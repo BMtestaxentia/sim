@@ -36,7 +36,14 @@
     "source": "ParaGEN!B31:B32 ; selection IdF si zone A ou A bis (calculs!B1254)",
     "hors_idf": 930,
     "idf": 1054,
-    "abattement_logement_social": "50 % reglementaire, applique via ParaGLOB!H54 dans l'assiette (calculs!B1255)"
+    "abattement_logement_social": 0.50,
+    "abattement_source": "50 % reglementaire, applique via ParaGLOB!H54 dans l'assiette (calculs!B1255)"
+  },
+
+  "versement_sous_densite": {
+    "plafond_valeur_terrain": 0.25,
+    "part_valeur_terrain": 0.5,
+    "source": "R-FISC-3 ; MIN(valeur_terrain/2 * (1 - SDP/(seuil*surface)), 25 % * valeur_terrain)"
   },
 
   "quotites_foncier_vefa": {
@@ -67,6 +74,11 @@
   },
 
   "constantes_reglementaires": {
+    "coefficient_surface_annexes": {
+      "valeur": 0.5,
+      "usage": "Surface utile = SHAB + 0,5 x surfaces annexes (R-SURF-1)",
+      "source": "calculs!D384 (terme 0.5*ParaCD!$F$28), regle reglementaire"
+    },
     "coefficient_structure": {
       "source": "calculs!D91:D116",
       "metropole_habitat": { "base": 0.77, "facteur_nl": 20, "formule": "CS = 0.77 * (1 + 20 * NL / SU)" },
@@ -76,10 +88,17 @@
     "majoration_plus_33": 0.33,
     "majoration_loyers_depassement_plafonds": { "valeur": 0.33, "source": "COMMUN!B22" },
     "marge_locale_plafond_defaut": { "valeur": 0.12, "source": "ParaPLUS!AD30 (saisi par simulation)" },
-    "majoration_lcr": { "regle": "ratio < 10 % -> 0 ; ratio > 20 % -> +2 % ; sinon ratio/100", "source": "calculs!B152:B153" },
+    "majoration_lcr": {
+      "regle": "ratio < seuil_bas -> 0 ; ratio > seuil_haut -> majoration_au_dessus ; sinon ratio/100",
+      "seuil_bas": 10,
+      "seuil_haut": 20,
+      "majoration_au_dessus": 0.02,
+      "source": "calculs!B152:B153"
+    },
     "ssf": {
       "seuil_participation_collectivites": 0.40,
-      "plafond_si_sous_seuil": "min(taux_depassement_plafonne * reference, 50 % * depassement)",
+      "part_max_depassement": 0.50,
+      "plafond_si_sous_seuil": "min(taux_depassement_plafonne * reference, part_max_depassement * depassement)",
       "taux_subvention": { "neuf": 2, "neuf_dom": 3, "acq_amelioration": 0.4 },
       "taux_depassement_plafonne": { "neuf": 1, "acq_amelioration": 0.2 },
       "source": "calculs!D275:G276"

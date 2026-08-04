@@ -25,10 +25,12 @@
  * @property {CodeProduit} code
  * @property {string} libelle
  * @property {string} cle_bareme_loyer   cle dans referentiels/baremes_2025.json (ex. 'PLUS')
+ * @property {'123'|'ABC'} zonage        quel zonage indexe le bareme de loyer de ce produit
+ * @property {string} [majoration_loyer] cle d'une majoration multiplicative du loyer de base
  * @property {string} cle_lasm           cle du taux LASM (ex. 'taux_reduit_simulation')
  * @property {boolean} coefficient_structure  le loyer passe-t-il par le CS (R-SURF-2) ?
  * @property {PretDefaut[]} prets_defaut
- * @property {boolean} v1                traite dans la V1 (PLUS/PLAI) ?
+ * @property {boolean} v1                traite dans la V1 (PLUS/PLAI/PLS) ?
  */
 
 /** @type {Record<CodeProduit, DefinitionProduit>} */
@@ -37,6 +39,7 @@ export const PRODUITS = {
     code: 'PLUS',
     libelle: 'PLUS',
     cle_bareme_loyer: 'PLUS',
+    zonage: '123',
     cle_lasm: 'taux_reduit_simulation',
     coefficient_structure: true,
     prets_defaut: [
@@ -49,6 +52,8 @@ export const PRODUITS = {
     code: 'PLUS33',
     libelle: 'PLUS 33 %',
     cle_bareme_loyer: 'PLUS', // loyer = loyer PLUS x 1,33 (R-LOYER-1 ; arbitrage I-6 : x1,33 partout)
+    zonage: '123',
+    majoration_loyer: 'majoration_plus_33', // cle dans constantes_reglementaires
     cle_lasm: 'taux_reduit_simulation',
     coefficient_structure: true,
     prets_defaut: [], // finance avec les prets PLUS (affectation PLUS)
@@ -58,6 +63,7 @@ export const PRODUITS = {
     code: 'PLAI',
     libelle: 'PLAI',
     cle_bareme_loyer: 'PLAI',
+    zonage: '123',
     cle_lasm: 'taux_reduit_simulation',
     coefficient_structure: true,
     prets_defaut: [
@@ -70,6 +76,7 @@ export const PRODUITS = {
     code: 'PLS',
     libelle: 'PLS',
     cle_bareme_loyer: 'PLS', // bareme par zone ABC (baremes_2025.json/loyers_max_zone_ABC)
+    zonage: 'ABC',
     cle_lasm: 'taux_reduit_simulation',
     coefficient_structure: true,
     prets_defaut: [
@@ -86,6 +93,7 @@ export const PRODUITS = {
     code: 'LIBRE',
     libelle: 'Libre',
     cle_bareme_loyer: 'LIBRE',
+    zonage: '123',
     cle_lasm: 'taux_normal',
     coefficient_structure: false, // loyer de marche, pas de CS
     prets_defaut: [],
@@ -95,6 +103,7 @@ export const PRODUITS = {
     code: 'LOC',
     libelle: 'LLI (LOC)',
     cle_bareme_loyer: 'LLI',
+    zonage: 'ABC',
     cle_lasm: 'taux_reduit_simulation',
     coefficient_structure: false,
     prets_defaut: [],

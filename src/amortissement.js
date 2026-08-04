@@ -2,38 +2,45 @@
 /**
  * R-AMT — Moteur d'amortissement des prets (coeur du moteur, cible +/-0,1 % vs LEON).
  *
+ * Transcription etablie a partir des formules VIVANTES de la matrice LEON
+ * (classeur BERGERAC 07/2026, meme version 131 onglets que la matrice de
+ * reference) : SimPLUS!FF117:FN117 pour le tableau d'amortissement,
+ * SimPLUS!AM15 pour le facteur d'annuite affiche, SimPLUS!FA15:FD27 pour la
+ * capitalisation du prefinancement, SimLIB!FG8/FH8 pour la variante taux fixe.
+ *
  * Regles couvertes :
- * - R-AMT-2 : premiere annuite du profil progressif (source SimPLUS!AM15).
- *   Arbitrage I-8 : a taux nul LEON renvoie 0 ; ici amortissement lineaire.
- * - R-AMT-3 : annee de premiere echeance PAR PRET (source SimPLUS!AR17...).
- *   C'est la regle dont la violation causait le bug historique ALS : chaque
- *   pret demarre a SA date, jamais a un « an 1 » commun a l'operation.
- * - R-AMT-4 : revision annuelle bareme CDC (source SimPLUS!FF117 sq.) selon la
- *   revisabilite (DOUBLE / D.LIMITEE / SIMPLE / TAUX FIXE), differes type 1
- *   (interets capitalises) et type 2 (interets seuls), arret sur CRD nul et
- *   derniere echeance ajustee (formule FK117 a confirmer, cf. QUESTIONS_SPEC Q-1).
- * - R-AMT-5 : table de sortie par pret (annee -> taux, annuite, interets,
- *   amortissement, CRD).
- * - R-FIN-6 : interets de prefinancement par echeancier de tirages mensuels
- *   (capitalisation SimPLUS!FA15:FD27 ; hypothese de taux mensuel proportionnel,
- *   cf. QUESTIONS_SPEC Q-3).
+ * - R-AMT-2 : forme fermee de l'annuite (SimPLUS!AM15 = facteur, hors capital).
+ * - R-AMT-3 : annee de premiere echeance PAR PRET (SimPLUS!AM17/AR17...).
+ *   C'est la regle dont la violation causait le bug historique ALS.
+ * - R-AMT-4 : RE-AMORTISSEMENT annuel (et non progression geometrique de
+ *   l'annuite) : chaque annee, l'annuite est recalculee par la forme fermee sur
+ *   le CRD restant et la duree restante m_N = duree - (annee_N - annee_1re_echeance),
+ *   aux taux revises de l'annee. Les deux formulations coincident exactement
+ *   tant que le Livret A ne bouge pas ; elles divergent des qu'il bouge.
+ * - R-AMT-5 : table par pret (annee -> taux, annuite, interets, amortissement, CRD).
+ * - R-FIN-6 : interets de prefinancement, capitalisation ACTUARIELLE base
+ *   exact/365 jusqu'a la date du dernier tirage.
  *
  * Unites : montants en euros, taux en fraction (0.021 = 2,1 %), durees en annees.
- * Module pur : la trajectoire du Livret A est une ENTREE (annee -> taux), jamais
- * lue d'une horloge, d'un fichier ou d'un etat global.
+ * Module pur : la trajectoire du Livret A et les dates sont des ENTREES, jamais
+ * lues d'une horloge, d'un fichier ou d'un etat global.
  */
 import { arrondiCRD } from './arrondis.js';
 
-/** Nombre de mois dans une annee civile (constante calendaire, pas un parametre metier). */
-const MOIS_PAR_AN = 12;
+/**
+ * Base de jours de la capitalisation du prefinancement : exact/365.
+ * Convention lue dans la formule source SimPLUS!FA15 (`(FA$14-AL23)/365`),
+ * ce n'est pas un parametre de bareme mais la convention de calcul de LEON.
+ */
+const BASE_JOURS_ACT365 = 365;
 
-/** Garde numerique pour les cas degeneres (q -> 1) ; pas un parametre metier. */
-const EPSILON_NUMERIQUE = 1e-12;
+/** Millisecondes par jour (constante calendaire). */
+const MS_PAR_JOUR = 86400000;
 
 /** @typedef {'DOUBLE'|'D.LIMITEE'|'SIMPLE'|'TAUX FIXE'} Revisabilite */
 
 /**
- * Libelles rencontres dans LEON (onglet IN) -> forme canonique.
+ * Libelles rencontres dans LEON (SimPLUS!AM19, onglet IN) -> forme canonique.
  * @type {Record<string, Revisabilite>}
  */
 const REVISABILITES = {
@@ -48,7 +55,7 @@ const REVISABILITES = {
 };
 
 /**
- * Normalise un libelle de revisabilite tel que serialise par LEON
+ * Normalise un libelle de revisabilite tel que saisi dans LEON
  * (« D. LIMITEE » avec espace, « TAUX FIXE »...) vers la forme canonique.
  * @param {string} libelle
  * @returns {Revisabilite}
@@ -61,10 +68,9 @@ export function normaliserRevisabilite(libelle) {
 
 /**
  * R-AMT-3 — Annee de premiere echeance d'un pret CDC :
- * annee(mise en location) + 1 ; en demembrement le decalage est nul
- * (interpretation « +0 si demembrement » du dictionnaire, cf. QUESTIONS_SPEC Q-4).
+ * annee(mise en location) + 1 ; en demembrement le decalage est nul.
  * Les prets « autres » portent leur propre date saisie (SimPLUS!AR17...) et ne
- * passent pas par cette fonction.
+ * passent pas par cette fonction : chacun garde SA date.
  * @param {number} annee_mise_en_location annee civile de la mise en location (DAT)
  * @param {{demembrement?: boolean}} [options]
  * @returns {number}
@@ -74,34 +80,52 @@ export function anneePremiereEcheance(annee_mise_en_location, { demembrement = f
 }
 
 /**
- * R-AMT-2 — Premiere annuite d'un pret a profil progressif (SimPLUS!AM15).
- * q = (1+p)/(1+t) ; annuite_1 = K x (1+t) x (1 - q) / (1 - q^m), m = duree - differe.
- * Arbitrage I-8 : si t = 0, LEON renvoie 0 ; ici amortissement lineaire K/m.
+ * Facteur d'annuite de la forme fermee (SimPLUS!AM15, sans le capital) :
+ * (1+tx) x (1 - q) / (1 - q^m) avec q = (1+rev)/(1+tx).
+ * Multiplie par un capital, il donne l'annuite qui amortit exactement ce capital
+ * en m echeances progressant au taux `rev`, au taux d'interet `tx`.
+ * @param {number} tx  taux d'interet de la periode
+ * @param {number} rev taux de progression des annuites
+ * @param {number} m   nombre d'echeances restantes
+ * @returns {number}
+ */
+export function facteurAnnuite(tx, rev, m) {
+  if (!(m > 0)) throw new Error(`Nombre d'echeances invalide : ${m}`);
+  const q = (1 + rev) / (1 + tx);
+  // q = 1 <=> rev = tx : LEON produit #DIV/0! ; la limite mathematique est (1+tx)/m.
+  if (q === 1) return (1 + tx) / m;
+  return ((1 + tx) * (1 - q)) / (1 - q ** m);
+}
+
+/**
+ * R-AMT-2 — Premiere annuite d'un pret a profil progressif.
+ * annuite_1 = K x facteurAnnuite(t, p, duree - differe).
+ *
+ * Ecart documente avec LEON : la cellule d'affichage SimPLUS!AM15 renvoie 0
+ * quand t = 0 (irregularite I-8), mais le TABLEAU d'amortissement, lui, ne
+ * l'utilise pas et traite le cas t = 0 correctement. Le cas reellement degenere
+ * est t = 0 ET p = 0, ou LEON amortit lineairement (branche `K/(duree-differe)`
+ * de SimPLUS!FK117) : c'est cette regle-la qui est implementee ici.
  * @param {Object} p
- * @param {number} p.montant_eur   K : capital a amortir (apres capitalisation d'un eventuel differe type 1)
+ * @param {number} p.montant_eur   K : capital a amortir
  * @param {number} p.taux          t : taux d'interet initial (fraction)
  * @param {number} p.progressivite p : taux de progressivite des annuites (fraction, ex. -0.005)
  * @param {number} p.nb_echeances  m : nombre d'echeances amortissantes (duree - differe)
  * @returns {number} annuite de la premiere echeance, en euros
  */
 export function premiereAnnuite({ montant_eur, taux, progressivite, nb_echeances }) {
-  if (!(nb_echeances > 0)) throw new Error(`Nombre d'echeances invalide : ${nb_echeances}`);
-  if (taux === 0) return montant_eur / nb_echeances; // I-8 : lineaire
-  const q = (1 + progressivite) / (1 + taux);
-  if (Math.abs(1 - q) < EPSILON_NUMERIQUE) {
-    // Cas degenere p = t : la formule tend vers K(1+t)/m
-    return (montant_eur * (1 + taux)) / nb_echeances;
-  }
-  return (montant_eur * (1 + taux) * (1 - q)) / (1 - q ** nb_echeances);
+  if (taux === 0 && progressivite === 0) return montant_eur / nb_echeances;
+  return montant_eur * facteurAnnuite(taux, progressivite, nb_echeances);
 }
 
 /**
- * Livret A applicable une annee donnee. Au-dela de la trajectoire connue, la
- * derniere valeur anterieure est reconduite (la table ParaGEN s'arrete en 2073
- * alors qu'un pret foncier 60 ans court au-dela).
+ * Livret A applicable une annee donnee. Reproduit le VLOOKUP approche de LEON
+ * (SimPLUS!FJ117 -> ParaGEN!CT22:DD102, colonne 11) : valeur exacte si l'annee
+ * est dans la table, sinon derniere valeur anterieure. Hors table par le bas,
+ * LEON renvoie #N/A ; ici on retombe sur le LA d'origine (aucune revision).
  * @param {Record<number, number>|null|undefined} livret_a_par_annee
  * @param {number} annee
- * @param {number} defaut valeur de repli (LA d'origine du pret)
+ * @param {number} defaut LA d'origine du pret
  * @returns {number}
  */
 function livretAPourAnnee(livret_a_par_annee, annee, defaut) {
@@ -117,45 +141,6 @@ function livretAPourAnnee(livret_a_par_annee, annee, defaut) {
 }
 
 /**
- * R-AMT-4 — Taux d'interet revise de l'annee N :
- * tx_N = (1+t) x (1 + (LA_N - LA_0)/(1+t)) - 1  (algebriquement : t + LA_N - LA_0).
- * TAUX FIXE : t constant. SIMPLE : taux revise, progressivite seule figee
- * (interpretation a confirmer, cf. QUESTIONS_SPEC Q-2).
- * @param {Revisabilite} revisabilite
- * @param {number} taux t : taux initial
- * @param {number} la_n Livret A de l'annee N
- * @param {number} la_0 Livret A d'origine du pret
- * @returns {number}
- */
-function tauxInteretRevise(revisabilite, taux, la_n, la_0) {
-  if (revisabilite === 'TAUX FIXE') return taux;
-  return (1 + taux) * (1 + (la_n - la_0) / (1 + taux)) - 1;
-}
-
-/**
- * R-AMT-4 — Taux de revision de l'annuite de l'annee N :
- * rev_N = (1+p) x (1 + (LA_N - LA_0)/(1+t)) - 1.
- * DOUBLE -> rev_N ; D.LIMITEE -> MAX(rev_N, 0) ; SIMPLE / TAUX FIXE -> p seul.
- * @param {Revisabilite} revisabilite
- * @param {number} taux t : taux initial
- * @param {number} progressivite p
- * @param {number} la_n Livret A de l'annee N
- * @param {number} la_0 Livret A d'origine du pret
- * @returns {number}
- */
-function tauxRevisionAnnuite(revisabilite, taux, progressivite, la_n, la_0) {
-  const rev = (1 + progressivite) * (1 + (la_n - la_0) / (1 + taux)) - 1;
-  switch (revisabilite) {
-    case 'DOUBLE':
-      return rev;
-    case 'D.LIMITEE':
-      return Math.max(rev, 0);
-    default:
-      return progressivite; // SIMPLE et TAUX FIXE (cf. QUESTIONS_SPEC Q-2)
-  }
-}
-
-/**
  * @typedef {Object} PretEntree
  * @property {number} montant_eur                capital emprunte (0 -> table vide, pret non mobilise)
  * @property {number} taux                       taux d'interet initial t (fraction)
@@ -164,8 +149,8 @@ function tauxRevisionAnnuite(revisabilite, taux, progressivite, la_n, la_0) {
  * @property {number} annee_premiere_echeance    annee civile de la 1re echeance DE CE PRET (R-AMT-3)
  * @property {Revisabilite|string} [revisabilite] defaut 'TAUX FIXE'
  * @property {number} [differe_ans]              d, defaut 0
- * @property {1|2} [differe_type]                1 = annuite 0, interets capitalises ; 2 = interets seuls
- * @property {number} [livret_a_origine]         LA_0 a l'origine du pret (requis si revisable)
+ * @property {1|2} [differe_type]                1 = rien n'est du ; 2 = interets seuls
+ * @property {number} [livret_a_origine]         LA_0 a l'origine du pret (plage nommee Tx_LA)
  * @property {Record<number, number>} [livret_a_par_annee] trajectoire LA (annee civile -> taux)
  *
  * @typedef {Object} LigneAmortissement
@@ -173,27 +158,36 @@ function tauxRevisionAnnuite(revisabilite, taux, progressivite, la_n, la_0) {
  * @property {number} taux              taux d'interet applique (tx_N)
  * @property {number} annuite_eur
  * @property {number} interets_eur
- * @property {number} amortissement_eur annuite - interets (negatif en differe type 1 : le CRD croit)
+ * @property {number} amortissement_eur
  * @property {number} crd_eur           capital restant du en fin d'annee
  */
 
 /**
  * R-AMT-2/3/4/5 — Table d'amortissement annuelle d'un pret.
  *
- * Deroulement : d annees de differe (type 1 : annuite nulle, interets capitalises
- * au CRD ; type 2 : annuite = interets, CRD constant), puis n-d echeances
- * amortissantes. La premiere annuite vient de la forme fermee R-AMT-2 (pas
- * d'accumulation iterative, lecon I-4), les suivantes sont revisees selon
- * R-AMT-4. Arret : derniere echeance de la duree, ou des que ROUND(CRD,4) <= 0 ;
- * dans les deux cas la derniere annuite est ajustee pour solder exactement le
- * CRD (annuite = CRD precedent + interets — hypothese FK117, QUESTIONS_SPEC Q-1).
+ * Transcription de SimPLUS!FF117:FN117. Pour chaque annee N (k = 0..duree-1,
+ * annee = annee_premiere_echeance + k) :
+ *   LA_N   = trajectoire(annee), a defaut LA_0
+ *   tx_N   = t si TAUX FIXE, sinon (1+t)(1 + (LA_N-LA_0)/(1+t)) - 1   [FJ]
+ *   rev_N  = DOUBLE -> (1+p)(1 + (LA_N-LA_0)/(1+t)) - 1               [FF/FI]
+ *            D.LIMITEE -> MAX(ci-dessus, 0) ; sinon -> p
+ *   pendant le differe (k < d) : amortissement 0, CRD inchange,
+ *            interets = 0 (type 1) ou tx_N x CRD (type 2), annuite = interets
+ *   sinon    annuite = CRD_{N-1} x facteurAnnuite(tx_N, rev_N, duree - k)   [FK]
+ *            interets = tx_N x CRD_{N-1} ; amortissement = annuite - interets
+ *            CRD_N = CRD_{N-1} - amortissement
+ *
+ * La derniere echeance n'est PAS un cas particulier : a la derniere annee
+ * m_N = 1, donc facteurAnnuite = (1+tx) et l'annuite solde exactement le CRD.
+ * Si le CRD est deja epuise (ROUND(CRD,4) <= 0), l'annuite est nulle et la
+ * ligne reste dans la table, comme dans LEON.
  *
  * Aucune valeur n'est arrondie dans la table (les arrondis s'appliquent aux
  * frontieres de presentation, R-CONV / I-9) ; seul le test d'arret utilise
  * arrondiCRD, comme LEON.
  *
  * @param {PretEntree} pret
- * @returns {LigneAmortissement[]}
+ * @returns {LigneAmortissement[]} une ligne par annee de la duree du pret
  */
 export function tableauAmortissement(pret) {
   const {
@@ -225,36 +219,30 @@ export function tableauAmortissement(pret) {
   }
 
   const rev = normaliserRevisabilite(String(revisabilite));
-  const revisable = rev !== 'TAUX FIXE';
-  if (revisable && livret_a_par_annee && livret_a_origine === undefined) {
-    throw new Error('livret_a_origine est requis pour un pret revisable avec trajectoire');
-  }
-  // Sans trajectoire fournie, LA_N = LA_0 : les formules R-AMT-4 se reduisent a t et p.
   const la0 = livret_a_origine ?? 0;
 
   /** @type {LigneAmortissement[]} */
   const lignes = [];
   let crd = montant_eur;
-  let annee = annee_premiere_echeance;
 
-  // --- Phase de differe (R-AMT-4) ---
-  for (let i = 0; i < differe_ans; i++, annee++) {
+  for (let k = 0; k < duree_ans; k++) {
+    const annee = annee_premiere_echeance + k;
     const laN = livretAPourAnnee(livret_a_par_annee, annee, la0);
-    const tx = tauxInteretRevise(rev, taux, laN, la0);
-    const interets = tx * crd;
-    if (differe_type === 1) {
-      // Annuite nulle, interets capitalises : le CRD croit.
-      crd += interets;
-      lignes.push({
-        annee,
-        taux: tx,
-        annuite_eur: 0,
-        interets_eur: interets,
-        amortissement_eur: -interets,
-        crd_eur: crd,
-      });
-    } else {
-      // Interets seuls : le CRD est inchange.
+    const ecartLA = (laN - la0) / (1 + taux);
+
+    // [FJ] Le taux d'interet suit le Livret A sauf en taux fixe (garde SimLIB!FH8 ;
+    // le bloc CDC de SimPLUS omet cette garde, cf. ECARTS_LEON E-3).
+    const tx = rev === 'TAUX FIXE' ? taux : (1 + taux) * (1 + ecartLA) - 1;
+
+    // [FF/FI] Revision de la progression de l'annuite selon la revisabilite.
+    const revBrut = (1 + progressivite) * (1 + ecartLA) - 1;
+    const revN =
+      rev === 'DOUBLE' ? revBrut : rev === 'D.LIMITEE' ? Math.max(revBrut, 0) : progressivite;
+
+    if (k < differe_ans) {
+      // Differe : aucun amortissement, CRD inchange. Type 1 -> rien n'est du
+      // (LEON ne capitalise PAS ces interets, cf. ECARTS_LEON E-2).
+      const interets = differe_type === 1 ? 0 : tx * crd;
       lignes.push({
         annee,
         taux: tx,
@@ -263,59 +251,21 @@ export function tableauAmortissement(pret) {
         amortissement_eur: 0,
         crd_eur: crd,
       });
+      continue;
     }
-  }
 
-  // --- Phase amortissante ---
-  const nbEcheances = duree_ans - differe_ans;
-
-  if (taux === 0) {
-    // I-8 : taux nul -> amortissement lineaire, quel que soit le profil.
-    const amortConstant = crd / nbEcheances;
-    for (let i = 1; i <= nbEcheances; i++, annee++) {
-      const amort = i === nbEcheances ? crd : amortConstant;
-      crd -= amort;
-      lignes.push({
-        annee,
-        taux: 0,
-        annuite_eur: amort,
-        interets_eur: 0,
-        amortissement_eur: amort,
-        crd_eur: i === nbEcheances ? 0 : crd,
-      });
+    let annuite;
+    if (arrondiCRD(crd) <= 0) {
+      annuite = 0; // pret deja solde : LEON continue d'emettre des lignes a zero
+    } else if ((taux === 0 && progressivite === 0) || (revN === 0 && tx === 0)) {
+      // Branche lineaire de FK117 : capital d'ORIGINE / duree amortissante.
+      annuite = montant_eur / (duree_ans - differe_ans);
+    } else {
+      annuite = crd * facteurAnnuite(tx, revN, duree_ans - k);
     }
-    return lignes;
-  }
 
-  let annuite = premiereAnnuite({
-    montant_eur: crd,
-    taux,
-    progressivite,
-    nb_echeances: nbEcheances,
-  });
-
-  for (let i = 1; i <= nbEcheances; i++, annee++) {
-    const laN = livretAPourAnnee(livret_a_par_annee, annee, la0);
-    const tx = tauxInteretRevise(rev, taux, laN, la0);
-    if (i > 1) {
-      annuite *= 1 + tauxRevisionAnnuite(rev, taux, progressivite, laN, la0);
-    }
     const interets = tx * crd;
     const amort = annuite - interets;
-
-    if (i === nbEcheances || arrondiCRD(crd - amort) <= 0) {
-      // Derniere echeance ajustee : solde exact du CRD (R-AMT-4 / Q-1).
-      lignes.push({
-        annee,
-        taux: tx,
-        annuite_eur: crd + interets,
-        interets_eur: interets,
-        amortissement_eur: crd,
-        crd_eur: 0,
-      });
-      break;
-    }
-
     crd -= amort;
     lignes.push({
       annee,
@@ -331,35 +281,62 @@ export function tableauAmortissement(pret) {
 }
 
 /**
+ * Numero de jour UTC d'une date exprimee en ISO 'AAAA-MM-JJ' (ou d'un objet Date).
+ * Pas d'horloge systeme : la date est toujours une entree explicite.
+ * @param {string|Date} date
+ * @returns {number}
+ */
+export function jourUTC(date) {
+  if (date instanceof Date) {
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) / MS_PAR_JOUR;
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date));
+  if (!m) throw new Error(`Date attendue au format AAAA-MM-JJ : ${date}`);
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / MS_PAR_JOUR;
+}
+
+/**
  * @typedef {Object} Tirage
  * @property {number} montant_eur
- * @property {number} mois_avant_location nombre de mois entre le tirage et la mise en location (DAT)
+ * @property {string|Date} date date du tirage (AAAA-MM-JJ)
  */
 
 /**
- * R-FIN-6 — Interets de prefinancement par echeancier de tirages mensuels.
- * interets = somme(tirages capitalises jusqu'a la DAT) - somme(nominal).
- * HYPOTHESE en attente de la transcription de SimPLUS!FA15:FD27 (QUESTIONS_SPEC
- * Q-3) : capitalisation mensuelle au taux proportionnel taux/12.
- * Le flag « ne pas capitaliser » (SimPLUS) ne supprime pas le cout des interets,
- * il empeche seulement leur incorporation au capital du pret.
+ * R-FIN-6 — Interets de prefinancement par echeancier de tirages dates.
+ *
+ * Transcription de SimPLUS!FA15:FD27 :
+ *   capitalise = SOMME( montant_i x (1 + taux) ^ ((date_fin - date_i) / 365) )
+ *   interets   = capitalise - SOMME(montant_i)
+ * La capitalisation est ACTUARIELLE (puissance fractionnaire du taux annuel) en
+ * base exact/365, et court jusqu'a `date_fin` = date du DERNIER tirage
+ * (SimPLUS!FA14 = $AL$35), pas jusqu'a la mise en location.
+ *
+ * Le flag « ne pas capitaliser les interets de prefinancement » (SimPLUS!AS24)
+ * ne supprime pas le cout des interets : il empeche seulement leur incorporation
+ * au capital du pret.
+ *
  * @param {Object} p
  * @param {Tirage[]} p.tirages
- * @param {number} p.taux taux annuel du prefinancement (fraction)
- * @param {boolean} [p.capitaliser] defaut true ; false = flag « ne pas capitaliser »
+ * @param {number} p.taux        taux annuel du prefinancement (fraction)
+ * @param {string|Date} [p.date_fin] defaut : date du dernier tirage
+ * @param {boolean} [p.capitaliser] defaut true
  * @returns {{nominal_eur: number, interets_eur: number, capital_constitue_eur: number}}
  */
-export function prefinancement({ tirages, taux, capitaliser = true }) {
-  const tauxMensuel = taux / MOIS_PAR_AN;
+export function prefinancement({ tirages, taux, date_fin, capitaliser = true }) {
+  if (!tirages.length) return { nominal_eur: 0, interets_eur: 0, capital_constitue_eur: 0 };
+  const jours = tirages.map((t) => jourUTC(t.date));
+  const jourFin = date_fin === undefined ? Math.max(...jours) : jourUTC(date_fin);
+
   let nominal = 0;
   let capitalise = 0;
-  for (const { montant_eur, mois_avant_location } of tirages) {
-    if (mois_avant_location < 0) {
-      throw new Error(`Tirage posterieur a la mise en location : ${mois_avant_location} mois`);
+  tirages.forEach((tirage, i) => {
+    if (jours[i] > jourFin) {
+      throw new Error(`Tirage posterieur a la date de fin de capitalisation : ${tirage.date}`);
     }
-    nominal += montant_eur;
-    capitalise += montant_eur * (1 + tauxMensuel) ** mois_avant_location;
-  }
+    nominal += tirage.montant_eur;
+    capitalise += tirage.montant_eur * (1 + taux) ** ((jourFin - jours[i]) / BASE_JOURS_ACT365);
+  });
+
   const interets = capitalise - nominal;
   return {
     nominal_eur: nominal,

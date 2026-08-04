@@ -1,22 +1,24 @@
 // @ts-check
 /**
- * Cas canoniques du moteur d'amortissement (R-AMT-2 a R-AMT-5, R-FIN-6),
- * conformement au brief sessions 2-3 : taux 0 (I-8), progressivite 0 (PMT),
- * progressivite -0,5 %, revision LA hausse/baisse, differes, 40 vs 60 ans,
- * derniere echeance, prefinancement.
+ * Cas canoniques du moteur d'amortissement (R-AMT-2 a R-AMT-5, R-FIN-6).
  *
- * Les valeurs attendues sont soit des invariants structurels (somme des
- * amortissements = capital, CRD final nul), soit des oracles independants
- * (PMT classique, simplification algebrique tx_N = t + dLA), jamais une
- * simple recopie du code teste.
+ * Les attendus sont soit des invariants structurels (somme des amortissements
+ * = capital, CRD final nul), soit des oracles independants (PMT classique,
+ * simplification algebrique tx_N = t + dLA, capitalisation actuarielle
+ * recalculee a la main), jamais une recopie du code teste.
+ *
+ * Reference : formules SimPLUS!FF117:FN117, SimPLUS!FA15:FD27, SimLIB!FG8/FH8
+ * de la matrice LEON (classeur BERGERAC 07/2026).
  */
 import { describe, it, expect } from 'vitest';
 import {
   tableauAmortissement,
   premiereAnnuite,
+  facteurAnnuite,
   anneePremiereEcheance,
   normaliserRevisabilite,
   prefinancement,
+  jourUTC,
 } from '../src/amortissement.js';
 
 /** Oracle independant : annuite constante classique (formule PMT). */
@@ -29,19 +31,30 @@ function sommeAmortissements(table) {
   return table.reduce((s, l) => s + l.amortissement_eur, 0);
 }
 
-describe('R-AMT-2 — premiere annuite', () => {
+describe('R-AMT-2 — forme fermee de l annuite', () => {
   it('progressivite 0 : annuite egale au PMT classique', () => {
     const a1 = premiereAnnuite({ montant_eur: 100000, taux: 0.02, progressivite: 0, nb_echeances: 25 });
     expect(a1).toBeCloseTo(pmt(100000, 0.02, 25), 8);
   });
 
-  it('taux 0 : amortissement lineaire (arbitrage I-8, LEON renvoie 0)', () => {
-    expect(premiereAnnuite({ montant_eur: 120000, taux: 0, progressivite: -0.005, nb_echeances: 30 })).toBe(4000);
+  it('taux 0 ET progressivite 0 : amortissement lineaire (branche lineaire de FK117)', () => {
+    expect(premiereAnnuite({ montant_eur: 120000, taux: 0, progressivite: 0, nb_echeances: 30 })).toBe(4000);
   });
 
-  it('cas degenere p = t : annuite = K(1+t)/m', () => {
-    const a1 = premiereAnnuite({ montant_eur: 100000, taux: 0.02, progressivite: 0.02, nb_echeances: 20 });
-    expect(a1).toBeCloseTo((100000 * 1.02) / 20, 8);
+  it('taux 0 mais progressivite non nulle : forme fermee, pas de lineaire', () => {
+    // q = (1+p)/1 = 1+p : la forme fermee reste definie, LEON ne bascule pas en lineaire.
+    const a1 = premiereAnnuite({ montant_eur: 120000, taux: 0, progressivite: -0.005, nb_echeances: 30 });
+    const q = 0.995;
+    expect(a1).toBeCloseTo((120000 * (1 - q)) / (1 - q ** 30), 8);
+    expect(a1).not.toBeCloseTo(4000, 2);
+  });
+
+  it('cas degenere rev = tx (q = 1) : limite (1+tx)/m, la ou LEON produit #DIV/0!', () => {
+    expect(facteurAnnuite(0.02, 0.02, 20)).toBeCloseTo(1.02 / 20, 12);
+  });
+
+  it('derniere echeance : a m = 1 le facteur vaut (1+tx), soit CRD + interets', () => {
+    expect(facteurAnnuite(0.031, -0.005, 1)).toBeCloseTo(1.031, 12);
   });
 });
 
@@ -58,11 +71,13 @@ describe('R-AMT-4/5 — table a taux fixe', () => {
     expect(table).toHaveLength(25);
     const attendu = pmt(100000, 0.02, 25);
     for (const ligne of table) expect(ligne.annuite_eur).toBeCloseTo(attendu, 6);
-    expect(table.at(-1)?.crd_eur).toBe(0);
+    expect(table.at(-1)?.crd_eur).toBeCloseTo(0, 6);
     expect(sommeAmortissements(table)).toBeCloseTo(100000, 6);
   });
 
-  it('progressivite -0,5 % : annuites en progression geometrique 0,995 jusqu a la derniere incluse', () => {
+  it('progressivite -0,5 % : le re-amortissement annuel reproduit la progression geometrique 0,995', () => {
+    // Invariant fort : a taux constant, re-amortir le CRD sur la duree restante
+    // redonne exactement la suite geometrique de raison (1+p).
     const table = tableauAmortissement({
       montant_eur: 100000,
       taux: 0.021,
@@ -72,19 +87,14 @@ describe('R-AMT-4/5 — table a taux fixe', () => {
       revisabilite: 'TAUX FIXE',
     });
     expect(table).toHaveLength(40);
-    for (let i = 1; i < table.length - 1; i++) {
-      expect(table[i].annuite_eur / table[i - 1].annuite_eur).toBeCloseTo(0.995, 10);
+    for (let i = 1; i < table.length; i++) {
+      expect(table[i].annuite_eur / table[i - 1].annuite_eur).toBeCloseTo(0.995, 9);
     }
-    // La forme fermee R-AMT-2 doit faire atterrir le CRD exactement en annee 40 :
-    // la derniere annuite ajustee ne s'ecarte du profil geometrique que du bruit flottant.
-    const derniere = table.at(-1);
-    const avantDerniere = table.at(-2);
-    expect(derniere && avantDerniere && derniere.annuite_eur / avantDerniere.annuite_eur).toBeCloseTo(0.995, 6);
-    expect(derniere?.crd_eur).toBe(0);
+    expect(table.at(-1)?.crd_eur).toBeCloseTo(0, 6);
     expect(sommeAmortissements(table)).toBeCloseTo(100000, 6);
   });
 
-  it('taux 0 : table lineaire pure', () => {
+  it('taux 0 et progressivite 0 : table lineaire pure', () => {
     const table = tableauAmortissement({
       montant_eur: 120000,
       taux: 0,
@@ -97,7 +107,7 @@ describe('R-AMT-4/5 — table a taux fixe', () => {
       expect(ligne.annuite_eur).toBeCloseTo(4000, 8);
       expect(ligne.interets_eur).toBe(0);
     }
-    expect(table.at(-1)?.crd_eur).toBe(0);
+    expect(table.at(-1)?.crd_eur).toBeCloseTo(0, 8);
   });
 
   it('40 ans vs 60 ans : premiere annuite plus faible sur la duree longue, les deux soldent', () => {
@@ -105,8 +115,8 @@ describe('R-AMT-4/5 — table a taux fixe', () => {
     const t40 = tableauAmortissement({ ...base, duree_ans: 40 });
     const t60 = tableauAmortissement({ ...base, duree_ans: 60 });
     expect(t60[0].annuite_eur).toBeLessThan(t40[0].annuite_eur);
-    expect(t40.at(-1)?.crd_eur).toBe(0);
-    expect(t60.at(-1)?.crd_eur).toBe(0);
+    expect(t40.at(-1)?.crd_eur).toBeCloseTo(0, 5);
+    expect(t60.at(-1)?.crd_eur).toBeCloseTo(0, 5);
     expect(sommeAmortissements(t60)).toBeCloseTo(500000, 5);
   });
 });
@@ -123,7 +133,7 @@ describe('R-AMT-4 — revision Livret A', () => {
     livret_a_origine: 0.015,
   };
 
-  it('hausse du LA (DOUBLE) : taux revise = t + dLA et annuite revisee a la hausse', () => {
+  it('hausse du LA (DOUBLE) : taux revise = t + dLA', () => {
     const table = tableauAmortissement({
       ...pretDouble,
       livret_a_par_annee: { 2027: 0.015, 2028: 0.025 },
@@ -132,12 +142,14 @@ describe('R-AMT-4 — revision Livret A', () => {
     expect(table[0].taux).toBeCloseTo(0.021, 12);
     expect(table[1].taux).toBeCloseTo(0.031, 12);
     expect(table[1].interets_eur).toBeCloseTo(0.031 * table[0].crd_eur, 8);
-    // rev_N = 0.995 x (1 + 0.01/1.021) - 1 = 0.0047453477 : l'annuite monte
-    // malgre la progressivite negative (valeur derivee a la main).
-    expect(table[1].annuite_eur / table[0].annuite_eur).toBeCloseTo(1.0047453477, 8);
+    // Le LA reste a 2,5 % ensuite : l'annuite reprend une progression geometrique
+    // de raison rev = 0,995 x (1 + 0,01/1,021) - 1 (valeur derivee a la main).
+    const rev = 0.995 * (1 + 0.01 / 1.021) - 1;
+    expect(table[2].annuite_eur / table[1].annuite_eur).toBeCloseTo(1 + rev, 9);
+    expect(table.at(-1)?.crd_eur).toBeCloseTo(0, 5);
   });
 
-  it('baisse du LA : DOUBLE baisse l annuite, D.LIMITEE la plancher a son niveau precedent', () => {
+  it('baisse du LA : DOUBLE baisse l annuite, D.LIMITEE la maintient', () => {
     const base = {
       montant_eur: 100000,
       taux: 0.036,
@@ -152,12 +164,21 @@ describe('R-AMT-4 — revision Livret A', () => {
     // Le taux d'interet baisse dans les deux cas : 3,6 % - 1 point = 2,6 %
     expect(double[1].taux).toBeCloseTo(0.026, 12);
     expect(limitee[1].taux).toBeCloseTo(0.026, 12);
-    // DOUBLE : rev_N < 0, l'annuite baisse ; D.LIMITEE : MAX(rev_N, 0) = 0, annuite inchangee
-    expect(double[1].annuite_eur).toBeLessThan(double[0].annuite_eur);
-    expect(limitee[1].annuite_eur).toBeCloseTo(limitee[0].annuite_eur, 10);
+    // Ce qui distingue les deux : la PENTE du profil restant.
+    // DOUBLE -> rev_N = (1+p)(1 + dLA/(1+t)) - 1 < 0 : le profil continue de decroitre.
+    const rev = 1 * (1 + -0.01 / 1.036) - 1;
+    expect(double[2].annuite_eur / double[1].annuite_eur).toBeCloseTo(1 + rev, 9);
+    // D.LIMITEE -> MAX(rev_N, 0) = 0 : le profil devient plat.
+    expect(limitee[2].annuite_eur / limitee[1].annuite_eur).toBeCloseTo(1, 9);
+    // Consequence du re-amortissement : un profil decroissant se paie plus tot,
+    // donc l'annuite DOUBLE de l'annee N+1 est SUPERIEURE a celle de D.LIMITEE.
+    expect(double[1].annuite_eur).toBeGreaterThan(limitee[1].annuite_eur);
+    // Dans les deux cas le pret solde exactement a son terme (re-amortissement).
+    expect(double.at(-1)?.crd_eur).toBeCloseTo(0, 5);
+    expect(limitee.at(-1)?.crd_eur).toBeCloseTo(0, 5);
   });
 
-  it('TAUX FIXE : la trajectoire LA est ignoree', () => {
+  it('TAUX FIXE : la trajectoire LA est ignoree (garde SimLIB!FH8)', () => {
     const table = tableauAmortissement({
       montant_eur: 100000,
       taux: 0.015,
@@ -172,32 +193,63 @@ describe('R-AMT-4 — revision Livret A', () => {
     expect(table[1].annuite_eur).toBeCloseTo(table[0].annuite_eur, 8);
   });
 
-  it('baisse durable du LA (D.LIMITEE) : annuite planchee mais taux en baisse, le pret se solde avant terme avec derniere echeance ajustee', () => {
+  it('SIMPLE : le taux suit le LA, la progression de l annuite reste a p', () => {
+    const table = tableauAmortissement({
+      montant_eur: 100000,
+      taux: 0.02,
+      progressivite: -0.005,
+      duree_ans: 30,
+      annee_premiere_echeance: 2027,
+      revisabilite: 'SIMPLE',
+      livret_a_origine: 0.02,
+      livret_a_par_annee: { 2027: 0.02, 2028: 0.03 },
+    });
+    expect(table[1].taux).toBeCloseTo(0.03, 12); // taux revise
+    // rev reste p : la progression n'est pas affectee par le LA.
+    expect(table[2].annuite_eur / table[1].annuite_eur).toBeCloseTo(0.995, 9);
+  });
+
+  it('re-amortissement : le pret solde toujours a son terme, meme apres un choc de LA', () => {
+    // Difference de fond avec une simple progression geometrique de l'annuite :
+    // apres un choc, LEON recalcule l'annuite sur le CRD et la duree restante,
+    // donc le CRD atterrit exactement a zero au terme contractuel.
     const table = tableauAmortissement({
       montant_eur: 100000,
       taux: 0.036,
       progressivite: 0,
       duree_ans: 40,
       annee_premiere_echeance: 2027,
-      revisabilite: 'D.LIMITEE',
+      revisabilite: 'DOUBLE',
       livret_a_origine: 0.03,
-      livret_a_par_annee: { 2027: 0.03, 2028: 0.005 },
+      livret_a_par_annee: { 2027: 0.03, 2035: 0.005, 2045: 0.05 },
     });
-    expect(table.length).toBeLessThan(40);
-    const derniere = table.at(-1);
-    const avantDerniere = table.at(-2);
-    expect(derniere?.crd_eur).toBe(0);
-    // Derniere annuite ajustee : elle solde exactement le CRD precedent + interets
-    expect(derniere?.annuite_eur).toBeCloseTo(
-      (avantDerniere?.crd_eur ?? 0) + (derniere?.interets_eur ?? 0),
-      8,
-    );
-    expect(sommeAmortissements(table)).toBeCloseTo(100000, 6);
+    expect(table).toHaveLength(40);
+    expect(table.at(-1)?.crd_eur).toBeCloseTo(0, 5);
+    expect(sommeAmortissements(table)).toBeCloseTo(100000, 5);
   });
 });
 
 describe('R-AMT-4 — differes', () => {
-  it('differe type 1 : annuites nulles, interets capitalises, puis amortissement du capital majore', () => {
+  it('differe type 2 : annuite = interets seuls, CRD constant', () => {
+    const table = tableauAmortissement({
+      montant_eur: 100000,
+      taux: 0.02,
+      progressivite: 0,
+      duree_ans: 25,
+      annee_premiere_echeance: 2027,
+      differe_ans: 2,
+      differe_type: 2,
+    });
+    expect(table).toHaveLength(25);
+    expect(table[0].annuite_eur).toBeCloseTo(2000, 8);
+    expect(table[0].crd_eur).toBe(100000);
+    expect(table[1].crd_eur).toBe(100000);
+    // Les 23 echeances restantes amortissent le capital d'origine (oracle PMT).
+    expect(table[2].annuite_eur).toBeCloseTo(pmt(100000, 0.02, 23), 6);
+    expect(table.at(-1)?.crd_eur).toBeCloseTo(0, 6);
+  });
+
+  it('differe type 1 : rien n est du et le CRD reste constant (LEON ne capitalise pas, cf. E-2)', () => {
     const table = tableauAmortissement({
       montant_eur: 100000,
       taux: 0.02,
@@ -209,29 +261,11 @@ describe('R-AMT-4 — differes', () => {
     });
     expect(table).toHaveLength(25);
     expect(table[0].annuite_eur).toBe(0);
-    expect(table[1].annuite_eur).toBe(0);
-    // Capitalisation composee : 100000 x 1,02 x 1,02
-    expect(table[1].crd_eur).toBeCloseTo(100000 * 1.02 ** 2, 8);
-    // Les 23 echeances restantes amortissent le capital capitalise (oracle PMT)
-    expect(table[2].annuite_eur).toBeCloseTo(pmt(100000 * 1.02 ** 2, 0.02, 23), 6);
-    expect(table.at(-1)?.crd_eur).toBe(0);
-  });
-
-  it('differe type 2 : annuite = interets seuls, CRD constant', () => {
-    const table = tableauAmortissement({
-      montant_eur: 100000,
-      taux: 0.02,
-      progressivite: 0,
-      duree_ans: 25,
-      annee_premiere_echeance: 2027,
-      differe_ans: 2,
-      differe_type: 2,
-    });
-    expect(table[0].annuite_eur).toBeCloseTo(2000, 8);
-    expect(table[0].crd_eur).toBe(100000);
+    expect(table[0].interets_eur).toBe(0);
     expect(table[1].crd_eur).toBe(100000);
+    // Le capital amorti reste celui d'origine : les interets du differe sont perdus.
     expect(table[2].annuite_eur).toBeCloseTo(pmt(100000, 0.02, 23), 6);
-    expect(table.at(-1)?.crd_eur).toBe(0);
+    expect(sommeAmortissements(table)).toBeCloseTo(100000, 6);
   });
 
   it('refuse un differe sans type explicite', () => {
@@ -270,7 +304,7 @@ describe('R-AMT-3 — date de premiere echeance PAR PRET (bug historique ALS)', 
 });
 
 describe('normalisation des libelles LEON', () => {
-  it('accepte les formes serialisees par l onglet IN', () => {
+  it('accepte les formes saisies dans SimPLUS!AM19', () => {
     expect(normaliserRevisabilite('D. LIMITEE')).toBe('D.LIMITEE');
     expect(normaliserRevisabilite('TAUX FIXE')).toBe('TAUX FIXE');
     expect(normaliserRevisabilite('double')).toBe('DOUBLE');
@@ -278,30 +312,54 @@ describe('normalisation des libelles LEON', () => {
   });
 });
 
-describe('R-FIN-6 — prefinancement', () => {
+describe('R-FIN-6 — prefinancement (capitalisation actuarielle exact/365)', () => {
+  // Echeancier type SimPLUS!AL23:AL35 : tirages mensuels, capitalises jusqu au dernier.
   const tirages = [
-    { montant_eur: 100000, mois_avant_location: 12 },
-    { montant_eur: 50000, mois_avant_location: 6 },
+    { montant_eur: 100000, date: '2027-01-01' },
+    { montant_eur: 50000, date: '2027-07-01' },
   ];
 
-  it('capitalise chaque tirage mensuellement jusqu a la mise en location', () => {
-    const r = prefinancement({ tirages, taux: 0.03 });
+  it('capitalise chaque tirage a la puissance (jours/365) jusqu a la date de fin', () => {
+    const r = prefinancement({ tirages, taux: 0.03, date_fin: '2028-01-01' });
+    // Oracle recalcule a la main : 2027 n'est pas bissextile, 365 j et 184 j.
     const attendu =
-      100000 * ((1 + 0.03 / 12) ** 12 - 1) + 50000 * ((1 + 0.03 / 12) ** 6 - 1);
+      100000 * 1.03 ** (365 / 365) + 50000 * 1.03 ** (184 / 365) - 150000;
     expect(r.nominal_eur).toBe(150000);
-    expect(r.interets_eur).toBeCloseTo(attendu, 8);
-    expect(r.capital_constitue_eur).toBeCloseTo(150000 + attendu, 8);
+    expect(r.interets_eur).toBeCloseTo(attendu, 6);
+    expect(r.capital_constitue_eur).toBeCloseTo(150000 + attendu, 6);
+  });
+
+  it('sans date_fin explicite, la capitalisation court jusqu au dernier tirage (SimPLUS!FA14 = $AL$35)', () => {
+    const r = prefinancement({ tirages, taux: 0.03 });
+    const attendu = 100000 * 1.03 ** (181 / 365) - 100000; // 01/01 -> 01/07 = 181 j
+    expect(r.interets_eur).toBeCloseTo(attendu, 6);
   });
 
   it('flag « ne pas capitaliser » : le capital reste au nominal, le cout des interets demeure', () => {
-    const r = prefinancement({ tirages, taux: 0.03, capitaliser: false });
+    const r = prefinancement({ tirages, taux: 0.03, date_fin: '2028-01-01', capitaliser: false });
     expect(r.capital_constitue_eur).toBe(150000);
     expect(r.interets_eur).toBeGreaterThan(0);
   });
 
   it('un tirage plus precoce coute plus d interets', () => {
-    const precoce = prefinancement({ tirages: [{ montant_eur: 100000, mois_avant_location: 12 }], taux: 0.03 });
-    const tardif = prefinancement({ tirages: [{ montant_eur: 100000, mois_avant_location: 3 }], taux: 0.03 });
+    const opts = { taux: 0.03, date_fin: '2028-01-01' };
+    const precoce = prefinancement({ tirages: [{ montant_eur: 100000, date: '2027-01-01' }], ...opts });
+    const tardif = prefinancement({ tirages: [{ montant_eur: 100000, date: '2027-10-01' }], ...opts });
     expect(precoce.interets_eur).toBeGreaterThan(tardif.interets_eur);
+  });
+
+  it('refuse un tirage posterieur a la date de fin de capitalisation', () => {
+    expect(() =>
+      prefinancement({
+        tirages: [{ montant_eur: 1000, date: '2028-06-01' }],
+        taux: 0.03,
+        date_fin: '2028-01-01',
+      }),
+    ).toThrow(/posterieur/i);
+  });
+
+  it('les dates sont lues en UTC, sans horloge systeme', () => {
+    expect(jourUTC('2028-01-01') - jourUTC('2027-01-01')).toBe(365);
+    expect(() => jourUTC('01/01/2028')).toThrow();
   });
 });

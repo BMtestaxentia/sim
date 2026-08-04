@@ -69,14 +69,23 @@ Reconstruit depuis ParaPLUS, SimPLUS!A8:A42, ParaGLOB, validé par l'onglet IN d
 - **R-FIN-3** ✅ Solde à financer : solde_PLUS = PR_TTC_PLUS_modulé − (subventions_PLUS + FP_PLUS + autres_prêts_PLUS) (calculs!D336) ; idem PLAI.
 - **R-FIN-4** 🔶 Prêts CDC théoriques : PRÊT FONCIER = MIN(borné(solde, foncier_finançable), solde), plancher 0, arrondi milliers sup si option ; PRÊT BÂTIMENT = solde − préfi_échéancier − prêt_foncier. Correction « redressement », montants forcés, option PLUS Horizen (prêts >49 ans affectés PLUS → foncier), dernière échéance = reliquat au dernier tirage.
 - **R-FIN-5** ✅ Contrôles : ratio prêts CDC PLUS / PR PLUS ≥ 50 %.
-- **R-FIN-6** 🔶 Préfinancement : échéancier de tirages mensuels sur 12 mois avant mise en location ; intérêts_préfi = Σ tirages_capitalisés − Σ nominal (capitalisation SimPLUS!FA15:FD27 à transcrire). Deux modes : forfait au bilan ou par échéancier. Flag « ne pas capitaliser ».
+- **R-FIN-6** ✅ Préfinancement — **transcrit le 04/08/2026**. Échéancier de 13 tirages datés (`SimPLUS!AL23:AL35` dates, `AM23:AP35` montants par prêt). Capitalisation **actuarielle en base exact/365** : `capitalisé = Σ montant_i × (1 + taux)^((date_fin − date_i)/365)`, `intérêts_préfi = capitalisé − Σ montant_i`. `date_fin = SimPLUS!FA14 = $AL$35` = date du **dernier tirage** (et non la mise en location). Deux modes : forfait au bilan ou par échéancier. Flag « ne pas capitaliser les intérêts de préfinancement » (`SimPLUS!AS24`) : n'annule pas le coût, empêche seulement l'incorporation au capital. Source `SimPLUS!FA15:FD27`.
 
 ## 8. R-AMT — Moteur d'amortissement CDC ⭐ (cœur, validé ±0,1 % avril 2026)
 
 - **R-AMT-1** ✅ Caractéristiques par défaut des 4 prêts CDC : PLUS Constr. LA+0,60 %/40 ans/DOUBLE ; PLUS Foncier LA+0,60 %/50 (B2/C) ou 60 ans/DOUBLE ; PLAI Constr. LA−0,20 %/40 ans/DOUBLE ; PLAI Foncier LA−0,20 %/50-60 ans/DOUBLE. Progressivité −0,5 % (AXENTIA). + marge_anticipée_LA sur tous les taux.
 - **R-AMT-2** ✅ Première annuité (profil progressif) : `q = (1+p)/(1+t)` ; `annuité_1 = K × (1+t) × (1 − q) / (1 − q^(n−d))`. Si t = 0 → LEON renvoie 0 (⚠️ I-8 : nous faisons l'amortissement linéaire). Source SimPLUS!AM15.
 - **R-AMT-3** ✅ Date de première échéance : année(DAT) + 1, +0 si démembrement. Chaque prêt « autre » porte sa propre date (AR17…) — c'est la règle dont la violation causait le bug ALS (chaque prêt démarre à SA date, pas à l'an 1 commun).
-- **R-AMT-4** 🔶 Révision annuelle (barème CDC) : `LA_N = trajectoire_LA[N]` ; `tx_N = (1+t) × (1 + (LA_N − LA₀)/(1+t)) − 1` ; `rev_N = (1+p) × (1 + (LA_N − LA₀)/(1+t)) − 1`. Selon révisabilité : DOUBLE → taux_annuité = rev_N ; D.LIMITÉE → MAX(rev_N, 0) ; SIMPLE/fixe → p seul. `annuité_N = annuité_{N−1} × (1 + taux_annuité)` ; `intérêts_N = tx_N × CRD_{N−1}` ; `amort_N = annuité_N − intérêts_N` ; `CRD_N = CRD_{N−1} − amort_N`. Différé type 1 → annuité 0 (intérêts capitalisés) ; sinon intérêts seuls. Arrêt : si ROUND(CRD,4) ≤ 0 → dernière annuité ajustée. Source SimPLUS!FF117 sq. (formule FK117 de la dernière annuité à transcrire caractère par caractère).
+- **R-AMT-4** ✅ Révision annuelle (barème CDC) — **transcrite le 04/08/2026 depuis les formules vivantes** (classeur BERGERAC 07/2026, même version 131 onglets). Pour chaque année N, k = 0…durée−1, année = année_1re_échéance + k :
+  - `LA_N = VLOOKUP(année, ParaGEN!CT22:DD102, 11)` (approché, dernière valeur ≤ année) ; `LA₀ = Tx_LA`.
+  - `tx_N = (1+t) × (1 + (LA_N − LA₀)/(1+t)) − 1` (= `t + LA_N − LA₀`), sauf `TAUX FIXE` → `tx_N = t` (garde présente dans SimLIB!FH8, absente du bloc CDC : écart E-3).
+  - `rev_N` : DOUBLE → `(1+p) × (1 + (LA_N − LA₀)/(1+t)) − 1` ; D. LIMITÉE → `MAX(…, 0)` ; tout autre libellé (SIMPLE inclus) → `p`.
+  - **Pendant le différé** (k < d) : amortissement 0, CRD inchangé ; intérêts = 0 si type 1 (LEON ne capitalise pas — écart E-2, question Q-6), sinon `tx_N × CRD` ; annuité = intérêts.
+  - **Sinon — RÉ-AMORTISSEMENT annuel** (et non progression géométrique de l'annuité) : `annuité_N = CRD_{N−1} × (1+tx_N) × (1 − q_N)/(1 − q_N^{m_N})` avec `q_N = (1+rev_N)/(1+tx_N)` et `m_N = durée − k`. Puis `intérêts_N = tx_N × CRD_{N−1}` ; `amort_N = annuité_N − intérêts_N` ; `CRD_N = CRD_{N−1} − amort_N`.
+  - Branche linéaire : si `(t = 0 et p = 0)` ou `(rev_N = 0 et tx_N = 0)` → `annuité = K/(durée − différé)`.
+  - Si `ROUND(CRD_{N−1}, 4) ≤ 0` → annuité 0, la ligne reste dans la table.
+  - **Dernière échéance : aucun cas particulier.** À `m_N = 1` le facteur vaut `(1+tx_N)`, donc l'annuité solde exactement `CRD + intérêts`.
+  - ⚠️ La formulation `annuité_N = annuité_{N−1} × (1 + rev_N)` de la v0.1 est **fausse dès que le LA bouge** ; elle n'est équivalente qu'à taux constant. Source `SimPLUS!FF117:FN117`.
 - **R-AMT-5** ✅ Sortie : table par prêt (année → taux, annuité, intérêts, amortissement, CRD). Annuité comptée si année ≥ année(1re échéance du prêt).
 
 ## 9. R-EXP — Compte d'exploitation prévisionnel (50-60 ans) 🔶

@@ -62,3 +62,12 @@ export function arrondiMillierSup(eur) {
 export function arrondiSurface(m2) {
   return arrondi(m2, 2);
 }
+
+/**
+ * CRD pour le test d'arret du tableau d'amortissement : 4 decimales
+ * (R-AMT-4 : « si ROUND(CRD,4) <= 0 -> derniere annuite ajustee », SimPLUS!FF117 sq.).
+ * @param {number} eur
+ */
+export function arrondiCRD(eur) {
+  return arrondi(eur, 4);
+}

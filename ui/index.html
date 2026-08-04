@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Moteur de simulation — saisie et plan de financement</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Manrope (charte SFO). Degrade proprement sur les polices systeme hors ligne. -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="entete">
+      <div class="entete__titre">
+        <h1>Simulation d'opération</h1>
+        <p class="entete__sous-titre">
+          Saisie et plan de financement — moteur <span id="version-moteur">…</span>
+        </p>
+      </div>
+      <div class="entete__actions">
+        <span id="etat-calcul" class="pastille pastille--ok">à jour</span>
+        <button type="button" id="btn-json" class="bouton bouton--discret">Voir le JSON</button>
+      </div>
+    </header>
+
+    <main class="grille">
+      <!-- ============ COLONNE DE SAISIE ============ -->
+      <section class="colonne colonne--saisie" aria-label="Saisie de l'opération">
+        <fieldset class="bloc">
+          <legend class="bloc__titre">Identité</legend>
+          <div class="champs">
+            <label class="champ champ--large">
+              <span>Nom de l'opération</span>
+              <input type="text" data-champ="identite.nom" />
+            </label>
+            <label class="champ">
+              <span>Produit</span>
+              <select data-champ="identite.produit" id="select-produit"></select>
+            </label>
+            <label class="champ">
+              <span>Type</span>
+              <select data-champ="identite.type_operation">
+                <option>Vefa</option>
+                <option>Neuf</option>
+                <option>Acq-Amélio</option>
+                <option>Réhab</option>
+              </select>
+            </label>
+            <label class="champ">
+              <span>Zone 1/2/3</span>
+              <select data-champ="identite.zone_123" data-type="nombre">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+              </select>
+            </label>
+            <label class="champ">
+              <span>Zone A/B/C</span>
+              <select data-champ="identite.zone_ABC">
+                <option>A</option>
+                <option>A bis</option>
+                <option>B1</option>
+                <option>B2</option>
+                <option>C</option>
+              </select>
+            </label>
+            <label class="champ">
+              <span>Mise en location</span>
+              <input type="number" data-champ="dates.annee_mise_en_location" data-type="nombre" step="1" />
+            </label>
+            <label class="champ">
+              <span>Durée simulation</span>
+              <input type="number" data-champ="dates.duree_simulation_ans" data-type="nombre" step="1" min="1" />
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="bloc">
+          <legend class="bloc__titre">Programme</legend>
+          <div class="champs">
+            <label class="champ">
+              <span>Logements</span>
+              <input type="number" data-champ="lots.0.nb_logements" data-type="nombre" step="1" min="0" />
+            </label>
+            <label class="champ">
+              <span>SHAB (m²)</span>
+              <input type="number" data-champ="lots.0.shab_m2" data-type="nombre" step="0.01" min="0" />
+            </label>
+            <label class="champ">
+              <span>Annexes (m²)</span>
+              <input type="number" data-champ="lots.0.surfaces_annexes_m2" data-type="nombre" step="0.01" min="0" />
+            </label>
+            <label class="champ">
+              <span>Marge locale (€/m²)</span>
+              <input type="number" data-champ="lots.0.marge_locale_eur_m2" data-type="nombre" step="0.01" />
+            </label>
+          </div>
+          <p class="aide" id="aide-surfaces"></p>
+        </fieldset>
+
+        <fieldset class="bloc">
+          <legend class="bloc__titre">
+            Prix de revient
+            <button type="button" class="bouton bouton--ajout" data-ajouter="postes_bilan">+ poste</button>
+          </legend>
+          <div class="liste" id="liste-postes"></div>
+        </fieldset>
+
+        <fieldset class="bloc">
+          <legend class="bloc__titre">
+            Subventions
+            <button type="button" class="bouton bouton--ajout" data-ajouter="subventions">+ subvention</button>
+          </legend>
+          <div class="liste" id="liste-subventions"></div>
+          <div class="champs">
+            <label class="champ">
+              <span>Fonds propres (€)</span>
+              <input type="number" data-champ="fonds_propres_eur" data-type="nombre" step="1" min="0" />
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="bloc">
+          <legend class="bloc__titre">
+            Prêts
+            <button type="button" class="bouton bouton--ajout" data-ajouter="prets">+ prêt</button>
+          </legend>
+          <div class="liste" id="liste-prets"></div>
+          <p class="aide">
+            Chaque prêt porte sa propre année de première échéance (règle R-AMT-3).
+          </p>
+        </fieldset>
+      </section>
+
+      <!-- ============ COLONNE RÉSULTATS ============ -->
+      <section class="colonne colonne--resultats" aria-label="Plan de financement">
+        <div id="erreur" class="erreur" hidden></div>
+
+        <div class="carte carte--equilibre" id="carte-equilibre">
+          <div class="equilibre__entete">
+            <h2>Plan de financement</h2>
+            <span id="badge-equilibre" class="badge">—</span>
+          </div>
+
+          <div class="balance">
+            <div class="balance__colonne">
+              <div class="balance__libelle">Emplois</div>
+              <div class="barre" id="barre-emplois"></div>
+              <div class="balance__total" id="total-emplois">—</div>
+            </div>
+            <div class="balance__colonne">
+              <div class="balance__libelle">Ressources</div>
+              <div class="barre" id="barre-ressources"></div>
+              <div class="balance__total" id="total-ressources">—</div>
+            </div>
+          </div>
+
+          <div class="legende" id="legende"></div>
+        </div>
+
+        <div class="carte">
+          <h2>Prêts</h2>
+          <table class="tableau" id="tableau-prets">
+            <thead>
+              <tr>
+                <th>Prêt</th>
+                <th class="num">Montant</th>
+                <th class="num">Taux appliqué</th>
+                <th class="num">Durée</th>
+                <th class="num">1<sup>re</sup> annuité</th>
+                <th class="num">Dernière</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <p class="aide" id="aide-taux"></p>
+        </div>
+
+        <div class="carte">
+          <h2>Indicateurs</h2>
+          <div class="indicateurs" id="indicateurs"></div>
+        </div>
+
+        <div class="carte" id="carte-alertes" hidden>
+          <h2>Contrôles</h2>
+          <ul class="alertes" id="alertes"></ul>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="dialogue-json" class="dialogue">
+      <div class="dialogue__entete">
+        <h2>Résultat brut</h2>
+        <button type="button" id="btn-fermer-json" class="bouton bouton--discret">Fermer</button>
+      </div>
+      <pre id="contenu-json"></pre>
+    </dialog>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

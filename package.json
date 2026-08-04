@@ -7,6 +7,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "ui": "node outils/serveur.js",
+    "exemple": "node exemples/simulation_pls.js",
     "check": "tsc --noEmit --allowJs --checkJs -p jsconfig.json"
   },
   "devDependencies": {

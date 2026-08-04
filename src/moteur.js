@@ -15,6 +15,9 @@
  * calcul metier, seulement l'assemblage et la propagation des donnees.
  */
 import { surfaceUtile, quotesPartsSU, loyerProduit, loyerAnnexesSeparees, controlesLoyer } from './loyers.js';
+import { normaliserTrajectoires } from './trajectoires.js';
+import { calendrierOperation } from './calendrier.js';
+import { pretsDefautResolus, ORDRE_PRODUITS } from './produits.js';
 import { prixDeRevient } from './bilan.js';
 import { agregerSubventions, surchargeFonciere } from './subventions.js';
 import {
@@ -29,7 +32,7 @@ import { compteExploitation, anneeReconstitutionFondsPropres } from './exploitat
 import { arrondiEuro } from './arrondis.js';
 
 /** Version du moteur, reportee dans les resultats pour la tracabilite. */
-export const VERSION_MOTEUR = '0.3.0';
+export const VERSION_MOTEUR = '0.4.0';
 
 /**
  * @typedef {Object} Entrees
@@ -51,45 +54,78 @@ export const VERSION_MOTEUR = '0.3.0';
  */
 export function calculer(entrees, referentiels) {
   const baremes = referentiels.baremes ?? referentiels;
-  const trajectoires = referentiels.trajectoires ?? {};
+  // Le referentiel de trajectoires stocke une ligne par annee ; les modules de
+  // calcul consomment un dictionnaire par poste. Sans cette normalisation,
+  // l'indexation retombe silencieusement a zero (defaut V2).
+  const trajectoires = normaliserTrajectoires(referentiels.trajectoires);
   const alertes = [];
 
   const { identite = {}, dates = {}, lots = [], options = {} } = entrees;
   const zones = { zone_123: identite.zone_123, zone_ABC: identite.zone_ABC };
-  const anneeMEL = dates.annee_mise_en_location;
-  if (!Number.isInteger(anneeMEL)) {
-    throw new Error("dates.annee_mise_en_location est requise (annee civile entiere)");
-  }
+
+  // --- 0. Calendrier (R-AMT-3 en amont) ---
+  const calendrier = calendrierOperation(dates);
+  const anneeMEL = calendrier.annee_mise_en_location;
 
   // --- 1. Surfaces (R-SURF) ---
   const surfaces = lots.map((lot) => ({
     ...lot,
     su_m2: surfaceUtile(lot, baremes),
   }));
-  const suParProduit = {};
+
+  // Agregation PAR TRANCHE DE FINANCEMENT avant tout calcul de loyer : le
+  // coefficient de structure est une fonction de (nb logements, SU) de la
+  // tranche entiere (R-SURF-2). Le calculer ligne a ligne donnerait des CS
+  // differents selon le decoupage de saisie, donc des loyers faux (defaut V3).
+  /** @type {Record<string, {nb_logements: number, su_m2: number, shab_m2: number, lignes: any[]}>} */
+  const tranches = {};
   for (const s of surfaces) {
-    suParProduit[s.code_produit] = (suParProduit[s.code_produit] ?? 0) + s.su_m2;
+    const t = (tranches[s.code_produit] ??= { nb_logements: 0, su_m2: 0, shab_m2: 0, lignes: [] });
+    t.nb_logements += s.nb_logements ?? 0;
+    t.su_m2 += s.su_m2 ?? 0;
+    t.shab_m2 += s.shab_m2 ?? 0;
+    t.lignes.push(s);
   }
+
+  const suParProduit = Object.fromEntries(
+    Object.entries(tranches).map(([code, t]) => [code, t.su_m2]),
+  );
   const quotesParts = quotesPartsSU(suParProduit);
 
-  // --- 2. Loyers (R-LOYER) ---
-  const loyers = surfaces.map((s) => {
+  /** Codes de produit presents, dans l'ordre canonique. */
+  const codesPresents = ORDRE_PRODUITS.filter((c) => tranches[c]).concat(
+    Object.keys(tranches).filter((c) => !ORDRE_PRODUITS.includes(/** @type {any} */ (c))),
+  );
+
+  // --- 2. Loyers (R-LOYER), une ligne par TRANCHE ---
+  const loyers = codesPresents.map((code) => {
+    const t = tranches[code];
+    // Les surcharges de loyer se saisissent au niveau de la tranche : on prend
+    // la premiere valeur renseignee parmi ses lignes.
+    const premiere = t.lignes.find((l) => l.marge_locale_eur_m2 !== undefined) ?? t.lignes[0];
+    const forcee = t.lignes.find((l) => l.loyer_sortie_force !== undefined && l.loyer_sortie_force !== null);
     const l = loyerProduit(
       {
-        code_produit: s.code_produit,
-        su_m2: s.su_m2,
-        nb_logements: s.nb_logements,
+        code_produit: code,
+        su_m2: t.su_m2,
+        nb_logements: t.nb_logements,
         zones,
-        marge_locale_eur_m2: s.marge_locale_eur_m2,
-        marge_majoration: s.marge_majoration,
-        loyer_sortie_force: s.loyer_sortie_force,
+        marge_locale_eur_m2: premiere?.marge_locale_eur_m2,
+        marge_majoration: premiere?.marge_majoration,
+        loyer_sortie_force: forcee?.loyer_sortie_force,
         dom: identite.dom,
         foyer: identite.foyer,
       },
       baremes,
     );
-    alertes.push(...controlesLoyer(l, s.code_produit));
-    return { code_produit: s.code_produit, nb_logements: s.nb_logements, su_m2: s.su_m2, ...l };
+    alertes.push(...controlesLoyer(l, code));
+    return {
+      code_produit: code,
+      nb_logements: t.nb_logements,
+      su_m2: t.su_m2,
+      shab_m2: t.shab_m2,
+      ...l,
+    };
   });
 
   const loyersLogementsAnnuels = arrondiEuro(
@@ -151,17 +187,57 @@ export function calculer(entrees, referentiels) {
         });
 
   // --- 6. Amortissement (R-AMT) ---
-  const laOrigine = trajectoires.taux_reference_livret_a ?? trajectoires.taux_livret_a_courant;
+  const laOrigine = trajectoires.taux_reference_livret_a;
   const laParAnnee = trajectoires.livret_a_par_annee;
 
-  /** @type {Array<Object>} */
-  const pretsACalculer =
-    pretsCDCSaisis.length > 0
-      ? pretsSaisis
-      : [
-          { code: 'CDC_FONCIER', montant_eur: cdcTheoriques.pret_foncier_eur, nature: 'foncier' },
-          { code: 'CDC_BATIMENT', montant_eur: cdcTheoriques.pret_batiment_eur, nature: 'construction' },
-        ].map((p) => ({ ...p, ...(entrees.caracteristiques_prets_defaut ?? {}) }));
+  /**
+   * Prets a amortir. En l'absence de prets saisis, on mobilise les prets CDC
+   * theoriques, dont les caracteristiques sont resolues depuis `produits.js`
+   * (R-AMT-1) et non laissees indefinies — sans quoi l'amortissement leve
+   * « Duree de pret invalide » (defaut V4).
+   * @type {Array<Object>}
+   */
+  let pretsACalculer;
+  if (pretsCDCSaisis.length > 0) {
+    pretsACalculer = pretsSaisis;
+  } else {
+    const surcharges = entrees.caracteristiques_prets_defaut ?? {};
+    let defauts = [];
+    try {
+      defauts = pretsDefautResolus(produitPrincipal, {
+        zone_ABC: identite.zone_ABC,
+        livret_a_reference: surcharges.livret_a_origine ?? laOrigine,
+        progressivite: surcharges.progressivite ?? 0,
+      });
+    } catch (e) {
+      alertes.push(
+        `Prets CDC theoriques non calculables : ${/** @type {Error} */ (e).message}. ` +
+          'Saisir les prets manuellement.',
+      );
+    }
+    const parNature = Object.fromEntries(defauts.map((d) => [d.nature, d]));
+    pretsACalculer = [
+      { code: 'CDC_FONCIER', libelle: 'Pret CDC foncier', montant_eur: cdcTheoriques.pret_foncier_eur, nature: 'foncier' },
+      { code: 'CDC_BATIMENT', libelle: 'Pret CDC construction', montant_eur: cdcTheoriques.pret_batiment_eur, nature: 'construction' },
+    ].map((p) => ({
+      ...p,
+      ...(parNature[p.nature] ?? {}),
+      livret_a_origine: laOrigine,
+      livret_a_par_annee: laParAnnee,
+      ...surcharges,
+    }));
+
+    // Un pret theorique dont les caracteristiques n'ont pas pu etre resolues ne
+    // doit pas faire echouer toute la simulation : on le signale et on l'ecarte.
+    const incalculables = pretsACalculer.filter((p) => p.montant_eur > 0 && !(p.duree_ans > 0));
+    for (const p of incalculables) {
+      alertes.push(
+        `${p.libelle} de ${arrondiEuro(p.montant_eur)} EUR non amorti : duree et taux inconnus ` +
+          `pour le produit ${produitPrincipal}. Saisir ce pret manuellement.`,
+      );
+    }
+    pretsACalculer = pretsACalculer.filter((p) => p.duree_ans > 0);
+  }
 
   const amortissements = pretsACalculer
     .filter((p) => p.montant_eur > 0)
@@ -169,6 +245,11 @@ export function calculer(entrees, referentiels) {
       code: p.code ?? p.libelle ?? 'pret',
       libelle: p.libelle ?? p.code,
       montant_eur: p.montant_eur,
+      nature: p.nature ?? 'autre',
+      taux_saisi: p.taux,
+      annee_premiere_echeance:
+        p.annee_premiere_echeance ??
+        anneePremiereEcheance(anneeMEL, { demembrement: identite.demembrement }),
       tableau: tableauAmortissement({
         montant_eur: p.montant_eur,
         taux: p.taux,
@@ -186,21 +267,57 @@ export function calculer(entrees, referentiels) {
       }),
     }));
 
-  const totalPrets = arrondiEuro(
-    amortissements.reduce((s, a) => s + a.montant_eur, 0) + autresPretsEur * 0,
-  );
+  // Tous les prets amortis, quelle que soit leur nature. `amortissements` porte
+  // deja les prets « autre » : les rajouter les compterait deux fois (defaut V1).
+  const totalPrets = arrondiEuro(amortissements.reduce((s, a) => s + a.montant_eur, 0));
+
+  // Seuls les prets CDC entrent au ratio reglementaire R-FIN-5 : un pret
+  // collecteur ou une avance ne sont pas des prets de la Caisse des Depots.
+  const totalPretsCDC = cdcTheoriques
+    ? cdcTheoriques.total_cdc_eur
+    : arrondiEuro(
+        amortissements.filter((a) => a.nature !== 'autre').reduce((s, a) => s + a.montant_eur, 0),
+      );
 
   const equilibre = controleEquilibre(
     {
       prix_revient_ttc_module_eur: bilan.total_ttc_module_eur,
       subventions_eur: subventionsTotal,
       fonds_propres_eur: fondsPropres,
-      prets_eur: totalPrets + autresPretsEur,
-      prets_cdc_eur: cdcTheoriques ? cdcTheoriques.total_cdc_eur : totalPrets,
+      prets_eur: totalPrets,
+      prets_cdc_eur: totalPretsCDC,
     },
     baremes,
   );
   alertes.push(...equilibre.alertes);
+
+  // Un pret dont les echeances depassent l'horizon de simulation voit ses
+  // annuites disparaitre des totaux d'exploitation SANS AUCUN SIGNAL : le compte
+  // boucle sur la duree de simulation. On le signale explicitement.
+  const anneeFinSimulation = anneeMEL + (dates.duree_simulation_ans ?? 50) - 1;
+  for (const a of amortissements) {
+    const derniere = a.tableau.at(-1)?.annee;
+    if (derniere > anneeFinSimulation) {
+      const horsHorizon = a.tableau
+        .filter((l) => l.annee > anneeFinSimulation)
+        .reduce((s, l) => s + l.annuite_eur, 0);
+      alertes.push(
+        `${a.libelle} court jusqu'en ${derniere}, au-dela de l'horizon de simulation ` +
+          `(${anneeFinSimulation}) : ${arrondiEuro(horsHorizon)} EUR d'annuites ne sont pas ` +
+          "comptes au compte d'exploitation.",
+      );
+    }
+  }
+
+  // Le prix de revient applique un taux de LASM unique, celui du produit
+  // principal : sur une operation a plusieurs tranches, c'est une approximation.
+  if (codesPresents.length > 1) {
+    alertes.push(
+      `Operation a ${codesPresents.length} tranches (${codesPresents.join(', ')}) mais un seul ` +
+        `taux de livraison a soi-meme applique, celui du ${produitPrincipal}. ` +
+        'Le prix de revient par tranche n est pas encore ventile.',
+    );
+  }
 
   // --- 7. Fiscalite (R-FISC) ---
   const tfpb = exonerationTFPB(
@@ -240,7 +357,9 @@ export function calculer(entrees, referentiels) {
       exp.tfpb_par_logement_eur ?? baremes.constantes_reglementaires.tfpb.montant_par_logement_eur,
     annee_debut_tfpb: exp.annee_debut_tfpb ?? tfpb.annee_debut_tfpb,
     annuites: annuitesAplaties,
-    trajectoires: exp.trajectoires ?? trajectoires,
+    // Trajectoires par poste, issues du referentiel normalise. Une surcharge
+    // explicite dans les entrees reste possible pour tester un scenario.
+    trajectoires: exp.trajectoires ?? trajectoires.par_poste,
   });
 
   // --- 9. Indicateurs de synthese ---
@@ -271,7 +390,14 @@ export function calculer(entrees, referentiels) {
   return {
     version_moteur: VERSION_MOTEUR,
     identite,
-    surfaces: { par_produit: suParProduit, quotes_parts: quotesParts, detail: surfaces },
+    calendrier,
+    profil_trajectoires: trajectoires.profil ?? null,
+    surfaces: {
+      par_produit: suParProduit,
+      quotes_parts: quotesParts,
+      tranches: codesPresents,
+      detail: surfaces,
+    },
     loyers,
     bilan,
     subventions: { ...subventions, surcharge_fonciere: ssf, total_avec_ssf_eur: subventionsTotal },
@@ -279,6 +405,8 @@ export function calculer(entrees, referentiels) {
       solde_a_financer_eur: solde,
       prets_cdc_theoriques: cdcTheoriques,
       prefinancement: prefi,
+      total_prets_eur: totalPrets,
+      total_prets_cdc_eur: totalPretsCDC,
       equilibre,
     },
     amortissements,

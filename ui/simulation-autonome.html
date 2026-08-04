@@ -670,8 +670,11 @@ const PRODUITS = {
     coefficient_structure: true,
     prets_defaut: [
       // Taux constate sur l'operation BERGERAC : 3,51 % pour un LA de reference de
-      // 2,40 % (ParaGEN!DD20), soit LA + 1,11 %. Revisabilite SIMPLE (SimPLS!AM19) :
-      // le taux suit le Livret A, la progression de l'annuite reste a p.
+      // 2,40 % (ParaGEN!DD20), soit LA + 1,11 %. Confirme independamment par la
+      // maquette LEON REWORK (ADMIN!C45 « Spread PLS » = 0,0111), qui donne aussi
+      // PLAI -0,20 % et PLUS +0,60 %, conformes a R-AMT-1.
+      // Revisabilite SIMPLE (SimPLS!AM19) : le taux suit le Livret A, la
+      // progression de l'annuite reste a p.
       { nature: 'construction', taux_ref: 'LA+1.11', duree_ref: '40', revisabilite: 'SIMPLE' },
       { nature: 'foncier', taux_ref: 'LA+1.11', duree_ref: 'zone_abc:B2|C->50,sinon->60', revisabilite: 'SIMPLE' },
     ],
@@ -710,6 +713,84 @@ function produit(code) {
   return p;
 }
 
+/**
+ * Ordre canonique d'affichage et de restitution : rang reglementaire, du plus
+ * social au plus libre. Source unique pour les listes deroulantes, les
+ * recapitulatifs par tranche et les tableaux — evite de recoder l'ordre partout.
+ * @type {CodeProduit[]}
+ */
+const ORDRE_PRODUITS = ['PLAI', 'PLUS', 'PLUS33', 'PLS', 'LOC', 'LIBRE'];
+
+/**
+ * Produits tries dans l'ordre canonique.
+ * @returns {DefinitionProduit[]}
+ */
+function produitsOrdonnes() {
+  return ORDRE_PRODUITS.map((c) => PRODUITS[c]).filter(Boolean);
+}
+
+/**
+ * Resout le taux d'un pret a partir de sa cle de reference.
+ * `'LA+0.60'` -> Livret A de reference + 0,60 point. `'fixe'` -> taux a saisir.
+ * Les spreads sont confirmes par deux sources independantes : R-AMT-1 du
+ * dictionnaire et `ADMIN!C43:C46` de la maquette LEON REWORK.
+ * @param {string} taux_ref
+ * @param {number} livret_a_reference
+ * @returns {number|null} taux en fraction, ou null si le taux doit etre saisi
+ */
+function resoudreTaux(taux_ref, livret_a_reference) {
+  const m = /^LA([+-])(\d+(?:\.\d+)?)$/.exec(String(taux_ref).trim());
+  if (!m) return null;
+  if (!Number.isFinite(livret_a_reference)) {
+    throw new Error(`Livret A de reference requis pour resoudre le taux ${taux_ref}`);
+  }
+  const spread = Number(m[2]) / 100;
+  return livret_a_reference + (m[1] === '-' ? -spread : spread);
+}
+
+/**
+ * Resout la duree d'un pret a partir de sa cle de reference.
+ * `'40'` -> 40 ans. `'zone_abc:B2|C->50,sinon->60'` -> 50 ans en zone B2 ou C,
+ * 60 ans ailleurs (R-AMT-1).
+ * @param {string} duree_ref
+ * @param {string} [zone_ABC]
+ * @returns {number}
+ */
+function resoudreDuree(duree_ref, zone_ABC) {
+  const brut = String(duree_ref).trim();
+  if (/^\d+$/.test(brut)) return Number(brut);
+
+  const m = /^zone_abc:([^-]+)->(\d+),sinon->(\d+)$/.exec(brut);
+  if (!m) throw new Error(`Cle de duree de pret non reconnue : ${duree_ref}`);
+  const zones = m[1].split('|').map((z) => z.trim().toUpperCase());
+  const zone = String(zone_ABC ?? '').trim().toUpperCase();
+  if (!zone) {
+    throw new Error(`Zone ABC requise pour resoudre la duree de pret « ${duree_ref} »`);
+  }
+  return zones.includes(zone) ? Number(m[2]) : Number(m[3]);
+}
+
+/**
+ * Caracteristiques par defaut des prets CDC d'un produit (R-AMT-1), resolues
+ * depuis les cles declaratives de `PRODUITS`. C'est ce qui rend le jeu de prets
+ * theorique calculable sans saisie.
+ * @param {CodeProduit} code
+ * @param {Object} contexte
+ * @param {string} [contexte.zone_ABC]
+ * @param {number} contexte.livret_a_reference
+ * @param {number} [contexte.progressivite] progressivite appliquee (AXENTIA : -0,005)
+ * @returns {Array<{nature: string, taux: number|null, duree_ans: number, revisabilite: string, progressivite: number}>}
+ */
+function pretsDefautResolus(code, { zone_ABC, livret_a_reference, progressivite = 0 }) {
+  return produit(code).prets_defaut.map((p) => ({
+    nature: p.nature,
+    taux: resoudreTaux(p.taux_ref, livret_a_reference),
+    duree_ans: resoudreDuree(p.duree_ref, zone_ABC),
+    revisabilite: p.revisabilite,
+    progressivite,
+  }));
+}
+
 /* ===== src/amortissement.js ===== */
 // @ts-check
 /**
@@ -746,7 +827,7 @@ function produit(code) {
  */
 const BASE_JOURS_ACT365 = 365;
 
-/** Millisecondes par jour (constante calendaire). */
+/** Millisecondes par jour (constante calendaire). Source unique du projet. */
 const MS_PAR_JOUR = 86400000;
 
 /** @typedef {'DOUBLE'|'D.LIMITEE'|'SIMPLE'|'TAUX FIXE'} Revisabilite */
@@ -1054,6 +1135,277 @@ function prefinancement({ tirages, taux, date_fin, capitaliser = true }) {
     nominal_eur: nominal,
     interets_eur: interets,
     capital_constitue_eur: capitaliser ? nominal + interets : nominal,
+  };
+}
+
+/* ===== src/calendrier.js ===== */
+// @ts-check
+/**
+ * Calendrier de l'operation : chaine de dates derivees de la saisie.
+ *
+ * Source d'ergonomie : onglet ACCUEIL de la maquette LEON REWORK, ou seule la
+ * date de debut des travaux est saisie ; livraison et mise en location en
+ * decoulent (`C24 = C22 decalee de C23 mois`, `C25 = C24 + 1 jour`).
+ *
+ * Ce module existe pour que cette derivation reste une REGLE DE CALCUL du
+ * moteur et n'aille pas se loger dans l'interface, ou elle serait invisible aux
+ * tests et divergerait a la premiere occasion. L'UI l'appelle pour afficher, le
+ * moteur l'appelle pour calculer : une seule implementation.
+ *
+ * Aucune horloge systeme : toutes les dates sont des entrees explicites.
+ */
+
+/**
+ * Formate un numero de jour UTC en date ISO 'AAAA-MM-JJ'.
+ * @param {number} jour
+ * @returns {string}
+ */
+function versISO(jour) {
+  return new Date(jour * MS_PAR_JOUR).toISOString().slice(0, 10);
+}
+
+/**
+ * Decale une date d'un nombre entier de mois, en calendaire (et non en tranches
+ * de 30 jours). Le jour du mois est conserve, sauf si le mois d'arrivee est plus
+ * court : on retombe alors sur son dernier jour (31 janvier + 1 mois = 28 ou 29 fevrier).
+ * @param {string|Date} date
+ * @param {number} mois
+ * @returns {string} date ISO
+ */
+function decalerMois(date, mois) {
+  const j = jourUTC(date);
+  const d = new Date(j * MS_PAR_JOUR);
+  const an = d.getUTCFullYear();
+  const m = d.getUTCMonth();
+  const jour = d.getUTCDate();
+
+  const cible = new Date(Date.UTC(an, m + mois, 1));
+  const dernierJourDuMois = new Date(
+    Date.UTC(cible.getUTCFullYear(), cible.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+
+  return versISO(
+    Date.UTC(cible.getUTCFullYear(), cible.getUTCMonth(), Math.min(jour, dernierJourDuMois)) /
+      MS_PAR_JOUR,
+  );
+}
+
+/**
+ * @typedef {Object} EntreesCalendrier
+ * @property {string|Date} [date_debut_travaux]
+ * @property {number} [duree_chantier_mois]
+ * @property {string|Date} [date_livraison]      surcharge (contractuelle en VEFA)
+ * @property {string|Date} [date_mise_en_location] surcharge
+ * @property {number} [annee_mise_en_location]   surcharge directe (forme minimale)
+ *
+ * @typedef {Object} Calendrier
+ * @property {string|null} date_debut_travaux
+ * @property {number|null} duree_chantier_mois
+ * @property {string|null} date_livraison
+ * @property {string|null} date_mise_en_location
+ * @property {number} annee_mise_en_location
+ * @property {Record<string, 'saisie'|'calcule'>} origine  d'ou vient chaque date
+ */
+
+/**
+ * Derive le calendrier de l'operation.
+ *
+ * Regles (maquette ACCUEIL) :
+ *   livraison        = debut des travaux decale de la duree de chantier, en mois
+ *   mise en location = livraison + 1 jour
+ * Chaque date derivee peut etre surchargee par la saisie ; `origine` indique
+ * pour chacune si elle a ete saisie ou calculee, ce qui permet a l'interface de
+ * distinguer visuellement les deux sans reimplementer la regle.
+ *
+ * @param {EntreesCalendrier} entrees
+ * @returns {Calendrier}
+ */
+function calendrierOperation(entrees = {}) {
+  const {
+    date_debut_travaux,
+    duree_chantier_mois,
+    date_livraison,
+    date_mise_en_location,
+    annee_mise_en_location,
+  } = entrees;
+
+  /** @type {Record<string, 'saisie'|'calcule'>} */
+  const origine = {};
+
+  let livraison = null;
+  if (date_livraison) {
+    livraison = versISO(jourUTC(date_livraison));
+    origine.date_livraison = 'saisie';
+  } else if (date_debut_travaux && Number.isFinite(duree_chantier_mois)) {
+    livraison = decalerMois(date_debut_travaux, Number(duree_chantier_mois));
+    origine.date_livraison = 'calcule';
+  }
+
+  let miseEnLocation = null;
+  if (date_mise_en_location) {
+    miseEnLocation = versISO(jourUTC(date_mise_en_location));
+    origine.date_mise_en_location = 'saisie';
+  } else if (livraison) {
+    miseEnLocation = versISO(jourUTC(livraison) + 1);
+    origine.date_mise_en_location = 'calcule';
+  }
+
+  let annee;
+  if (miseEnLocation) {
+    annee = Number(miseEnLocation.slice(0, 4));
+    origine.annee_mise_en_location = 'calcule';
+  } else if (Number.isInteger(annee_mise_en_location)) {
+    annee = Number(annee_mise_en_location);
+    origine.annee_mise_en_location = 'saisie';
+  } else {
+    throw new Error(
+      "Calendrier incomplet : renseigner soit annee_mise_en_location, soit une date de mise en " +
+        'location, soit un debut de travaux avec une duree de chantier.',
+    );
+  }
+
+  if (date_debut_travaux) origine.date_debut_travaux = 'saisie';
+
+  return {
+    date_debut_travaux: date_debut_travaux ? versISO(jourUTC(date_debut_travaux)) : null,
+    duree_chantier_mois: Number.isFinite(duree_chantier_mois) ? Number(duree_chantier_mois) : null,
+    date_livraison: livraison,
+    date_mise_en_location: miseEnLocation,
+    annee_mise_en_location: annee,
+    origine,
+  };
+}
+
+/* ===== src/trajectoires.js ===== */
+// @ts-check
+/**
+ * Adaptation du referentiel de trajectoires macro vers la forme consommee par
+ * le moteur.
+ *
+ * Le fichier `referentiels/trajectoires_axentia_2026.json` stocke une LIGNE PAR
+ * ANNEE (`trajectoires: [{annee, loyers_irl, tfpb, livret_a, ...}]`), forme
+ * naturelle pour un referentiel versionne et relisible. Les modules de calcul,
+ * eux, consomment un DICTIONNAIRE PAR POSTE (`{2028: 0.02, 2029: 0.021}`), forme
+ * naturelle pour une indexation annee par annee.
+ *
+ * Sans cette conversion, `trajectoires.loyers_irl` vaut `undefined`, l'indexation
+ * retombe silencieusement a 0 et le profil AXENTIA n'est jamais applique : c'est
+ * un defaut qui ne leve aucune erreur et ne se voit que sur les montants. D'ou
+ * ce module dedie et son test qui charge le fichier reel.
+ *
+ * Unites : taux en fraction, annees civiles entieres.
+ */
+
+/** Postes portes par une ligne de trajectoire (tout sauf l'annee elle-meme). */
+const POSTES = [
+  'gros_entretien',
+  'gestion',
+  'vacance_impayes',
+  'loyers_irl',
+  'frais_financiers',
+  'produits_financiers',
+  'tfpb',
+  'livret_a',
+  'rel',
+  'crl',
+];
+
+/**
+ * @typedef {Object} TrajectoiresMoteur
+ * @property {string} [profil]
+ * @property {string} [source]
+ * @property {number|undefined} taux_reference_livret_a  LA d'origine des prets (LA_0)
+ * @property {Record<number, number>} livret_a_par_annee
+ * @property {number} annee_min
+ * @property {number} annee_max
+ * @property {Record<string, Record<number, number>>} par_poste
+ */
+
+/**
+ * Convertit le referentiel versionne en trajectoires exploitables par le moteur.
+ *
+ * Les annees postérieures a la derniere ligne ne sont PAS extrapolees ici : les
+ * consommateurs (`facteurIndexation`, `livretAPourAnnee`) reconduisent d'eux-memes
+ * la derniere valeur connue, comme le VLOOKUP approche de LEON. C'est important
+ * car l'horizon des prets fonciers (60 ans) depasse celui de la table.
+ *
+ * @param {any} referentiel contenu de trajectoires_axentia_2026.json
+ * @returns {TrajectoiresMoteur}
+ */
+function adapterTrajectoires(referentiel) {
+  const lignes = referentiel?.trajectoires;
+  if (!Array.isArray(lignes) || lignes.length === 0) {
+    throw new Error(
+      "Referentiel de trajectoires invalide : cle `trajectoires` absente ou vide. " +
+        'Attendu : [{annee, loyers_irl, tfpb, livret_a, ...}].',
+    );
+  }
+
+  /** @type {Record<string, Record<number, number>>} */
+  const parPoste = {};
+  for (const poste of POSTES) parPoste[poste] = {};
+
+  let anneeMin = Infinity;
+  let anneeMax = -Infinity;
+
+  for (const ligne of lignes) {
+    const annee = Number(ligne.annee);
+    if (!Number.isInteger(annee)) {
+      throw new Error(`Ligne de trajectoire sans annee civile exploitable : ${JSON.stringify(ligne)}`);
+    }
+    anneeMin = Math.min(anneeMin, annee);
+    anneeMax = Math.max(anneeMax, annee);
+    for (const poste of POSTES) {
+      const v = ligne[poste];
+      // `null` est une valeur legitime du referentiel (poste non renseigne cette
+      // annee-la) : on ne l'inscrit pas, la reconduction fera son office.
+      if (typeof v === 'number') parPoste[poste][annee] = v;
+    }
+  }
+
+  return {
+    profil: referentiel.profil,
+    source: referentiel.source,
+    // LA de reference des prets. Le referentiel ne porte aujourd'hui que
+    // `taux_livret_a_courant` ; la matrice LEON utilise `ParaGEN!DD20` (« Taux
+    // reference LA »), qui en differe. Ecart ouvert : QUESTIONS_SPEC Q-7 et Q-8.
+    taux_reference_livret_a: referentiel.taux_reference_livret_a ?? referentiel.taux_livret_a_courant,
+    livret_a_par_annee: parPoste.livret_a,
+    annee_min: anneeMin,
+    annee_max: anneeMax,
+    par_poste: parPoste,
+  };
+}
+
+/**
+ * Vrai si l'objet est deja au format attendu par le moteur (deja adapte).
+ * Permet aux appelants de passer indifferemment le fichier brut ou son adaptation.
+ * @param {any} t
+ * @returns {boolean}
+ */
+function dejaAdaptees(t) {
+  return Boolean(t && typeof t === 'object' && t.par_poste && t.livret_a_par_annee);
+}
+
+/**
+ * Normalise une entree de trajectoires : accepte le fichier referentiel brut,
+ * un objet deja adapte, ou un objet vide (aucune indexation).
+ * @param {any} t
+ * @returns {TrajectoiresMoteur}
+ */
+function normaliserTrajectoires(t) {
+  if (dejaAdaptees(t)) return t;
+  if (Array.isArray(t?.trajectoires)) return adapterTrajectoires(t);
+  // Forme libre `{loyers_irl: 0.02, ...}` utilisee par les tests et les exemples :
+  // on la laisse passer telle quelle, les consommateurs acceptent un taux constant.
+  return {
+    profil: undefined,
+    source: undefined,
+    taux_reference_livret_a: t?.taux_reference_livret_a ?? t?.taux_livret_a_courant,
+    livret_a_par_annee: t?.livret_a_par_annee ?? {},
+    annee_min: NaN,
+    annee_max: NaN,
+    par_poste: t ?? {},
   };
 }
 
@@ -2103,8 +2455,11 @@ function anneeReconstitutionFondsPropres(lignes, fonds_propres_eur) {
 
 
 
+
+
+
 /** Version du moteur, reportee dans les resultats pour la tracabilite. */
-const VERSION_MOTEUR = '0.3.0';
+const VERSION_MOTEUR = '0.4.0';
 
 /**
  * @typedef {Object} Entrees
@@ -2126,45 +2481,78 @@ const VERSION_MOTEUR = '0.3.0';
  */
 function calculer(entrees, referentiels) {
   const baremes = referentiels.baremes ?? referentiels;
-  const trajectoires = referentiels.trajectoires ?? {};
+  // Le referentiel de trajectoires stocke une ligne par annee ; les modules de
+  // calcul consomment un dictionnaire par poste. Sans cette normalisation,
+  // l'indexation retombe silencieusement a zero (defaut V2).
+  const trajectoires = normaliserTrajectoires(referentiels.trajectoires);
   const alertes = [];
 
   const { identite = {}, dates = {}, lots = [], options = {} } = entrees;
   const zones = { zone_123: identite.zone_123, zone_ABC: identite.zone_ABC };
-  const anneeMEL = dates.annee_mise_en_location;
-  if (!Number.isInteger(anneeMEL)) {
-    throw new Error("dates.annee_mise_en_location est requise (annee civile entiere)");
-  }
+
+  // --- 0. Calendrier (R-AMT-3 en amont) ---
+  const calendrier = calendrierOperation(dates);
+  const anneeMEL = calendrier.annee_mise_en_location;
 
   // --- 1. Surfaces (R-SURF) ---
   const surfaces = lots.map((lot) => ({
     ...lot,
     su_m2: surfaceUtile(lot, baremes),
   }));
-  const suParProduit = {};
+
+  // Agregation PAR TRANCHE DE FINANCEMENT avant tout calcul de loyer : le
+  // coefficient de structure est une fonction de (nb logements, SU) de la
+  // tranche entiere (R-SURF-2). Le calculer ligne a ligne donnerait des CS
+  // differents selon le decoupage de saisie, donc des loyers faux (defaut V3).
+  /** @type {Record<string, {nb_logements: number, su_m2: number, shab_m2: number, lignes: any[]}>} */
+  const tranches = {};
   for (const s of surfaces) {
-    suParProduit[s.code_produit] = (suParProduit[s.code_produit] ?? 0) + s.su_m2;
+    const t = (tranches[s.code_produit] ??= { nb_logements: 0, su_m2: 0, shab_m2: 0, lignes: [] });
+    t.nb_logements += s.nb_logements ?? 0;
+    t.su_m2 += s.su_m2 ?? 0;
+    t.shab_m2 += s.shab_m2 ?? 0;
+    t.lignes.push(s);
   }
+
+  const suParProduit = Object.fromEntries(
+    Object.entries(tranches).map(([code, t]) => [code, t.su_m2]),
+  );
   const quotesParts = quotesPartsSU(suParProduit);
 
-  // --- 2. Loyers (R-LOYER) ---
-  const loyers = surfaces.map((s) => {
+  /** Codes de produit presents, dans l'ordre canonique. */
+  const codesPresents = ORDRE_PRODUITS.filter((c) => tranches[c]).concat(
+    Object.keys(tranches).filter((c) => !ORDRE_PRODUITS.includes(/** @type {any} */ (c))),
+  );
+
+  // --- 2. Loyers (R-LOYER), une ligne par TRANCHE ---
+  const loyers = codesPresents.map((code) => {
+    const t = tranches[code];
+    // Les surcharges de loyer se saisissent au niveau de la tranche : on prend
+    // la premiere valeur renseignee parmi ses lignes.
+    const premiere = t.lignes.find((l) => l.marge_locale_eur_m2 !== undefined) ?? t.lignes[0];
+    const forcee = t.lignes.find((l) => l.loyer_sortie_force !== undefined && l.loyer_sortie_force !== null);
     const l = loyerProduit(
       {
-        code_produit: s.code_produit,
-        su_m2: s.su_m2,
-        nb_logements: s.nb_logements,
+        code_produit: code,
+        su_m2: t.su_m2,
+        nb_logements: t.nb_logements,
         zones,
-        marge_locale_eur_m2: s.marge_locale_eur_m2,
-        marge_majoration: s.marge_majoration,
-        loyer_sortie_force: s.loyer_sortie_force,
+        marge_locale_eur_m2: premiere?.marge_locale_eur_m2,
+        marge_majoration: premiere?.marge_majoration,
+        loyer_sortie_force: forcee?.loyer_sortie_force,
         dom: identite.dom,
         foyer: identite.foyer,
       },
       baremes,
     );
-    alertes.push(...controlesLoyer(l, s.code_produit));
-    return { code_produit: s.code_produit, nb_logements: s.nb_logements, su_m2: s.su_m2, ...l };
+    alertes.push(...controlesLoyer(l, code));
+    return {
+      code_produit: code,
+      nb_logements: t.nb_logements,
+      su_m2: t.su_m2,
+      shab_m2: t.shab_m2,
+      ...l,
+    };
   });
 
   const loyersLogementsAnnuels = arrondiEuro(
@@ -2226,17 +2614,57 @@ function calculer(entrees, referentiels) {
         });
 
   // --- 6. Amortissement (R-AMT) ---
-  const laOrigine = trajectoires.taux_reference_livret_a ?? trajectoires.taux_livret_a_courant;
+  const laOrigine = trajectoires.taux_reference_livret_a;
   const laParAnnee = trajectoires.livret_a_par_annee;
 
-  /** @type {Array<Object>} */
-  const pretsACalculer =
-    pretsCDCSaisis.length > 0
-      ? pretsSaisis
-      : [
-          { code: 'CDC_FONCIER', montant_eur: cdcTheoriques.pret_foncier_eur, nature: 'foncier' },
-          { code: 'CDC_BATIMENT', montant_eur: cdcTheoriques.pret_batiment_eur, nature: 'construction' },
-        ].map((p) => ({ ...p, ...(entrees.caracteristiques_prets_defaut ?? {}) }));
+  /**
+   * Prets a amortir. En l'absence de prets saisis, on mobilise les prets CDC
+   * theoriques, dont les caracteristiques sont resolues depuis `produits.js`
+   * (R-AMT-1) et non laissees indefinies — sans quoi l'amortissement leve
+   * « Duree de pret invalide » (defaut V4).
+   * @type {Array<Object>}
+   */
+  let pretsACalculer;
+  if (pretsCDCSaisis.length > 0) {
+    pretsACalculer = pretsSaisis;
+  } else {
+    const surcharges = entrees.caracteristiques_prets_defaut ?? {};
+    let defauts = [];
+    try {
+      defauts = pretsDefautResolus(produitPrincipal, {
+        zone_ABC: identite.zone_ABC,
+        livret_a_reference: surcharges.livret_a_origine ?? laOrigine,
+        progressivite: surcharges.progressivite ?? 0,
+      });
+    } catch (e) {
+      alertes.push(
+        `Prets CDC theoriques non calculables : ${/** @type {Error} */ (e).message}. ` +
+          'Saisir les prets manuellement.',
+      );
+    }
+    const parNature = Object.fromEntries(defauts.map((d) => [d.nature, d]));
+    pretsACalculer = [
+      { code: 'CDC_FONCIER', libelle: 'Pret CDC foncier', montant_eur: cdcTheoriques.pret_foncier_eur, nature: 'foncier' },
+      { code: 'CDC_BATIMENT', libelle: 'Pret CDC construction', montant_eur: cdcTheoriques.pret_batiment_eur, nature: 'construction' },
+    ].map((p) => ({
+      ...p,
+      ...(parNature[p.nature] ?? {}),
+      livret_a_origine: laOrigine,
+      livret_a_par_annee: laParAnnee,
+      ...surcharges,
+    }));
+
+    // Un pret theorique dont les caracteristiques n'ont pas pu etre resolues ne
+    // doit pas faire echouer toute la simulation : on le signale et on l'ecarte.
+    const incalculables = pretsACalculer.filter((p) => p.montant_eur > 0 && !(p.duree_ans > 0));
+    for (const p of incalculables) {
+      alertes.push(
+        `${p.libelle} de ${arrondiEuro(p.montant_eur)} EUR non amorti : duree et taux inconnus ` +
+          `pour le produit ${produitPrincipal}. Saisir ce pret manuellement.`,
+      );
+    }
+    pretsACalculer = pretsACalculer.filter((p) => p.duree_ans > 0);
+  }
 
   const amortissements = pretsACalculer
     .filter((p) => p.montant_eur > 0)
@@ -2244,6 +2672,11 @@ function calculer(entrees, referentiels) {
       code: p.code ?? p.libelle ?? 'pret',
       libelle: p.libelle ?? p.code,
       montant_eur: p.montant_eur,
+      nature: p.nature ?? 'autre',
+      taux_saisi: p.taux,
+      annee_premiere_echeance:
+        p.annee_premiere_echeance ??
+        anneePremiereEcheance(anneeMEL, { demembrement: identite.demembrement }),
       tableau: tableauAmortissement({
         montant_eur: p.montant_eur,
         taux: p.taux,
@@ -2261,21 +2694,57 @@ function calculer(entrees, referentiels) {
       }),
     }));
 
-  const totalPrets = arrondiEuro(
-    amortissements.reduce((s, a) => s + a.montant_eur, 0) + autresPretsEur * 0,
-  );
+  // Tous les prets amortis, quelle que soit leur nature. `amortissements` porte
+  // deja les prets « autre » : les rajouter les compterait deux fois (defaut V1).
+  const totalPrets = arrondiEuro(amortissements.reduce((s, a) => s + a.montant_eur, 0));
+
+  // Seuls les prets CDC entrent au ratio reglementaire R-FIN-5 : un pret
+  // collecteur ou une avance ne sont pas des prets de la Caisse des Depots.
+  const totalPretsCDC = cdcTheoriques
+    ? cdcTheoriques.total_cdc_eur
+    : arrondiEuro(
+        amortissements.filter((a) => a.nature !== 'autre').reduce((s, a) => s + a.montant_eur, 0),
+      );
 
   const equilibre = controleEquilibre(
     {
       prix_revient_ttc_module_eur: bilan.total_ttc_module_eur,
       subventions_eur: subventionsTotal,
       fonds_propres_eur: fondsPropres,
-      prets_eur: totalPrets + autresPretsEur,
-      prets_cdc_eur: cdcTheoriques ? cdcTheoriques.total_cdc_eur : totalPrets,
+      prets_eur: totalPrets,
+      prets_cdc_eur: totalPretsCDC,
     },
     baremes,
   );
   alertes.push(...equilibre.alertes);
+
+  // Un pret dont les echeances depassent l'horizon de simulation voit ses
+  // annuites disparaitre des totaux d'exploitation SANS AUCUN SIGNAL : le compte
+  // boucle sur la duree de simulation. On le signale explicitement.
+  const anneeFinSimulation = anneeMEL + (dates.duree_simulation_ans ?? 50) - 1;
+  for (const a of amortissements) {
+    const derniere = a.tableau.at(-1)?.annee;
+    if (derniere > anneeFinSimulation) {
+      const horsHorizon = a.tableau
+        .filter((l) => l.annee > anneeFinSimulation)
+        .reduce((s, l) => s + l.annuite_eur, 0);
+      alertes.push(
+        `${a.libelle} court jusqu'en ${derniere}, au-dela de l'horizon de simulation ` +
+          `(${anneeFinSimulation}) : ${arrondiEuro(horsHorizon)} EUR d'annuites ne sont pas ` +
+          "comptes au compte d'exploitation.",
+      );
+    }
+  }
+
+  // Le prix de revient applique un taux de LASM unique, celui du produit
+  // principal : sur une operation a plusieurs tranches, c'est une approximation.
+  if (codesPresents.length > 1) {
+    alertes.push(
+      `Operation a ${codesPresents.length} tranches (${codesPresents.join(', ')}) mais un seul ` +
+        `taux de livraison a soi-meme applique, celui du ${produitPrincipal}. ` +
+        'Le prix de revient par tranche n est pas encore ventile.',
+    );
+  }
 
   // --- 7. Fiscalite (R-FISC) ---
   const tfpb = exonerationTFPB(
@@ -2315,7 +2784,9 @@ function calculer(entrees, referentiels) {
       exp.tfpb_par_logement_eur ?? baremes.constantes_reglementaires.tfpb.montant_par_logement_eur,
     annee_debut_tfpb: exp.annee_debut_tfpb ?? tfpb.annee_debut_tfpb,
     annuites: annuitesAplaties,
-    trajectoires: exp.trajectoires ?? trajectoires,
+    // Trajectoires par poste, issues du referentiel normalise. Une surcharge
+    // explicite dans les entrees reste possible pour tester un scenario.
+    trajectoires: exp.trajectoires ?? trajectoires.par_poste,
   });
 
   // --- 9. Indicateurs de synthese ---
@@ -2346,7 +2817,14 @@ function calculer(entrees, referentiels) {
   return {
     version_moteur: VERSION_MOTEUR,
     identite,
-    surfaces: { par_produit: suParProduit, quotes_parts: quotesParts, detail: surfaces },
+    calendrier,
+    profil_trajectoires: trajectoires.profil ?? null,
+    surfaces: {
+      par_produit: suParProduit,
+      quotes_parts: quotesParts,
+      tranches: codesPresents,
+      detail: surfaces,
+    },
     loyers,
     bilan,
     subventions: { ...subventions, surcharge_fonciere: ssf, total_avec_ssf_eur: subventionsTotal },
@@ -2354,6 +2832,8 @@ function calculer(entrees, referentiels) {
       solde_a_financer_eur: solde,
       prets_cdc_theoriques: cdcTheoriques,
       prefinancement: prefi,
+      total_prets_eur: totalPrets,
+      total_prets_cdc_eur: totalPretsCDC,
       equilibre,
     },
     amortissements,
@@ -2431,7 +2911,9 @@ const etat = {
     frais_gestion_pct_loyers: 0.07,
     taux_vacance_impayes: 0.02,
     gros_entretien_eur_m2: 5,
-    trajectoires: { loyers_irl: 0.02, gros_entretien: 0.023, tfpb: 0.05 },
+    // Aucune trajectoire en dur ici : le moteur applique le profil du
+    // referentiel (AXENTIA HER 2026). Un doublon a cet endroit le masquerait,
+    // ce qui est exactement l'irregularite I-2 que le projet combat.
   },
   options: {},
 };
@@ -2631,6 +3113,8 @@ function rendreResultats(r) {
   }
 
   // --- Ressources : subventions, fonds propres, prets ---
+  // Les prets viennent du RESULTAT et non de la saisie : en mode « prets CDC
+  // theoriques » ils sont calcules par le moteur et absents de l'etat.
   const ressources = [];
   if (r.subventions.total_avec_ssf_eur > 0) {
     ressources.push({ libelle: 'Subventions', montant: r.subventions.total_avec_ssf_eur, couleur: COULEURS.subventions });
@@ -2638,12 +3122,12 @@ function rendreResultats(r) {
   if (etat.fonds_propres_eur > 0) {
     ressources.push({ libelle: 'Fonds propres', montant: etat.fonds_propres_eur, couleur: COULEURS.fonds_propres });
   }
-  for (const p of etat.prets) {
-    if (!(p.montant_eur > 0)) continue;
+  for (const a of r.amortissements) {
+    if (!(a.montant_eur > 0)) continue;
     ressources.push({
-      libelle: p.libelle || p.code,
-      montant: p.montant_eur,
-      couleur: COULEURS[`pret_${p.nature}`] ?? COULEURS.pret_autre,
+      libelle: a.libelle || a.code,
+      montant: a.montant_eur,
+      couleur: COULEURS[`pret_${a.nature}`] ?? COULEURS.pret_autre,
     });
   }
 
@@ -2685,12 +3169,12 @@ function rendreResultats(r) {
 
   // Le taux applique differe du taux saisi des que la revisabilite joue : on
   // l'explicite, c'est la source de confusion n°1 face a LEON (question Q-8).
-  const ecarts = r.amortissements
-    .map((a, i) => ({ a, saisi: etat.prets[i]?.taux }))
-    .filter(({ a, saisi }) => saisi !== undefined && Math.abs(a.tableau[0].taux - saisi) > 1e-9);
+  const ecarts = r.amortissements.filter(
+    (a) => a.taux_saisi !== undefined && Math.abs(a.tableau[0].taux - a.taux_saisi) > 1e-9,
+  );
   $('#aide-taux').textContent = ecarts.length
-    ? `Taux appliqué ≠ taux saisi : la révision Livret A joue dès la première échéance ` +
-      `(LA de référence ${pct(referentiels.baremes ? 0.024 : 0)} contre trajectoire ${pct(0.02)}).`
+    ? `Le taux appliqué diffère du taux saisi : la révision Livret A joue dès la première ` +
+      `échéance. Profil ${r.profil_trajectoires ?? 'non renseigné'}.`
     : '';
 
   // --- Indicateurs ---

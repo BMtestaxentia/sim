@@ -31,6 +31,8 @@ const MODULES = [
   'arrondis.js',
   'produits.js',
   'amortissement.js',
+  'calendrier.js', // depend de amortissement.js (jourUTC)
+  'trajectoires.js',
   'loyers.js',
   'bilan.js',
   'subventions.js',
@@ -70,7 +72,29 @@ function verifierCollisions(morceaux) {
   }
 }
 
+/**
+ * Verifie qu'aucun module du moteur n'importe un fichier absent de MODULES.
+ * Sans ce controle, un module oublie produit un fichier qui se genere sans bruit
+ * et n'echoue qu'a l'ouverture dans le navigateur, sur un « X is not defined ».
+ */
+function verifierExhaustivite() {
+  const manquants = new Set();
+  for (const nom of MODULES) {
+    for (const m of lire('src', nom).matchAll(/from\s+['"]\.\/([^'"]+)['"]/g)) {
+      if (!MODULES.includes(m[1])) manquants.add(`${m[1]} (importe par ${nom})`);
+    }
+  }
+  if (manquants.size) {
+    throw new Error(
+      'Modules du moteur absents de la liste MODULES :\n  - ' +
+        [...manquants].join('\n  - ') +
+        '\nAjoutez-les dans l ordre de dependance.',
+    );
+  }
+}
+
 // --- Moteur ---
+verifierExhaustivite();
 const morceaux = MODULES.map((nom) => ({ nom, code: aplatir(lire('src', nom)) }));
 verifierCollisions(morceaux);
 const moteur = morceaux

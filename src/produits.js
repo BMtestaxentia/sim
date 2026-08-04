@@ -123,3 +123,81 @@ export function produit(code) {
   if (!p) throw new Error(`Produit inconnu : ${code}`);
   return p;
 }
+
+/**
+ * Ordre canonique d'affichage et de restitution : rang reglementaire, du plus
+ * social au plus libre. Source unique pour les listes deroulantes, les
+ * recapitulatifs par tranche et les tableaux — evite de recoder l'ordre partout.
+ * @type {CodeProduit[]}
+ */
+export const ORDRE_PRODUITS = ['PLAI', 'PLUS', 'PLUS33', 'PLS', 'LOC', 'LIBRE'];
+
+/**
+ * Produits tries dans l'ordre canonique.
+ * @returns {DefinitionProduit[]}
+ */
+export function produitsOrdonnes() {
+  return ORDRE_PRODUITS.map((c) => PRODUITS[c]).filter(Boolean);
+}
+
+/**
+ * Resout le taux d'un pret a partir de sa cle de reference.
+ * `'LA+0.60'` -> Livret A de reference + 0,60 point. `'fixe'` -> taux a saisir.
+ * Les spreads sont confirmes par deux sources independantes : R-AMT-1 du
+ * dictionnaire et `ADMIN!C43:C46` de la maquette LEON REWORK.
+ * @param {string} taux_ref
+ * @param {number} livret_a_reference
+ * @returns {number|null} taux en fraction, ou null si le taux doit etre saisi
+ */
+export function resoudreTaux(taux_ref, livret_a_reference) {
+  const m = /^LA([+-])(\d+(?:\.\d+)?)$/.exec(String(taux_ref).trim());
+  if (!m) return null;
+  if (!Number.isFinite(livret_a_reference)) {
+    throw new Error(`Livret A de reference requis pour resoudre le taux ${taux_ref}`);
+  }
+  const spread = Number(m[2]) / 100;
+  return livret_a_reference + (m[1] === '-' ? -spread : spread);
+}
+
+/**
+ * Resout la duree d'un pret a partir de sa cle de reference.
+ * `'40'` -> 40 ans. `'zone_abc:B2|C->50,sinon->60'` -> 50 ans en zone B2 ou C,
+ * 60 ans ailleurs (R-AMT-1).
+ * @param {string} duree_ref
+ * @param {string} [zone_ABC]
+ * @returns {number}
+ */
+export function resoudreDuree(duree_ref, zone_ABC) {
+  const brut = String(duree_ref).trim();
+  if (/^\d+$/.test(brut)) return Number(brut);
+
+  const m = /^zone_abc:([^-]+)->(\d+),sinon->(\d+)$/.exec(brut);
+  if (!m) throw new Error(`Cle de duree de pret non reconnue : ${duree_ref}`);
+  const zones = m[1].split('|').map((z) => z.trim().toUpperCase());
+  const zone = String(zone_ABC ?? '').trim().toUpperCase();
+  if (!zone) {
+    throw new Error(`Zone ABC requise pour resoudre la duree de pret « ${duree_ref} »`);
+  }
+  return zones.includes(zone) ? Number(m[2]) : Number(m[3]);
+}
+
+/**
+ * Caracteristiques par defaut des prets CDC d'un produit (R-AMT-1), resolues
+ * depuis les cles declaratives de `PRODUITS`. C'est ce qui rend le jeu de prets
+ * theorique calculable sans saisie.
+ * @param {CodeProduit} code
+ * @param {Object} contexte
+ * @param {string} [contexte.zone_ABC]
+ * @param {number} contexte.livret_a_reference
+ * @param {number} [contexte.progressivite] progressivite appliquee (AXENTIA : -0,005)
+ * @returns {Array<{nature: string, taux: number|null, duree_ans: number, revisabilite: string, progressivite: number}>}
+ */
+export function pretsDefautResolus(code, { zone_ABC, livret_a_reference, progressivite = 0 }) {
+  return produit(code).prets_defaut.map((p) => ({
+    nature: p.nature,
+    taux: resoudreTaux(p.taux_ref, livret_a_reference),
+    duree_ans: resoudreDuree(p.duree_ref, zone_ABC),
+    revisabilite: p.revisabilite,
+    progressivite,
+  }));
+}

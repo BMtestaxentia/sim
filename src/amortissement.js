@@ -34,8 +34,8 @@ import { arrondiCRD } from './arrondis.js';
  */
 const BASE_JOURS_ACT365 = 365;
 
-/** Millisecondes par jour (constante calendaire). */
-const MS_PAR_JOUR = 86400000;
+/** Millisecondes par jour (constante calendaire). Source unique du projet. */
+export const MS_PAR_JOUR = 86400000;
 
 /** @typedef {'DOUBLE'|'D.LIMITEE'|'SIMPLE'|'TAUX FIXE'} Revisabilite */
 

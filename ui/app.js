@@ -69,7 +69,9 @@ const etat = {
     frais_gestion_pct_loyers: 0.07,
     taux_vacance_impayes: 0.02,
     gros_entretien_eur_m2: 5,
-    trajectoires: { loyers_irl: 0.02, gros_entretien: 0.023, tfpb: 0.05 },
+    // Aucune trajectoire en dur ici : le moteur applique le profil du
+    // referentiel (AXENTIA HER 2026). Un doublon a cet endroit le masquerait,
+    // ce qui est exactement l'irregularite I-2 que le projet combat.
   },
   options: {},
 };
@@ -269,6 +271,8 @@ function rendreResultats(r) {
   }
 
   // --- Ressources : subventions, fonds propres, prets ---
+  // Les prets viennent du RESULTAT et non de la saisie : en mode « prets CDC
+  // theoriques » ils sont calcules par le moteur et absents de l'etat.
   const ressources = [];
   if (r.subventions.total_avec_ssf_eur > 0) {
     ressources.push({ libelle: 'Subventions', montant: r.subventions.total_avec_ssf_eur, couleur: COULEURS.subventions });
@@ -276,12 +280,12 @@ function rendreResultats(r) {
   if (etat.fonds_propres_eur > 0) {
     ressources.push({ libelle: 'Fonds propres', montant: etat.fonds_propres_eur, couleur: COULEURS.fonds_propres });
   }
-  for (const p of etat.prets) {
-    if (!(p.montant_eur > 0)) continue;
+  for (const a of r.amortissements) {
+    if (!(a.montant_eur > 0)) continue;
     ressources.push({
-      libelle: p.libelle || p.code,
-      montant: p.montant_eur,
-      couleur: COULEURS[`pret_${p.nature}`] ?? COULEURS.pret_autre,
+      libelle: a.libelle || a.code,
+      montant: a.montant_eur,
+      couleur: COULEURS[`pret_${a.nature}`] ?? COULEURS.pret_autre,
     });
   }
 
@@ -323,12 +327,12 @@ function rendreResultats(r) {
 
   // Le taux applique differe du taux saisi des que la revisabilite joue : on
   // l'explicite, c'est la source de confusion n°1 face a LEON (question Q-8).
-  const ecarts = r.amortissements
-    .map((a, i) => ({ a, saisi: etat.prets[i]?.taux }))
-    .filter(({ a, saisi }) => saisi !== undefined && Math.abs(a.tableau[0].taux - saisi) > 1e-9);
+  const ecarts = r.amortissements.filter(
+    (a) => a.taux_saisi !== undefined && Math.abs(a.tableau[0].taux - a.taux_saisi) > 1e-9,
+  );
   $('#aide-taux').textContent = ecarts.length
-    ? `Taux appliqué ≠ taux saisi : la révision Livret A joue dès la première échéance ` +
-      `(LA de référence ${pct(referentiels.baremes ? 0.024 : 0)} contre trajectoire ${pct(0.02)}).`
+    ? `Le taux appliqué diffère du taux saisi : la révision Livret A joue dès la première ` +
+      `échéance. Profil ${r.profil_trajectoires ?? 'non renseigné'}.`
     : '';
 
   // --- Indicateurs ---

@@ -4,7 +4,7 @@
  * le moteur y est duplique 14 fois, un onglet par produit, avec des divergences
  * de bugs. Ici le produit est une DONNEE, jamais du code duplique).
  *
- * V1 : PLUS / PLAI habitat. Les autres (LIBRE, LOC/LLI, PLS, foyers) sont
+ * V1 : PLUS / PLAI / PLS habitat. Les autres (LIBRE, LOC/LLI, foyers) sont
  * declares en squelette pour figer l'architecture des le depart ; ils seront
  * completes a leur tour sans reecriture du moteur.
  *
@@ -66,6 +66,21 @@ export const PRODUITS = {
     ],
     v1: true,
   },
+  PLS: {
+    code: 'PLS',
+    libelle: 'PLS',
+    cle_bareme_loyer: 'PLS', // bareme par zone ABC (baremes_2025.json/loyers_max_zone_ABC)
+    cle_lasm: 'taux_reduit_simulation',
+    coefficient_structure: true,
+    prets_defaut: [
+      // Taux constate sur l'operation BERGERAC : 3,51 % pour un LA de reference de
+      // 2,40 % (ParaGEN!DD20), soit LA + 1,11 %. Revisabilite SIMPLE (SimPLS!AM19) :
+      // le taux suit le Livret A, la progression de l'annuite reste a p.
+      { nature: 'construction', taux_ref: 'LA+1.11', duree_ref: '40', revisabilite: 'SIMPLE' },
+      { nature: 'foncier', taux_ref: 'LA+1.11', duree_ref: 'zone_abc:B2|C->50,sinon->60', revisabilite: 'SIMPLE' },
+    ],
+    v1: true,
+  },
   // --- Hors V1 : squelettes pour figer l'architecture parametrique ---
   LIBRE: {
     code: 'LIBRE',
@@ -82,15 +97,6 @@ export const PRODUITS = {
     cle_bareme_loyer: 'LLI',
     cle_lasm: 'taux_reduit_simulation',
     coefficient_structure: false,
-    prets_defaut: [],
-    v1: false,
-  },
-  PLS: {
-    code: 'PLS',
-    libelle: 'PLS',
-    cle_bareme_loyer: 'PLS',
-    cle_lasm: 'taux_reduit_simulation',
-    coefficient_structure: true,
     prets_defaut: [],
     v1: false,
   },

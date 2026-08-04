@@ -1,7 +1,9 @@
-# Fixtures golden test — annexes LEON Mulhouse
+# Fixtures golden test
 
-Extraites le 04/08/2026 depuis les annexes officielles LEON (anx_1303) par l'instance chat.
-À placer dans `fixtures/` du repo moteur-sim. **Données réelles AXENTIA — repo privé uniquement.**
+**Données réelles AXENTIA — repo privé uniquement.** Ne jamais copier vers `exnihilo`.
+
+Deux origines distinctes, qui n'ont pas la même structure (voir plus bas) :
+les **annexes** LEON (Mulhouse) et la **matrice** LEON complète (Bergerac).
 
 ## Contenu
 
@@ -10,8 +12,25 @@ Extraites le 04/08/2026 depuis les annexes officielles LEON (anx_1303) par l'ins
 - `mulhouse_3308_lli/` — simulation n°3307 (même opération, partie LLI), VEFA, zone 2/B1.
   Prêts : LLI 5 198 270 EUR (35 ans, DOUBLE, LA+1,4 %), LLI Foncier 2 546 267 EUR (40 ans, DOUBLE),
   ALS 100 000 EUR. Subventions 1 193 114 EUR. FP 643 020 EUR.
+- `bergerac_lls6_pls/` — produit **PLS**, VEFA, habitation. Extraite le 04/08/2026 non pas d'une
+  annexe mais de la **matrice complète** (131 onglets), en lecture seule via Excel COM.
+  Prêts : PLS construction 494 023 EUR (40 ans) et PLS foncier 176 035 EUR (50 ans), tous deux
+  à 3,51 % saisis / **3,11 % appliqués** (révisabilité SIMPLE : 3,51 % + LA 2028 2,0 % − LA de
+  référence 2,4 %), progressivité 0. Périmètre : **amortissement uniquement.**
 
-## Structure de chaque dossier
+## Structure — fixtures issues de la matrice (`bergerac_lls6_pls`)
+
+La matrice n'a pas d'onglet `IN` ni de Présentation CA : les entrées sont lues dans le bloc de
+saisie (`SimPLS!AL10:AN21`) et les attendus sont les **tableaux calculés par LEON lui-même**
+(`SimPLS!FH16:FO55` et `FP16:FW65`). C'est une référence plus fine qu'une annexe : elle donne
+l'échéancier année par année (taux, annuité, intérêts, amortissement, CRD) et non des totaux.
+
+- `entrees.json` — schéma propre au moteur (aucune reprise de la structure du tableur) :
+  identité, `referentiel_amortissement` (LA de référence + trajectoire), liste de prêts.
+  Chaque bloc cite sa cellule source.
+- `attendus.json` — un tableau d'amortissement complet par prêt.
+
+## Structure — fixtures issues des annexes (`mulhouse_*`)
 
 - `entrees.json` — reconstruit depuis l'onglet IN (sérialisation de la simulation) :
   identité, zones, dates, taux d'évolution, surfaces par produit, plan de financement,
@@ -27,6 +46,12 @@ Extraites le 04/08/2026 depuis les annexes officielles LEON (anx_1303) par l'ins
 ## Tolérances et pièges connus
 
 - Tolérances : ±1 EUR sur bilan et plan de financement ; ±0,1 % sur annuités et exploitation.
+- Bergerac PLS : le moteur reproduit actuellement les deux tables à **1,8 × 10⁻¹¹ EUR près**
+  (soit 10⁻¹³ %), c'est-à-dire au bruit flottant. La tolérance de ±0,1 % n'est donc pas
+  « juste tenue » : tout écart visible sur cette fixture signale une régression réelle.
+- Bergerac PLS : le collecteur (20 000 EUR à 0,25 %, 40 ans) est saisi dans la matrice mais
+  n'a **pas** de bloc d'amortissement dans `SimPLS` — il est donc hors fixture, faute de
+  référence à confronter. Question ouverte Q-9.
 - LLI : le TOTAL FINANCEMENTS de LEON est affiché arrondi à l'euro (9 680 671) alors que le
   PR TTC vaut 9 680 671,454... L'écart de 0,45 EUR est un arrondi de présentation de LEON,
   pas une erreur du moteur. Ne pas chercher à le reproduire.

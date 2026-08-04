@@ -4,7 +4,9 @@
 
 ## 1. Objet du projet
 
-Moteur de calcul de simulations financières d'opérations de logement social (construction / VEFA / acquisition-amélioration), réécrit à partir de la rétro-ingénierie de la matrice LEON (Scepia). Périmètre V1 : PLUS/PLAI habitat. Cible : PLS, LLI (LOC), LIBRE, foyers — **le moteur est paramétrique dès le départ, le produit est une donnée, jamais une duplication de code.**
+Moteur de calcul de simulations financières d'opérations de logement social (construction / VEFA / acquisition-amélioration), réécrit à partir de la rétro-ingénierie de la matrice LEON (Scepia). Périmètre V1 : PLUS/PLAI/PLS habitat. Cible : LLI (LOC), LIBRE, foyers — **le moteur est paramétrique dès le départ, le produit est une donnée, jamais une duplication de code.**
+
+Les matrices LEON fournies sont mal conçues (moteur dupliqué 14 fois, constantes en dur, arrondis hétérogènes). **On en reprend les règles de calcul, jamais la structure** : liberté totale de restructuration tant que les résultats sont reproduits.
 
 La spécification de référence est `docs/DICTIONNAIRE_REGLES_MOTEUR_PLUSPLAI_v0.1.md` (identifiants R-xxx). Toute implémentation cite l'identifiant de règle qu'elle couvre. Tout écart volontaire avec LEON est documenté dans `docs/ECARTS_LEON.md` avec référence à l'irrégularité (I-1 à I-10) qui le justifie.
 
@@ -42,6 +44,7 @@ moteur/
   fixtures/                    # DONNÉES RÉELLES — raison du repo privé
     mulhouse_3308_libre/       # entrees.json + attendus.json (depuis l'annexe LIBRE)
     mulhouse_3308_lli/
+    bergerac_lls6_pls/         # PLS, depuis la matrice complète (tables d'amortissement LEON)
     (à venir : opérations PLUS/PLAI exportées par Bastien)
   tests/
     amortissement.test.js      # cas canoniques (taux 0, progressivité, révision LA, différés, dernière échéance)

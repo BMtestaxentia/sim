@@ -1,0 +1,105 @@
+{
+  "date_valeur": "2025-01-01",
+  "source": "LEON 2025-042d, onglet ParaGEN, profil AXENTIA HER 2026 (PMT 2025), extrait le 2026-08-04",
+  "note": "Baremes reglementaires versionnes. Toutes les valeurs sont lues dans la matrice, aucune n'est inventee. Les cellules sources sont citees pour audit.",
+
+  "loyers_max_zone_123": {
+    "unite": "EUR/m2 SU/mois",
+    "source": "ParaGEN!D22:G24 (plage LMZone_Neuf)",
+    "zones": ["zone_1", "zone_2", "zone_3", "zone_1bis"],
+    "PLUS":  [7.32, 6.42, 5.95, 7.77],
+    "PLAI":  [6.50, 5.71, 5.28, 6.93],
+    "LIBRE": [15.00, 11.00, 8.00, 18.00]
+  },
+
+  "loyers_max_zone_ABC": {
+    "unite": "EUR/m2 SU/mois",
+    "source": "ParaGEN!D56:H59",
+    "zones": ["A", "A_bis", "B1", "B2", "C"],
+    "PLS":  [11.68, 15.16, 10.07, 9.64, 8.94],
+    "PLI":  [14.49, 19.51, 11.68, 10.15, 10.15],
+    "PSLA_plafond_loyer": [11.75, 15.30, 10.13, 9.73, 9.00],
+    "PSLA_plafond_prix_vente_ht": [4675, 6170, 3744, 3269, 2857]
+  },
+
+  "valeurs_de_base": {
+    "unite": "EUR/m2",
+    "usage": "Assiette subvention (VB), MQECO ; selectionne par zone_123 x neuf/acquisition x collectif/individuel",
+    "source": "ParaGEN!D36:G41",
+    "zones": ["zone_1", "zone_2", "zone_3", "zone_1bis"],
+    "neuf":        { "collectif": [1767, 1473, 1473, 1767], "individuel": [1767, 1619, 1619, 1767] },
+    "acquisition": { "collectif": [1767, 1382, 1382, 1767], "individuel": [1767, 1473, 1473, 1767] }
+  },
+
+  "taxe_amenagement": {
+    "unite": "EUR/m2 (valeur forfaitaire)",
+    "source": "ParaGEN!B31:B32 ; selection IdF si zone A ou A bis (calculs!B1254)",
+    "hors_idf": 930,
+    "idf": 1054,
+    "abattement_logement_social": "50 % reglementaire, applique via ParaGLOB!H54 dans l'assiette (calculs!B1255)"
+  },
+
+  "quotites_foncier_vefa": {
+    "usage": "Ventilation d'un prix global en foncier/batiment. Ligne 'terrain' = quote-part terrain pour le pret foncier ; ligne 'ssf_pge' = quote-part pour l'assiette SSF et la valeur comptable terrain.",
+    "source": "ParaGEN!C61:H69 (plage qpFonc_VEFA), mode de calcul du pret foncier : ParaGEN!A64 = 'global'",
+    "zones": ["A", "A_bis", "B1", "B2", "C"],
+    "terrain_vefa": [0.35, 0.45, 0.30, 0.25, 0.20],
+    "terrain_acq_amelioration": [0.35, 0.45, 0.30, 0.25, 0.20],
+    "valeur_comptable_terrain_vefa": [0.25, 0.25, 0.13, 0.13, 0.11],
+    "ssf_pge_acq_amelioration": [0.60, 0.60, 0.60, 0.60, 0.60]
+  },
+
+  "tva": {
+    "source": "calculs!B1223:B1228, ParaGLOB!J44/J46, ParaGEN!A77:H78",
+    "taux_reduit_simulation": 0.10,
+    "taux_normal": 0.20,
+    "lasm_par_produit": {
+      "note": "PLUS/PLAI utilise le taux reduit de la simulation (ParaGLOB!J44 = 10 % actuellement) et non la valeur 5,5 % du tableau historique ParaGEN!A78. Les autres produits lisent ParaGEN!78.",
+      "PLUS_PLAI": 0.10,
+      "PLUS_CD": 0.055,
+      "PLS": 0.10,
+      "LLI_PLI": 0.10,
+      "LIBRE": 0.20,
+      "ACCESSION": 0.20,
+      "REHAB": 0.10,
+      "FOYER_PLUS": 0.055
+    }
+  },
+
+  "constantes_reglementaires": {
+    "coefficient_structure": {
+      "source": "calculs!D91:D116",
+      "metropole_habitat": { "base": 0.77, "facteur_nl": 20, "formule": "CS = 0.77 * (1 + 20 * NL / SU)" },
+      "foyers": { "facteur_nl": 38 },
+      "dom": { "base": 0.685, "facteur_nl": 31, "formule": "CS = 0.685 * (31 * NL + SF) / SF" }
+    },
+    "majoration_plus_33": 0.33,
+    "majoration_loyers_depassement_plafonds": { "valeur": 0.33, "source": "COMMUN!B22" },
+    "marge_locale_plafond_defaut": { "valeur": 0.12, "source": "ParaPLUS!AD30 (saisi par simulation)" },
+    "majoration_lcr": { "regle": "ratio < 10 % -> 0 ; ratio > 20 % -> +2 % ; sinon ratio/100", "source": "calculs!B152:B153" },
+    "ssf": {
+      "seuil_participation_collectivites": 0.40,
+      "plafond_si_sous_seuil": "min(taux_depassement_plafonne * reference, 50 % * depassement)",
+      "taux_subvention": { "neuf": 2, "neuf_dom": 3, "acq_amelioration": 0.4 },
+      "taux_depassement_plafonne": { "neuf": 1, "acq_amelioration": 0.2 },
+      "source": "calculs!D275:G276"
+    },
+    "prets_cdc_defauts": {
+      "source": "SimPLUS!AL10:AP21",
+      "taux": { "PLUS": "LA + 0.006", "PLAI": "LA - 0.002" },
+      "duree_construction_ans": 40,
+      "duree_foncier_ans": { "zones_B2_C": 50, "autres_zones": 60 },
+      "revisabilite": "DOUBLE",
+      "progressivite_axentia": -0.005,
+      "premiere_echeance": "annee(mise_en_location) + 1 an (+0 si demembrement)"
+    },
+    "controle_ratio_prets_cdc_min": { "valeur": 0.50, "source": "calculs!B1234:B1235" },
+    "tfpb": {
+      "montant_par_logement_eur": 345,
+      "duree_exoneration_defaut_ans": 25,
+      "source": "SimPLUS!A37/G37 ; duree parametrable par simulation (irregularite I-7 du dictionnaire)"
+    },
+    "arrondi_prets": "milliers superieurs si option active (SimPLUS!AR26)",
+    "arrondi_cs_loyers": { "flag_global": "ParaGEN!B26 (NON chez AXENTIA)", "cs_decimales": 4, "loyers_decimales": 2 }
+  }
+}

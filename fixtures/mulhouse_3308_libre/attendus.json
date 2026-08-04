@@ -1,0 +1,3517 @@
+{
+  "_meta": {
+    "source": "MULHOUSE_RE_HSE_HYPOTHEQUE_PARTIE_LIBRE_anx_1303.XLS",
+    "extrait_le": "2026-08-04",
+    "tolerances": {
+      "bilan_plan_financement": "±1 EUR",
+      "annuites_exploitation": "±0,1 %"
+    },
+    "note": "Valeurs attendues lues dans la Presentation CA, la Grille d'analyse, le PMT et le compte de synthese de IN. Ne jamais modifier pour faire passer un test."
+  },
+  "bilan": {
+    "postes": [
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "01",
+        "libelle": "Terrain",
+        "ht": 1913440.12,
+        "ttc": 1913440.12,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "02",
+        "libelle": "Sondages Etudes de sols",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "03",
+        "libelle": "Démolition",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "04",
+        "libelle": "VRD",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "05",
+        "libelle": "Branchements",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "06",
+        "libelle": "Droits et taxes",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "07",
+        "libelle": "Frais d'acquisition",
+        "ht": 27170.849704,
+        "ttc": 27170.849704,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "10",
+        "libelle": "Commission achat & divers",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "11",
+        "libelle": "Taxe d'aménagement",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "12",
+        "libelle": "fondations spéciales",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "13",
+        "libelle": "désamientage",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "14",
+        "libelle": "divers foncier 3",
+        "ht": 7967.51,
+        "ttc": 7967.51,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "15",
+        "libelle": "frais d'hypothèque",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "16",
+        "libelle": "divers foncier 5",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "17",
+        "libelle": "divers foncier 6",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "18",
+        "libelle": "divers foncier 7",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "I - CHARGE FONCIERE",
+        "numero": "19",
+        "libelle": "divers foncier 8",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "II - BÂTIMENT",
+        "numero": "20",
+        "libelle": "Travaux de construction",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "II - BÂTIMENT",
+        "numero": "21",
+        "libelle": "aléas",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "II - BÂTIMENT",
+        "numero": "22",
+        "libelle": "divers batiment 2",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "II - BÂTIMENT",
+        "numero": "23",
+        "libelle": "divers batiment 3",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "II - BÂTIMENT",
+        "numero": "24",
+        "libelle": "divers batiment 4",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "II - BÂTIMENT",
+        "numero": "25",
+        "libelle": "divers batiment 5",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "II - BÂTIMENT",
+        "numero": "26",
+        "libelle": "divers batiment 6",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "II - BÂTIMENT",
+        "numero": "27",
+        "libelle": "divers batiment 7",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "II - BÂTIMENT",
+        "numero": "28",
+        "libelle": "divers batiment 8",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "29",
+        "libelle": "Honoraires VRD",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "30",
+        "libelle": "Architecte",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "31",
+        "libelle": "Bureau d'étude",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "32",
+        "libelle": "AMO",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "33",
+        "libelle": "Géomètre",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "34",
+        "libelle": "OPC",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "35",
+        "libelle": "Contrôleur Technique",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "36",
+        "libelle": "Assurances",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "37",
+        "libelle": "SPS / Coordinateur sécurité",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "38",
+        "libelle": "Coût qualité (Labelisation / Certification)",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "39",
+        "libelle": "Conduite d'opération",
+        "ht": 29109.09,
+        "ttc": 29109.09,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "41",
+        "libelle": "Direction d'investissement",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "42",
+        "libelle": "études",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "43",
+        "libelle": "étude de faisabilité",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "44",
+        "libelle": "frais hypothéque",
+        "ht": 27972.28,
+        "ttc": 27972.28,
+        "tva": 0
+      },
+      {
+        "chapitre": "III - HONORAIRES",
+        "numero": "45",
+        "libelle": "divers honoraires 4",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "IV - FRAIS DIVERS",
+        "numero": "46",
+        "libelle": "Actualisation/Révision",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "IV - FRAIS DIVERS",
+        "numero": "47",
+        "libelle": "divers honoraires 5",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "IV - FRAIS DIVERS",
+        "numero": "48",
+        "libelle": "divers honoraires 6    +   divers honoraires 7    +   divers honoraires 8",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      },
+      {
+        "chapitre": "V - FRAIS FINANCIERS",
+        "numero": "49",
+        "libelle": "interets prefi. forfaites",
+        "ht": 60169.795491,
+        "ttc": 60169.795491,
+        "tva": 0
+      },
+      {
+        "chapitre": "V - FRAIS FINANCIERS",
+        "numero": "50",
+        "libelle": "frais financiers",
+        "ht": 0,
+        "ttc": 0,
+        "tva": 0
+      }
+    ],
+    "chapitres": {
+      "I - CHARGE FONCIERE": {
+        "ht": 1948578.479704,
+        "ttc": 1948578.479704
+      },
+      "II - BÂTIMENT": {
+        "ht": 0.0,
+        "ttc": 0.0
+      },
+      "III - HONORAIRES": {
+        "ht": 57081.37,
+        "ttc": 57081.37
+      },
+      "IV - FRAIS DIVERS": {
+        "ht": 0.0,
+        "ttc": 0.0
+      },
+      "V - FRAIS FINANCIERS": {
+        "ht": 60169.795491,
+        "ttc": 60169.795491
+      }
+    },
+    "total_prix_revient": {
+      "ht": 2065829.645195,
+      "ttc": 2065829.645195
+    },
+    "ratios": {
+      "rmo": 0.019788,
+      "rmo_par_jour": 79.750932,
+      "prix_journee_an1": 25.4459
+    }
+  },
+  "hypotheses_exploitation": {
+    "nombre_logements": 11.0,
+    "date_OS": "2024-12-15",
+    "date_DAT": "2026-06-30",
+    "date_mise_en_location": "2026-09-01",
+    "remuneration_fp": 0.025,
+    "duree_reconstitution_fp": 30.0,
+    "pgerc_n1": 0.006,
+    "plafond_pgerc": 0.006,
+    "tfpb_eur_logement": 345.0,
+    "exoneration_tfpb_ans": 2.0,
+    "irl_n1": 0.0104,
+    "frais_gestion": 0.3,
+    "frais_financiers": 0.029126,
+    "profil_gestion": "AXENTIA HER 2026 (PMT 2025)"
+  },
+  "prets": [
+    {
+      "libelle": "PLS Foncier",
+      "pct_pr": 0,
+      "duree_ans": 60.0,
+      "montant": 0,
+      "revisabilite": "DOUBLE",
+      "progressivite": -0.005,
+      "taux_base": "Livret A",
+      "marge": 0.0111,
+      "taux": 0.0261
+    },
+    {
+      "libelle": "PLS Travaux",
+      "pct_pr": 0,
+      "duree_ans": 40.0,
+      "montant": 0,
+      "revisabilite": "DOUBLE",
+      "progressivite": -0.005,
+      "taux_base": "Livret A",
+      "marge": 0.0111,
+      "taux": 0.0261
+    },
+    {
+      "libelle": "PLUS Foncier",
+      "pct_pr": 0,
+      "duree_ans": 60.0,
+      "montant": 0,
+      "revisabilite": "DOUBLE",
+      "progressivite": -0.005,
+      "taux_base": "Livret A",
+      "marge": 0.006,
+      "taux": 0.021
+    },
+    {
+      "libelle": "PLUS Travaux",
+      "pct_pr": 0,
+      "duree_ans": 40.0,
+      "montant": 0,
+      "revisabilite": "DOUBLE",
+      "progressivite": -0.005,
+      "taux_base": "Livret A",
+      "marge": 0.006,
+      "taux": 0.021
+    },
+    {
+      "libelle": "PLAI Foncier",
+      "pct_pr": 0,
+      "duree_ans": 60.0,
+      "montant": 0,
+      "revisabilite": "DOUBLE",
+      "progressivite": -0.005,
+      "taux_base": "Livret A",
+      "marge": -0.002,
+      "taux": 0.013
+    },
+    {
+      "libelle": "PLAI Travaux",
+      "pct_pr": 0,
+      "duree_ans": 40.0,
+      "montant": 0,
+      "revisabilite": "DOUBLE",
+      "progressivite": -0.005,
+      "taux_base": "Livret A",
+      "marge": -0.002,
+      "taux": 0.013
+    },
+    {
+      "libelle": "LIBRE",
+      "pct_pr": 0.94907,
+      "duree_ans": 30.0,
+      "montant": 1960617.645195,
+      "revisabilite": "TAUX FIXE",
+      "progressivite": 0,
+      "taux_base": "Livret A",
+      "marge": -0.0077,
+      "taux": 0.015
+    },
+    {
+      "libelle": "LLI",
+      "pct_pr": 0,
+      "duree_ans": 35.0,
+      "montant": 0,
+      "revisabilite": "DOUBLE",
+      "progressivite": -0.005,
+      "taux_base": "Livret A",
+      "marge": 0.014,
+      "taux": 0.029
+    },
+    {
+      "libelle": "LLI Foncier",
+      "pct_pr": 0,
+      "duree_ans": 40.0,
+      "montant": 0,
+      "revisabilite": "DOUBLE",
+      "progressivite": -0.005,
+      "taux_base": "Livret A",
+      "marge": 0.014,
+      "taux": 0.029
+    },
+    {
+      "libelle": "ALS (LLI)",
+      "pct_pr": 0,
+      "duree_ans": null,
+      "montant": 0,
+      "revisabilite": 0.0,
+      "progressivite": 0,
+      "taux_base": null,
+      "marge": 0,
+      "taux": 0
+    },
+    {
+      "libelle": "LOC 1 Travaux",
+      "pct_pr": 0,
+      "duree_ans": 30.0,
+      "montant": 0,
+      "revisabilite": "D. LIMITEE",
+      "progressivite": 0,
+      "taux_base": "Livret A",
+      "marge": 0.0245,
+      "taux": 0.0395
+    },
+    {
+      "libelle": "LOC 1 Foncier",
+      "pct_pr": 0,
+      "duree_ans": 60.0,
+      "montant": 0,
+      "revisabilite": "D. LIMITEE",
+      "progressivite": 0,
+      "taux_base": "Livret A",
+      "marge": 0.04,
+      "taux": 0.055
+    }
+  ],
+  "grille_analyse": {
+    "pr_ht": 2065829.645195,
+    "pr_ttc": 2065829.645195,
+    "grille_pgerc_jointe": "Oui",
+    "type_grille_pgerc": "A+",
+    "plafond_pgerc": 0.006,
+    "pgerc_1ere_annee": 0.0,
+    "tfpb_eur_logement": 345.0,
+    "exoneration_tfpb_ans": 2.0,
+    "duree_reconstitution_fp": 30.0,
+    "taux_remuneration_fp": 0.0125,
+    "frais_financiers": 0.029126,
+    "frais_gestion": 0.3,
+    "rmo": 0.019788,
+    "rmo_reference": 0.015,
+    "frais_structure_eur_logement": 124.0,
+    "valeur_comptable_terrain": 478360.03,
+    "base_amortissement": 1587469.615195,
+    "base_amort_sur_pr_ttc": 0.768442,
+    "somme_amortissements_annexe": 1587469.615195,
+    "total_prets": 1960617.645195,
+    "pct_prets": 0.94907,
+    "fonds_propres_nr": 105212.0,
+    "pct_fp": 0.05093,
+    "total_subventions": 0.0,
+    "total_financements": 2065829.645195,
+    "van_5_ans": 670.701954,
+    "van_10_ans": 1454.275413,
+    "van_15_ans": 2245.58399
+  },
+  "totaux_plan_financement": {
+    "total_prets": 1960617.645195,
+    "pct_prets": 0.94907,
+    "total_subventions": 0.0,
+    "pct_subventions": 0.0,
+    "avance_tresorerie_remuneree": 0,
+    "fonds_propres_non_remuneres": 105212.0,
+    "pct_fp": 0.05093,
+    "fp_stock_pgerc": 0,
+    "total_fp": 105212.0,
+    "prix_revient_ttc": 2065829.645195,
+    "total_financements": 2065829.645195,
+    "tri": 0.013442
+  },
+  "redevance_forfaitaire_par_annee": [
+    {
+      "annee": 2026.0,
+      "n": 1.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 29.930956,
+      "frais_gestion_keur": 0,
+      "tfpb_teom_keur": 0,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2027.0,
+      "n": 2.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 30.559506,
+      "frais_gestion_keur": 6.493318,
+      "tfpb_teom_keur": 0,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2028.0,
+      "n": 3.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 31.231815,
+      "frais_gestion_keur": 6.616691,
+      "tfpb_teom_keur": 4.213503,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2029.0,
+      "n": 4.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 32.012611,
+      "frais_gestion_keur": 6.742408,
+      "tfpb_teom_keur": 4.335694,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2030.0,
+      "n": 5.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 32.812926,
+      "frais_gestion_keur": 6.870514,
+      "tfpb_teom_keur": 4.461429,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2031.0,
+      "n": 6.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 33.633249,
+      "frais_gestion_keur": 7.001054,
+      "tfpb_teom_keur": 4.590811,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2032.0,
+      "n": 7.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 34.474081,
+      "frais_gestion_keur": 7.134074,
+      "tfpb_teom_keur": 4.723944,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2033.0,
+      "n": 8.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 35.335933,
+      "frais_gestion_keur": 7.269621,
+      "tfpb_teom_keur": 4.860939,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2034.0,
+      "n": 9.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 36.219331,
+      "frais_gestion_keur": 7.407744,
+      "tfpb_teom_keur": 5.001906,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2035.0,
+      "n": 10.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 37.124814,
+      "frais_gestion_keur": 7.548491,
+      "tfpb_teom_keur": 5.146961,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2036.0,
+      "n": 11.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 38.052934,
+      "frais_gestion_keur": 7.691913,
+      "tfpb_teom_keur": 5.296223,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2037.0,
+      "n": 12.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 39.004258,
+      "frais_gestion_keur": 7.838059,
+      "tfpb_teom_keur": 5.449813,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2038.0,
+      "n": 13.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 39.979364,
+      "frais_gestion_keur": 7.986982,
+      "tfpb_teom_keur": 5.607858,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2039.0,
+      "n": 14.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 40.978848,
+      "frais_gestion_keur": 8.138735,
+      "tfpb_teom_keur": 5.770486,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2040.0,
+      "n": 15.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 42.00332,
+      "frais_gestion_keur": 8.293371,
+      "tfpb_teom_keur": 5.93783,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2041.0,
+      "n": 16.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 43.053403,
+      "frais_gestion_keur": 8.450945,
+      "tfpb_teom_keur": 6.110027,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2042.0,
+      "n": 17.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 44.129738,
+      "frais_gestion_keur": 8.611513,
+      "tfpb_teom_keur": 6.287218,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2043.0,
+      "n": 18.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 45.232981,
+      "frais_gestion_keur": 8.775132,
+      "tfpb_teom_keur": 6.469547,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2044.0,
+      "n": 19.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 46.363806,
+      "frais_gestion_keur": 8.941859,
+      "tfpb_teom_keur": 6.657164,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2045.0,
+      "n": 20.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 47.522901,
+      "frais_gestion_keur": 9.111754,
+      "tfpb_teom_keur": 6.850222,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2046.0,
+      "n": 21.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 48.710973,
+      "frais_gestion_keur": 9.284878,
+      "tfpb_teom_keur": 7.048878,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2047.0,
+      "n": 22.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 49.928748,
+      "frais_gestion_keur": 9.46129,
+      "tfpb_teom_keur": 7.253296,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2048.0,
+      "n": 23.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 51.176966,
+      "frais_gestion_keur": 9.641055,
+      "tfpb_teom_keur": 7.463641,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2049.0,
+      "n": 24.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 52.45639,
+      "frais_gestion_keur": 9.824235,
+      "tfpb_teom_keur": 7.680087,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2050.0,
+      "n": 25.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 53.7678,
+      "frais_gestion_keur": 10.010895,
+      "tfpb_teom_keur": 7.902809,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2051.0,
+      "n": 26.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 55.111995,
+      "frais_gestion_keur": 10.201102,
+      "tfpb_teom_keur": 8.131991,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2052.0,
+      "n": 27.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 56.489795,
+      "frais_gestion_keur": 10.394923,
+      "tfpb_teom_keur": 8.367819,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2053.0,
+      "n": 28.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 57.90204,
+      "frais_gestion_keur": 10.592427,
+      "tfpb_teom_keur": 8.610485,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2054.0,
+      "n": 29.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 59.349591,
+      "frais_gestion_keur": 10.793683,
+      "tfpb_teom_keur": 8.860189,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2055.0,
+      "n": 30.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 60.833331,
+      "frais_gestion_keur": 10.998763,
+      "tfpb_teom_keur": 9.117135,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2056.0,
+      "n": 31.0,
+      "annuites_emprunts_keur": 81.638527,
+      "annuites_fp_keur": 0,
+      "pge_keur": 62.354164,
+      "frais_gestion_keur": 11.207739,
+      "tfpb_teom_keur": 9.381532,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2057.0,
+      "n": 32.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 63.913018,
+      "frais_gestion_keur": 11.420687,
+      "tfpb_teom_keur": 9.653596,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2058.0,
+      "n": 33.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 65.510844,
+      "frais_gestion_keur": 11.63768,
+      "tfpb_teom_keur": 9.933551,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2059.0,
+      "n": 34.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 67.148615,
+      "frais_gestion_keur": 11.858795,
+      "tfpb_teom_keur": 10.221624,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2060.0,
+      "n": 35.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 68.82733,
+      "frais_gestion_keur": 12.084113,
+      "tfpb_teom_keur": 10.518051,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2061.0,
+      "n": 36.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 70.548013,
+      "frais_gestion_keur": 12.313711,
+      "tfpb_teom_keur": 10.823074,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2062.0,
+      "n": 37.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 72.311714,
+      "frais_gestion_keur": 12.547671,
+      "tfpb_teom_keur": 11.136943,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2063.0,
+      "n": 38.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 74.119506,
+      "frais_gestion_keur": 12.786077,
+      "tfpb_teom_keur": 11.459915,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2064.0,
+      "n": 39.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 75.972494,
+      "frais_gestion_keur": 13.029012,
+      "tfpb_teom_keur": 11.792252,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2065.0,
+      "n": 40.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 77.871806,
+      "frais_gestion_keur": 13.276564,
+      "tfpb_teom_keur": 12.134227,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2066.0,
+      "n": 41.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 79.818602,
+      "frais_gestion_keur": 13.528818,
+      "tfpb_teom_keur": 12.48612,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2067.0,
+      "n": 42.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 81.814067,
+      "frais_gestion_keur": 13.785866,
+      "tfpb_teom_keur": 12.848217,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2068.0,
+      "n": 43.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 83.859418,
+      "frais_gestion_keur": 14.047797,
+      "tfpb_teom_keur": 13.220816,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2069.0,
+      "n": 44.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 85.955904,
+      "frais_gestion_keur": 14.314706,
+      "tfpb_teom_keur": 13.604219,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2070.0,
+      "n": 45.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 88.104801,
+      "frais_gestion_keur": 14.586685,
+      "tfpb_teom_keur": 13.998742,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2071.0,
+      "n": 46.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 90.307421,
+      "frais_gestion_keur": 14.863832,
+      "tfpb_teom_keur": 14.404705,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2072.0,
+      "n": 47.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 92.565107,
+      "frais_gestion_keur": 15.146245,
+      "tfpb_teom_keur": 14.822442,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2073.0,
+      "n": 48.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 94.879235,
+      "frais_gestion_keur": 15.434023,
+      "tfpb_teom_keur": 15.252293,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2074.0,
+      "n": 49.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 97.251216,
+      "frais_gestion_keur": 15.72727,
+      "tfpb_teom_keur": 15.694609,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2075.0,
+      "n": 50.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 99.682496,
+      "frais_gestion_keur": 16.026088,
+      "tfpb_teom_keur": 16.149753,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2076.0,
+      "n": 51.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 102.174558,
+      "frais_gestion_keur": 16.330584,
+      "tfpb_teom_keur": 16.618096,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2077.0,
+      "n": 52.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 104.728922,
+      "frais_gestion_keur": 16.640865,
+      "tfpb_teom_keur": 17.10002,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2078.0,
+      "n": 53.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 107.347145,
+      "frais_gestion_keur": 16.957041,
+      "tfpb_teom_keur": 17.595921,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2079.0,
+      "n": 54.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 110.030824,
+      "frais_gestion_keur": 17.279225,
+      "tfpb_teom_keur": 18.106203,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2080.0,
+      "n": 55.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 112.781595,
+      "frais_gestion_keur": 17.60753,
+      "tfpb_teom_keur": 18.631283,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2081.0,
+      "n": 56.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 115.601134,
+      "frais_gestion_keur": 17.942073,
+      "tfpb_teom_keur": 19.17159,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2082.0,
+      "n": 57.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 118.491163,
+      "frais_gestion_keur": 18.282973,
+      "tfpb_teom_keur": 19.727566,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2083.0,
+      "n": 58.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 121.453442,
+      "frais_gestion_keur": 18.630349,
+      "tfpb_teom_keur": 20.299665,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2084.0,
+      "n": 59.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 124.489778,
+      "frais_gestion_keur": 18.984326,
+      "tfpb_teom_keur": 20.888356,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    },
+    {
+      "annee": 2085.0,
+      "n": 60.0,
+      "annuites_emprunts_keur": 0,
+      "annuites_fp_keur": 0,
+      "pge_keur": 127.602022,
+      "frais_gestion_keur": 19.345028,
+      "tfpb_teom_keur": 21.494118,
+      "assurance_keur": 0,
+      "autres_depenses_keur": 0
+    }
+  ],
+  "resultat_par_annee": [
+    {
+      "n": 1.0,
+      "redevance_eur": 33367.973724,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 17333.138556,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 0,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 2.0,
+      "redevance_eur": 102165.289795,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 51857.340763,
+      "interets_emprunts_eur": 29409.264678,
+      "taxe_fonciere_eur": 0,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 3.0,
+      "redevance_eur": 103902.099722,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 51857.340763,
+      "interets_emprunts_eur": 28625.82574,
+      "taxe_fonciere_eur": 4213.50258,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 4.0,
+      "redevance_eur": 105876.239617,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 51857.340763,
+      "interets_emprunts_eur": 27830.635217,
+      "taxe_fonciere_eur": 4335.694154,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 5.0,
+      "redevance_eur": 107887.888169,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 51857.340763,
+      "interets_emprunts_eur": 27023.516837,
+      "taxe_fonciere_eur": 4461.429285,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 6.0,
+      "redevance_eur": 109937.758044,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 51857.340763,
+      "interets_emprunts_eur": 26204.291681,
+      "taxe_fonciere_eur": 4590.810734,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 7.0,
+      "redevance_eur": 112026.575447,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 51857.340763,
+      "interets_emprunts_eur": 25372.778147,
+      "taxe_fonciere_eur": 4723.944245,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 8.0,
+      "redevance_eur": 114155.080381,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 51857.340763,
+      "interets_emprunts_eur": 24528.791911,
+      "taxe_fonciere_eur": 4860.938629,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 9.0,
+      "redevance_eur": 116324.026908,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 51857.340763,
+      "interets_emprunts_eur": 23672.145881,
+      "taxe_fonciere_eur": 5001.905849,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 10.0,
+      "redevance_eur": 118534.183419,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 51857.340763,
+      "interets_emprunts_eur": 22802.650161,
+      "taxe_fonciere_eur": 5146.961118,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 11.0,
+      "redevance_eur": 120786.332904,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 51857.340763,
+      "interets_emprunts_eur": 21920.112005,
+      "taxe_fonciere_eur": 5296.222991,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 12.0,
+      "redevance_eur": 123081.273229,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 51857.340763,
+      "interets_emprunts_eur": 21024.335776,
+      "taxe_fonciere_eur": 5449.813458,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 13.0,
+      "redevance_eur": 125419.817421,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 51857.340763,
+      "interets_emprunts_eur": 20115.122904,
+      "taxe_fonciere_eur": 5607.858048,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 14.0,
+      "redevance_eur": 127802.793952,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 51857.340763,
+      "interets_emprunts_eur": 19192.271839,
+      "taxe_fonciere_eur": 5770.485931,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 15.0,
+      "redevance_eur": 130231.047037,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 51857.340763,
+      "interets_emprunts_eur": 18255.578008,
+      "taxe_fonciere_eur": 5937.830023,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 16.0,
+      "redevance_eur": 132705.436931,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 44075.115289,
+      "interets_emprunts_eur": 17304.83377,
+      "taxe_fonciere_eur": 6110.027094,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 17.0,
+      "redevance_eur": 135226.840232,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 28574.453074,
+      "interets_emprunts_eur": 16339.828368,
+      "taxe_fonciere_eur": 6287.21788,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 18.0,
+      "redevance_eur": 137796.150197,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 28574.453074,
+      "interets_emprunts_eur": 15360.347885,
+      "taxe_fonciere_eur": 6469.547198,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 19.0,
+      "redevance_eur": 140414.27705,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 28574.453074,
+      "interets_emprunts_eur": 14366.175195,
+      "taxe_fonciere_eur": 6657.164067,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 20.0,
+      "redevance_eur": 143082.148314,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 28574.453074,
+      "interets_emprunts_eur": 13357.089914,
+      "taxe_fonciere_eur": 6850.221825,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 21.0,
+      "redevance_eur": 145800.709132,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 26452.027944,
+      "interets_emprunts_eur": 12332.868354,
+      "taxe_fonciere_eur": 7048.878258,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 22.0,
+      "redevance_eur": 148570.922606,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 11293.283471,
+      "taxe_fonciere_eur": 7253.295727,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 23.0,
+      "redevance_eur": 151393.770135,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 10238.104814,
+      "taxe_fonciere_eur": 7463.641303,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 24.0,
+      "redevance_eur": 154270.251768,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 9167.098478,
+      "taxe_fonciere_eur": 7680.086901,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 25.0,
+      "redevance_eur": 157201.386552,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 8080.027047,
+      "taxe_fonciere_eur": 7902.809421,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 26.0,
+      "redevance_eur": 160188.212896,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 6976.649544,
+      "taxe_fonciere_eur": 8131.990894,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 27.0,
+      "redevance_eur": 163231.788941,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 5856.721378,
+      "taxe_fonciere_eur": 8367.81863,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 28.0,
+      "redevance_eur": 166333.192931,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 4719.99429,
+      "taxe_fonciere_eur": 8610.485371,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 29.0,
+      "redevance_eur": 169493.523597,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 3566.216296,
+      "taxe_fonciere_eur": 8860.189446,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 30.0,
+      "redevance_eur": 172713.900545,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 2395.131632,
+      "taxe_fonciere_eur": 9117.13494,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 31.0,
+      "redevance_eur": 175995.464655,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 1206.480698,
+      "taxe_fonciere_eur": 9381.531854,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 32.0,
+      "redevance_eur": 179339.378484,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 9653.596277,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 33.0,
+      "redevance_eur": 182746.826675,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 9933.550569,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 34.0,
+      "redevance_eur": 186219.016382,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 10221.623536,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 35.0,
+      "redevance_eur": 189757.177693,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 10518.050618,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 36.0,
+      "redevance_eur": 193362.564069,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 10823.074086,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 37.0,
+      "redevance_eur": 197036.452786,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 11136.943235,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 38.0,
+      "redevance_eur": 200780.145389,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 11459.914589,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 39.0,
+      "redevance_eur": 204594.968152,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 11792.252112,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 40.0,
+      "redevance_eur": 208482.272547,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 12134.227423,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 41.0,
+      "redevance_eur": 212443.435725,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 12486.120018,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 42.0,
+      "redevance_eur": 216479.861004,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 12848.217499,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 43.0,
+      "redevance_eur": 220592.978363,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 13220.815806,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 44.0,
+      "redevance_eur": 224784.244952,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 13604.219465,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 45.0,
+      "redevance_eur": 229055.145606,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 13998.741829,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 46.0,
+      "redevance_eur": 233407.193372,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 14404.705342,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 47.0,
+      "redevance_eur": 237841.930047,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 14822.441797,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 48.0,
+      "redevance_eur": 242360.926717,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 15252.292609,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 49.0,
+      "redevance_eur": 246965.784325,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 15694.609095,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 50.0,
+      "redevance_eur": 251658.134227,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 22224.574613,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 16149.752759,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 51.0,
+      "redevance_eur": 256439.638778,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 14796.08666,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 16618.095589,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 52.0,
+      "redevance_eur": 261311.991914,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 0,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 17100.020361,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 53.0,
+      "redevance_eur": 266276.919761,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 0,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 17595.920951,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 54.0,
+      "redevance_eur": 271336.181236,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 0,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 18106.202659,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 55.0,
+      "redevance_eur": 276491.56868,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 0,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 18631.282536,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 56.0,
+      "redevance_eur": 281744.908485,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 0,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 19171.589729,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 57.0,
+      "redevance_eur": 287098.061746,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 0,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 19727.565832,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 58.0,
+      "redevance_eur": 292552.924919,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 0,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 20299.665241,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 59.0,
+      "redevance_eur": 298111.430492,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 0,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 20888.355533,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    },
+    {
+      "n": 60.0,
+      "redevance_eur": 303775.547672,
+      "qp_subventions_eur": 0,
+      "amort_comptables_ifrs_eur": 0,
+      "interets_emprunts_eur": 0,
+      "taxe_fonciere_eur": 21494.117843,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0
+    }
+  ],
+  "autofinancement_par_annee": [
+    {
+      "n": 1.0,
+      "redevance_eur": 33367.973724,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 0,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1403.839712,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 31964.134012
+    },
+    {
+      "n": 2.0,
+      "redevance_eur": 102165.289795,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 0,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1429.108827,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 19097.653731
+    },
+    {
+      "n": 3.0,
+      "redevance_eur": 103902.099722,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 4213.50258,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1456.261895,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 16593.808011
+    },
+    {
+      "n": 4.0,
+      "redevance_eur": 105876.239617,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 4335.694154,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1483.930871,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 18418.087354
+    },
+    {
+      "n": 5.0,
+      "redevance_eur": 107887.888169,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 4461.429285,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1512.125557,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 20275.80609
+    },
+    {
+      "n": 6.0,
+      "redevance_eur": 109937.758044,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 4590.810734,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1540.855943,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 22167.564131
+    },
+    {
+      "n": 7.0,
+      "redevance_eur": 112026.575447,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 4723.944245,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1570.132206,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 24093.971759
+    },
+    {
+      "n": 8.0,
+      "redevance_eur": 114155.080381,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 4860.938629,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1599.964717,
+      "gros_entretien_eur": 13000.0,
+      "autofinancement_eur": 13055.649798
+    },
+    {
+      "n": 9.0,
+      "redevance_eur": 116324.026908,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 5001.905849,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1630.364047,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 28053.229775
+    },
+    {
+      "n": 10.0,
+      "redevance_eur": 118534.183419,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 5146.961118,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1661.340964,
+      "gros_entretien_eur": 38000.0,
+      "autofinancement_eur": -7912.6459
+    },
+    {
+      "n": 11.0,
+      "redevance_eur": 120786.332904,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 5296.222991,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1692.906442,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 32158.676234
+    },
+    {
+      "n": 12.0,
+      "redevance_eur": 123081.273229,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 5449.813458,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1725.071665,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 34267.86087
+    },
+    {
+      "n": 13.0,
+      "redevance_eur": 125419.817421,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 5607.858048,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1757.848026,
+      "gros_entretien_eur": 54000.0,
+      "autofinancement_eur": -17584.415891
+    },
+    {
+      "n": 14.0,
+      "redevance_eur": 127802.793952,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 5770.485931,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1791.247139,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 38602.533645
+    },
+    {
+      "n": 15.0,
+      "redevance_eur": 130231.047037,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 5937.830023,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1825.280834,
+      "gros_entretien_eur": 175000.0,
+      "autofinancement_eur": -134170.591058
+    },
+    {
+      "n": 16.0,
+      "redevance_eur": 132705.436931,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 6110.027094,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1859.96117,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 43096.921429
+    },
+    {
+      "n": 17.0,
+      "redevance_eur": 135226.840232,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 6287.21788,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1895.300433,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 45405.794683
+    },
+    {
+      "n": 18.0,
+      "redevance_eur": 137796.150197,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 6469.547198,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1931.311141,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 47756.764621
+    },
+    {
+      "n": 19.0,
+      "redevance_eur": 140414.27705,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 6657.164067,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 1968.006052,
+      "gros_entretien_eur": 46000.0,
+      "autofinancement_eur": 4150.579694
+    },
+    {
+      "n": 20.0,
+      "redevance_eur": 143082.148314,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 6850.221825,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2005.398167,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 52588.001085
+    },
+    {
+      "n": 21.0,
+      "redevance_eur": 145800.709132,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 7048.878258,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2043.500733,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 55069.802905
+    },
+    {
+      "n": 22.0,
+      "redevance_eur": 148570.922606,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 7253.295727,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2082.327247,
+      "gros_entretien_eur": 18000.0,
+      "autofinancement_eur": 39596.772395
+    },
+    {
+      "n": 23.0,
+      "redevance_eur": 151393.770135,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 7463.641303,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2121.891464,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 60169.710131
+    },
+    {
+      "n": 24.0,
+      "redevance_eur": 154270.251768,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 7680.086901,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2162.207402,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 62789.430228
+    },
+    {
+      "n": 25.0,
+      "redevance_eur": 157201.386552,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 7902.809421,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2203.289343,
+      "gros_entretien_eur": 71000.0,
+      "autofinancement_eur": -5543.23945
+    },
+    {
+      "n": 26.0,
+      "redevance_eur": 160188.212896,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 8131.990894,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2245.15184,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 68172.542924
+    },
+    {
+      "n": 27.0,
+      "redevance_eur": 163231.788941,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 8367.81863,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2287.809725,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 70937.633348
+    },
+    {
+      "n": 28.0,
+      "redevance_eur": 166333.192931,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 8610.485371,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2331.27811,
+      "gros_entretien_eur": 57000.0,
+      "autofinancement_eur": 16752.902213
+    },
+    {
+      "n": 29.0,
+      "redevance_eur": 169493.523597,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 8860.189446,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2375.572394,
+      "gros_entretien_eur": 240000.0,
+      "autofinancement_eur": -163380.765481
+    },
+    {
+      "n": 30.0,
+      "redevance_eur": 172713.900545,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 9117.13494,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2420.70827,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 79537.530098
+    },
+    {
+      "n": 31.0,
+      "redevance_eur": 175995.464655,
+      "annuites_emprunts_eur": 81638.527237,
+      "taxe_fonciere_eur": 9381.531854,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2466.701727,
+      "gros_entretien_eur": 2904000.0,
+      "autofinancement_eur": -2821491.296162
+    },
+    {
+      "n": 32.0,
+      "redevance_eur": 179339.378484,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 9653.596277,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2513.569059,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 167172.213147
+    },
+    {
+      "n": 33.0,
+      "redevance_eur": 182746.826675,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 9933.550569,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2561.326872,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 170251.949234
+    },
+    {
+      "n": 34.0,
+      "redevance_eur": 186219.016382,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 10221.623536,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2609.992082,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 173387.400764
+    },
+    {
+      "n": 35.0,
+      "redevance_eur": 189757.177693,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 10518.050618,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2659.581932,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 176579.545143
+    },
+    {
+      "n": 36.0,
+      "redevance_eur": 193362.564069,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 10823.074086,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2710.113988,
+      "gros_entretien_eur": 318000.0,
+      "autofinancement_eur": -138170.624006
+    },
+    {
+      "n": 37.0,
+      "redevance_eur": 197036.452786,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 11136.943235,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2761.606154,
+      "gros_entretien_eur": 163000.0,
+      "autofinancement_eur": 20137.903397
+    },
+    {
+      "n": 38.0,
+      "redevance_eur": 200780.145389,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 11459.914589,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2814.076671,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 186506.15413
+    },
+    {
+      "n": 39.0,
+      "redevance_eur": 204594.968152,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 11792.252112,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2867.544128,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 189935.171912
+    },
+    {
+      "n": 40.0,
+      "redevance_eur": 208482.272547,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 12134.227423,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2922.027466,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 193426.017657
+    },
+    {
+      "n": 41.0,
+      "redevance_eur": 212443.435725,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 12486.120018,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 2977.545988,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 196979.769719
+    },
+    {
+      "n": 42.0,
+      "redevance_eur": 216479.861004,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 12848.217499,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 3034.119362,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 200597.524143
+    },
+    {
+      "n": 43.0,
+      "redevance_eur": 220592.978363,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 13220.815806,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 3091.76763,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 204280.394927
+    },
+    {
+      "n": 44.0,
+      "redevance_eur": 224784.244952,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 13604.219465,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 3150.511215,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 208029.514272
+    },
+    {
+      "n": 45.0,
+      "redevance_eur": 229055.145606,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 13998.741829,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 3210.370928,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 211846.032849
+    },
+    {
+      "n": 46.0,
+      "redevance_eur": 233407.193372,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 14404.705342,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 3271.367975,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 215731.120055
+    },
+    {
+      "n": 47.0,
+      "redevance_eur": 237841.930047,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 14822.441797,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 3333.523967,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 219685.964282
+    },
+    {
+      "n": 48.0,
+      "redevance_eur": 242360.926717,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 15252.292609,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 3396.860922,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 223711.773186
+    },
+    {
+      "n": 49.0,
+      "redevance_eur": 246965.784325,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 15694.609095,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 3461.40128,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 227809.77395
+    },
+    {
+      "n": 50.0,
+      "redevance_eur": 251658.134227,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 16149.752759,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 3527.167904,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 231981.213564
+    },
+    {
+      "n": 51.0,
+      "redevance_eur": 256439.638778,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 16618.095589,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 3594.184094,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 236227.359094
+    },
+    {
+      "n": 52.0,
+      "redevance_eur": 261311.991914,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 17100.020361,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 3662.473592,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 240549.497961
+    },
+    {
+      "n": 53.0,
+      "redevance_eur": 266276.919761,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 17595.920951,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 3732.06059,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 244948.938219
+    },
+    {
+      "n": 54.0,
+      "redevance_eur": 271336.181236,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 18106.202659,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 3802.969742,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 249427.008836
+    },
+    {
+      "n": 55.0,
+      "redevance_eur": 276491.56868,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 18631.282536,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 3875.226167,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 253985.059977
+    },
+    {
+      "n": 56.0,
+      "redevance_eur": 281744.908485,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 19171.589729,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 3948.855464,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 258624.463291
+    },
+    {
+      "n": 57.0,
+      "redevance_eur": 287098.061746,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 19727.565832,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 4023.883718,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 263346.612196
+    },
+    {
+      "n": 58.0,
+      "redevance_eur": 292552.924919,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 20299.665241,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 4100.337508,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 268152.92217
+    },
+    {
+      "n": 59.0,
+      "redevance_eur": 298111.430492,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 20888.355533,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 4178.243921,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 273044.831039
+    },
+    {
+      "n": 60.0,
+      "redevance_eur": 303775.547672,
+      "annuites_emprunts_eur": 0,
+      "taxe_fonciere_eur": 21494.117843,
+      "assurance_eur": 0,
+      "autres_depenses_eur": 0,
+      "frais_structure_eur": 4257.630556,
+      "gros_entretien_eur": 0,
+      "autofinancement_eur": 278023.799273
+    }
+  ],
+  "synthese_exploitation_par_annee": [
+    {
+      "n": 1.0,
+      "annee": 2026.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 0,
+      "pge_keur": 29.930956,
+      "tfpb_keur": 0,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 2.0,
+      "annee": 2027.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 6.493318,
+      "pge_keur": 30.559506,
+      "tfpb_keur": 0,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 3.0,
+      "annee": 2028.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 6.616691,
+      "pge_keur": 31.231815,
+      "tfpb_keur": 4.213503,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 4.0,
+      "annee": 2029.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 6.742408,
+      "pge_keur": 32.012611,
+      "tfpb_keur": 4.335694,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 5.0,
+      "annee": 2030.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 6.870514,
+      "pge_keur": 32.812926,
+      "tfpb_keur": 4.461429,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 6.0,
+      "annee": 2031.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 7.001054,
+      "pge_keur": 33.633249,
+      "tfpb_keur": 4.590811,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 7.0,
+      "annee": 2032.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 7.134074,
+      "pge_keur": 34.474081,
+      "tfpb_keur": 4.723944,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 8.0,
+      "annee": 2033.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 7.269621,
+      "pge_keur": 35.335933,
+      "tfpb_keur": 4.860939,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 9.0,
+      "annee": 2034.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 7.407744,
+      "pge_keur": 36.219331,
+      "tfpb_keur": 5.001906,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 10.0,
+      "annee": 2035.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 7.548491,
+      "pge_keur": 37.124814,
+      "tfpb_keur": 5.146961,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 11.0,
+      "annee": 2036.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 7.691913,
+      "pge_keur": 38.052934,
+      "tfpb_keur": 5.296223,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 12.0,
+      "annee": 2037.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 7.838059,
+      "pge_keur": 39.004258,
+      "tfpb_keur": 5.449813,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 13.0,
+      "annee": 2038.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 7.986982,
+      "pge_keur": 39.979364,
+      "tfpb_keur": 5.607858,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 14.0,
+      "annee": 2039.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 8.138735,
+      "pge_keur": 40.978848,
+      "tfpb_keur": 5.770486,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 15.0,
+      "annee": 2040.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 8.293371,
+      "pge_keur": 42.00332,
+      "tfpb_keur": 5.93783,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 16.0,
+      "annee": 2041.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 8.450945,
+      "pge_keur": 43.053403,
+      "tfpb_keur": 6.110027,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 17.0,
+      "annee": 2042.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 8.611513,
+      "pge_keur": 44.129738,
+      "tfpb_keur": 6.287218,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 18.0,
+      "annee": 2043.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 8.775132,
+      "pge_keur": 45.232981,
+      "tfpb_keur": 6.469547,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 19.0,
+      "annee": 2044.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 8.941859,
+      "pge_keur": 46.363806,
+      "tfpb_keur": 6.657164,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 20.0,
+      "annee": 2045.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 9.111754,
+      "pge_keur": 47.522901,
+      "tfpb_keur": 6.850222,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 21.0,
+      "annee": 2046.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 9.284878,
+      "pge_keur": 48.710973,
+      "tfpb_keur": 7.048878,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 22.0,
+      "annee": 2047.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 9.46129,
+      "pge_keur": 49.928748,
+      "tfpb_keur": 7.253296,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 23.0,
+      "annee": 2048.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 9.641055,
+      "pge_keur": 51.176966,
+      "tfpb_keur": 7.463641,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 24.0,
+      "annee": 2049.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 9.824235,
+      "pge_keur": 52.45639,
+      "tfpb_keur": 7.680087,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 25.0,
+      "annee": 2050.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 10.010895,
+      "pge_keur": 53.7678,
+      "tfpb_keur": 7.902809,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 26.0,
+      "annee": 2051.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 10.201102,
+      "pge_keur": 55.111995,
+      "tfpb_keur": 8.131991,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 27.0,
+      "annee": 2052.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 10.394923,
+      "pge_keur": 56.489795,
+      "tfpb_keur": 8.367819,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 28.0,
+      "annee": 2053.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 10.592427,
+      "pge_keur": 57.90204,
+      "tfpb_keur": 8.610485,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 29.0,
+      "annee": 2054.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 10.793683,
+      "pge_keur": 59.349591,
+      "tfpb_keur": 8.860189,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 30.0,
+      "annee": 2055.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 10.998763,
+      "pge_keur": 60.833331,
+      "tfpb_keur": 9.117135,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 31.0,
+      "annee": 2056.0,
+      "annuites_cdc_keur": 81.638527,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 11.207739,
+      "pge_keur": 62.354164,
+      "tfpb_keur": 9.381532,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 32.0,
+      "annee": 2057.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 11.420687,
+      "pge_keur": 63.913018,
+      "tfpb_keur": 9.653596,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 33.0,
+      "annee": 2058.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 11.63768,
+      "pge_keur": 65.510844,
+      "tfpb_keur": 9.933551,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 34.0,
+      "annee": 2059.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 11.858795,
+      "pge_keur": 67.148615,
+      "tfpb_keur": 10.221624,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 35.0,
+      "annee": 2060.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 12.084113,
+      "pge_keur": 68.82733,
+      "tfpb_keur": 10.518051,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 36.0,
+      "annee": 2061.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 12.313711,
+      "pge_keur": 70.548013,
+      "tfpb_keur": 10.823074,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 37.0,
+      "annee": 2062.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 12.547671,
+      "pge_keur": 72.311714,
+      "tfpb_keur": 11.136943,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 38.0,
+      "annee": 2063.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 12.786077,
+      "pge_keur": 74.119506,
+      "tfpb_keur": 11.459915,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 39.0,
+      "annee": 2064.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 13.029012,
+      "pge_keur": 75.972494,
+      "tfpb_keur": 11.792252,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 40.0,
+      "annee": 2065.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 13.276564,
+      "pge_keur": 77.871806,
+      "tfpb_keur": 12.134227,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 41.0,
+      "annee": 2066.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 13.528818,
+      "pge_keur": 79.818602,
+      "tfpb_keur": 12.48612,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 42.0,
+      "annee": 2067.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 13.785866,
+      "pge_keur": 81.814067,
+      "tfpb_keur": 12.848217,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 43.0,
+      "annee": 2068.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 14.047797,
+      "pge_keur": 83.859418,
+      "tfpb_keur": 13.220816,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 44.0,
+      "annee": 2069.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 14.314706,
+      "pge_keur": 85.955904,
+      "tfpb_keur": 13.604219,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 45.0,
+      "annee": 2070.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 14.586685,
+      "pge_keur": 88.104801,
+      "tfpb_keur": 13.998742,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 46.0,
+      "annee": 2071.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 14.863832,
+      "pge_keur": 90.307421,
+      "tfpb_keur": 14.404705,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 47.0,
+      "annee": 2072.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 15.146245,
+      "pge_keur": 92.565107,
+      "tfpb_keur": 14.822442,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 48.0,
+      "annee": 2073.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 15.434023,
+      "pge_keur": 94.879235,
+      "tfpb_keur": 15.252293,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 49.0,
+      "annee": 2074.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 15.72727,
+      "pge_keur": 97.251216,
+      "tfpb_keur": 15.694609,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 50.0,
+      "annee": 2075.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 16.026088,
+      "pge_keur": 99.682496,
+      "tfpb_keur": 16.149753,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 51.0,
+      "annee": 2076.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 16.330584,
+      "pge_keur": 102.174558,
+      "tfpb_keur": 16.618096,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 52.0,
+      "annee": 2077.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 16.640865,
+      "pge_keur": 104.728922,
+      "tfpb_keur": 17.10002,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 53.0,
+      "annee": 2078.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 16.957041,
+      "pge_keur": 107.347145,
+      "tfpb_keur": 17.595921,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 54.0,
+      "annee": 2079.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 17.279225,
+      "pge_keur": 110.030824,
+      "tfpb_keur": 18.106203,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 55.0,
+      "annee": 2080.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 17.60753,
+      "pge_keur": 112.781595,
+      "tfpb_keur": 18.631283,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 56.0,
+      "annee": 2081.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 17.942073,
+      "pge_keur": 115.601134,
+      "tfpb_keur": 19.17159,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 57.0,
+      "annee": 2082.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 18.282973,
+      "pge_keur": 118.491163,
+      "tfpb_keur": 19.727566,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 58.0,
+      "annee": 2083.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 18.630349,
+      "pge_keur": 121.453442,
+      "tfpb_keur": 20.299665,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 59.0,
+      "annee": 2084.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 18.984326,
+      "pge_keur": 124.489778,
+      "tfpb_keur": 20.888356,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 60.0,
+      "annee": 2085.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 19.345028,
+      "pge_keur": 127.602022,
+      "tfpb_keur": 21.494118,
+      "autres_flux_keur": 0
+    },
+    {
+      "n": 61.0,
+      "annee": 2086.0,
+      "annuites_cdc_keur": 0,
+      "annuites_autres_keur": 0,
+      "rel_keur": 0,
+      "frais_fonct_keur": 19.712584,
+      "pge_keur": 130.792073,
+      "tfpb_keur": 22.117447,
+      "autres_flux_keur": 0
+    }
+  ],
+  "pmt_redevances_par_annee": [
+    {
+      "annee": 2026.0,
+      "n": 1.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2027.0,
+      "n": 2.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2028.0,
+      "n": 3.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2029.0,
+      "n": 4.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2030.0,
+      "n": 5.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2031.0,
+      "n": 6.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2032.0,
+      "n": 7.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2033.0,
+      "n": 8.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2034.0,
+      "n": 9.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2035.0,
+      "n": 10.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2036.0,
+      "n": 11.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2037.0,
+      "n": 12.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2038.0,
+      "n": 13.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2039.0,
+      "n": 14.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2040.0,
+      "n": 15.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2041.0,
+      "n": 16.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2042.0,
+      "n": 17.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2043.0,
+      "n": 18.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2044.0,
+      "n": 19.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2045.0,
+      "n": 20.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2046.0,
+      "n": 21.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2047.0,
+      "n": 22.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2048.0,
+      "n": 23.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2049.0,
+      "n": 24.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2050.0,
+      "n": 25.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2051.0,
+      "n": 26.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2052.0,
+      "n": 27.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2053.0,
+      "n": 28.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2054.0,
+      "n": 29.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2055.0,
+      "n": 30.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2056.0,
+      "n": 31.0,
+      "redevance_eur": 81638.527237
+    },
+    {
+      "annee": 2057.0,
+      "n": 32.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2058.0,
+      "n": 33.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2059.0,
+      "n": 34.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2060.0,
+      "n": 35.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2061.0,
+      "n": 36.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2062.0,
+      "n": 37.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2063.0,
+      "n": 38.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2064.0,
+      "n": 39.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2065.0,
+      "n": 40.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2066.0,
+      "n": 41.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2067.0,
+      "n": 42.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2068.0,
+      "n": 43.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2069.0,
+      "n": 44.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2070.0,
+      "n": 45.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2071.0,
+      "n": 46.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2072.0,
+      "n": 47.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2073.0,
+      "n": 48.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2074.0,
+      "n": 49.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2075.0,
+      "n": 50.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2076.0,
+      "n": 51.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2077.0,
+      "n": 52.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2078.0,
+      "n": 53.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2079.0,
+      "n": 54.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2080.0,
+      "n": 55.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2081.0,
+      "n": 56.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2082.0,
+      "n": 57.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2083.0,
+      "n": 58.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2084.0,
+      "n": 59.0,
+      "redevance_eur": 0
+    },
+    {
+      "annee": 2085.0,
+      "n": 60.0,
+      "redevance_eur": 0
+    }
+  ]
+}

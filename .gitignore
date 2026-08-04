@@ -1,0 +1,6 @@
+node_modules/
+.DS_Store
+*.log
+# Exports bruts d'annexes LEON avant transformation en fixtures JSON
+*.xls
+*.xlsx

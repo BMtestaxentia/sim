@@ -1,0 +1,15 @@
+{
+  "name": "moteur-sim",
+  "version": "0.1.0",
+  "description": "Moteur de simulation financiere d'operations de logement social (successeur LEON). JavaScript ESM pur, sans build.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "tsc --noEmit --allowJs --checkJs -p jsconfig.json"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0"
+  }
+}

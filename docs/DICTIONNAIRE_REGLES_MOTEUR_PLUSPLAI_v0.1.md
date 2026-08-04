@@ -1,0 +1,122 @@
+# DICTIONNAIRE DES RÈGLES — MOTEUR DE SIMULATION PLUS/PLAI
+
+Version 0.1 — 04/08/2026. Extrait par rétro-ingénierie de la matrice LEON (Scepia) version 2025-042d, profil « AXENTIA HER 2026 (PMT 2025) », fichier MATRICE_CALCULS_BACKGROUND_LEON.XLS (131 onglets, 278 887 formules, 21 423 plages nommées).
+
+> Ce fichier est la reproduction, dans le repo du moteur, de la spécification produite par l'instance Claude « chat » qui détient la matrice LEON. La source de vérité reste cette instance : en cas d'ambiguïté, ne pas deviner — consigner la question dans `docs/QUESTIONS_SPEC.md` (voir CLAUDE.md §6).
+
+Objet : spécification testable du moteur de calcul V1 (périmètre PLUS/PLAI habitat, neuf / VEFA / acquisition-amélioration) pour la ré-implémentation en module de code pur (entrées JSON → sorties JSON), avec validation par golden tests contre les annexes LEON officielles.
+
+Convention de traçabilité : chaque règle porte un identifiant R-xxx et cite sa source (Onglet!Cellule). Statuts : ✅ formule extraite et transcrite · 🔶 mécanisme identifié, extraction fine à compléter à l'implémentation · ⚠️ irrégularité ou arbitrage à trancher.
+
+## 0. Architecture de la matrice source
+
+Chaîne PLUS/PLAI dans LEON : ParaGEN/ParaGLOB (barèmes + paramètres globaux) → ParaPLUS (saisie produit) → BilPLUS (prix de revient HT/TVA/TTC, LASM) → TypPLUS (typologies) → calculs (l.22-350 : loyers, CS, SLA, SSF, prêts ; l.1020-1290 : prêts fonciers globaux, TVA/LASM, préfi, TA) → FinPLUS (plan de financement) → SimPLUS (paramètres + amortissement + exploitation 50 ans) → COMMUN (constantes). SimTOTAL/ComTOTAL = consolidation multi-produits (hors V1).
+
+## 1. Modèle de données d'entrée
+
+Reconstruit depuis ParaPLUS, SimPLUS!A8:A42, ParaGLOB, validé par l'onglet IN des annexes (sérialisation à plat d'une simulation).
+
+- **Identité/contexte** : id_simulation, nom_operation, etape, commune_insee (préfixe 97x → DOM), zone_123 (1/2/3/1bis, barème loyers), zone_ABC (A/Abis/B1/B2/C, durées prêts), type_operation (Neuf/Vefa/Acq-Amélio/Réhab), nature (V1 = Habitation), type_foncier (Pleine propriété/Démembrement → décale la 1re échéance CDC, R-AMT-3), tva_reduite/normale (10/20 %), duree_simulation (18-60), date_OS/livraison/mise_en_location (DAT = mise en location).
+- **Programme physique** (par produit × Coll/Ind, ParaPLUS!25:44) : NL, SHAB, surfaces_annexes, SU (R-SURF-1 ou forcée), CS_distinct, loyer_base, modulation, loyer_sortie_forcé (court-circuite le calcul). Annexes louées séparément (garages, parkings, commerces, privatifs, jardins) + LCR. SDP Coll/Ind.
+- **Prix de revient** (BilPLUS) : 4 chapitres (Charge foncière 19 postes / Bâtiment / Honoraires / Frais divers) × Coll/Ind × (HT, TVA, TTC), chaque poste avec son taux de TVA de saisie ; colonne TVA finale/LASM retraite au taux de livraison à soi-même (R-TVA-2).
+- **Financements saisis** (SimPLUS!AL8:AX42) : 4 prêts CDC (PLUS/PLAI × Construction/Foncier) + jusqu'à 7 autres prêts (montant, taux fixe ou formule LA, progressivité, date 1re échéance, durée, différé, révisabilité, affectation, clé quote-part SU/NL). Options : capitaliser_interets_prefi, arrondir_prets_milliers_sup, option_PLUS_Horizen. Subventions 10 lignes (montant, flag gratuit, affectation) + SLA (R-SUB-1) + SSF (R-SUB-2). Fonds propres (montant, répartition, gratuit, durée reconstitution, taux rémunération, différé).
+- **Paramètres d'exploitation** : trajectoires annuelles (ParaGEN!GS22:HE72 : LA, GE, gestion, vacance-impayés, loyers/IRL, frais fin., produits fin., TFPB, index TFPB). TFPB €/logement + année début. REL. Frais de gestion. PGE/PGERC. Marge anticipée LA. Majoration 120 % = 33 %.
+
+## 2. Référentiels versionnés (fichier `referentiels/baremes_2025.json` + `trajectoires_axentia_2026.json`)
+
+- **Loyers max €/m² SU/mois** (ParaGEN!D22:G24) : PLUS 7,32/6,42/5,95/7,77 (zones 1/2/3/1bis) ; PLAI 6,50/5,71/5,28/6,93 ; LIBRE 15/11/8/18. DOM : valeurs par département (branchement présent, hors V1).
+- **Valeurs de base VB €/m²** (ParaGEN!D36:G41) : Neuf Coll 1767/1473/1473/1767, Ind 1767/1619/1619/1767 ; Acquisition Coll 1767/1382/1382/1767, Ind 1767/1473/1473/1767.
+- **Taxe d'aménagement €/m²** (ParaGEN!B31:B32) : 930 hors IdF, 1054 IdF.
+- **Quotité foncier VEFA par zone** (ParaGEN!D61:H69) : matrice usage × zone ABC (constaté B1 : terrain 0,30 ; SSF/PGE 0,60).
+- **Trajectoires macro par année civile** (ParaGEN!GS22:HE72) : LA, GE, gestion, vacance, loyers, frais fin., produits fin., TFPB, index TFPB. Profil AXENTIA HER 2026 (PMT 2025).
+- **Constantes** : CS 0,77 & facteur 20 (métropole habitat), 0,685 & 31 (DOM), 38 (foyers) ; PLUS 33 % ; majoration >100 % plafonds = 33 % ; marge locale plafonnée (~12 %) ; SSF plafonds 40/50 %, taux État 20 % neuf / 40 % AA ; TVA 10 %/5,5 %/20 % ; exonération TFPB 25 ans.
+
+## 3. R-SURF — Surfaces et coefficients de structure
+
+- **R-SURF-1** ✅ Surface utile : SU = SHAB + 0,5 × surfaces_annexes (par produit × Coll/Ind), arrondie 2 déc. Peut être forcée. Source calculs!D384. DOM → « Surface Financée ».
+- **R-SURF-2** ✅ Coefficient de structure (habitat métropole) : CS = 0,77 × (1 + k × NL/SU), k = 20 (habitat/étudiant), 38 (foyers) ; DOM : 0,685 × (31 × NL + SF)/SF. Source calculs!D92:D116. Variantes : par produit, mixte (SU PLUS+PLAI), hors annexes (SHAB), SLA mixte. Flag CS_mixte (ParaPLUS!H27/H37). Arrondi 4 déc. si option.
+- **R-SURF-3** ✅ Quotes-parts : qpSUPLUS = SU_(PLUS+PLUS33)/SU_totale, qpSUPLAI = SU_PLAI/SU_totale (calculs!B167:B168).
+
+## 4. R-LOYER — Loyers réglementés
+
+- **R-LOYER-1** ✅ Loyer de base = loyer_max_zone(produit, zone) + marge_locale_départementale (saisie €/m²). Source calculs!D72:D77. PLUS 33 % = loyer PLUS × 1,33 (⚠️ I-6 : LEON fait +0,33 en mode arrondi vs ×1,33 sinon — arbitrage : ×1,33 partout).
+- **R-LOYER-2** ✅ Loyer max de base = CS(produit) × loyer_base(produit) (calculs!D117:D119), arrondi 2 déc. optionnel.
+- **R-LOYER-3** ✅ Marges locales de majoration : marge = MIN(Σ majorations affectées, plafond ParaPLUS!AD30), plafonnement séparé PLUS/PLAI. Source FinPLUS!S26:T29.
+- **R-LOYER-4** 🔶 Majoration LCR : ratio surfaces LCR/référence ; <10 % → 0, >20 % → +2 %, sinon ratio/100 (borne intermédiaire à confirmer calculs!D152/F152).
+- **R-LOYER-5** ✅ Loyer pratiqué = Lmax_base × (1 + marge_plafonnée), arrondi 2 déc. si option. Si loyer_sortie_forcé → remplace tout. Annuel = 12 × SU × loyer. Source FinPLUS!S46:U58.
+- **R-LOYER-6** 🔶 Annexe importante : si loyer des annexes intégrées > seuil (facteur 1,18 si marge ≤ 12 %, 1,25 sinon), part excédentaire retirée et loyer recalculé « après annexe importante ». Transcription fine à faire avec cas de test dédié (calculs!D120:D156).
+- **R-LOYER-7** ✅ Loyers annexes séparées : NL × loyer_unitaire × 12, sans passer par le CS (FinPLUS!S60:U64).
+- **R-LOYER-8** ✅ Contrôles : alerte dépassement loyer max ; alerte loyer plafond dépassé.
+
+## 5. R-TVA — Prix de revient et TVA (LASM)
+
+- **R-TVA-1** ✅ Saisie HT + taux → TVA → TTC, séparément Coll/Ind (BilPLUS!D:J).
+- **R-TVA-2** ✅ TVA finale (livraison à soi-même) : TTC_final(poste) = HT × (1 + taux_LASM), taux_LASM_PLUSPLAI = 10 % (⚠️ le tableau ParaGEN!A78 affiche 5,5 % mais LEON utilise le taux réduit de la simulation ParaGLOB!J44 = 10 % — documenté dans baremes_2025.json). PR TTC réf = BilPLUS!V86.
+- **R-TVA-3** ✅ Clé de répartition : % SU (défaut), % SDP ou % SHAB.
+- **R-TVA-4** ✅ Modulation du PR : PR_TTC_modulé = PRTTC + modulation (TTC non finançable saisi), ventilé par qpSU.
+- **R-TVA-5** ✅ TVA sur intérêts de préfi (ParaPLUS!F47/J47, 0 ou 5 %).
+
+## 6. R-SUB — Subventions calculées
+
+- **R-SUB-1** 🔶 Subvention État (SLA) : métropole via forfait (base NL/SHAB/SU selon mode) ; assiette réglementaire nulle hors DOM. SLA_PLUSPLAI = SLA_PLUS + SLA_PLAI. MQECO en acquisition-amélioration. Source calculs!B254:B264.
+- **R-SUB-2** ✅ Subvention surcharge foncière (SSF) : dépassement = valeur foncière réelle − référence (VB × SU_SSF) ; plafond État conditionnel (participations collectivités < 40 % du dépassement → MIN(taux plafonné × réf, 50 % × dépassement)) ; taux dépassement ×1 neuf/×0,2 AA ; taux subvention 2 neuf/0,4 AA. Conditionné au flag ParaPLUS!DE76 = OK. Source calculs!D274:B292.
+- **R-SUB-3** ✅ Gratuité et affectation : chaque subvention porte flag gratuit (1/0) et affectation PLUS/PLAI/PLUS-PLAI (ventilée par qpSU). Agrégats gratuites/non gratuites → équilibre. Source calculs!D295:D314.
+
+## 7. R-FIN — Plan de financement et prêts CDC théoriques
+
+- **R-FIN-1** ✅ Équilibre : Subventions + FP + Prêts = PR_TTC_modulé. Contrôle calculs!D327 (surfinancement/sous-financement).
+- **R-FIN-2** 🔶 Foncier finançable (méthode globale si ParaGEN!A64 = "global") : charge_foncière × (1 − financements_gratuits/PR_TTC_opération), réparti au prorata SU. Sinon méthode par produit. Prix du foncier par quotités VEFA en VEFA (calculs!B1281:B1287).
+- **R-FIN-3** ✅ Solde à financer : solde_PLUS = PR_TTC_PLUS_modulé − (subventions_PLUS + FP_PLUS + autres_prêts_PLUS) (calculs!D336) ; idem PLAI.
+- **R-FIN-4** 🔶 Prêts CDC théoriques : PRÊT FONCIER = MIN(borné(solde, foncier_finançable), solde), plancher 0, arrondi milliers sup si option ; PRÊT BÂTIMENT = solde − préfi_échéancier − prêt_foncier. Correction « redressement », montants forcés, option PLUS Horizen (prêts >49 ans affectés PLUS → foncier), dernière échéance = reliquat au dernier tirage.
+- **R-FIN-5** ✅ Contrôles : ratio prêts CDC PLUS / PR PLUS ≥ 50 %.
+- **R-FIN-6** 🔶 Préfinancement : échéancier de tirages mensuels sur 12 mois avant mise en location ; intérêts_préfi = Σ tirages_capitalisés − Σ nominal (capitalisation SimPLUS!FA15:FD27 à transcrire). Deux modes : forfait au bilan ou par échéancier. Flag « ne pas capitaliser ».
+
+## 8. R-AMT — Moteur d'amortissement CDC ⭐ (cœur, validé ±0,1 % avril 2026)
+
+- **R-AMT-1** ✅ Caractéristiques par défaut des 4 prêts CDC : PLUS Constr. LA+0,60 %/40 ans/DOUBLE ; PLUS Foncier LA+0,60 %/50 (B2/C) ou 60 ans/DOUBLE ; PLAI Constr. LA−0,20 %/40 ans/DOUBLE ; PLAI Foncier LA−0,20 %/50-60 ans/DOUBLE. Progressivité −0,5 % (AXENTIA). + marge_anticipée_LA sur tous les taux.
+- **R-AMT-2** ✅ Première annuité (profil progressif) : `q = (1+p)/(1+t)` ; `annuité_1 = K × (1+t) × (1 − q) / (1 − q^(n−d))`. Si t = 0 → LEON renvoie 0 (⚠️ I-8 : nous faisons l'amortissement linéaire). Source SimPLUS!AM15.
+- **R-AMT-3** ✅ Date de première échéance : année(DAT) + 1, +0 si démembrement. Chaque prêt « autre » porte sa propre date (AR17…) — c'est la règle dont la violation causait le bug ALS (chaque prêt démarre à SA date, pas à l'an 1 commun).
+- **R-AMT-4** 🔶 Révision annuelle (barème CDC) : `LA_N = trajectoire_LA[N]` ; `tx_N = (1+t) × (1 + (LA_N − LA₀)/(1+t)) − 1` ; `rev_N = (1+p) × (1 + (LA_N − LA₀)/(1+t)) − 1`. Selon révisabilité : DOUBLE → taux_annuité = rev_N ; D.LIMITÉE → MAX(rev_N, 0) ; SIMPLE/fixe → p seul. `annuité_N = annuité_{N−1} × (1 + taux_annuité)` ; `intérêts_N = tx_N × CRD_{N−1}` ; `amort_N = annuité_N − intérêts_N` ; `CRD_N = CRD_{N−1} − amort_N`. Différé type 1 → annuité 0 (intérêts capitalisés) ; sinon intérêts seuls. Arrêt : si ROUND(CRD,4) ≤ 0 → dernière annuité ajustée. Source SimPLUS!FF117 sq. (formule FK117 de la dernière annuité à transcrire caractère par caractère).
+- **R-AMT-5** ✅ Sortie : table par prêt (année → taux, annuité, intérêts, amortissement, CRD). Annuité comptée si année ≥ année(1re échéance du prêt).
+
+## 9. R-EXP — Compte d'exploitation prévisionnel (50-60 ans) 🔶
+
+Table SimPLUS!DO..EC+ (années en lignes, montants k€). Par année N : **Produits** = loyers logements (an 1 R-LOYER-5 indexé IRL) + loyers annexes + loyer divers + produits financiers. **Charges** = Σ annuités (VLOOKUP tables amortissement, filtrées par date 1re échéance) + frais de gestion + TFPB (à partir de fin d'exonération R-FISC-1) + REL + gros entretien/PGERC (trajectoire GE €/m² × SHAB × index BT01) + vacance & impayés + frais financiers. **Soldes** = résultat, autofinancement, cumuls, reconstitution FP (durée, taux, différé, mode). Bloc à transcrire produit par produit avec l'annexe en golden test (colonnes EC-EN + cachées GU/HB/HH/HX/IA).
+
+## 10. R-FISC — Fiscalité
+
+- **R-FISC-1** 🔶 Exonération TFPB : année_début = année(DAT) + 25 + correction (pivot 1er janvier). Durée 25 ans standard (⚠️ I-7 : paramétrable 2/15/25/30). Source SimPLUS!G37.
+- **R-FISC-2** ✅ Taxe d'aménagement : assiette = SDP × (1 − abattement 50 %) × valeur_forfaitaire (930/1054) + parkings ×… Source calculs!B1255:B1259.
+- **R-FISC-3** ✅ VSD : si neuf et seuil densité > 0, MIN(valeur_terrain/2 × (1 − SDP/(seuil×surface)), 25 % × valeur_terrain).
+- **R-FISC-4** 🔶 TVA (cf. R-TVA) ; dégrèvement/défiscalisation SimPLUS!A40:A42 (hors chemin critique V1 métropole).
+
+## 11. Indicateurs de sortie (Grille d'analyse / Présentation CA)
+
+PR par chapitre HT/TTC + total, €/m² SHAB, €/logement ; plan de financement (prêts montant/durée/% PR/révisabilité, subventions, FP, % prêts, % FP) ; RMO (loyers an 1 / PR TTC) ; frais financiers moyens ; base d'amortissement comptable (PR TTC − terrain, terrain = 25 % acq VEFA) ; année reconstitution FP ; taux rémunération FP ; PGERC (type, plafond 0,6-1 %) ; TFPB €/lgt ; compte d'exploitation année par année.
+
+## 12. Golden tests — protocole
+
+Mêmes entrées (onglet IN) → reproduire la Présentation CA ligne à ligne. Tolérances : ±1 € bilan/plan de financement, ±0,1 % annuités/exploitation. Jeux disponibles : `fixtures/mulhouse_3308_libre` (LIBRE, VEFA zone 2/B1), `fixtures/mulhouse_3308_lli` (LLI, en réalité sim n°3307 même opération ; écart résiduel 0,45 € = arrondi de présentation LEON, à NE PAS reproduire). Manque V1 : un jeu PLUS/PLAI habitat (annexe 1303 à exporter). Tests unitaires : R-AMT-2/4 (annuités canoniques), R-LOYER (zone×produit×marges), R-SUB-2 (SSF aux bornes), R-FIN-4 (équilibres, redressement, Horizen).
+
+## 13. Irrégularités de la source (arbitrages)
+
+| ID | Constat | Arbitrage |
+|---|---|---|
+| I-1 | Moteur dupliqué 14× (divergences de bugs, ex. date 1re échéance ALS) | Moteur unique paramétrique, produit = donnée |
+| I-2 | Constantes en dur (`345+117*0`, 0,9, 0,8 %, 1,18/1,25) | Tout en référentiel versionné, zéro littéral |
+| I-3 | Référence cassée ParaGLOBC49 → SimPLUS!A36 #DIV/0! | Réimplémenter proprement (frais contrôle ville % loyers) |
+| I-4 | Bruit flottant par accumulation itérative (PMT) | Calculs exacts + arrondis aux frontières |
+| I-5 | Libellés fautifs (« désamientage »…) | Référentiel de postes propre |
+| I-6 | PLUS 33 % : +0,33 vs ×1,33 selon mode | ×1,33 partout, écart documenté |
+| I-7 | Exonération TFPB 25 ans câblée vs « EXONERATION 2 » ailleurs | Paramètre durée_exoneration_tfpb |
+| I-8 | Annuité à taux 0 → 0 | Taux 0 = amortissement linéaire |
+| I-9 | Arrondis pilotés par flag global hétérogène | Politique explicite par grandeur (`arrondis.js`) |
+| I-10 | XML malformé des liens annexes | Sans objet dans la cible |
+
+## 14. Backlog d'extraction (par ordre d'implémentation)
+
+R-AMT-4 fin (FK117 + capitalisation préfi FA15:FD27) → R-EXP colonnes EC-EN + cachées → R-LOYER-6 (annexe importante) → reconstitution FP → PGERC (trajectoire GJ13:GK74, index BT01) → Présentation CA (mapping 593 lignes). Modules hors V1 : foyers (jeu Strasbourg n°3204 prêt) → PLS → LLI/LOC → LIBRE → REH → IFRS/IS.
+
+## 15. Schéma de données cible (persistance — phase ultérieure, Postgres VM, jamais Supabase)
+
+`referentiels` (versionnés par date_valeur : baremes loyers/valeurs de base/TA/quotités VEFA, trajectoires, constantes) ; `simulations` (id, operation_id lien SFO, version_moteur, entrees JSONB, resultats JSONB, indicateurs plats requêtables) ; `moteur` (module JS pur versionné : `calculer(entrees, referentiels) → resultats`, déterministe, testé).

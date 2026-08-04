@@ -81,8 +81,11 @@ export const PRODUITS = {
     coefficient_structure: true,
     prets_defaut: [
       // Taux constate sur l'operation BERGERAC : 3,51 % pour un LA de reference de
-      // 2,40 % (ParaGEN!DD20), soit LA + 1,11 %. Revisabilite SIMPLE (SimPLS!AM19) :
-      // le taux suit le Livret A, la progression de l'annuite reste a p.
+      // 2,40 % (ParaGEN!DD20), soit LA + 1,11 %. Confirme independamment par la
+      // maquette LEON REWORK (ADMIN!C45 « Spread PLS » = 0,0111), qui donne aussi
+      // PLAI -0,20 % et PLUS +0,60 %, conformes a R-AMT-1.
+      // Revisabilite SIMPLE (SimPLS!AM19) : le taux suit le Livret A, la
+      // progression de l'annuite reste a p.
       { nature: 'construction', taux_ref: 'LA+1.11', duree_ref: '40', revisabilite: 'SIMPLE' },
       { nature: 'foncier', taux_ref: 'LA+1.11', duree_ref: 'zone_abc:B2|C->50,sinon->60', revisabilite: 'SIMPLE' },
     ],

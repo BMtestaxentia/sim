@@ -16,3 +16,25 @@ Procédure (CLAUDE.md §6) : en cas d'ambiguïté métier, NE PAS deviner. Consi
 | Q-7 | R-AMT-4 | **Source de la trajectoire du Livret A** : l'amortissement lit `ParaGEN!CT22:DD102` (colonne 11), table qui court de 2028 à 2108 et vaut 2 % à plat dans le classeur Bergerac. Le référentiel `trajectoires_axentia_2026.json` du repo vient, lui, de `ParaGEN!GS22:HE72` (2023-2073, LA variable). Deux tables distinctes : laquelle fait foi pour l'amortissement, et faut-il verser CT22:DD102 dans les référentiels ? | ouverte | — |
 | Q-8 | R-AMT-1 | Le « Taux référence LA » (`ParaGEN!DD20` = 2,4 %, plage nommée `Tx_LA`) est supérieur à la trajectoire (2 % dès 2028) : tous les prêts démarrent donc avec une révision de **−0,4 point** dès la première échéance. Vérifié sur Bergerac : PLS saisi à 3,51 %, amorti à 3,11 %. Est-ce voulu (LA figé à la date de montage du barème) ou un résidu de paramétrage ? Impact direct sur toutes les annuités. | ouverte | — |
 | Q-9 | R-AMT-5 | Bergerac : le prêt « Collecteur 1 » (20 000 EUR à 0,25 %, 40 ans, 1re échéance 2028) est bien saisi dans `SimPLS!AQ12:AQ18` et référencé 673 fois dans le classeur, mais **aucun bloc d'amortissement de `SimPLS` ne le pilote** (les 4 blocs existants portent sur `$AM`, `$AN`, `$AS`, `$AU`). Ses annuités sont-elles calculées ailleurs, ou ce prêt est-il absent du compte d'exploitation ? | ouverte | — |
+
+## Questions issues de la maquette LEON REWORK (04/08/2026)
+
+Maquette Excel fournie par Bastien, 12 onglets, avec son propre onglet ARBITRAGES et un rapport d'AUDIT. Elle constitue une **seconde source** indépendante de la matrice LEON, et une spécification d'ergonomie.
+
+| # | Règle | Question | Statut | Réponse / source |
+|---|---|---|---|---|
+| Q-13 | R-TVA-2 | **Taux de TVA du PLAI** : la maquette (`ADMIN!C48`) retient 5,5 % pour le PLAI et 10 % pour PLUS/PLS, alors que LEON applique 10 % à PLUS **et** PLAI (taux réduit de la simulation `ParaGLOB!J44`, écart déjà documenté dans `baremes_2025.json`). Les deux sources divergent sur un poste qui pèse directement sur le prix de revient. Laquelle fait foi ? | ouverte | — |
+| Q-14 | R-FISC-1 | **Exonération TFPB par tranche** : la maquette la paramètre produit par produit (`ADMIN!C25:C29` — PLAI/PLUS/PLS 25 ans, PLI/LIBRE 0 an). Le moteur ne porte qu'une durée unique par simulation. Confirmer que la durée est bien une propriété du **produit** et non de l'opération, auquel cas elle rejoint `produits.js`. | ouverte | — |
+| Q-15 | R-FIN-5 | **Seuil de quotité CDC** : le moteur contrôle un minimum de 50 % (`calculs!B1234`, versé dans `baremes_2025.json`). La maquette contrôle **51 %** pour le PLS (`FIN!X40:X41`, audit Q-01 qui signale une alerte à 50,9999 %). Deux seuils différents : lequel s'applique, et à quels produits ? | ouverte | — |
+| Q-16 | R-EXP | **Charges d'exploitation absentes du moteur**, toutes présentes dans `ADMIN` de la maquette : TEOM (117 €/logement), CGLLS (0,34 % des loyers), assurance PNO (75 €/lot), PGERC (0,6 %), provision gros entretien / PPRE. À noter : `345` (TFPB) et `117` (TEOM) sont précisément les deux constantes que le dictionnaire signalait câblées en dur dans LEON sous la forme `345+117*0` (irrégularité I-2) — la maquette les sépare correctement. Recoupe Q-11 et les arbitrages 1 à 3 de la maquette. | ouverte | — |
+| Q-17 | R-EXP | **Frais de gestion** : la maquette les définit en % du **prix de revient TTC** (`ADMIN!C17` = 0,3 %), là où le moteur propose un forfait par logement ou un % des **loyers**. Trois assiettes possibles pour le même poste. Laquelle retenir, et varie-t-elle par produit ? | ouverte | — |
+| Q-18 | hors dictionnaire | **Amortissement comptable par composants** (`ADMIN!B30:D36` : structure 50 % sur 50 ans, toiture 8 % sur 25 ans, menuiseries 12 % sur 25 ans, équipements 15 % sur 15 ans, agencements 15 % sur 15 ans, dotation moyenne 26,3 ans). Absent du dictionnaire et du moteur. Fait-il partie du périmètre, ou reste-t-il hors champ comme le précise la maquette elle-même (« Pas un modèle comptable ANC ») ? | ouverte | — |
+
+### Arbitrages déjà posés par Bastien dans la maquette
+
+Ces quatre points sont **en attente de décision** dans l'onglet ARBITRAGES et recoupent Q-11 et Q-16. Ils ne sont pas des questions techniques mais des choix d'hypothèses, à trancher par le métier :
+
+1. **Vacance structurelle en mode forfaitaire** — actuellement 0 %. Options : 0 / 2 / 3 / 5 %. Impact chiffré par la maquette : 450 k€ à 700 k€ d'autofinancement cumulé sur 51 ans.
+2. **Provision gros entretien (GE / PPRE)** — absente. Options : forfait par logement (300-600 €/lot/an), % des loyers (1,5 à 3 %), plan pluriannuel par composant, ou combinaison. Impact : environ 2,5 M€ cumulés à 400 €/lot/an sur 85 lots. **Poste majeur.**
+3. **REL** — à 0 €. Options : activation à partir de l'année 10-15, montant progressif, ou forfait dès l'année 1.
+4. **Horizon d'affichage de la synthèse** — 40 ans affichés pour une simulation à 51 ans et des prêts fonciers à 60 ans. Choix de présentation, sans impact sur le calcul.

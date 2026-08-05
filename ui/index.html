@@ -175,19 +175,23 @@
       <section class="bloc">
         <h2 class="bloc__titre">
           Prix de revient
-          <button type="button" class="bouton bouton--ajout" data-ajouter="postes_bilan">+ poste</button>
+          <span class="bloc__outils">
+            <label class="interrupteur">
+              <input type="checkbox" id="masquer-vides" />
+              <span>Masquer les lignes non renseignées</span>
+            </label>
+          </span>
         </h2>
         <div class="table-defilante">
-          <table class="tableau tableau--saisie" id="table-postes">
+          <table class="tableau tableau--saisie tableau--nomenclature" id="table-postes">
             <thead>
               <tr>
-                <th>Chapitre</th>
-                <th>Libellé</th>
+                <th class="num">N°</th>
+                <th>Poste</th>
                 <th class="num">Montant HT (€)</th>
                 <th class="num">TVA</th>
                 <th class="num calc">TVA (€)</th>
                 <th class="num calc">TTC saisie (€)</th>
-                <th></th>
               </tr>
             </thead>
             <tbody></tbody>

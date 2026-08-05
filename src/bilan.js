@@ -103,6 +103,9 @@ export function prixDeRevient({ code_produit, postes, modulation_ttc_eur = 0 }, 
     ttc += v.ttc_eur;
     ttcLasm += ttcFinal;
     detail.push({
+      // Identifiant stable du poste, s'il en porte un : c'est lui qui permet a
+      // une restitution de retrouver sa ligne de saisie, jamais le rang.
+      id: poste.id,
       chapitre: poste.chapitre,
       libelle: poste.libelle,
       taux_tva: poste.taux_tva,
@@ -213,6 +216,7 @@ export function prixDeRevientVentile(
       ch.ttcLasm += ttcLasm;
     }
     return {
+      id: poste.id,
       chapitre: poste.chapitre,
       libelle: poste.libelle,
       taux_tva: poste.taux_tva,

@@ -27,8 +27,32 @@ const $ = (sel) => /** @type {HTMLElement} */ (document.querySelector(sel));
 const referentiels = {
   baremes: await (await fetch('../referentiels/baremes_2025.json')).json(),
   trajectoires: await (await fetch('../referentiels/trajectoires_axentia_2026.json')).json(),
+  nomenclature_pdr: await (await fetch('../referentiels/nomenclature_pdr.json')).json(),
 };
 // __REFERENTIELS_FIN__
+
+/**
+ * Postes de prix de revient : la nomenclature complete est PRESENTE d'emblee,
+ * on ne remplit que les lignes utiles. C'est la logique de la maquette : on
+ * cherche sa ligne dans une liste connue plutot que de la creer et de la nommer,
+ * ce qui garantit que deux operations restent comparables poste a poste.
+ *
+ * Un montant vide vaut « poste non utilise » et non zero : ces lignes ne sont
+ * pas transmises au moteur.
+ */
+function nomenclatureEnPostes(valeursInitiales = {}) {
+  const tauxDefaut = referentiels.baremes.tva.taux_reduit_simulation;
+  return referentiels.nomenclature_pdr.chapitres.flatMap((ch) =>
+    ch.postes.map((p) => ({
+      id: p.id,
+      numero: p.numero,
+      chapitre: ch.code,
+      libelle: p.libelle,
+      montant_ht_eur: valeursInitiales[p.id]?.montant_ht_eur ?? null,
+      taux_tva: valeursInitiales[p.id]?.taux_tva ?? tauxDefaut,
+    })),
+  );
+}
 
 // ---------------------------------------------------------------- etat initial
 
@@ -59,11 +83,11 @@ const etat = {
   lots: [
     { code_produit: 'PLS', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 40, marge_locale_eur_m2: 0 },
   ],
-  postes_bilan: [
-    { chapitre: 'charge_fonciere', libelle: 'Acquisition VEFA', montant_ht_eur: 642780, taux_tva: 0.055 },
-    { chapitre: 'charge_fonciere', libelle: 'Frais de notaire', montant_ht_eur: 12000, taux_tva: 0.055 },
-    { chapitre: 'honoraires', libelle: 'Honoraires techniques', montant_ht_eur: 18000, taux_tva: 0.2 },
-  ],
+  postes_bilan: nomenclatureEnPostes({
+    cf_acquisition: { montant_ht_eur: 642780, taux_tva: 0.055 },
+    cf_notaire: { montant_ht_eur: 12000, taux_tva: 0.055 },
+    hon_architecte: { montant_ht_eur: 18000, taux_tva: 0.2 },
+  }),
   modulation_ttc_eur: 0,
   subventions: [{ libelle: 'Ville', montant_eur: 20000, gratuite: true }],
   fonds_propres_eur: 50000,
@@ -112,12 +136,14 @@ const COULEURS = {
   pret_autre: '#c79ad6',
 };
 
-const CHAPITRES = {
-  charge_fonciere: 'Charge foncière',
-  batiment: 'Bâtiment',
-  honoraires: 'Honoraires',
-  frais_divers: 'Frais divers',
-};
+/**
+ * Libelles de chapitre DERIVES de la nomenclature, jamais recopies : une table
+ * codee ici finirait par en diverger. C'est ainsi que « Frais financiers », le
+ * cinquieme chapitre, manquait a la restitution.
+ */
+const CHAPITRES = Object.fromEntries(
+  referentiels.nomenclature_pdr.chapitres.map((c) => [c.code, c.libelle]),
+);
 
 const OPTIONS_REVISABILITE = ['DOUBLE', 'D. LIMITEE', 'SIMPLE', 'TAUX FIXE'];
 const OPTIONS_DIFFERE = [
@@ -194,24 +220,45 @@ function rendreStructure() {
     })
     .join('');
 
-  // --- Postes de prix de revient ---
-  $('#table-postes').querySelector('tbody').innerHTML = etat.postes_bilan
-    .map(
-      (p, i) => `<tr data-poste="${i}">
-        <td><select data-champ="postes_bilan.${i}.chapitre" data-structure="1">
-          ${Object.entries(CHAPITRES).map(([c, l]) => `<option value="${c}" ${c === p.chapitre ? 'selected' : ''}>${l}</option>`).join('')}
-        </select></td>
-        <td><input type="text" data-champ="postes_bilan.${i}.libelle" value="${att(p.libelle)}" /></td>
+  // --- Prix de revient : nomenclature complete, groupee par chapitre ---
+  const masquerVides = /** @type {HTMLInputElement} */ (document.getElementById('masquer-vides'))?.checked;
+  const lignesPdr = [];
+  for (const ch of referentiels.nomenclature_pdr.chapitres) {
+    const indices = etat.postes_bilan
+      .map((p, i) => ({ p, i }))
+      .filter(({ p }) => p.chapitre === ch.code);
+    const visibles = masquerVides ? indices.filter(({ p }) => !nul(p.montant_ht_eur)) : indices;
+    // Un chapitre entierement vide disparait quand on masque : inutile de laisser
+    // un en-tete et un sous-total a zero.
+    if (!visibles.length) continue;
+
+    lignesPdr.push(
+      `<tr class="chapitre-entete"><td colspan="6">${ch.numero} — ${att(ch.libelle)}</td></tr>`,
+    );
+    for (const { p, i } of visibles) {
+      const vide = nul(p.montant_ht_eur);
+      lignesPdr.push(`<tr data-poste="${i}" class="${vide ? 'poste--vide' : ''}">
+        <td class="num num-poste">${p.numero}</td>
+        <td class="libelle-poste">${att(p.libelle)}</td>
         <td><input type="number" step="1" data-champ="postes_bilan.${i}.montant_ht_eur" data-type="nombre" value="${valNum(p.montant_ht_eur)}" /></td>
         <td><select data-champ="postes_bilan.${i}.taux_tva" data-type="nombre">
           ${TAUX_TVA.map((v) => `<option value="${v}" ${v === p.taux_tva ? 'selected' : ''}>${(v * 100).toFixed(1)} %</option>`).join('')}
         </select></td>
         <td class="calc" data-calc="tva"></td>
         <td class="calc" data-calc="ttc"></td>
-        <td><button type="button" class="bouton--supprimer" data-supprimer="postes_bilan" data-index="${i}" title="Supprimer">×</button></td>
+      </tr>`);
+    }
+    lignesPdr.push(
+      `<tr class="chapitre-total" data-chapitre-total="${ch.code}">
+        <td></td><td class="libelle">Sous-total ${att(ch.libelle.toLowerCase())}</td>
+        <td class="num" data-total="ht"></td><td></td>
+        <td class="num" data-total="tva"></td><td class="num" data-total="ttc"></td>
       </tr>`,
-    )
-    .join('');
+    );
+  }
+  $('#table-postes').querySelector('tbody').innerHTML =
+    lignesPdr.join('') ||
+    '<tr><td colspan="6" class="vide">Aucun poste renseigné. Décocher « Masquer les lignes non renseignées » pour saisir.</td></tr>';
 
   // --- Subventions ---
   $('#table-subventions').querySelector('tbody').innerHTML = etat.subventions.length
@@ -303,28 +350,53 @@ function rendreValeurs(r) {
       <td></td>
     </tr>`;
 
-  // --- Postes : le detail vient du moteur, rien n'est recalcule ici ---
+  // --- Postes : le detail vient du moteur, apparie par IDENTIFIANT et non par
+  // rang, puisque les postes vides ne lui sont pas transmis. ---
   const b = r.bilan;
-  for (const tr of document.querySelectorAll('#table-postes tbody tr')) {
+  const detailParId = Object.fromEntries((b.postes ?? []).filter((d) => d.id).map((d) => [d.id, d]));
+  for (const tr of document.querySelectorAll('#table-postes tbody tr[data-poste]')) {
     const i = Number(/** @type {HTMLElement} */ (tr).dataset.poste);
-    const d = b.postes[i];
+    const d = detailParId[etat.postes_bilan[i]?.id];
     const set = (cle, v) => {
       const td = tr.querySelector(`[data-calc="${cle}"]`);
       if (td) td.textContent = v;
     };
-    set('tva', d ? eur(d.tva_eur) : '—');
-    set('ttc', d ? eur(d.ttc_eur) : '—');
+    set('tva', d ? eur(d.tva_eur) : '');
+    set('ttc', d ? eur(d.ttc_eur) : '');
+    // Une ligne cesse d'etre grisee des qu'elle porte un montant, sans attendre
+    // un rendu de structure : sinon elle reste visuellement « non renseignee ».
+    tr.classList.toggle('poste--vide', nul(etat.postes_bilan[i]?.montant_ht_eur));
   }
+
+  // Sous-totaux de chapitre, tires des chapitres du moteur.
+  for (const tr of document.querySelectorAll('#table-postes [data-chapitre-total]')) {
+    const code = /** @type {HTMLElement} */ (tr).dataset.chapitreTotal;
+    const c = b.chapitres[code];
+    const set = (cle, v) => {
+      const td = tr.querySelector(`[data-total="${cle}"]`);
+      if (td) td.textContent = v;
+    };
+    set('ht', c ? eur(c.ht_eur) : eur(0));
+    set('tva', c ? eur(c.tva_eur) : eur(0));
+    set('ttc', c ? eur(c.ttc_eur) : eur(0));
+  }
+  const renseignes = etat.postes_bilan.filter((p) => !nul(p.montant_ht_eur)).length;
   $('#table-postes').querySelector('tfoot').innerHTML = `<tr>
-      <td class="libelle" colspan="2">Total</td>
+      <td></td><td class="libelle">Prix de revient total</td>
       <td class="num">${eur(b.total_ht_eur)}</td><td></td>
       <td class="num">${eur(b.total_tva_eur)}</td>
-      <td class="num">${eur(b.total_ttc_eur)}</td><td></td>
+      <td class="num">${eur(b.total_ttc_eur)}</td>
     </tr>
     <tr>
-      <td class="libelle" colspan="2">Base finançable (TTC / LASM)</td>
+      <td></td><td class="libelle">Base finançable (TTC / LASM)</td>
       <td colspan="3"></td>
-      <td class="num">${eur(b.total_ttc_module_eur)}</td><td></td>
+      <td class="num">${eur(b.total_ttc_module_eur)}</td>
+    </tr>
+    <tr>
+      <td></td><td colspan="5" style="font-weight:400;color:var(--encre-doux);border-top:none">
+        ${renseignes} poste${renseignes > 1 ? 's' : ''} renseigné${renseignes > 1 ? 's' : ''}
+        sur ${etat.postes_bilan.length} de la nomenclature
+      </td>
     </tr>`;
   $('#aide-lasm').textContent =
     `⚙ La base finançable applique le taux de livraison à soi-même du produit principal ` +
@@ -922,6 +994,9 @@ function recalculer() {
     // theorique (R-FIN-4).
     const entrees = structuredClone(etat);
     if (etat.mode_prets === 'theoriques') entrees.prets = [];
+    // Un poste sans montant vaut « non utilise » : il ne doit pas entrer dans le
+    // bilan, sinon la nomenclature entiere y figurerait a zero.
+    entrees.postes_bilan = entrees.postes_bilan.filter((p) => !nul(p.montant_ht_eur));
     const r = calculer(entrees, referentiels);
     dernierResultat = r;
     erreur.hidden = true;
@@ -986,6 +1061,11 @@ document.addEventListener('input', (ev) => {
   else recalculer();
 });
 
+document.addEventListener('change', (ev) => {
+  // L'interrupteur de masquage change la STRUCTURE de la table, pas l'etat.
+  if (/** @type {HTMLElement} */ (ev.target).id === 'masquer-vides') rafraichirTout();
+});
+
 document.addEventListener('click', (ev) => {
   const el = /** @type {HTMLElement} */ (ev.target);
 
@@ -1035,7 +1115,6 @@ document.addEventListener('click', (ev) => {
       });
     } else {
       const modeles = {
-        postes_bilan: { chapitre: 'batiment', libelle: 'Nouveau poste', montant_ht_eur: 0, taux_tva: 0.1 },
         subventions: { libelle: 'Nouvelle subvention', montant_eur: 0, gratuite: false },
         prets: {
           code: `PRET_${etat.prets.length + 1}`, libelle: 'Nouveau prêt', nature: 'autre',

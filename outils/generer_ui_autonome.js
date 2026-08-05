@@ -104,7 +104,16 @@ const moteur = morceaux
 const referentiels = {
   baremes: JSON.parse(lire('referentiels', 'baremes_2025.json')),
   trajectoires: JSON.parse(lire('referentiels', 'trajectoires_axentia_2026.json')),
+  nomenclature_pdr: JSON.parse(lire('referentiels', 'nomenclature_pdr.json')),
 };
+
+// Garde-fou : tout referentiel charge par l'UI doit etre inline ici, sinon la
+// version autonome part avec un referentiel manquant et echoue a l'ouverture.
+for (const m of lire('ui', 'app.js').matchAll(/referentiels\/([\w.]+)\.json/g)) {
+  const cle = m[1].replace(/_\d{4}$/, '').replace(/_axentia_\d{4}$/, '');
+  const present = Object.keys(referentiels).some((k) => k.startsWith(cle.split('_')[0]));
+  if (!present) throw new Error(`Referentiel charge par l'UI mais absent du generateur : ${m[1]}.json`);
+}
 // L'UI est concatenee dans la MEME portee que le moteur : ses noms racine
 // entrent donc en collision avec les siens. On verifie l'ensemble d'un bloc,
 // et pas seulement les modules entre eux.

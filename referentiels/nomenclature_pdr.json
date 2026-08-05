@@ -1,0 +1,89 @@
+{
+  "libelle": "Nomenclature du prix de revient",
+  "source": "Maquette LEON REWORK, onglet PDR (B8:C67). 5 chapitres, 46 postes.",
+  "extrait_le": "2026-08-05",
+  "note": "La numerotation comporte des trous (17 a 19 et 28 absents) : elle est reservee par chapitre et n'est pas une simple sequence. Elle est conservee telle quelle pour que la saisie reste comparable a la maquette. L'identifiant `id` est STABLE et independant du numero : c'est lui qui doit servir de cle, jamais le numero ni le rang d'affichage.",
+  "chapitres": [
+    {
+      "code": "charge_fonciere",
+      "numero": "I",
+      "libelle": "Charge foncière",
+      "postes": [
+        { "id": "cf_acquisition", "numero": 1, "libelle": "Acquisition / Terrain" },
+        { "id": "cf_sondages", "numero": 2, "libelle": "Sondages / Études de sols" },
+        { "id": "cf_demolition", "numero": 3, "libelle": "Démolition" },
+        { "id": "cf_vrd", "numero": 4, "libelle": "Travaux VRD" },
+        { "id": "cf_vrd_actualisation", "numero": 5, "libelle": "Actualisation VRD" },
+        { "id": "cf_vrd_revision", "numero": 6, "libelle": "Révision VRD" },
+        { "id": "cf_branchements", "numero": 7, "libelle": "Branchements" },
+        { "id": "cf_taxe_assainissement", "numero": 8, "libelle": "Taxe assainissement" },
+        { "id": "cf_notaire", "numero": 9, "libelle": "Frais de notaire" },
+        { "id": "cf_commission_achat", "numero": 10, "libelle": "Commission achat" },
+        { "id": "cf_taxes_amenagement", "numero": 11, "libelle": "Taxes aménagement & VSD" },
+        { "id": "cf_fondations_speciales", "numero": 12, "libelle": "Fondations spéciales" },
+        { "id": "cf_desamiantage", "numero": 13, "libelle": "Désamiantage" },
+        { "id": "cf_divers_1", "numero": 14, "libelle": "Divers foncier 1" },
+        { "id": "cf_divers_2", "numero": 15, "libelle": "Divers foncier 2" },
+        { "id": "cf_divers_3", "numero": 16, "libelle": "Divers foncier 3" }
+      ]
+    },
+    {
+      "code": "batiment",
+      "numero": "II",
+      "libelle": "Bâtiment",
+      "postes": [
+        { "id": "bat_travaux", "numero": 20, "libelle": "Travaux de construction" },
+        { "id": "bat_actualisation", "numero": 21, "libelle": "Actual. bâtiment" },
+        { "id": "bat_revision", "numero": 22, "libelle": "Révision bâtiment" },
+        { "id": "bat_aleas", "numero": 23, "libelle": "Aléas" },
+        { "id": "bat_divers_1", "numero": 24, "libelle": "Divers bât. 1" },
+        { "id": "bat_divers_2", "numero": 25, "libelle": "Divers bât. 2" },
+        { "id": "bat_divers_3", "numero": 26, "libelle": "Divers bât. 3" },
+        { "id": "bat_divers_4", "numero": 27, "libelle": "Divers bât. 4" }
+      ]
+    },
+    {
+      "code": "honoraires",
+      "numero": "III",
+      "libelle": "Honoraires",
+      "postes": [
+        { "id": "hon_vrd", "numero": 29, "libelle": "Honoraires VRD" },
+        { "id": "hon_architecte", "numero": 30, "libelle": "Architecte" },
+        { "id": "hon_bureau_etudes", "numero": 31, "libelle": "Bureau d'études" },
+        { "id": "hon_amo", "numero": 32, "libelle": "AMO" },
+        { "id": "hon_geometre", "numero": 33, "libelle": "Géomètre" },
+        { "id": "hon_opc", "numero": 34, "libelle": "OPC / Pilotage" },
+        { "id": "hon_controleur", "numero": 35, "libelle": "Contrôleur technique" },
+        { "id": "hon_assurances", "numero": 36, "libelle": "Assurances (DO/TRC)" },
+        { "id": "hon_sps", "numero": 37, "libelle": "SPS / Coord. sécurité" },
+        { "id": "hon_labellisation", "numero": 38, "libelle": "Labellisation / Certif." },
+        { "id": "hon_conduite_operation", "numero": 39, "libelle": "Conduite d'opération" },
+        { "id": "hon_dir_investissement", "numero": 40, "libelle": "Dir. d'investissement" },
+        { "id": "hon_etudes", "numero": 41, "libelle": "Études" },
+        { "id": "hon_faisabilite", "numero": 42, "libelle": "Étude de faisabilité" },
+        { "id": "hon_interets_immobilisables", "numero": 43, "libelle": "Intérêts immobilisables" },
+        { "id": "hon_divers_1", "numero": 44, "libelle": "Divers hon. 1" },
+        { "id": "hon_divers_2", "numero": 45, "libelle": "Divers hon. 2" }
+      ]
+    },
+    {
+      "code": "frais_divers",
+      "numero": "IV",
+      "libelle": "Frais divers",
+      "postes": [
+        { "id": "fd_actualisation_hon", "numero": 46, "libelle": "Actual./Rév. hon." },
+        { "id": "fd_divers_1", "numero": 47, "libelle": "Divers frais 1" },
+        { "id": "fd_divers_2", "numero": 48, "libelle": "Divers frais 2" }
+      ]
+    },
+    {
+      "code": "frais_financiers",
+      "numero": "V",
+      "libelle": "Frais financiers",
+      "postes": [
+        { "id": "ff_interets_prefi", "numero": 49, "libelle": "Intérêts préfin." },
+        { "id": "ff_divers", "numero": 50, "libelle": "Frais fin. divers" }
+      ]
+    }
+  ]
+}

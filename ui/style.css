@@ -53,7 +53,8 @@ h1 { font-size: 16px; }
 .entete {
   display: flex;
   align-items: center;
-  gap: 24px;
+  flex-wrap: wrap; /* sur fenetre etroite, l'entete passe a la ligne au lieu de deborder */
+  gap: 10px 24px;
   padding: 10px 24px;
   background: var(--navy-900);
   color: #fff;
@@ -67,7 +68,7 @@ h1 { font-size: 16px; }
 .entete__sep { opacity: 0.5; margin: 0 3px; }
 .entete__actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 
-.onglets { display: flex; gap: 2px; }
+.onglets { display: flex; gap: 2px; flex-wrap: wrap; min-width: 0; }
 .onglet {
   font: inherit;
   font-size: 13px;
@@ -207,6 +208,42 @@ input.champ--requis-vide { border-color: var(--rouge); background: var(--rouge-c
   background: var(--surface);
 }
 .tableau tfoot .libelle { text-transform: uppercase; font-size: 10px; letter-spacing: 0.06em; color: var(--navy-700); }
+
+/* ---------- Nomenclature de prix de revient ---------- */
+.bloc__outils { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.interrupteur { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--encre-doux); cursor: pointer; }
+.interrupteur input { width: auto; }
+
+.tableau--nomenclature { table-layout: fixed; min-width: 620px; }
+.tableau--nomenclature td { padding: 2px 5px; }
+.tableau--nomenclature .num-poste { color: var(--encre-doux); font-size: 11px; }
+.tableau--nomenclature .libelle-poste { color: var(--encre); }
+
+/* Largeurs fixes : sans elles le selecteur de TVA se retrouve tronque. */
+.tableau--nomenclature th:nth-child(1), .tableau--nomenclature td:nth-child(1) { width: 38px; }
+.tableau--nomenclature th:nth-child(2), .tableau--nomenclature td:nth-child(2) { width: auto; }
+.tableau--nomenclature th:nth-child(3), .tableau--nomenclature td:nth-child(3) { width: 130px; }
+.tableau--nomenclature th:nth-child(4), .tableau--nomenclature td:nth-child(4) { width: 84px; }
+.tableau--nomenclature th:nth-child(5), .tableau--nomenclature td:nth-child(5) { width: 100px; }
+.tableau--nomenclature th:nth-child(6), .tableau--nomenclature td:nth-child(6) { width: 120px; }
+.tableau--nomenclature select { padding-right: 2px; }
+
+/* Une ligne non renseignee reste lisible mais s'efface : l'oeil va aux lignes remplies. */
+.tableau--nomenclature .poste--vide .libelle-poste,
+.tableau--nomenclature .poste--vide .num-poste { color: #9aa6b8; }
+.tableau--nomenclature .poste--vide input { background: #fcfdfe; }
+.tableau--nomenclature .poste--vide td.calc { color: #b6c0ce; background: transparent; }
+
+.chapitre-entete td {
+  background: var(--navy-900); color: #fff;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 5px 8px; border-bottom: none;
+}
+.chapitre-total td {
+  background: var(--navy-100); font-weight: 700;
+  font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--trait);
+}
+.chapitre-total .libelle { text-transform: none; letter-spacing: 0; color: var(--navy-800); }
 
 /* ---------- Bandeau de controle ---------- */
 .bandeau {

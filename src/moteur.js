@@ -18,7 +18,12 @@ import { surfaceUtile, quotesPartsSU, loyerProduit, loyerAnnexesSeparees, contro
 import { normaliserTrajectoires } from './trajectoires.js';
 import { calendrierOperation } from './calendrier.js';
 import { pretsDefautResolus, ORDRE_PRODUITS } from './produits.js';
-import { prixDeRevient, prixDeRevientVentile } from './bilan.js';
+import {
+  prixDeRevient,
+  prixDeRevientVentile,
+  valeurComptableTerrain,
+  baseAmortissementComptable,
+} from './bilan.js';
 import { agregerSubventions, surchargeFonciere } from './subventions.js';
 import {
   soldeAFinancer,
@@ -430,6 +435,26 @@ export function calculer(entrees, referentiels) {
     'Subvention d’exploitation à durée limitée',
   ];
 
+  // Base d'amortissement comptable (Grille d'analyse). Calculee UNIQUEMENT si
+  // l'appelant fournit le montant de terrain et la quotite non amortissable :
+  // la quotite n'a pas de valeur par defaut tant que Q-26 n'est pas tranchee
+  // (25 % dans les annexes contre 13 % en zone B1 au referentiel).
+  let amortissementComptable = null;
+  if (entrees.amortissement_comptable?.montant_terrain_eur !== undefined) {
+    const valeurTerrain = valeurComptableTerrain({
+      montant_terrain_eur: entrees.amortissement_comptable.montant_terrain_eur,
+      quotite: entrees.amortissement_comptable.quotite_terrain,
+    });
+    amortissementComptable = {
+      valeur_comptable_terrain_eur: valeurTerrain,
+      quotite_terrain: entrees.amortissement_comptable.quotite_terrain,
+      ...baseAmortissementComptable({
+        prix_revient_ttc_eur: bilan.total_ttc_module_eur,
+        valeur_comptable_terrain_eur: valeurTerrain,
+      }),
+    };
+  }
+
   // --- 9. Indicateurs de synthese ---
   const indicateurs = {
     nb_logements: nbLogements,
@@ -457,6 +482,7 @@ export function calculer(entrees, referentiels) {
       fondsPropres,
     ),
     annee_debut_tfpb: tfpb.annee_debut_tfpb,
+    amortissement_comptable: amortissementComptable,
   };
 
   return {

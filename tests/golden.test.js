@@ -121,8 +121,7 @@ describe('golden — MULHOUSE 3308 LIBRE (annexe LEON, chaine complete)', () => 
   const PRET = attendus.prets.find((p) => p.montant);
   const T = attendus.totaux_plan_financement;
 
-  const resultat = calculer(
-    {
+  const entreesLibre = {
       identite: { nom: 'MULHOUSE LIBRE', produit: 'LIBRE', zone_123: 2, zone_ABC: 'B1', type_operation: 'VEFA' },
       dates: { annee_mise_en_location: 2026, duree_simulation_ans: 18 },
       lots: [{ code_produit: 'LIBRE', nb_logements: 11, shab_m2: 545.8, surfaces_annexes_m2: 0 }],
@@ -157,9 +156,9 @@ describe('golden — MULHOUSE 3308 LIBRE (annexe LEON, chaine complete)', () => 
           revisabilite: PRET.revisabilite,
         },
       ],
-    },
-    { baremes, trajectoires },
-  );
+  };
+
+  const resultat = calculer(entreesLibre, { baremes, trajectoires });
 
   it('reproduit le prix de revient total a +/-1 EUR', () => {
     expect(
@@ -238,6 +237,26 @@ describe('golden — MULHOUSE 3308 LIBRE (annexe LEON, chaine complete)', () => 
     const somme = table.reduce((s, l) => s + l.amortissement_eur, 0);
     expect(Math.abs(somme - PRET.montant)).toBeLessThanOrEqual(1);
   });
+
+  it('reproduit la base d amortissement comptable de la Grille d analyse', () => {
+    const g = attendus.grille_analyse;
+    const terrain = attendus.bilan.postes.find((x) => x.libelle === 'Terrain');
+    // La quotite est fournie par l'appelant, pas devinee : l'annexe applique
+    // 25 % du poste Terrain (Q-26).
+    const avecAmort = calculer(
+      { ...entreesLibre, amortissement_comptable: { montant_terrain_eur: terrain.ht, quotite_terrain: 0.25 } },
+      { baremes, trajectoires },
+    );
+    const a = avecAmort.indicateurs.amortissement_comptable;
+    expect(Math.abs(a.valeur_comptable_terrain_eur - g.valeur_comptable_terrain)).toBeLessThanOrEqual(1);
+    expect(Math.abs(a.base_eur - g.base_amortissement)).toBeLessThanOrEqual(1);
+    expect(a.part_du_prix_revient).toBeCloseTo(g.base_amort_sur_pr_ttc, 5);
+  });
+
+  it('ne calcule pas la base d amortissement sans quotite explicite', () => {
+    expect(resultat.indicateurs.amortissement_comptable).toBe(null);
+  });
+
 });
 
 /**

@@ -282,6 +282,46 @@ export function prixDeRevientVentile(
 }
 
 /**
+ * Valeur comptable du terrain, part du prix de revient qui ne s'amortit pas.
+ *
+ * ATTENTION, la quotite est un PARAMETRE et non une constante : l'annexe
+ * Mulhouse applique 25 % du poste Terrain, alors que `baremes_2025.json` porte
+ * une table par zone donnant 13 % en B1. Les deux valeurs coexistent dans les
+ * sources et ne sont pas arbitrees (QUESTIONS_SPEC Q-26). L'appelant fournit
+ * donc la quotite qu'il retient, et la fonction ne choisit pas a sa place.
+ *
+ * @param {Object} p
+ * @param {number} p.montant_terrain_eur  poste de terrain ou d'acquisition VEFA
+ * @param {number} p.quotite              part non amortissable (fraction)
+ * @returns {number}
+ */
+export function valeurComptableTerrain({ montant_terrain_eur, quotite }) {
+  if (!Number.isFinite(quotite)) {
+    throw new Error('Quotite de terrain requise : elle n a pas de valeur par defaut (Q-26)');
+  }
+  return arrondiEuro(montant_terrain_eur * quotite);
+}
+
+/**
+ * Base d'amortissement comptable : prix de revient TTC moins la valeur
+ * comptable du terrain. C'est l'assiette de la dotation aux amortissements.
+ * Source : Grille d'analyse LEON (« base d'amortissement »), verifiee sur
+ * l'annexe Mulhouse (2 065 829,65 - 478 360,03 = 1 587 469,62).
+ *
+ * @param {Object} p
+ * @param {number} p.prix_revient_ttc_eur
+ * @param {number} p.valeur_comptable_terrain_eur
+ * @returns {{base_eur: number, part_du_prix_revient: number|null}}
+ */
+export function baseAmortissementComptable({ prix_revient_ttc_eur, valeur_comptable_terrain_eur }) {
+  const base = prix_revient_ttc_eur - valeur_comptable_terrain_eur;
+  return {
+    base_eur: arrondiEuro(base),
+    part_du_prix_revient: prix_revient_ttc_eur > 0 ? base / prix_revient_ttc_eur : null,
+  };
+}
+
+/**
  * R-TVA-3 — Cle de repartition d'un montant global entre produits.
  * Defaut : quote-part de surface utile. Les variantes SDP et SHAB se demandent
  * explicitement, elles ne sont pas un branchement cache.

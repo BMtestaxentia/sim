@@ -4,13 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Moteur de simulation — montage d'opération</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Manrope (charte SFO). Degrade proprement sur les polices systeme hors ligne. -->
-    <link
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <!--
+      Aucune ressource distante : la version autonome doit fonctionner sans reseau,
+      et une balise vers une police hebergee contredirait cette promesse. Manrope
+      est utilisee si elle est installee sur le poste, sinon la pile systeme prend
+      le relais (voir --police dans style.css).
+    -->
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -234,6 +233,29 @@
         </section>
 
         <section class="bloc">
+          <h2 class="bloc__titre">Hypothèses d'exploitation</h2>
+          <div class="champs">
+            <label class="champ">
+              <span>Frais de gestion (% des loyers)</span>
+              <input type="number" step="0.1" min="0" data-champ="exploitation.frais_gestion_pct_loyers" data-type="pourcentage" />
+            </label>
+            <label class="champ">
+              <span>Vacance et impayés (%)</span>
+              <input type="number" step="0.1" min="0" data-champ="exploitation.taux_vacance_impayes" data-type="pourcentage" />
+            </label>
+            <label class="champ">
+              <span>Gros entretien (€/m² SHAB/an)</span>
+              <input type="number" step="0.1" min="0" data-champ="exploitation.gros_entretien_eur_m2" data-type="nombre" />
+            </label>
+          </div>
+          <p class="aide">
+            ⚙ Ces trois hypothèses pilotent le compte d'exploitation, donc l'année de
+            reconstitution des fonds propres. Elles étaient figées dans le code avant d'être
+            exposées ici. L'indexation annuelle vient du profil du référentiel, pas de ces champs.
+          </p>
+        </section>
+
+        <section class="bloc">
           <h2 class="bloc__titre">
             Prêts
             <span class="bascule">
@@ -346,6 +368,7 @@
       <section class="bloc">
         <h2 class="bloc__titre">Contrôles</h2>
         <ul class="controles" id="controles"></ul>
+        <div id="messages-moteur"></div>
       </section>
     </main>
 

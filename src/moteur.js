@@ -133,6 +133,16 @@ export function calculer(entrees, referentiels) {
   );
   const loyersAnnexesAnnuels = loyerAnnexesSeparees(entrees.annexes_louees ?? []);
 
+  // Deux lignes de saisie portant le meme produit sont agregees en une tranche :
+  // le loyer et le coefficient de structure ne se calculent qu'a ce niveau. On le
+  // signale, sans quoi la saisie laisse croire a deux tranches distinctes.
+  if (lots.length > codesPresents.length) {
+    alertes.push(
+      `${lots.length} lignes de programme pour ${codesPresents.length} tranche(s) : les lignes ` +
+        "d'un meme produit sont agregees, et leurs marges ou loyers forces ne sont pris qu'une fois.",
+    );
+  }
+
   // --- 3. Prix de revient (R-TVA) ---
   const produitPrincipal = identite.produit ?? lots[0]?.code_produit;
   const bilan = prixDeRevient(
@@ -373,6 +383,10 @@ export function calculer(entrees, referentiels) {
     prix_revient_par_m2_shab_eur:
       shabTotal > 0 ? arrondiEuro(bilan.total_ttc_module_eur / shabTotal) : null,
     loyers_annuels_eur: arrondiEuro(loyersLogementsAnnuels + loyersAnnexesAnnuels),
+    surfaces_annexes_m2: lots.reduce((s, l) => s + (l.surfaces_annexes_m2 ?? 0), 0),
+    subventions_eur: subventionsTotal,
+    fonds_propres_eur: fondsPropres,
+    ressources_eur: equilibre.ressources_eur,
     // RMO : rendement des loyers de l'annee 1 sur le prix de revient TTC.
     rmo:
       bilan.total_ttc_module_eur > 0

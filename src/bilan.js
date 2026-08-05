@@ -82,6 +82,8 @@ export function prixDeRevient({ code_produit, postes, modulation_ttc_eur = 0 }, 
 
   /** @type {Record<string, {ht_eur: number, tva_eur: number, ttc_eur: number, ttc_lasm_eur: number}>} */
   const chapitres = {};
+  /** Detail poste par poste, pour que la restitution n'ait rien a recalculer. */
+  const detail = [];
   let ht = 0;
   let tva = 0;
   let ttc = 0;
@@ -100,8 +102,20 @@ export function prixDeRevient({ code_produit, postes, modulation_ttc_eur = 0 }, 
     tva += v.tva_eur;
     ttc += v.ttc_eur;
     ttcLasm += ttcFinal;
+    detail.push({
+      chapitre: poste.chapitre,
+      libelle: poste.libelle,
+      taux_tva: poste.taux_tva,
+      ht_eur: arrondiEuro(v.ht_eur),
+      tva_eur: arrondiEuro(v.tva_eur),
+      ttc_eur: arrondiEuro(v.ttc_eur),
+      ttc_lasm_eur: arrondiEuro(ttcFinal),
+    });
   }
 
+  // Les totaux sont arrondis A PARTIR DES VALEURS EXACTES, jamais en sommant des
+  // valeurs deja arrondies : sommer des arrondis fait deriver le total (un total
+  // de 12 EUR pour un prix de revient de 11 EUR, constate en revue).
   for (const c of Object.values(chapitres)) {
     c.ht_eur = arrondiEuro(c.ht_eur);
     c.tva_eur = arrondiEuro(c.tva_eur);
@@ -112,6 +126,7 @@ export function prixDeRevient({ code_produit, postes, modulation_ttc_eur = 0 }, 
   return {
     taux_lasm,
     chapitres,
+    postes: detail,
     total_ht_eur: arrondiEuro(ht),
     total_tva_eur: arrondiEuro(tva),
     total_ttc_eur: arrondiEuro(ttc),

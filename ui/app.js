@@ -362,6 +362,7 @@ function rendreValeurs(r) {
   }
 
   rendreFinancement(r);
+  rendreExploitation(r);
 }
 
 function rendreBarre(element, segments, echelle) {
@@ -588,9 +589,18 @@ function viderRestitution(message) {
   bandeau.className = 'bandeau bandeau--erreur';
   bandeau.innerHTML = `<span class="bandeau__principal">Aucun résultat</span>
     <span class="bandeau__detail">${att(message)}</span>`;
-  for (const sel of ['#barre-emplois', '#barre-ressources', '#legende', '#indicateurs', '#controles', '#messages-moteur']) {
+  for (const sel of [
+    '#barre-emplois', '#barre-ressources', '#legende', '#indicateurs', '#controles',
+    '#messages-moteur', '#tuiles-exploitation', '#graphe-exploitation', '#postes-absents',
+  ]) {
     $(sel).innerHTML = '';
   }
+  $('#table-exploitation').querySelector('tbody').innerHTML = '';
+  $('#table-exploitation').querySelector('tfoot').innerHTML = '';
+  $('#bandeau-exploitation').className = 'bandeau bandeau--erreur';
+  $('#bandeau-exploitation').innerHTML = `<span class="bandeau__principal">Aucun résultat</span>`;
+  $('#aide-graphe').textContent = '';
+  $('#aide-exploitation').textContent = '';
   $('#total-emplois').textContent = '—';
   $('#total-ressources').textContent = '—';
   for (const id of ['#table-emplois', '#table-ressources', '#table-prets']) {
@@ -598,6 +608,193 @@ function viderRestitution(message) {
     $(id).querySelector('tfoot').innerHTML = '';
   }
   $('#aide-taux').textContent = '';
+}
+
+// ---------------------------------------------------------------- ecran exploitation
+
+/** Vue courante du compte : jalons (defaut) ou annee par annee. */
+let vueExploitation = 'jalons';
+
+/**
+ * Graphe du resultat annuel et du cumul, en SVG ecrit a la main.
+ *
+ * Deux axes : barres du resultat de l'annee sur l'axe principal, ligne du cumul
+ * sur un axe secondaire mis a sa propre echelle. Les ruptures calculees par le
+ * moteur sont tracees en reperes verticaux annotes : ce sont elles qui
+ * expliquent la forme de la courbe, sans quoi le lecteur ne peut que constater.
+ */
+function grapheExploitation(lignes, evenements) {
+  if (!lignes.length) return '<p class="aide">Aucune année à représenter.</p>';
+
+  const L = 1000;
+  const H = 260;
+  const marge = { haut: 16, bas: 34, gauche: 8, droite: 8 };
+  const largeurTrace = L - marge.gauche - marge.droite;
+  const hauteurTrace = H - marge.haut - marge.bas;
+
+  const resultats = lignes.map((l) => l.resultat_eur);
+  const cumuls = lignes.map((l) => l.cumul_eur);
+  const maxRes = Math.max(...resultats, 0);
+  const minRes = Math.min(...resultats, 0);
+  const etendueRes = maxRes - minRes || 1;
+  const maxCum = Math.max(...cumuls, 0);
+  const minCum = Math.min(...cumuls, 0);
+  const etendueCum = maxCum - minCum || 1;
+
+  const pas = largeurTrace / lignes.length;
+  const largeurBarre = Math.max(1, pas * 0.68);
+  const yRes = (v) => marge.haut + hauteurTrace * (1 - (v - minRes) / etendueRes);
+  const yCum = (v) => marge.haut + hauteurTrace * (1 - (v - minCum) / etendueCum);
+  const xCentre = (i) => marge.gauche + pas * (i + 0.5);
+
+  const barres = lignes
+    .map((l, i) => {
+      const y0 = yRes(0);
+      const y1 = yRes(l.resultat_eur);
+      const haut = Math.max(1, Math.abs(y1 - y0));
+      const classe = l.resultat_eur < 0 ? 'negatif' : 'positif';
+      return `<rect class="graphe__barre--${classe}" x="${(xCentre(i) - largeurBarre / 2).toFixed(1)}" y="${Math.min(y0, y1).toFixed(1)}" width="${largeurBarre.toFixed(1)}" height="${haut.toFixed(1)}"><title>${l.annee} : résultat ${eur(l.resultat_eur)}, cumul ${eur(l.cumul_eur)}</title></rect>`;
+    })
+    .join('');
+
+  const trace = lignes.map((l, i) => `${xCentre(i).toFixed(1)},${yCum(l.cumul_eur).toFixed(1)}`).join(' ');
+
+  const reperes = evenements
+    .map((e) => {
+      const i = lignes.findIndex((l) => l.annee === e.annee);
+      if (i < 0) return '';
+      const x = xCentre(i).toFixed(1);
+      return `<line class="graphe__repere" x1="${x}" y1="${marge.haut}" x2="${x}" y2="${marge.haut + hauteurTrace}" />
+        <text class="graphe__texte graphe__texte--repere" x="${x}" y="${marge.haut - 4}" text-anchor="middle">${att(e.annee)}</text>`;
+    })
+    .join('');
+
+  // Reperes d'annee en pied : premiere, milieu, derniere, et les ruptures.
+  const anneesPied = new Set([lignes[0].annee, lignes[Math.floor(lignes.length / 2)].annee, lignes.at(-1).annee]);
+  const axe = lignes
+    .map((l, i) =>
+      anneesPied.has(l.annee)
+        ? `<text class="graphe__texte" x="${xCentre(i).toFixed(1)}" y="${H - 14}" text-anchor="middle">${l.annee}</text>`
+        : '',
+    )
+    .join('');
+
+  return `<svg viewBox="0 0 ${L} ${H}" role="img"
+      aria-label="Résultat annuel en barres et cumul en ligne, de ${lignes[0].annee} à ${lignes.at(-1).annee}">
+      <line class="graphe__zero" x1="${marge.gauche}" y1="${yRes(0).toFixed(1)}" x2="${L - marge.droite}" y2="${yRes(0).toFixed(1)}" />
+      ${barres}
+      <polyline class="graphe__cumul" points="${trace}" />
+      ${reperes}${axe}
+      <text class="graphe__texte" x="${marge.gauche}" y="${H - 2}">Résultat de l’année, échelle ${eur(minRes)} à ${eur(maxRes)}</text>
+      <text class="graphe__texte" x="${L - marge.droite}" y="${H - 2}" text-anchor="end">Cumul, échelle ${eur(minCum)} à ${eur(maxCum)}</text>
+    </svg>`;
+}
+
+function rendreExploitation(r) {
+  const e = r.exploitation;
+  const ind = e.indicateurs;
+
+  // --- Bandeau ---
+  const bandeau = $('#bandeau-exploitation');
+  const deficit = ind.exercices_deficitaires > 0;
+  bandeau.className = `bandeau ${deficit ? 'bandeau--alerte' : 'bandeau--ok'}`;
+  bandeau.innerHTML =
+    `<span class="bandeau__principal">${
+      deficit
+        ? `${ind.exercices_deficitaires} exercice${ind.exercices_deficitaires > 1 ? 's' : ''} déficitaire${ind.exercices_deficitaires > 1 ? 's' : ''}`
+        : 'Aucun exercice déficitaire'
+    }</span>` +
+    `<span class="bandeau__detail">${e.lignes.length} années simulées, de ${e.lignes[0]?.annee} à ` +
+    `${e.lignes.at(-1)?.annee}${deficit ? `, de ${ind.premiere_annee_deficitaire} à ${ind.derniere_annee_deficitaire}` : ''}. ` +
+    `Compte partiel : ${e.postes_absents.length} familles de postes ne sont pas encore modélisées.</span>`;
+
+  // --- Tuiles ---
+  $('#tuiles-exploitation').innerHTML = [
+    {
+      l: 'Résultat cumulé en fin de simulation',
+      v: eur(ind.resultat_cumule_final_eur),
+      d: `sur ${e.lignes.length} ans`,
+    },
+    {
+      l: 'Creux du cumul',
+      v: eur(ind.creux_cumul_eur),
+      d: `atteint en ${ind.annee_creux_cumul}`,
+    },
+    {
+      l: 'Exercices déficitaires',
+      v: ind.exercices_deficitaires,
+      d: deficit ? `de ${ind.premiere_annee_deficitaire} à ${ind.derniere_annee_deficitaire}` : 'aucun sur l’horizon',
+    },
+    {
+      l: 'Taux de marge année 1',
+      v: pct(ind.taux_marge_annee_1, 1),
+      d: `moyenne ${pct(ind.taux_marge_moyen, 1)} sur ${ind.annees_moyenne_marge} ans`,
+    },
+    {
+      l: 'Reconstitution des fonds propres',
+      v: ind.annee_reconstitution_fonds_propres ?? 'non atteinte',
+      d: `cumul ≥ ${eur(e.fonds_propres_eur)}`,
+    },
+    {
+      l: 'Début de la taxe foncière',
+      v: r.indicateurs.annee_debut_tfpb,
+      d: 'fin d’exonération',
+    },
+  ]
+    .map((t) => `<div class="indicateur"><div class="indicateur__libelle">${t.l}</div>
+      <div class="indicateur__valeur">${t.v}</div><div class="indicateur__detail">${t.d}</div></div>`)
+    .join('');
+
+  // --- Graphe ---
+  $('#graphe-exploitation').innerHTML = grapheExploitation(e.lignes, e.evenements);
+  $('#aide-graphe').textContent = e.evenements.length
+    ? `⚙ Repères verticaux : ${e.evenements.map((x) => `${x.annee} ${x.libelle.toLowerCase()}`).join(' · ')}.`
+    : '';
+
+  // --- Tableau ---
+  for (const b of document.querySelectorAll('[data-vue-exploitation]')) {
+    b.setAttribute('aria-pressed', String(b.getAttribute('data-vue-exploitation') === vueExploitation));
+  }
+  const rangs =
+    vueExploitation === 'jalons'
+      ? e.jalons
+      : e.lignes.map((l) => ({
+          type: 'annee',
+          libelle: String(l.annee),
+          ...l,
+          evenements: e.evenements.filter((x) => x.annee === l.annee).map((x) => x.libelle),
+        }));
+
+  const montant = (v) => `<td class="num ${v < 0 ? 'montant--negatif' : ''}">${eur(v)}</td>`;
+  $('#table-exploitation').querySelector('tbody').innerHTML = rangs
+    .map((j) => {
+      const autresCharges = j.total_charges_eur - j.annuites_eur;
+      const marques = (j.evenements ?? []).map((x) => `<span class="evenement">${att(x)}</span>`).join('');
+      const classe = j.type === 'moyenne' ? 'ligne--moyenne' : marques ? 'ligne--rupture' : '';
+      return `<tr class="${classe}">
+        <td>${att(j.libelle)}${marques}</td>
+        ${montant(j.total_produits_eur)}${montant(j.annuites_eur)}${montant(autresCharges)}
+        ${montant(j.resultat_eur)}${montant(j.cumul_eur)}
+        <td class="num">${pct(j.taux_marge, 1)}</td>
+      </tr>`;
+    })
+    .join('');
+
+  const t = e.totaux;
+  $('#table-exploitation').querySelector('tfoot').innerHTML = `<tr>
+      <td class="libelle">Cumul sur ${e.lignes.length} ans</td>
+      ${montant(t.produits_eur)}${montant(t.annuites_eur)}
+      ${montant(t.charges_eur - t.annuites_eur)}${montant(t.resultat_eur)}
+      <td colspan="2"></td></tr>`;
+
+  $('#aide-exploitation').textContent =
+    vueExploitation === 'jalons'
+      ? `⚙ Les années de rupture et les premières années sont détaillées, les périodes intermédiaires ` +
+        `sont présentées en moyenne annuelle. Basculer sur « Année par année » pour le détail complet.`
+      : `⚙ ${e.lignes.length} exercices, de ${e.lignes[0]?.annee} à ${e.lignes.at(-1)?.annee}. ` +
+        `La dernière année porte une marge exceptionnelle : les prêts y sont soldés.`;
+
+  $('#postes-absents').innerHTML = e.postes_absents.map((p) => `<li>${att(p)}</li>`).join('');
 }
 
 // ---------------------------------------------------------------- ecran parametres
@@ -773,6 +970,13 @@ document.addEventListener('click', (ev) => {
       /** @type {HTMLElement} */ (e).hidden = e.id !== `ecran-${cible}`;
     }
     if (cible === 'parametres') rendreParametres();
+    return;
+  }
+
+  const vue = el.dataset?.vueExploitation;
+  if (vue) {
+    vueExploitation = vue;
+    if (dernierResultat) rendreExploitation(dernierResultat);
     return;
   }
 

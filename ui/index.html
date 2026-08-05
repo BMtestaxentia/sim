@@ -30,6 +30,9 @@
         <button type="button" class="onglet" role="tab" data-ecran="financement" aria-selected="false">
           Plan de financement
         </button>
+        <button type="button" class="onglet" role="tab" data-ecran="exploitation" aria-selected="false">
+          Exploitation
+        </button>
         <button type="button" class="onglet" role="tab" data-ecran="parametres" aria-selected="false">
           Paramètres du modèle
         </button>
@@ -372,7 +375,69 @@
       </section>
     </main>
 
-    <!-- ================= ÉCRAN 3 — PARAMÈTRES ================= -->
+    <!-- ================= ÉCRAN 3 — EXPLOITATION ================= -->
+    <main class="ecran" id="ecran-exploitation" role="tabpanel" hidden>
+      <div id="bandeau-exploitation" class="bandeau"></div>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">Lecture d'ensemble</h2>
+        <div class="indicateurs" id="tuiles-exploitation"></div>
+      </section>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">
+          Résultat annuel et cumul
+          <span class="legende-graphe">
+            <span class="legende__item"><span class="legende__puce puce--positif"></span>résultat excédentaire</span>
+            <span class="legende__item"><span class="legende__puce puce--negatif"></span>résultat déficitaire</span>
+            <span class="legende__item"><span class="legende__puce puce--cumul"></span>cumul</span>
+          </span>
+        </h2>
+        <div id="graphe-exploitation"></div>
+        <p class="aide" id="aide-graphe"></p>
+      </section>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">
+          Compte d'exploitation
+          <span class="bascule">
+            <button type="button" class="bascule__option" data-vue-exploitation="jalons">Jalons</button>
+            <button type="button" class="bascule__option" data-vue-exploitation="annuel">Année par année</button>
+          </span>
+        </h2>
+        <div class="table-defilante">
+          <table class="tableau" id="table-exploitation">
+            <thead>
+              <tr>
+                <th>Période</th>
+                <th class="num">Produits</th>
+                <th class="num">Annuités</th>
+                <th class="num">Autres charges</th>
+                <th class="num">Résultat</th>
+                <th class="num">Cumul</th>
+                <th class="num">Marge</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+        <p class="aide" id="aide-exploitation"></p>
+      </section>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">Postes non encore modélisés</h2>
+        <ul class="alertes" id="postes-absents"></ul>
+        <p class="aide">
+          ⚙ Ces postes existent dans la matrice LEON et dans la maquette, mais le moteur ne les
+          produit pas encore. Le résultat affiché est donc un compte partiel : il surestime
+          l'autofinancement. Les arbitrages correspondants sont consignés dans
+          <code>docs/QUESTIONS_SPEC.md</code>.
+        </p>
+      </section>
+    </main>
+
+    <!-- ================= ÉCRAN 4 — PARAMÈTRES ================= -->
     <main class="ecran" id="ecran-parametres" role="tabpanel" hidden>
       <div class="bandeau bandeau--info" id="bandeau-parametres"></div>
       <div id="contenu-parametres"></div>

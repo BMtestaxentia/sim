@@ -296,6 +296,30 @@ input.champ--requis-vide { border-color: var(--rouge); background: var(--rouge-c
 }
 .erreur[hidden] { display: none; }
 
+/* ---------- Graphe d'exploitation (SVG ecrit a la main, aucune dependance) ---------- */
+.legende-graphe { display: flex; gap: 14px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.puce--positif { background: var(--navy-500); }
+.puce--negatif { background: var(--rouge); }
+.puce--cumul { background: var(--vert); }
+
+#graphe-exploitation svg { display: block; width: 100%; height: auto; }
+.graphe__grille { stroke: var(--trait); stroke-width: 1; }
+.graphe__zero { stroke: var(--encre-doux); stroke-width: 1; }
+.graphe__barre--positif { fill: var(--navy-500); }
+.graphe__barre--negatif { fill: var(--rouge); }
+.graphe__cumul { fill: none; stroke: var(--vert); stroke-width: 2; }
+.graphe__repere { stroke: var(--ambre); stroke-width: 1; stroke-dasharray: 3 3; }
+.graphe__texte { font-family: var(--police); font-size: 10px; fill: var(--encre-doux); }
+.graphe__texte--repere { fill: var(--ambre); font-weight: 600; }
+
+.tableau .ligne--moyenne td { background: var(--fond); font-style: italic; color: var(--encre-doux); }
+.tableau .ligne--rupture td { border-top: 1px solid var(--ambre); }
+.montant--negatif { color: var(--rouge); }
+.evenement {
+  font-size: 10px; font-weight: 600; color: var(--ambre);
+  background: var(--ambre-clair); padding: 1px 6px; border-radius: 3px; margin-left: 6px;
+}
+
 /* ---------- Ecran parametres ---------- */
 .para-groupe { margin-bottom: 14px; }
 .para-groupe h3 {

@@ -28,7 +28,12 @@ import {
 } from './financement.js';
 import { tableauAmortissement, anneePremiereEcheance, prefinancement } from './amortissement.js';
 import { exonerationTFPB, taxeAmenagement } from './fiscalite.js';
-import { compteExploitation, anneeReconstitutionFondsPropres } from './exploitation.js';
+import {
+  compteExploitation,
+  anneeReconstitutionFondsPropres,
+  indicateursExploitation,
+  jalonsExploitation,
+} from './exploitation.js';
 import { arrondiEuro } from './arrondis.js';
 
 /** Version du moteur, reportee dans les resultats pour la tracabilite. */
@@ -371,6 +376,44 @@ export function calculer(entrees, referentiels) {
     // explicite dans les entrees reste possible pour tester un scenario.
     trajectoires: exp.trajectoires ?? trajectoires.par_poste,
   });
+
+  // Ruptures qui expliquent la forme de la courbe de resultat. Elles sont
+  // calculees ici, sinon l'interface les redecouvrirait par difference, ce qui
+  // serait du calcul metier dans l'ecran.
+  const evenements = [];
+  const anneeDebutTFPB = exp.annee_debut_tfpb ?? tfpb.annee_debut_tfpb;
+  if (anneeDebutTFPB > anneeMEL && anneeDebutTFPB <= anneeFinSimulation) {
+    evenements.push({
+      annee: anneeDebutTFPB,
+      code: 'tfpb',
+      libelle: `Fin d'exonération de taxe foncière`,
+    });
+  }
+  for (const a of amortissements) {
+    const derniere = a.tableau.at(-1)?.annee;
+    if (derniere && derniere <= anneeFinSimulation) {
+      evenements.push({ annee: derniere, code: 'pret', libelle: `Dernière échéance ${a.libelle}` });
+    }
+  }
+  evenements.sort((x, y) => x.annee - y.annee);
+
+  exploitation.evenements = evenements;
+  exploitation.indicateurs = indicateursExploitation(exploitation.lignes);
+  exploitation.jalons = jalonsExploitation(exploitation.lignes, evenements);
+  exploitation.indicateurs.annee_reconstitution_fonds_propres = anneeReconstitutionFondsPropres(
+    exploitation.lignes,
+    fondsPropres,
+  );
+  exploitation.fonds_propres_eur = fondsPropres;
+  // Postes du compte que le moteur ne sait pas encore produire, listes pour que
+  // l'ecran le dise plutot que de laisser croire a un compte complet.
+  exploitation.postes_absents = [
+    'Rémunération des fonds propres',
+    'Provision pour gros entretien (PCRC)',
+    'TEOM, CGLLS, assurance PNO, frais de structure',
+    'Dotation aux amortissements et autofinancement',
+    'Subvention d’exploitation à durée limitée',
+  ];
 
   // --- 9. Indicateurs de synthese ---
   const indicateurs = {

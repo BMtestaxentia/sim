@@ -1,4 +1,21 @@
-# Interface de saisie
+# Interface de montage d'opération
+
+Trois écrans, un seul document :
+
+- **Opération** — saisie : identification, calendrier, programme, prix de revient,
+  subventions et fonds propres, prêts.
+- **Plan de financement** — restitution : équilibre, emplois, ressources, prêts,
+  indicateurs, contrôles.
+- **Paramètres du modèle** — barèmes, prêts CDC par défaut, coefficient de
+  structure, trajectoires. **En lecture seule** : ces valeurs sont versionnées
+  dans le dépôt, les rendre modifiables produirait des simulations non
+  reproductibles.
+
+L'organisation reprend celle de la maquette Excel LEON REWORK : écrans séparés,
+unités dans les libellés, blocs du général au particulier, notes de renvoi
+préfixées d'un engrenage. Avec une correction : la maquette ne distingue pas le
+saisi du calculé, ici tout champ calculé par le moteur est grisé et non
+modifiable.
 
 Deux façons d'ouvrir la même interface. Le calcul est identique : les deux
 importent le même moteur, seule la manière de le charger diffère.
@@ -30,8 +47,11 @@ Régénérer le fichier autonome, sinon il diverge silencieusement du moteur :
 node outils/generer_ui_autonome.js
 ```
 
-Le générateur échoue bruyamment en cas de collision de noms entre modules ou de
-`await` de premier niveau restant, plutôt que de produire un fichier cassé.
+Le générateur échoue bruyamment plutôt que de produire un fichier cassé. Il
+refuse : un module du moteur absent de sa liste, un `await` de premier niveau
+restant, et **toute collision de nom racine** — y compris entre le moteur et
+`app.js`, puisque tout est concaténé dans une seule portée. Si vous ajoutez une
+constante à `app.js`, vérifiez qu'aucun module de `src/` ne porte déjà ce nom.
 
 ## Ce que l'interface ne fait pas
 

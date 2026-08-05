@@ -96,7 +96,6 @@ function verifierExhaustivite() {
 // --- Moteur ---
 verifierExhaustivite();
 const morceaux = MODULES.map((nom) => ({ nom, code: aplatir(lire('src', nom)) }));
-verifierCollisions(morceaux);
 const moteur = morceaux
   .map(({ nom, code }) => `\n/* ===== src/${nom} ===== */\n${code.trim()}\n`)
   .join('');
@@ -106,6 +105,9 @@ const referentiels = {
   baremes: JSON.parse(lire('referentiels', 'baremes_2025.json')),
   trajectoires: JSON.parse(lire('referentiels', 'trajectoires_axentia_2026.json')),
 };
+// L'UI est concatenee dans la MEME portee que le moteur : ses noms racine
+// entrent donc en collision avec les siens. On verifie l'ensemble d'un bloc,
+// et pas seulement les modules entre eux.
 const app = aplatir(lire('ui', 'app.js')).replace(
   /\/\/ __REFERENTIELS_DEBUT__[\s\S]*?\/\/ __REFERENTIELS_FIN__/,
   `const referentiels = ${JSON.stringify(referentiels)};`,
@@ -116,6 +118,8 @@ if (app.includes('__REFERENTIELS_DEBUT__')) {
 if (/\bawait\b/.test(app.split('\n').filter((l) => !l.trim().startsWith('*')).join('\n'))) {
   throw new Error('`await` de premier niveau restant : le script classique ne peut pas le porter');
 }
+
+verifierCollisions([...morceaux, { nom: 'ui/app.js', code: app }]);
 
 // --- Assemblage ---
 const html = lire('ui', 'index.html')

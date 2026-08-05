@@ -4,7 +4,7 @@
     <!-- FICHIER GENERE — ne pas editer. Source : ui/ + src/. Regenerer avec : node outils/generer_ui_autonome.js -->
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Moteur de simulation — saisie et plan de financement</title>
+    <title>Moteur de simulation — montage d'opération</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!-- Manrope (charte SFO). Degrade proprement sur les polices systeme hors ligne. -->
@@ -16,6 +16,10 @@
 /*
  * Charte SFO : navy, Manrope, sobriete.
  * Pas de degrade, pas d'ombre marquee, beaucoup de blanc, traits fins.
+ *
+ * Convention visuelle structurante : tout ce qui est CALCULE par le moteur porte
+ * la classe `--calcule` (fond neutre, pas de bordure, non focusable). C'est le
+ * seul defaut de la maquette Excel, qui ne distingue pas la saisie du calcul.
  */
 
 :root {
@@ -28,8 +32,10 @@
 
   --encre: #16202e;
   --encre-doux: #5a6b85;
+  --encre-calcule: #3d4c63;
   --trait: #dfe5ee;
   --fond: #f6f8fb;
+  --fond-calcule: #eef2f8;
   --surface: #ffffff;
 
   --vert: #1e7a5a;
@@ -56,263 +62,276 @@ body {
 }
 
 h1, h2 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
-h1 { font-size: 17px; }
-h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--encre-doux); }
+h1 { font-size: 16px; }
 
-/* ---------- Entete ---------- */
+/* ---------- Entete et onglets ---------- */
 .entete {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 24px;
+  gap: 24px;
+  padding: 10px 24px;
   background: var(--navy-900);
   color: #fff;
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 20;
 }
+.entete__marque { flex: none; }
 .entete h1 { color: #fff; }
-.entete__sous-titre { margin: 2px 0 0; font-size: 12px; color: var(--navy-300); }
-.entete__actions { display: flex; align-items: center; gap: 10px; }
+.entete__sous-titre { margin: 1px 0 0; font-size: 11px; color: var(--navy-300); }
+.entete__sep { opacity: 0.5; margin: 0 3px; }
+.entete__actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+
+.onglets { display: flex; gap: 2px; }
+.onglet {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy-300);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 7px 14px;
+  cursor: pointer;
+  border-radius: 4px 4px 0 0;
+}
+.onglet:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.onglet[aria-selected='true'] { color: #fff; border-bottom-color: var(--navy-300); }
 
 .pastille {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 9px;
-  border-radius: 999px;
-  letter-spacing: 0.03em;
+  font-size: 11px; font-weight: 600; padding: 3px 9px;
+  border-radius: 999px; letter-spacing: 0.03em; white-space: nowrap;
 }
 .pastille--ok { background: rgba(255, 255, 255, 0.12); color: var(--navy-300); }
 .pastille--calcul { background: rgba(255, 255, 255, 0.2); color: #fff; }
 
-/* ---------- Structure ---------- */
-.grille {
-  display: grid;
-  grid-template-columns: minmax(360px, 460px) 1fr;
-  gap: 20px;
-  padding: 20px 24px 48px;
-  align-items: start;
-  max-width: 1560px;
+/* ---------- Structure des ecrans ---------- */
+.ecran {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 24px 56px;
+  max-width: 1680px;
   margin: 0 auto;
 }
-.colonne { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.colonne--resultats { position: sticky; top: 74px; }
+.ecran[hidden] { display: none; }
 
-@media (max-width: 1080px) {
-  .grille { grid-template-columns: 1fr; }
-  .colonne--resultats { position: static; }
-}
+.colonnes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+.colonnes--balance { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+@media (max-width: 1100px) { .colonnes, .colonnes--balance { grid-template-columns: 1fr; } }
 
-/* ---------- Blocs de saisie ---------- */
 .bloc {
   background: var(--surface);
   border: 1px solid var(--trait);
   border-radius: var(--rayon);
   padding: 14px 16px 16px;
-  margin: 0;
 }
 .bloc__titre {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  padding: 0 0 10px;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--navy-700);
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 0 0 12px;
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--navy-700);
 }
 
-.champs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.champ { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+/* ---------- Champs ---------- */
+.champs { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.champs--serres { grid-template-columns: repeat(auto-fit, minmax(160px, 220px)); margin-top: 10px; }
+.champ { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .champ--large { grid-column: 1 / -1; }
 .champ > span { font-size: 11px; font-weight: 500; color: var(--encre-doux); }
 
 input, select {
-  font: inherit;
-  font-size: 13px;
-  color: var(--encre);
-  padding: 7px 9px;
-  border: 1px solid var(--trait);
-  border-radius: 4px;
-  background: var(--surface);
-  width: 100%;
-  min-width: 0;
+  font: inherit; font-size: 13px; color: var(--encre);
+  padding: 6px 9px;
+  border: 1px solid var(--trait); border-radius: 4px;
+  background: var(--surface); width: 100%; min-width: 0;
 }
 input:focus, select:focus {
-  outline: none;
-  border-color: var(--navy-500);
+  outline: none; border-color: var(--navy-500);
   box-shadow: 0 0 0 3px rgba(46, 90, 168, 0.12);
 }
 input[type='number'] { text-align: right; font-variant-numeric: tabular-nums; }
 input[type='checkbox'] { width: auto; }
+input::placeholder { color: #a8b3c4; font-style: italic; }
 
-.aide { margin: 10px 0 0; font-size: 11px; color: var(--encre-doux); }
-
-/* ---------- Listes dynamiques ---------- */
-.liste { display: flex; flex-direction: column; gap: 8px; }
-.ligne {
-  display: grid;
-  gap: 6px;
-  align-items: end;
-  padding: 9px 10px;
-  border: 1px solid var(--trait);
-  border-radius: 4px;
-  background: var(--fond);
-}
-.ligne--poste { grid-template-columns: 1fr 96px 74px 26px; }
-.ligne--subvention { grid-template-columns: 1fr 104px 56px 26px; }
-.ligne--pret { grid-template-columns: repeat(3, minmax(0, 1fr)) 26px; }
-.ligne__pied { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-
-.ligne .champ > span { font-size: 10px; }
-.ligne input, .ligne select { padding: 5px 7px; font-size: 12px; background: var(--surface); }
-
-.bouton {
-  font: inherit;
-  font-size: 12px;
+/* Champ calcule par le moteur : ni bordure, ni focus, ni curseur de saisie. */
+.champ--calcule,
+input.champ--calcule {
+  background: var(--fond-calcule);
+  border-color: transparent;
+  color: var(--encre-calcule);
   font-weight: 600;
-  padding: 5px 11px;
-  border-radius: 4px;
-  border: 1px solid var(--trait);
-  background: var(--surface);
-  color: var(--navy-700);
-  cursor: pointer;
+  cursor: default;
+}
+.champ--calcule:focus { box-shadow: none; border-color: transparent; }
+
+.champ--requis-vide input,
+input.champ--requis-vide { border-color: var(--rouge); background: var(--rouge-clair); }
+
+.aide { margin: 11px 0 0; font-size: 11px; color: var(--encre-doux); line-height: 1.45; }
+
+/* ---------- Boutons ---------- */
+.bouton {
+  font: inherit; font-size: 12px; font-weight: 600;
+  padding: 5px 11px; border-radius: 4px;
+  border: 1px solid var(--trait); background: var(--surface);
+  color: var(--navy-700); cursor: pointer;
 }
 .bouton:hover { border-color: var(--navy-300); background: var(--navy-100); }
 .bouton--discret { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.28); }
 .bouton--discret:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.5); }
 .bouton--ajout { font-size: 11px; padding: 3px 9px; }
 .bouton--supprimer {
-  border: none;
-  background: transparent;
-  color: var(--encre-doux);
-  cursor: pointer;
-  font-size: 17px;
-  line-height: 1;
-  padding: 4px;
-  border-radius: 4px;
+  border: none; background: transparent; color: var(--encre-doux);
+  cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 4px;
 }
 .bouton--supprimer:hover { color: var(--rouge); background: var(--rouge-clair); }
 
-/* ---------- Cartes de resultat ---------- */
-.carte {
+.bascule { display: inline-flex; border: 1px solid var(--trait); border-radius: 4px; overflow: hidden; }
+.bascule__option {
+  font: inherit; font-size: 11px; font-weight: 600;
+  padding: 4px 10px; border: none; background: var(--surface);
+  color: var(--encre-doux); cursor: pointer;
+}
+.bascule__option:hover { background: var(--navy-100); }
+.bascule__option[aria-pressed='true'] { background: var(--navy-700); color: #fff; }
+
+/* ---------- Tableaux ---------- */
+.table-defilante { overflow-x: auto; }
+.tableau { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tableau th, .tableau td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--trait); }
+.tableau th {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--encre-doux); white-space: nowrap;
+}
+.tableau th.calc { color: var(--navy-500); }
+.tableau .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tableau tbody tr:hover { background: var(--fond); }
+.tableau .vide { color: var(--encre-doux); font-style: italic; }
+
+.tableau--saisie td { padding: 4px 5px; }
+.tableau--saisie input, .tableau--saisie select { padding: 4px 6px; font-size: 12px; }
+.tableau--saisie td.calc {
+  background: var(--fond-calcule); color: var(--encre-calcule);
+  font-weight: 600; text-align: right; font-variant-numeric: tabular-nums;
+}
+
+.tableau tfoot td {
+  border-top: 2px solid var(--navy-100); border-bottom: none;
+  font-weight: 700; font-variant-numeric: tabular-nums;
   background: var(--surface);
-  border: 1px solid var(--trait);
-  border-radius: var(--rayon);
-  padding: 16px 18px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
+.tableau tfoot .libelle { text-transform: uppercase; font-size: 10px; letter-spacing: 0.06em; color: var(--navy-700); }
 
-.equilibre__entete { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.equilibre__entete h2 { color: var(--navy-900); font-size: 15px; text-transform: none; letter-spacing: -0.01em; }
-
-.badge {
-  font-size: 12px;
-  font-weight: 700;
-  padding: 4px 11px;
-  border-radius: 999px;
-  font-variant-numeric: tabular-nums;
+/* ---------- Bandeau de controle ---------- */
+.bandeau {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 16px; border-radius: var(--rayon);
+  border: 1px solid var(--trait); border-left-width: 3px;
+  background: var(--surface); font-size: 13px;
 }
-.badge--equilibre { background: var(--vert-clair); color: var(--vert); }
-.badge--ecart { background: var(--rouge-clair); color: var(--rouge); }
+.bandeau--ok { border-left-color: var(--vert); background: var(--vert-clair); color: var(--vert); }
+.bandeau--alerte { border-left-color: var(--ambre); background: var(--ambre-clair); color: var(--ambre); }
+.bandeau--erreur { border-left-color: var(--rouge); background: var(--rouge-clair); color: var(--rouge); }
+.bandeau--info { border-left-color: var(--navy-500); background: var(--navy-100); color: var(--navy-800); }
+.bandeau__principal { font-weight: 700; }
+.bandeau__detail { color: inherit; opacity: 0.8; }
 
-/* --- Balance emplois / ressources --- */
-.balance { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: end; }
-.balance__colonne { display: flex; flex-direction: column; gap: 6px; }
+/* ---------- Balance ---------- */
+.balance { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: end; }
+.balance__colonne { display: flex; flex-direction: column; gap: 5px; }
 .balance__libelle {
-  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.07em; color: var(--encre-doux);
 }
 .balance__total { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .barre {
-  display: flex;
-  flex-direction: column-reverse; /* empile du bas vers le haut */
-  height: 210px;
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--fond);
-  border: 1px solid var(--trait);
+  display: flex; flex-direction: column-reverse;
+  height: 200px; border-radius: 4px; overflow: hidden;
+  background: var(--fond); border: 1px solid var(--trait);
 }
 .segment {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  overflow: hidden;
-  white-space: nowrap;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 0; color: #fff; font-size: 11px; font-weight: 600;
+  font-variant-numeric: tabular-nums; overflow: hidden; white-space: nowrap;
   transition: flex-grow 0.18s ease;
 }
 .segment span { padding: 0 6px; }
 
-.legende { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.legende { display: flex; flex-wrap: wrap; gap: 5px 16px; margin-top: 12px; }
 .legende__item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 .legende__puce { width: 9px; height: 9px; border-radius: 2px; flex: none; }
 .legende__montant { color: var(--encre-doux); font-variant-numeric: tabular-nums; }
 
-/* ---------- Tableau ---------- */
-.tableau { width: 100%; border-collapse: collapse; font-size: 13px; }
-.tableau th, .tableau td { padding: 7px 8px; text-align: left; border-bottom: 1px solid var(--trait); }
-.tableau th {
-  font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.06em; color: var(--encre-doux); border-bottom-width: 1px;
-}
-.tableau .num { text-align: right; font-variant-numeric: tabular-nums; }
-.tableau tbody tr:last-child td { border-bottom: none; }
-.tableau .vide { color: var(--encre-doux); font-style: italic; }
-
 /* ---------- Indicateurs ---------- */
-.indicateurs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-.indicateur {
-  border-left: 2px solid var(--navy-100);
-  padding-left: 10px;
-}
+.indicateurs { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.indicateur { border-left: 2px solid var(--navy-100); padding-left: 10px; }
 .indicateur__libelle { font-size: 11px; color: var(--encre-doux); }
 .indicateur__valeur { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .indicateur__detail { font-size: 11px; color: var(--encre-doux); }
 
-/* ---------- Alertes et erreurs ---------- */
-.alertes { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
-.alertes li { font-size: 13px; color: var(--ambre); }
-
-.erreur {
-  background: var(--rouge-clair);
-  border: 1px solid #f0c4c1;
-  border-left: 3px solid var(--rouge);
-  color: var(--rouge);
-  padding: 10px 14px;
-  border-radius: var(--rayon);
-  font-size: 13px;
+/* ---------- Controles ---------- */
+.controles { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.controle { display: flex; align-items: baseline; gap: 9px; font-size: 13px; }
+.controle__etat {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 2px 7px; border-radius: 3px; flex: none; min-width: 62px; text-align: center;
 }
+.controle--ok .controle__etat { background: var(--vert-clair); color: var(--vert); }
+.controle--alerte .controle__etat { background: var(--ambre-clair); color: var(--ambre); }
+.controle--erreur .controle__etat { background: var(--rouge-clair); color: var(--rouge); }
+.controle__texte { color: var(--encre); }
+.controle--ok .controle__texte { color: var(--encre-doux); }
+
+/* ---------- Listes de prets ---------- */
+.liste { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.ligne {
+  display: grid; gap: 6px; align-items: end;
+  padding: 9px 10px; border: 1px solid var(--trait);
+  border-radius: 4px; background: var(--fond);
+}
+.ligne--pret { grid-template-columns: repeat(3, minmax(0, 1fr)) 26px; }
+.ligne__pied { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.ligne .champ > span { font-size: 10px; }
+.ligne input, .ligne select { padding: 5px 7px; font-size: 12px; background: var(--surface); }
+
+.encadre {
+  border: 1px dashed var(--navy-300); border-radius: 4px;
+  padding: 12px 14px; background: var(--fond); font-size: 13px;
+}
+.encadre[hidden] { display: none; }
+
+/* ---------- Erreur globale ---------- */
+.erreur {
+  margin: 14px 24px 0;
+  background: var(--rouge-clair); border: 1px solid #f0c4c1;
+  border-left: 3px solid var(--rouge); color: var(--rouge);
+  padding: 10px 14px; border-radius: var(--rayon); font-size: 13px;
+}
+.erreur[hidden] { display: none; }
+
+/* ---------- Ecran parametres ---------- */
+.para-groupe { margin-bottom: 14px; }
+.para-groupe h3 {
+  margin: 0 0 8px; font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.07em; color: var(--navy-700);
+}
+.para-source { font-size: 11px; color: var(--encre-doux); margin: -4px 0 8px; font-style: italic; }
 
 /* ---------- Dialogue JSON ---------- */
 .dialogue {
-  border: 1px solid var(--trait);
-  border-radius: var(--rayon);
-  padding: 0;
-  width: min(880px, 92vw);
-  max-height: 84vh;
-  overflow: hidden;
-  display: flex;
+  border: 1px solid var(--trait); border-radius: var(--rayon); padding: 0;
+  width: min(900px, 92vw); max-height: 84vh; overflow: hidden;
   flex-direction: column;
 }
 .dialogue::backdrop { background: rgba(11, 26, 51, 0.42); }
 .dialogue[open] { display: flex; }
 .dialogue__entete {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 16px; background: var(--navy-900); color: #fff; flex: none;
+  padding: 11px 16px; background: var(--navy-900); color: #fff; flex: none;
 }
-.dialogue__entete h2 { color: #fff; }
+.dialogue__entete h2 { color: #fff; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
 .dialogue pre {
   margin: 0; padding: 16px; overflow: auto; font-size: 11.5px; line-height: 1.5;
   font-family: 'Cascadia Mono', Consolas, monospace; background: var(--surface);
@@ -322,36 +341,65 @@ input[type='checkbox'] { width: auto; }
   </head>
   <body>
     <header class="entete">
-      <div class="entete__titre">
-        <h1>Simulation d'opération</h1>
+      <div class="entete__marque">
+        <h1>Montage d'opération</h1>
         <p class="entete__sous-titre">
-          Saisie et plan de financement — moteur <span id="version-moteur">…</span>
+          Logement social — saisie et plan de financement
+          <span class="entete__sep">·</span>
+          moteur <span id="version-moteur">…</span>
         </p>
       </div>
+
+      <nav class="onglets" role="tablist">
+        <button type="button" class="onglet" role="tab" data-ecran="operation" aria-selected="true">
+          Opération
+        </button>
+        <button type="button" class="onglet" role="tab" data-ecran="financement" aria-selected="false">
+          Plan de financement
+        </button>
+        <button type="button" class="onglet" role="tab" data-ecran="parametres" aria-selected="false">
+          Paramètres du modèle
+        </button>
+      </nav>
+
       <div class="entete__actions">
         <span id="etat-calcul" class="pastille pastille--ok">à jour</span>
-        <button type="button" id="btn-json" class="bouton bouton--discret">Voir le JSON</button>
+        <button type="button" id="btn-json" class="bouton bouton--discret">JSON</button>
       </div>
     </header>
 
-    <main class="grille">
-      <!-- ============ COLONNE DE SAISIE ============ -->
-      <section class="colonne colonne--saisie" aria-label="Saisie de l'opération">
-        <fieldset class="bloc">
-          <legend class="bloc__titre">Identité</legend>
+    <div id="erreur" class="erreur" hidden></div>
+
+    <!-- ================= ÉCRAN 1 — OPÉRATION ================= -->
+    <main class="ecran" id="ecran-operation" role="tabpanel">
+      <div class="colonnes">
+        <section class="bloc">
+          <h2 class="bloc__titre">Identification</h2>
           <div class="champs">
             <label class="champ champ--large">
               <span>Nom de l'opération</span>
               <input type="text" data-champ="identite.nom" />
             </label>
             <label class="champ">
-              <span>Produit</span>
+              <span>Version simulation</span>
+              <input type="text" data-champ="identite.version" placeholder="V1 - Faisabilité" />
+            </label>
+            <label class="champ">
+              <span>Commune</span>
+              <input type="text" data-champ="identite.commune" />
+            </label>
+            <label class="champ">
+              <span>Département</span>
+              <input type="text" data-champ="identite.departement" placeholder="Dordogne (24)" />
+            </label>
+            <label class="champ">
+              <span>Produit principal</span>
               <select data-champ="identite.produit" id="select-produit"></select>
             </label>
             <label class="champ">
-              <span>Type</span>
+              <span>Type d'opération</span>
               <select data-champ="identite.type_operation">
-                <option>Vefa</option>
+                <option>VEFA</option>
                 <option>Neuf</option>
                 <option>Acq-Amélio</option>
                 <option>Réhab</option>
@@ -375,84 +423,170 @@ input[type='checkbox'] { width: auto; }
                 <option>C</option>
               </select>
             </label>
+          </div>
+          <p class="aide">
+            Le produit principal détermine le taux de livraison à soi-même et le jeu de prêts CDC
+            par défaut. Le zonage applicable dépend du produit : 1/2/3 pour PLUS et PLAI, A/B/C
+            pour PLS.
+          </p>
+        </section>
+
+        <section class="bloc">
+          <h2 class="bloc__titre">Calendrier</h2>
+          <div class="champs" id="champs-calendrier">
+            <label class="champ">
+              <span>Début des travaux</span>
+              <input type="date" data-champ="dates.date_debut_travaux" />
+            </label>
+            <label class="champ">
+              <span>Durée du chantier (mois)</span>
+              <input type="number" step="1" min="0" data-champ="dates.duree_chantier_mois" data-type="nombre" />
+            </label>
+            <label class="champ">
+              <span>Livraison</span>
+              <input type="date" data-champ="dates.date_livraison" data-calcule="date_livraison" />
+            </label>
             <label class="champ">
               <span>Mise en location</span>
-              <input type="number" data-champ="dates.annee_mise_en_location" data-type="nombre" step="1" />
+              <input type="text" id="date-mel" class="champ--calcule" readonly tabindex="-1" />
             </label>
             <label class="champ">
-              <span>Durée simulation</span>
-              <input type="number" data-champ="dates.duree_simulation_ans" data-type="nombre" step="1" min="1" />
+              <span>Durée de simulation (ans)</span>
+              <input type="number" step="1" min="1" data-champ="dates.duree_simulation_ans" data-type="nombre" />
             </label>
           </div>
-        </fieldset>
-
-        <fieldset class="bloc">
-          <legend class="bloc__titre">Programme</legend>
-          <div class="champs">
-            <label class="champ">
-              <span>Logements</span>
-              <input type="number" data-champ="lots.0.nb_logements" data-type="nombre" step="1" min="0" />
-            </label>
-            <label class="champ">
-              <span>SHAB (m²)</span>
-              <input type="number" data-champ="lots.0.shab_m2" data-type="nombre" step="0.01" min="0" />
-            </label>
-            <label class="champ">
-              <span>Annexes (m²)</span>
-              <input type="number" data-champ="lots.0.surfaces_annexes_m2" data-type="nombre" step="0.01" min="0" />
-            </label>
-            <label class="champ">
-              <span>Marge locale (€/m²)</span>
-              <input type="number" data-champ="lots.0.marge_locale_eur_m2" data-type="nombre" step="0.01" />
-            </label>
-          </div>
-          <p class="aide" id="aide-surfaces"></p>
-        </fieldset>
-
-        <fieldset class="bloc">
-          <legend class="bloc__titre">
-            Prix de revient
-            <button type="button" class="bouton bouton--ajout" data-ajouter="postes_bilan">+ poste</button>
-          </legend>
-          <div class="liste" id="liste-postes"></div>
-        </fieldset>
-
-        <fieldset class="bloc">
-          <legend class="bloc__titre">
-            Subventions
-            <button type="button" class="bouton bouton--ajout" data-ajouter="subventions">+ subvention</button>
-          </legend>
-          <div class="liste" id="liste-subventions"></div>
-          <div class="champs">
-            <label class="champ">
-              <span>Fonds propres (€)</span>
-              <input type="number" data-champ="fonds_propres_eur" data-type="nombre" step="1" min="0" />
-            </label>
-          </div>
-        </fieldset>
-
-        <fieldset class="bloc">
-          <legend class="bloc__titre">
-            Prêts
-            <button type="button" class="bouton bouton--ajout" data-ajouter="prets">+ prêt</button>
-          </legend>
-          <div class="liste" id="liste-prets"></div>
           <p class="aide">
-            Chaque prêt porte sa propre année de première échéance (règle R-AMT-3).
+            ⚙ Livraison et mise en location sont déduites du début des travaux et de la durée de
+            chantier. Renseigner une date de livraison la fige (cas d'une VEFA contractuelle).
           </p>
-        </fieldset>
+        </section>
+      </div>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">
+          Programme
+          <button type="button" class="bouton bouton--ajout" data-ajouter="lots">+ tranche</button>
+        </h2>
+        <div class="table-defilante">
+          <table class="tableau tableau--saisie" id="table-programme">
+            <thead>
+              <tr>
+                <th>Financement</th>
+                <th class="num">Logements</th>
+                <th class="num">SHAB (m²)</th>
+                <th class="num">Annexes (m²)</th>
+                <th class="num calc">SU (m²)</th>
+                <th class="num calc">CS</th>
+                <th class="num calc">Plafond (€/m²/mois)</th>
+                <th class="num">Marge locale (€/m²/mois)</th>
+                <th class="num">Loyer forcé (€/m²/mois)</th>
+                <th class="num calc">Loyer sortie (€/m²/mois)</th>
+                <th class="num calc">Loyer annuel (€)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+        <p class="aide">
+          ⚙ Une ligne par tranche de financement, pas par logement : le coefficient de structure
+          porte sur la tranche entière (règle R-SURF-2). Les colonnes grisées sont calculées.
+          Laisser « Loyer forcé » vide applique le plafond réglementaire.
+        </p>
       </section>
 
-      <!-- ============ COLONNE RÉSULTATS ============ -->
-      <section class="colonne colonne--resultats" aria-label="Plan de financement">
-        <div id="erreur" class="erreur" hidden></div>
+      <section class="bloc">
+        <h2 class="bloc__titre">
+          Prix de revient
+          <button type="button" class="bouton bouton--ajout" data-ajouter="postes_bilan">+ poste</button>
+        </h2>
+        <div class="table-defilante">
+          <table class="tableau tableau--saisie" id="table-postes">
+            <thead>
+              <tr>
+                <th>Chapitre</th>
+                <th>Libellé</th>
+                <th class="num">Montant HT (€)</th>
+                <th class="num">TVA</th>
+                <th class="num calc">TVA (€)</th>
+                <th class="num calc">TTC saisie (€)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+        <div class="champs champs--serres">
+          <label class="champ">
+            <span>Modulation TTC (€)</span>
+            <input type="number" step="1" data-champ="modulation_ttc_eur" data-type="nombre" />
+          </label>
+        </div>
+        <p class="aide" id="aide-lasm"></p>
+      </section>
 
-        <div class="carte carte--equilibre" id="carte-equilibre">
-          <div class="equilibre__entete">
-            <h2>Plan de financement</h2>
-            <span id="badge-equilibre" class="badge">—</span>
+      <div class="colonnes">
+        <section class="bloc">
+          <h2 class="bloc__titre">
+            Subventions et fonds propres
+            <button type="button" class="bouton bouton--ajout" data-ajouter="subventions">+ subvention</button>
+          </h2>
+          <div class="table-defilante">
+            <table class="tableau tableau--saisie" id="table-subventions">
+              <thead>
+                <tr>
+                  <th>Libellé</th>
+                  <th class="num">Montant (€)</th>
+                  <th class="num">Gratuite</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+              <tfoot></tfoot>
+            </table>
           </div>
+          <div class="champs champs--serres">
+            <label class="champ">
+              <span>Fonds propres (€)</span>
+              <input type="number" step="1" min="0" data-champ="fonds_propres_eur" data-type="nombre" />
+            </label>
+          </div>
+          <p class="aide">
+            Une subvention gratuite ne se rembourse pas : elle réduit la charge foncière finançable
+            par prêt CDC (règle R-FIN-2).
+          </p>
+        </section>
 
+        <section class="bloc">
+          <h2 class="bloc__titre">
+            Prêts
+            <span class="bascule">
+              <button type="button" class="bascule__option" data-mode-prets="theoriques">CDC théoriques</button>
+              <button type="button" class="bascule__option" data-mode-prets="saisis">Saisis</button>
+            </span>
+          </h2>
+          <div id="prets-saisis">
+            <div class="liste" id="liste-prets"></div>
+            <button type="button" class="bouton bouton--ajout" data-ajouter="prets">+ prêt</button>
+          </div>
+          <div id="prets-theoriques" class="encadre" hidden></div>
+          <p class="aide">
+            ⚙ Chaque prêt porte sa propre année de première échéance (règle R-AMT-3). Barèmes,
+            spreads CDC et trajectoire du Livret A : voir Paramètres du modèle.
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <!-- ================= ÉCRAN 2 — PLAN DE FINANCEMENT ================= -->
+    <main class="ecran" id="ecran-financement" role="tabpanel" hidden>
+      <div id="bandeau-controle" class="bandeau"></div>
+
+      <div class="colonnes colonnes--balance">
+        <section class="bloc">
+          <h2 class="bloc__titre">Équilibre</h2>
           <div class="balance">
             <div class="balance__colonne">
               <div class="balance__libelle">Emplois</div>
@@ -465,43 +599,91 @@ input[type='checkbox'] { width: auto; }
               <div class="balance__total" id="total-ressources">—</div>
             </div>
           </div>
-
           <div class="legende" id="legende"></div>
-        </div>
+        </section>
 
-        <div class="carte">
-          <h2>Prêts</h2>
-          <table class="tableau" id="tableau-prets">
+        <section class="bloc">
+          <h2 class="bloc__titre">Indicateurs</h2>
+          <div class="indicateurs" id="indicateurs"></div>
+        </section>
+      </div>
+
+      <div class="colonnes">
+        <section class="bloc">
+          <h2 class="bloc__titre">Emplois</h2>
+          <div class="table-defilante">
+            <table class="tableau" id="table-emplois">
+              <thead>
+                <tr>
+                  <th>Chapitre</th>
+                  <th class="num">HT</th>
+                  <th class="num">TTC / LASM</th>
+                  <th class="num">Part</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+              <tfoot></tfoot>
+            </table>
+          </div>
+        </section>
+
+        <section class="bloc">
+          <h2 class="bloc__titre">Ressources</h2>
+          <div class="table-defilante">
+            <table class="tableau" id="table-ressources">
+              <thead>
+                <tr>
+                  <th>Nature</th>
+                  <th class="num">Montant</th>
+                  <th class="num">Part</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+              <tfoot></tfoot>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">Prêts</h2>
+        <div class="table-defilante">
+          <table class="tableau" id="table-prets">
             <thead>
               <tr>
                 <th>Prêt</th>
                 <th class="num">Montant</th>
+                <th class="num">Taux saisi</th>
                 <th class="num">Taux appliqué</th>
                 <th class="num">Durée</th>
+                <th class="num">1<sup>re</sup> échéance</th>
                 <th class="num">1<sup>re</sup> annuité</th>
-                <th class="num">Dernière</th>
+                <th class="num">Dernière annuité</th>
+                <th class="num">Total annuités</th>
               </tr>
             </thead>
             <tbody></tbody>
+            <tfoot></tfoot>
           </table>
-          <p class="aide" id="aide-taux"></p>
         </div>
-
-        <div class="carte">
-          <h2>Indicateurs</h2>
-          <div class="indicateurs" id="indicateurs"></div>
-        </div>
-
-        <div class="carte" id="carte-alertes" hidden>
-          <h2>Contrôles</h2>
-          <ul class="alertes" id="alertes"></ul>
-        </div>
+        <p class="aide" id="aide-taux"></p>
       </section>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">Contrôles</h2>
+        <ul class="controles" id="controles"></ul>
+      </section>
+    </main>
+
+    <!-- ================= ÉCRAN 3 — PARAMÈTRES ================= -->
+    <main class="ecran" id="ecran-parametres" role="tabpanel" hidden>
+      <div class="bandeau bandeau--info" id="bandeau-parametres"></div>
+      <div id="contenu-parametres"></div>
     </main>
 
     <dialog id="dialogue-json" class="dialogue">
       <div class="dialogue__entete">
-        <h2>Résultat brut</h2>
+        <h2>Résultat brut du moteur</h2>
         <button type="button" id="btn-fermer-json" class="bouton bouton--discret">Fermer</button>
       </div>
       <pre id="contenu-json"></pre>
@@ -2848,20 +3030,27 @@ function calculer(entrees, referentiels) {
 /* ===== ui/app.js ===== */
 // @ts-check
 /**
- * Interface de saisie d'operation et de visualisation du plan de financement.
+ * Interface de montage d'operation : saisie, plan de financement, parametres.
  *
  * Importe `src/moteur.js` TEL QUEL : le moteur est de l'ESM pur, il tourne dans
  * le navigateur sans build ni transpilation (exigence CLAUDE.md §3).
  *
- * Cette couche ne contient AUCUNE regle de calcul : elle collecte des entrees,
+ * Cette couche ne contient AUCUNE regle de calcul. Elle collecte des entrees,
  * appelle `calculer()` et met en forme le resultat. Toute valeur affichee vient
- * du moteur ; rien n'est recalcule ici.
+ * du moteur, y compris les dates derivees et les prets CDC theoriques.
+ *
+ * Ergonomie reprise de la maquette LEON REWORK (12 onglets) : ecrans separes,
+ * unites dans les libelles, blocs ordonnes du general au particulier, notes de
+ * renvoi prefixees d'un engrenage. Correction du seul defaut de la maquette :
+ * elle ne distingue pas visuellement le saisi du calcule, ici tout champ
+ * calcule porte la classe `--calcule` et n'est pas focusable.
+ *
+ * Un seul fichier a dessein : le generateur de la version autonome concatene
+ * tout dans une portee unique et refuse les collisions de noms racine.
  */
 
 
 const $ = (sel) => /** @type {HTMLElement} */ (document.querySelector(sel));
-
-// ---------------------------------------------------------------- referentiels
 
 const referentiels = {"baremes":{"date_valeur":"2025-01-01","source":"LEON 2025-042d, onglet ParaGEN, profil AXENTIA HER 2026 (PMT 2025), extrait le 2026-08-04","note":"Baremes reglementaires versionnes. Toutes les valeurs sont lues dans la matrice, aucune n'est inventee. Les cellules sources sont citees pour audit.","loyers_max_zone_123":{"unite":"EUR/m2 SU/mois","source":"ParaGEN!D22:G24 (plage LMZone_Neuf)","zones":["zone_1","zone_2","zone_3","zone_1bis"],"PLUS":[7.32,6.42,5.95,7.77],"PLAI":[6.5,5.71,5.28,6.93],"LIBRE":[15,11,8,18]},"loyers_max_zone_ABC":{"unite":"EUR/m2 SU/mois","source":"ParaGEN!D56:H59","zones":["A","A_bis","B1","B2","C"],"PLS":[11.68,15.16,10.07,9.64,8.94],"PLI":[14.49,19.51,11.68,10.15,10.15],"PSLA_plafond_loyer":[11.75,15.3,10.13,9.73,9],"PSLA_plafond_prix_vente_ht":[4675,6170,3744,3269,2857]},"valeurs_de_base":{"unite":"EUR/m2","usage":"Assiette subvention (VB), MQECO ; selectionne par zone_123 x neuf/acquisition x collectif/individuel","source":"ParaGEN!D36:G41","zones":["zone_1","zone_2","zone_3","zone_1bis"],"neuf":{"collectif":[1767,1473,1473,1767],"individuel":[1767,1619,1619,1767]},"acquisition":{"collectif":[1767,1382,1382,1767],"individuel":[1767,1473,1473,1767]}},"taxe_amenagement":{"unite":"EUR/m2 (valeur forfaitaire)","source":"ParaGEN!B31:B32 ; selection IdF si zone A ou A bis (calculs!B1254)","hors_idf":930,"idf":1054,"abattement_logement_social":0.5,"abattement_source":"50 % reglementaire, applique via ParaGLOB!H54 dans l'assiette (calculs!B1255)"},"versement_sous_densite":{"plafond_valeur_terrain":0.25,"part_valeur_terrain":0.5,"source":"R-FISC-3 ; MIN(valeur_terrain/2 * (1 - SDP/(seuil*surface)), 25 % * valeur_terrain)"},"quotites_foncier_vefa":{"usage":"Ventilation d'un prix global en foncier/batiment. Ligne 'terrain' = quote-part terrain pour le pret foncier ; ligne 'ssf_pge' = quote-part pour l'assiette SSF et la valeur comptable terrain.","source":"ParaGEN!C61:H69 (plage qpFonc_VEFA), mode de calcul du pret foncier : ParaGEN!A64 = 'global'","zones":["A","A_bis","B1","B2","C"],"terrain_vefa":[0.35,0.45,0.3,0.25,0.2],"terrain_acq_amelioration":[0.35,0.45,0.3,0.25,0.2],"valeur_comptable_terrain_vefa":[0.25,0.25,0.13,0.13,0.11],"ssf_pge_acq_amelioration":[0.6,0.6,0.6,0.6,0.6]},"tva":{"source":"calculs!B1223:B1228, ParaGLOB!J44/J46, ParaGEN!A77:H78","taux_reduit_simulation":0.1,"taux_normal":0.2,"lasm_par_produit":{"note":"PLUS/PLAI utilise le taux reduit de la simulation (ParaGLOB!J44 = 10 % actuellement) et non la valeur 5,5 % du tableau historique ParaGEN!A78. Les autres produits lisent ParaGEN!78.","PLUS_PLAI":0.1,"PLUS_CD":0.055,"PLS":0.1,"LLI_PLI":0.1,"LIBRE":0.2,"ACCESSION":0.2,"REHAB":0.1,"FOYER_PLUS":0.055}},"constantes_reglementaires":{"coefficient_surface_annexes":{"valeur":0.5,"usage":"Surface utile = SHAB + 0,5 x surfaces annexes (R-SURF-1)","source":"calculs!D384 (terme 0.5*ParaCD!$F$28), regle reglementaire"},"coefficient_structure":{"source":"calculs!D91:D116","metropole_habitat":{"base":0.77,"facteur_nl":20,"formule":"CS = 0.77 * (1 + 20 * NL / SU)"},"foyers":{"facteur_nl":38},"dom":{"base":0.685,"facteur_nl":31,"formule":"CS = 0.685 * (31 * NL + SF) / SF"}},"majoration_plus_33":0.33,"majoration_loyers_depassement_plafonds":{"valeur":0.33,"source":"COMMUN!B22"},"marge_locale_plafond_defaut":{"valeur":0.12,"source":"ParaPLUS!AD30 (saisi par simulation)"},"majoration_lcr":{"regle":"ratio < seuil_bas -> 0 ; ratio > seuil_haut -> majoration_au_dessus ; sinon ratio/100","seuil_bas":10,"seuil_haut":20,"majoration_au_dessus":0.02,"source":"calculs!B152:B153"},"ssf":{"seuil_participation_collectivites":0.4,"part_max_depassement":0.5,"plafond_si_sous_seuil":"min(taux_depassement_plafonne * reference, part_max_depassement * depassement)","taux_subvention":{"neuf":2,"neuf_dom":3,"acq_amelioration":0.4},"taux_depassement_plafonne":{"neuf":1,"acq_amelioration":0.2},"source":"calculs!D275:G276"},"prets_cdc_defauts":{"source":"SimPLUS!AL10:AP21","taux":{"PLUS":"LA + 0.006","PLAI":"LA - 0.002"},"duree_construction_ans":40,"duree_foncier_ans":{"zones_B2_C":50,"autres_zones":60},"revisabilite":"DOUBLE","progressivite_axentia":-0.005,"premiere_echeance":"annee(mise_en_location) + 1 an (+0 si demembrement)"},"controle_ratio_prets_cdc_min":{"valeur":0.5,"source":"calculs!B1234:B1235"},"tfpb":{"montant_par_logement_eur":345,"duree_exoneration_defaut_ans":25,"source":"SimPLUS!A37/G37 ; duree parametrable par simulation (irregularite I-7 du dictionnaire)"},"arrondi_prets":"milliers superieurs si option active (SimPLUS!AR26)","arrondi_cs_loyers":{"flag_global":"ParaGEN!B26 (NON chez AXENTIA)","cs_decimales":4,"loyers_decimales":2}}},"trajectoires":{"profil":"AXENTIA HER 2026 (PMT 2025)","source":"LEON 2025-042d, ParaGEN!GS22:HE72, extrait le 2026-08-04","taux_livret_a_courant":0.017,"marge_anticipee_livret_a":0,"note":"Taux d'evolution annuels par poste et trajectoire Livret A du scenario. Colonnes GT20/GU20/GW20/GZ20 (flags OUI/NON) indiquent si la trajectoire calendaire est active par poste ; sinon LEON applique un taux constant.","trajectoires":[{"annee":2023,"gros_entretien":0.053,"gestion":0.035,"vacance_impayes":null,"loyers_irl":0.035,"frais_financiers":0.029,"produits_financiers":0.029,"tfpb":0.078,"livret_a":0.029,"rel":0,"crl":0},{"annee":2024,"gros_entretien":0.028,"gestion":0.035,"vacance_impayes":null,"loyers_irl":0.035,"frais_financiers":0.03,"produits_financiers":0.03,"tfpb":0.053,"livret_a":0.03,"rel":0,"crl":0},{"annee":2025,"gros_entretien":0.027,"gestion":0.0326,"vacance_impayes":null,"loyers_irl":0.0326,"frais_financiers":0.0275,"produits_financiers":0.0275,"tfpb":0.055,"livret_a":0.0275,"rel":0,"crl":0},{"annee":2026,"gros_entretien":0.025,"gestion":0.023,"vacance_impayes":null,"loyers_irl":0.023,"frais_financiers":0.0225,"produits_financiers":0.0225,"tfpb":0.05,"livret_a":0.0225,"rel":0,"crl":0},{"annee":2027,"gros_entretien":0.024,"gestion":0.022,"vacance_impayes":null,"loyers_irl":0.022,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2028,"gros_entretien":0.023,"gestion":0.021,"vacance_impayes":null,"loyers_irl":0.021,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2029,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2030,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2031,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2032,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2033,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2034,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2035,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2036,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2037,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2038,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2039,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2040,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2041,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2042,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2043,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2044,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2045,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2046,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2047,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2048,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2049,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2050,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2051,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2052,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2053,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2054,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2055,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2056,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2057,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2058,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2059,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2060,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2061,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2062,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2063,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2064,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2065,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2066,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2067,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2068,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2069,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2070,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2071,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2072,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2073,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0}]}};
 
@@ -2871,39 +3060,43 @@ const referentiels = {"baremes":{"date_valeur":"2025-01-01","source":"LEON 2025-
 const etat = {
   identite: {
     nom: 'Opération de test',
+    version: 'V1 - Faisabilité',
+    commune: 'Bergerac',
+    departement: 'Dordogne (24)',
     produit: 'PLS',
     zone_123: 2,
     zone_ABC: 'B1',
-    type_operation: 'Vefa',
+    type_operation: 'VEFA',
   },
-  dates: { annee_mise_en_location: 2028, duree_simulation_ans: 40 },
+  dates: {
+    date_debut_travaux: '2026-01-01',
+    duree_chantier_mois: 24,
+    date_livraison: null,
+    duree_simulation_ans: 40,
+  },
   lots: [
-    {
-      code_produit: 'PLS',
-      nb_logements: 6,
-      shab_m2: 400,
-      surfaces_annexes_m2: 40,
-      marge_locale_eur_m2: 0,
-    },
+    { code_produit: 'PLS', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 40, marge_locale_eur_m2: 0 },
   ],
   postes_bilan: [
     { chapitre: 'charge_fonciere', libelle: 'Acquisition VEFA', montant_ht_eur: 642780, taux_tva: 0.055 },
     { chapitre: 'charge_fonciere', libelle: 'Frais de notaire', montant_ht_eur: 12000, taux_tva: 0.055 },
     { chapitre: 'honoraires', libelle: 'Honoraires techniques', montant_ht_eur: 18000, taux_tva: 0.2 },
   ],
+  modulation_ttc_eur: 0,
   subventions: [{ libelle: 'Ville', montant_eur: 20000, gratuite: true }],
   fonds_propres_eur: 50000,
+  mode_prets: 'saisis',
   prets: [
     {
       code: 'PLS_CONSTRUCTION', libelle: 'PLS construction', nature: 'construction',
       montant_eur: 494023, taux: 0.0351, progressivite: 0, duree_ans: 40,
-      annee_premiere_echeance: 2028, revisabilite: 'SIMPLE',
+      annee_premiere_echeance: 2028, revisabilite: 'SIMPLE', differe_ans: 0,
       livret_a_origine: 0.024, livret_a_par_annee: { 2028: 0.02 },
     },
     {
       code: 'PLS_FONCIER', libelle: 'PLS foncier', nature: 'foncier',
       montant_eur: 176035, taux: 0.0351, progressivite: 0, duree_ans: 50,
-      annee_premiere_echeance: 2028, revisabilite: 'SIMPLE',
+      annee_premiere_echeance: 2028, revisabilite: 'SIMPLE', differe_ans: 0,
       livret_a_origine: 0.024, livret_a_par_annee: { 2028: 0.02 },
     },
   ],
@@ -2911,23 +3104,21 @@ const etat = {
     frais_gestion_pct_loyers: 0.07,
     taux_vacance_impayes: 0.02,
     gros_entretien_eur_m2: 5,
-    // Aucune trajectoire en dur ici : le moteur applique le profil du
-    // referentiel (AXENTIA HER 2026). Un doublon a cet endroit le masquerait,
-    // ce qui est exactement l'irregularite I-2 que le projet combat.
+    // Aucune trajectoire en dur : le moteur applique le profil du referentiel.
   },
   options: {},
 };
 
 // ---------------------------------------------------------------- mise en forme
 
-const fmtEuro = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
-const fmtNombre = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
+const fEuro = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+const fNombre = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
 
-const eur = (v) => (v === null || v === undefined || Number.isNaN(v) ? '—' : fmtEuro.format(v));
-const pct = (v, d = 2) => (v === null || v === undefined || Number.isNaN(v) ? '—' : `${(v * 100).toFixed(d)} %`);
-const nb = (v) => (v === null || v === undefined ? '—' : fmtNombre.format(v));
+const nul = (v) => v === null || v === undefined || (typeof v === 'number' && Number.isNaN(v));
+const eur = (v) => (nul(v) ? '—' : fEuro.format(v));
+const pct = (v, d = 2) => (nul(v) ? '—' : `${(v * 100).toFixed(d)} %`);
+const nb = (v) => (nul(v) ? '—' : fNombre.format(v));
 
-/** Couleurs des segments de la balance (navy decline + accents sobres). */
 const COULEURS = {
   charge_fonciere: '#12274a',
   batiment: '#1b3a6b',
@@ -2941,180 +3132,277 @@ const COULEURS = {
   pret_autre: '#7c9bd0',
 };
 
-const LIBELLES_CHAPITRE = {
+const CHAPITRES = {
   charge_fonciere: 'Charge foncière',
   batiment: 'Bâtiment',
   honoraires: 'Honoraires',
   frais_divers: 'Frais divers',
 };
 
+const OPTIONS_REVISABILITE =['DOUBLE', 'D. LIMITEE', 'SIMPLE', 'TAUX FIXE'];
+const TAUX_TVA = [0.055, 0.1, 0.2, 0];
+
 // ---------------------------------------------------------------- utilitaires
 
-/** Ecrit une valeur dans l'etat a partir d'un chemin pointe (`lots.0.shab_m2`). */
-function definirParChemin(cible, chemin, valeur) {
+function ecrireChemin(cible, chemin, valeur) {
   const cles = chemin.split('.');
   let ref = cible;
   for (const cle of cles.slice(0, -1)) ref = ref[cle];
   ref[cles.at(-1)] = valeur;
 }
 
-/** Lit une valeur de l'etat a partir d'un chemin pointe. */
-function lireParChemin(cible, chemin) {
+function lireChemin(cible, chemin) {
   return chemin.split('.').reduce((o, cle) => (o == null ? undefined : o[cle]), cible);
 }
 
-// ---------------------------------------------------------------- rendu des listes
+/** Echappe le texte destine a un attribut HTML (les libelles sont libres). */
+function att(v) {
+  return String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
 
-function rendreListes() {
-  // --- Postes de prix de revient ---
-  $('#liste-postes').innerHTML = etat.postes_bilan
+/** Valeur d'un champ numerique : vide reste vide, jamais converti en zero. */
+function valNum(v) {
+  return nul(v) ? '' : v;
+}
+
+// ---------------------------------------------------------------- rendu saisie
+
+function rendreSelectProduit() {
+  $('#select-produit').innerHTML = produitsOrdonnes()
     .map(
-      (p, i) => `
-      <div class="ligne ligne--poste">
-        <label class="champ"><span>Libellé</span>
-          <input type="text" data-champ="postes_bilan.${i}.libelle" value="${p.libelle ?? ''}" /></label>
-        <label class="champ"><span>Montant HT</span>
-          <input type="number" step="1" data-champ="postes_bilan.${i}.montant_ht_eur" data-type="nombre" value="${p.montant_ht_eur}" /></label>
-        <label class="champ"><span>TVA</span>
-          <select data-champ="postes_bilan.${i}.taux_tva" data-type="nombre">
-            ${[0.055, 0.1, 0.2, 0]
-              .map((t) => `<option value="${t}" ${t === p.taux_tva ? 'selected' : ''}>${(t * 100).toFixed(1)} %</option>`)
-              .join('')}
-          </select></label>
-        <button type="button" class="bouton--supprimer" data-supprimer="postes_bilan" data-index="${i}" title="Supprimer">×</button>
-        <label class="champ" style="grid-column:1/-1"><span>Chapitre</span>
-          <select data-champ="postes_bilan.${i}.chapitre">
-            ${Object.entries(LIBELLES_CHAPITRE)
-              .map(([c, l]) => `<option value="${c}" ${c === p.chapitre ? 'selected' : ''}>${l}</option>`)
-              .join('')}
-          </select></label>
-      </div>`,
+      (p) =>
+        `<option value="${p.code}" ${p.v1 ? '' : 'disabled'}>${p.libelle}${p.v1 ? '' : ' (hors V1)'}</option>`,
     )
     .join('');
+}
 
-  // --- Subventions ---
-  $('#liste-subventions').innerHTML = etat.subventions
-    .map(
-      (s, i) => `
-      <div class="ligne ligne--subvention">
-        <label class="champ"><span>Libellé</span>
-          <input type="text" data-champ="subventions.${i}.libelle" value="${s.libelle ?? ''}" /></label>
-        <label class="champ"><span>Montant</span>
-          <input type="number" step="1" data-champ="subventions.${i}.montant_eur" data-type="nombre" value="${s.montant_eur}" /></label>
-        <label class="champ"><span>Gratuite</span>
-          <input type="checkbox" data-champ="subventions.${i}.gratuite" data-type="booleen" ${s.gratuite ? 'checked' : ''} /></label>
-        <button type="button" class="bouton--supprimer" data-supprimer="subventions" data-index="${i}" title="Supprimer">×</button>
-      </div>`,
-    )
+function rendreChampsStatiques() {
+  for (const el of document.querySelectorAll('[data-champ]')) {
+    const champ = /** @type {HTMLInputElement} */ (el);
+    if (champ.closest('tbody') || champ.closest('.liste')) continue;
+    const v = lireChemin(etat, champ.dataset.champ ?? '');
+    if (champ.type === 'checkbox') champ.checked = Boolean(v);
+    else champ.value = nul(v) ? '' : String(v);
+  }
+}
+
+/** Table du programme : une ligne par tranche de financement. */
+function rendreProgramme(r) {
+  const corps = $('#table-programme').querySelector('tbody');
+  const pied = $('#table-programme').querySelector('tfoot');
+
+  // Les colonnes calculees viennent du resultat, apparie par code produit.
+  const parProduit = {};
+  for (const l of r?.loyers ?? []) parProduit[l.code_produit] = l;
+
+  corps.innerHTML = etat.lots
+    .map((lot, i) => {
+      const c = parProduit[lot.code_produit];
+      const options = produitsOrdonnes()
+        .map((p) => `<option value="${p.code}" ${p.code === lot.code_produit ? 'selected' : ''} ${p.v1 ? '' : 'disabled'}>${p.libelle}</option>`)
+        .join('');
+      return `<tr>
+        <td><select data-champ="lots.${i}.code_produit">${options}</select></td>
+        <td><input type="number" step="1" min="0" data-champ="lots.${i}.nb_logements" data-type="nombre" data-requis="1" value="${valNum(lot.nb_logements)}" /></td>
+        <td><input type="number" step="0.01" min="0" data-champ="lots.${i}.shab_m2" data-type="nombre" data-requis="1" value="${valNum(lot.shab_m2)}" /></td>
+        <td><input type="number" step="0.01" min="0" data-champ="lots.${i}.surfaces_annexes_m2" data-type="nombre" value="${valNum(lot.surfaces_annexes_m2)}" /></td>
+        <td class="calc">${c ? nb(c.su_m2) : '—'}</td>
+        <td class="calc">${c ? nb(c.cs) : '—'}</td>
+        <td class="calc">${c ? nb(c.loyer_max_base_eur_m2) : '—'}</td>
+        <td><input type="number" step="0.01" data-champ="lots.${i}.marge_locale_eur_m2" data-type="nombre" value="${valNum(lot.marge_locale_eur_m2)}" /></td>
+        <td><input type="number" step="0.01" min="0" data-champ="lots.${i}.loyer_sortie_force" data-type="nombre" placeholder="${c ? nb(c.loyer_max_base_eur_m2) : ''}" value="${valNum(lot.loyer_sortie_force)}" /></td>
+        <td class="calc">${c ? nb(c.loyer_pratique_eur_m2) : '—'}</td>
+        <td class="calc">${c ? eur(c.loyer_annuel_eur) : '—'}</td>
+        <td><button type="button" class="bouton--supprimer" data-supprimer="lots" data-index="${i}" title="Supprimer">×</button></td>
+      </tr>`;
+    })
     .join('');
 
-  // --- Prets ---
+  const t = (cle) => etat.lots.reduce((s, l) => s + (Number(l[cle]) || 0), 0);
+  const suTotal = (r?.loyers ?? []).reduce((s, l) => s + l.su_m2, 0);
+  const loyerTotal = (r?.loyers ?? []).reduce((s, l) => s + l.loyer_annuel_eur, 0);
+  pied.innerHTML = `<tr>
+      <td class="libelle">Total</td>
+      <td class="num">${nb(t('nb_logements'))}</td>
+      <td class="num">${nb(t('shab_m2'))}</td>
+      <td class="num">${nb(t('surfaces_annexes_m2'))}</td>
+      <td class="num">${nb(suTotal)}</td>
+      <td colspan="5"></td>
+      <td class="num">${eur(loyerTotal)}</td>
+      <td></td>
+    </tr>`;
+}
+
+function rendrePostes(r) {
+  const corps = $('#table-postes').querySelector('tbody');
+  const pied = $('#table-postes').querySelector('tfoot');
+
+  corps.innerHTML = etat.postes_bilan
+    .map((p, i) => {
+      const tva = (Number(p.montant_ht_eur) || 0) * (Number(p.taux_tva) || 0);
+      return `<tr>
+        <td><select data-champ="postes_bilan.${i}.chapitre">
+          ${Object.entries(CHAPITRES).map(([c, l]) => `<option value="${c}" ${c === p.chapitre ? 'selected' : ''}>${l}</option>`).join('')}
+        </select></td>
+        <td><input type="text" data-champ="postes_bilan.${i}.libelle" value="${att(p.libelle)}" /></td>
+        <td><input type="number" step="1" data-champ="postes_bilan.${i}.montant_ht_eur" data-type="nombre" value="${valNum(p.montant_ht_eur)}" /></td>
+        <td><select data-champ="postes_bilan.${i}.taux_tva" data-type="nombre">
+          ${TAUX_TVA.map((v) => `<option value="${v}" ${v === p.taux_tva ? 'selected' : ''}>${(v * 100).toFixed(1)} %</option>`).join('')}
+        </select></td>
+        <td class="calc">${eur(tva)}</td>
+        <td class="calc">${eur((Number(p.montant_ht_eur) || 0) + tva)}</td>
+        <td><button type="button" class="bouton--supprimer" data-supprimer="postes_bilan" data-index="${i}" title="Supprimer">×</button></td>
+      </tr>`;
+    })
+    .join('');
+
+  const b = r?.bilan;
+  pied.innerHTML = `<tr>
+      <td class="libelle" colspan="2">Total</td>
+      <td class="num">${eur(b?.total_ht_eur)}</td>
+      <td></td>
+      <td class="num">${eur(b?.total_tva_eur)}</td>
+      <td class="num">${eur(b?.total_ttc_eur)}</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td class="libelle" colspan="2">Base finançable (TTC / LASM)</td>
+      <td colspan="3"></td>
+      <td class="num">${eur(b?.total_ttc_module_eur)}</td>
+      <td></td>
+    </tr>`;
+
+  $('#aide-lasm').textContent = b
+    ? `⚙ La base finançable applique le taux de livraison à soi-même du produit principal ` +
+      `(${pct(b.taux_lasm, 1)}), et non les taux de TVA de saisie. C'est elle qui doit être ` +
+      `couverte par le plan de financement.`
+    : '';
+}
+
+function rendreSubventions(r) {
+  const corps = $('#table-subventions').querySelector('tbody');
+  const pied = $('#table-subventions').querySelector('tfoot');
+
+  corps.innerHTML = etat.subventions.length
+    ? etat.subventions
+        .map(
+          (s, i) => `<tr>
+        <td><input type="text" data-champ="subventions.${i}.libelle" value="${att(s.libelle)}" /></td>
+        <td><input type="number" step="1" data-champ="subventions.${i}.montant_eur" data-type="nombre" value="${valNum(s.montant_eur)}" /></td>
+        <td class="num"><input type="checkbox" data-champ="subventions.${i}.gratuite" data-type="booleen" ${s.gratuite ? 'checked' : ''} /></td>
+        <td><button type="button" class="bouton--supprimer" data-supprimer="subventions" data-index="${i}" title="Supprimer">×</button></td>
+      </tr>`,
+        )
+        .join('')
+    : '<tr><td colspan="4" class="vide">Aucune subvention</td></tr>';
+
+  const s = r?.subventions;
+  pied.innerHTML = `<tr>
+      <td class="libelle">Total</td>
+      <td class="num">${eur(s?.total_avec_ssf_eur)}</td>
+      <td class="num" colspan="2" style="font-weight:400;color:var(--encre-doux)">dont gratuites ${eur(s?.gratuites_eur)}</td>
+    </tr>`;
+}
+
+function rendrePrets(r) {
+  for (const b of document.querySelectorAll('[data-mode-prets]')) {
+    b.setAttribute('aria-pressed', String(b.getAttribute('data-mode-prets') === etat.mode_prets));
+  }
+  const theorique = etat.mode_prets === 'theoriques';
+  $('#prets-saisis').hidden = theorique;
+  $('#prets-theoriques').hidden = !theorique;
+
+  if (theorique) {
+    const lignes = (r?.amortissements ?? [])
+      .map(
+        (a) =>
+          `<div><strong>${att(a.libelle)}</strong> — ${eur(a.montant_eur)}, ${a.tableau.length} ans, ` +
+          `taux appliqué ${pct(a.tableau[0].taux)}, 1<sup>re</sup> échéance ${a.annee_premiere_echeance}</div>`,
+      )
+      .join('');
+    $('#prets-theoriques').innerHTML =
+      (lignes || '<div class="vide">Aucun prêt CDC mobilisé : le solde à financer est nul ou négatif.</div>') +
+      `<p class="aide" style="margin-top:10px">Montants, durées et taux déduits du solde à financer et ` +
+      `des règles du produit (R-AMT-1, R-FIN-4). Basculer sur « Saisis » pour les reprendre à la main.</p>`;
+    return;
+  }
+
   $('#liste-prets').innerHTML = etat.prets
     .map(
       (p, i) => `
       <div class="ligne ligne--pret">
         <label class="champ"><span>Libellé</span>
-          <input type="text" data-champ="prets.${i}.libelle" value="${p.libelle ?? ''}" /></label>
-        <label class="champ"><span>Montant</span>
-          <input type="number" step="1" data-champ="prets.${i}.montant_eur" data-type="nombre" value="${p.montant_eur}" /></label>
+          <input type="text" data-champ="prets.${i}.libelle" value="${att(p.libelle)}" /></label>
+        <label class="champ"><span>Montant (€)</span>
+          <input type="number" step="1" data-champ="prets.${i}.montant_eur" data-type="nombre" value="${valNum(p.montant_eur)}" /></label>
         <label class="champ"><span>Nature</span>
           <select data-champ="prets.${i}.nature">
-            ${['construction', 'foncier', 'autre']
-              .map((n) => `<option value="${n}" ${n === p.nature ? 'selected' : ''}>${n}</option>`)
-              .join('')}
+            ${['construction', 'foncier', 'autre'].map((n) => `<option value="${n}" ${n === p.nature ? 'selected' : ''}>${n}</option>`).join('')}
           </select></label>
         <button type="button" class="bouton--supprimer" data-supprimer="prets" data-index="${i}" title="Supprimer">×</button>
         <div class="ligne__pied">
-          <label class="champ"><span>Taux saisi</span>
-            <input type="number" step="0.0001" data-champ="prets.${i}.taux" data-type="nombre" value="${p.taux}" /></label>
+          <label class="champ"><span>Taux saisi (%)</span>
+            <input type="number" step="0.01" data-champ="prets.${i}.taux" data-type="pourcentage" value="${valNum(nul(p.taux) ? null : p.taux * 100)}" /></label>
           <label class="champ"><span>Durée (ans)</span>
-            <input type="number" step="1" min="1" data-champ="prets.${i}.duree_ans" data-type="nombre" value="${p.duree_ans}" /></label>
-          <label class="champ"><span>1re échéance</span>
-            <input type="number" step="1" data-champ="prets.${i}.annee_premiere_echeance" data-type="nombre" value="${p.annee_premiere_echeance}" /></label>
+            <input type="number" step="1" min="1" data-champ="prets.${i}.duree_ans" data-type="nombre" value="${valNum(p.duree_ans)}" /></label>
+          <label class="champ"><span>1re échéance (année)</span>
+            <input type="number" step="1" data-champ="prets.${i}.annee_premiere_echeance" data-type="nombre" value="${valNum(p.annee_premiere_echeance)}" /></label>
         </div>
         <div class="ligne__pied">
           <label class="champ"><span>Révisabilité</span>
             <select data-champ="prets.${i}.revisabilite">
-              ${['DOUBLE', 'D. LIMITEE', 'SIMPLE', 'TAUX FIXE']
-                .map((r) => `<option value="${r}" ${r === p.revisabilite ? 'selected' : ''}>${r}</option>`)
-                .join('')}
+              ${OPTIONS_REVISABILITE.map((v) => `<option value="${v}" ${v === p.revisabilite ? 'selected' : ''}>${v}</option>`).join('')}
             </select></label>
-          <label class="champ"><span>Progressivité</span>
-            <input type="number" step="0.001" data-champ="prets.${i}.progressivite" data-type="nombre" value="${p.progressivite ?? 0}" /></label>
+          <label class="champ"><span>Progressivité (%)</span>
+            <input type="number" step="0.1" data-champ="prets.${i}.progressivite" data-type="pourcentage" value="${valNum(nul(p.progressivite) ? null : p.progressivite * 100)}" /></label>
           <label class="champ"><span>Différé (ans)</span>
-            <input type="number" step="1" min="0" data-champ="prets.${i}.differe_ans" data-type="nombre" value="${p.differe_ans ?? 0}" /></label>
+            <input type="number" step="1" min="0" data-champ="prets.${i}.differe_ans" data-type="nombre" value="${valNum(p.differe_ans)}" /></label>
         </div>
       </div>`,
     )
     .join('');
 }
 
-/** Remplit les champs statiques depuis l'etat (au premier chargement). */
-function rendreChampsStatiques() {
-  $('#select-produit').innerHTML = Object.values(PRODUITS)
-    .map((p) => `<option value="${p.code}" ${p.v1 ? '' : 'disabled'}>${p.libelle}${p.v1 ? '' : ' (hors V1)'}</option>`)
-    .join('');
-
-  for (const el of document.querySelectorAll('[data-champ]')) {
-    const champ = /** @type {HTMLInputElement} */ (el);
-    if (champ.closest('.liste')) continue; // gere par rendreListes()
-    const valeur = lireParChemin(etat, champ.dataset.champ ?? '');
-    if (valeur === undefined) continue;
-    if (champ.type === 'checkbox') champ.checked = Boolean(valeur);
-    else champ.value = String(valeur);
-  }
+function rendreCalendrier(r) {
+  const c = r?.calendrier;
+  $('#date-mel').value = c?.date_mise_en_location ?? '';
+  // Une date de livraison deduite se presente comme calculee, une date saisie non.
+  const champLivraison = /** @type {HTMLInputElement} */ (
+    document.querySelector('[data-champ="dates.date_livraison"]')
+  );
+  const deduite = c?.origine?.date_livraison === 'calcule';
+  champLivraison.classList.toggle('champ--calcule', deduite);
+  if (deduite) champLivraison.value = c?.date_livraison ?? '';
 }
 
 // ---------------------------------------------------------------- rendu resultats
 
-/** Construit une barre empilee proportionnelle a partir de segments. */
 function rendreBarre(element, segments, echelle) {
   element.innerHTML = segments
     .filter((s) => s.montant > 0)
     .map((s) => {
-      const part = s.montant / echelle;
-      // On n'affiche l'etiquette que si le segment est assez haut pour la porter.
-      const etiquette = part > 0.07 ? `<span>${eur(s.montant)}</span>` : '';
-      return `<div class="segment" style="flex-grow:${s.montant};background:${s.couleur}" title="${s.libelle} : ${eur(s.montant)}">${etiquette}</div>`;
+      const etiquette = s.montant / echelle > 0.07 ? `<span>${eur(s.montant)}</span>` : '';
+      return `<div class="segment" style="flex-grow:${s.montant};background:${s.couleur}" title="${att(s.libelle)} : ${eur(s.montant)}">${etiquette}</div>`;
     })
     .join('');
-  // Reserve le vide au-dessus quand ce cote est le plus court des deux.
   const total = segments.reduce((t, s) => t + Math.max(0, s.montant), 0);
   if (total < echelle) {
-    element.insertAdjacentHTML(
-      'beforeend',
-      `<div style="flex-grow:${echelle - total}"></div>`,
-    );
+    element.insertAdjacentHTML('beforeend', `<div style="flex-grow:${echelle - total}"></div>`);
   }
 }
 
-function rendreLegende(segments) {
-  $('#legende').innerHTML = segments
-    .filter((s) => s.montant > 0)
-    .map(
-      (s) => `<div class="legende__item">
-          <span class="legende__puce" style="background:${s.couleur}"></span>
-          <span>${s.libelle}</span>
-          <span class="legende__montant">${eur(s.montant)}</span>
-        </div>`,
-    )
-    .join('');
-}
-
-function rendreResultats(r) {
-  // --- Emplois : le prix de revient par chapitre, base TTC/LASM ---
+function rendreFinancement(r) {
+  // --- Emplois et ressources ---
   const emplois = Object.entries(r.bilan.chapitres).map(([code, c]) => ({
-    libelle: LIBELLES_CHAPITRE[code] ?? code,
+    libelle: CHAPITRES[code] ?? code,
     montant: c.ttc_lasm_eur,
+    ht: c.ht_eur,
     couleur: COULEURS[code] ?? COULEURS.frais_divers,
   }));
   if (r.bilan.modulation_ttc_eur) {
-    emplois.push({ libelle: 'Modulation', montant: r.bilan.modulation_ttc_eur, couleur: COULEURS.modulation });
+    emplois.push({ libelle: 'Modulation', montant: r.bilan.modulation_ttc_eur, ht: null, couleur: COULEURS.modulation });
   }
 
-  // --- Ressources : subventions, fonds propres, prets ---
-  // Les prets viennent du RESULTAT et non de la saisie : en mode « prets CDC
-  // theoriques » ils sont calcules par le moteur et absents de l'etat.
   const ressources = [];
   if (r.subventions.total_avec_ssf_eur > 0) {
     ressources.push({ libelle: 'Subventions', montant: r.subventions.total_avec_ssf_eur, couleur: COULEURS.subventions });
@@ -3137,110 +3425,301 @@ function rendreResultats(r) {
 
   rendreBarre($('#barre-emplois'), emplois, echelle);
   rendreBarre($('#barre-ressources'), ressources, echelle);
-  rendreLegende([...emplois, ...ressources]);
-
   $('#total-emplois').textContent = eur(totalEmplois);
   $('#total-ressources').textContent = eur(totalRessources);
+  $('#legende').innerHTML = [...emplois, ...ressources]
+    .filter((s) => s.montant > 0)
+    .map(
+      (s) => `<div class="legende__item"><span class="legende__puce" style="background:${s.couleur}"></span>
+        <span>${att(s.libelle)}</span><span class="legende__montant">${eur(s.montant)}</span></div>`,
+    )
+    .join('');
 
-  const eq = r.financement.equilibre;
-  const badge = $('#badge-equilibre');
-  badge.textContent = eq.equilibre ? 'Équilibré' : `Écart ${eur(eq.ecart_eur)}`;
-  badge.className = `badge ${eq.equilibre ? 'badge--equilibre' : 'badge--ecart'}`;
+  // --- Tableau des emplois ---
+  const tEmplois = $('#table-emplois');
+  tEmplois.querySelector('tbody').innerHTML = emplois
+    .map(
+      (e) => `<tr><td>${att(e.libelle)}</td><td class="num">${eur(e.ht)}</td>
+        <td class="num">${eur(e.montant)}</td>
+        <td class="num">${totalEmplois ? pct(e.montant / totalEmplois, 1) : '—'}</td></tr>`,
+    )
+    .join('');
+  const ind = r.indicateurs;
+  tEmplois.querySelector('tfoot').innerHTML = `<tr>
+      <td class="libelle">Total</td><td class="num">${eur(r.bilan.total_ht_eur)}</td>
+      <td class="num">${eur(totalEmplois)}</td><td class="num">100 %</td></tr>
+    <tr><td colspan="4" style="font-weight:400;color:var(--encre-doux);border-top:none">
+      ${eur(ind.prix_revient_par_logement_eur)} / logement · ${eur(ind.prix_revient_par_m2_shab_eur)} / m² SHAB
+    </td></tr>`;
 
-  // --- Tableau des prets ---
-  const corps = $('#tableau-prets').querySelector('tbody');
+  // --- Tableau des ressources ---
+  const tRes = $('#table-ressources');
+  tRes.querySelector('tbody').innerHTML = ressources
+    .map(
+      (s) => `<tr><td>${att(s.libelle)}</td><td class="num">${eur(s.montant)}</td>
+        <td class="num">${totalRessources ? pct(s.montant / totalRessources, 1) : '—'}</td></tr>`,
+    )
+    .join('');
+  tRes.querySelector('tfoot').innerHTML = `<tr>
+      <td class="libelle">Total</td><td class="num">${eur(totalRessources)}</td><td class="num">100 %</td></tr>
+    <tr><td class="libelle">Solde à financer</td>
+      <td class="num">${eur(r.financement.solde_a_financer_eur)}</td><td></td></tr>`;
+
+  // --- Prets ---
+  const corps = $('#table-prets').querySelector('tbody');
+  const pied = $('#table-prets').querySelector('tfoot');
   if (!r.amortissements.length) {
-    corps.innerHTML = '<tr><td colspan="6" class="vide">Aucun prêt mobilisé</td></tr>';
+    corps.innerHTML = '<tr><td colspan="9" class="vide">Aucun prêt mobilisé</td></tr>';
+    pied.innerHTML = '';
   } else {
     corps.innerHTML = r.amortissements
       .map((a) => {
         const t = a.tableau;
+        const total = t.reduce((s, l) => s + l.annuite_eur, 0);
         return `<tr>
-            <td>${a.libelle}</td>
-            <td class="num">${eur(a.montant_eur)}</td>
-            <td class="num">${pct(t[0].taux)}</td>
-            <td class="num">${t.length} ans</td>
-            <td class="num">${eur(t[0].annuite_eur)}</td>
-            <td class="num">${eur(t.at(-1).annuite_eur)}</td>
-          </tr>`;
+          <td>${att(a.libelle)}</td>
+          <td class="num">${eur(a.montant_eur)}</td>
+          <td class="num">${nul(a.taux_saisi) ? '—' : pct(a.taux_saisi)}</td>
+          <td class="num">${pct(t[0].taux)}</td>
+          <td class="num">${t.length} ans</td>
+          <td class="num">${t[0].annee}</td>
+          <td class="num">${eur(t[0].annuite_eur)}</td>
+          <td class="num">${eur(t.at(-1).annuite_eur)}</td>
+          <td class="num">${eur(total)}</td>
+        </tr>`;
       })
       .join('');
+    const totalMontant = r.amortissements.reduce((s, a) => s + a.montant_eur, 0);
+    const totalAnnuites = r.amortissements.reduce(
+      (s, a) => s + a.tableau.reduce((x, l) => x + l.annuite_eur, 0),
+      0,
+    );
+    pied.innerHTML = `<tr><td class="libelle">Total</td><td class="num">${eur(totalMontant)}</td>
+      <td colspan="6"></td><td class="num">${eur(totalAnnuites)}</td></tr>`;
   }
 
-  // Le taux applique differe du taux saisi des que la revisabilite joue : on
-  // l'explicite, c'est la source de confusion n°1 face a LEON (question Q-8).
   const ecarts = r.amortissements.filter(
-    (a) => a.taux_saisi !== undefined && Math.abs(a.tableau[0].taux - a.taux_saisi) > 1e-9,
+    (a) => !nul(a.taux_saisi) && Math.abs(a.tableau[0].taux - a.taux_saisi) > 1e-9,
   );
   $('#aide-taux').textContent = ecarts.length
-    ? `Le taux appliqué diffère du taux saisi : la révision Livret A joue dès la première ` +
+    ? `⚙ Le taux appliqué diffère du taux saisi : la révision Livret A joue dès la première ` +
       `échéance. Profil ${r.profil_trajectoires ?? 'non renseigné'}.`
     : '';
 
   // --- Indicateurs ---
-  const ind = r.indicateurs;
   $('#indicateurs').innerHTML = [
-    { l: 'Prix de revient TTC', v: eur(ind.prix_revient_ttc_eur), d: `${eur(ind.prix_revient_par_logement_eur)} / logement` },
+    { l: 'Prix de revient', v: eur(ind.prix_revient_ttc_eur), d: `${eur(ind.prix_revient_par_logement_eur)} / logement` },
     { l: 'Coût au m² SHAB', v: eur(ind.prix_revient_par_m2_shab_eur), d: `${nb(ind.shab_m2)} m² SHAB` },
     { l: 'Surface utile', v: `${nb(ind.su_m2)} m²`, d: `${ind.nb_logements} logements` },
     { l: 'Loyers annuels', v: eur(ind.loyers_annuels_eur), d: `RMO ${pct(ind.rmo)}` },
     { l: 'Fonds propres', v: pct(ind.taux_fonds_propres), d: eur(etat.fonds_propres_eur) },
-    {
-      l: 'Reconstitution FP',
-      v: ind.annee_reconstitution_fonds_propres ?? 'non atteinte',
-      d: `TFPB à partir de ${ind.annee_debut_tfpb}`,
-    },
+    { l: 'Prêts CDC', v: pct(r.financement.equilibre.ratio_prets_cdc), d: eur(r.financement.total_prets_cdc_eur) },
+    { l: 'Reconstitution FP', v: ind.annee_reconstitution_fonds_propres ?? 'non atteinte', d: `TFPB dès ${ind.annee_debut_tfpb}` },
   ]
     .map(
-      (i) => `<div class="indicateur">
-          <div class="indicateur__libelle">${i.l}</div>
-          <div class="indicateur__valeur">${i.v}</div>
-          <div class="indicateur__detail">${i.d}</div>
-        </div>`,
+      (i) => `<div class="indicateur"><div class="indicateur__libelle">${i.l}</div>
+        <div class="indicateur__valeur">${i.v}</div><div class="indicateur__detail">${i.d}</div></div>`,
     )
     .join('');
 
-  // --- Alertes ---
-  const carteAlertes = $('#carte-alertes');
-  if (r.alertes.length) {
-    carteAlertes.hidden = false;
-    $('#alertes').innerHTML = r.alertes.map((a) => `<li>${a}</li>`).join('');
-  } else {
-    carteAlertes.hidden = true;
-  }
+  rendreControles(r);
+}
 
-  // --- Aide de saisie : rappel de la surface utile calculee ---
-  const lot = r.surfaces.detail[0];
-  $('#aide-surfaces').textContent = lot
-    ? `Surface utile calculée : ${nb(lot.su_m2)} m² (SHAB + 0,5 × annexes) — coefficient de structure ${nb(r.loyers[0]?.cs)}.`
-    : '';
+/**
+ * Controles TOUJOURS visibles, y compris quand ils passent : masquer un controle
+ * satisfait rend l'absence d'alerte indistinguable de l'absence de controle.
+ */
+function rendreControles(r) {
+  const eq = r.financement.equilibre;
+  const mini = referentiels.baremes.constantes_reglementaires.controle_ratio_prets_cdc_min.valeur;
 
-  $('#version-moteur').textContent = `v${r.version_moteur}`;
+  const controles = [
+    {
+      ok: eq.equilibre,
+      libelle: eq.equilibre
+        ? 'Emplois et ressources s’équilibrent'
+        : `Emplois et ressources : écart de ${eur(eq.ecart_eur)}`,
+      grave: true,
+    },
+    {
+      ok: eq.ratio_prets_cdc === null || eq.ratio_prets_cdc >= mini,
+      libelle: `Ratio prêts CDC ${pct(eq.ratio_prets_cdc)} pour un minimum réglementaire de ${pct(mini, 0)}`,
+    },
+    {
+      ok: !r.loyers.some((l) => l.force && l.loyer_pratique_eur_m2 > l.loyer_max_base_eur_m2),
+      libelle: 'Loyers de sortie dans le plafond réglementaire',
+    },
+    {
+      ok: !r.alertes.some((a) => /horizon de simulation/i.test(a)),
+      libelle: "Toutes les annuités tombent dans l’horizon de simulation",
+    },
+    {
+      ok: r.surfaces.tranches.length <= 1,
+      libelle:
+        r.surfaces.tranches.length <= 1
+          ? 'Opération mono-produit : taux de livraison à soi-même unique'
+          : `Opération à ${r.surfaces.tranches.length} tranches, un seul taux de LASM appliqué`,
+    },
+  ];
+
+  const passes = controles.filter((c) => c.ok).length;
+  const echecs = controles.length - passes;
+
+  $('#controles').innerHTML = controles
+    .map((c) => {
+      const classe = c.ok ? 'ok' : c.grave ? 'erreur' : 'alerte';
+      const etat = c.ok ? 'OK' : c.grave ? 'Erreur' : 'Alerte';
+      return `<li class="controle controle--${classe}">
+        <span class="controle__etat">${etat}</span>
+        <span class="controle__texte">${c.libelle}</span></li>`;
+    })
+    .join('');
+
+  const bandeau = $('#bandeau-controle');
+  const bloquant = controles.some((c) => !c.ok && c.grave);
+  bandeau.className = `bandeau ${bloquant ? 'bandeau--erreur' : echecs ? 'bandeau--alerte' : 'bandeau--ok'}`;
+  bandeau.innerHTML =
+    `<span class="bandeau__principal">${
+      eq.equilibre ? 'Plan de financement équilibré' : `Écart de ${eur(eq.ecart_eur)}`
+    }</span>` +
+    `<span class="bandeau__detail">${passes} contrôle${passes > 1 ? 's' : ''} sur ${controles.length} ` +
+    `${passes > 1 ? 'passés' : 'passé'}${echecs ? `, ${echecs} à examiner` : ''}.</span>`;
+}
+
+// ---------------------------------------------------------------- ecran parametres
+
+function rendreParametres() {
+  const b = referentiels.baremes;
+  const t = referentiels.trajectoires;
+
+  $('#bandeau-parametres').innerHTML =
+    `<span class="bandeau__principal">Lecture seule</span>` +
+    `<span class="bandeau__detail">Barèmes ${b.date_valeur} · profil ${t.profil}. ` +
+    `Ces valeurs sont versionnées dans le dépôt : les modifier ici rendrait les simulations ` +
+    `non reproductibles.</span>`;
+
+  const tableau = (titre, source, entetes, lignes) => `
+    <section class="bloc para-groupe">
+      <h3>${titre}</h3>
+      ${source ? `<p class="para-source">${att(source)}</p>` : ''}
+      <div class="table-defilante"><table class="tableau">
+        <thead><tr>${entetes.map((e, i) => `<th ${i ? 'class="num"' : ''}>${e}</th>`).join('')}</tr></thead>
+        <tbody>${lignes
+          .map((l) => `<tr>${l.map((c, i) => `<td ${i ? 'class="num"' : ''}>${c}</td>`).join('')}</tr>`)
+          .join('')}</tbody>
+      </table></div>
+    </section>`;
+
+  const lm123 = b.loyers_max_zone_123;
+  const lmABC = b.loyers_max_zone_ABC;
+  const cs = b.constantes_reglementaires.coefficient_structure;
+
+  const blocs = [
+    tableau(
+      'Loyers plafonds par zone 1/2/3 (€/m² SU/mois)',
+      lm123.source,
+      ['Produit', ...lm123.zones],
+      ['PLUS', 'PLAI', 'LIBRE'].map((p) => [p, ...lm123[p].map((v) => nb(v))]),
+    ),
+    tableau(
+      'Loyers plafonds par zone A/B/C (€/m² SU/mois)',
+      lmABC.source,
+      ['Produit', ...lmABC.zones],
+      ['PLS', 'PLI'].map((p) => [p, ...lmABC[p].map((v) => nb(v))]),
+    ),
+    tableau(
+      'Prêts CDC par défaut',
+      'R-AMT-1 ; spreads confirmés par la maquette LEON REWORK (ADMIN!C43:C46)',
+      ['Produit', 'Nature', 'Taux', 'Durée', 'Révisabilité'],
+      produitsOrdonnes().flatMap((p) =>
+        p.prets_defaut.map((d) => [p.libelle, d.nature, d.taux_ref, d.duree_ref, d.revisabilite]),
+      ),
+    ),
+    tableau(
+      'Taux de livraison à soi-même',
+      b.tva.source,
+      ['Clé', 'Taux'],
+      Object.entries(b.tva.lasm_par_produit)
+        .filter(([, v]) => typeof v === 'number')
+        .map(([k, v]) => [k, pct(v, 1)]),
+    ),
+    tableau(
+      'Coefficient de structure',
+      cs.source,
+      ['Cas', 'Base', 'Facteur logements'],
+      [
+        ['Métropole habitat', nb(cs.metropole_habitat.base), nb(cs.metropole_habitat.facteur_nl)],
+        ['Foyers', nb(cs.metropole_habitat.base), nb(cs.foyers.facteur_nl)],
+        ['DOM', nb(cs.dom.base), nb(cs.dom.facteur_nl)],
+      ],
+    ),
+    tableau(
+      'Trajectoires macro',
+      `${t.source} — ${t.trajectoires.length} années, de ${t.trajectoires[0].annee} à ${t.trajectoires.at(-1).annee}`,
+      ['Année', 'Loyers / IRL', 'Gros entretien', 'Gestion', 'TFPB', 'Livret A'],
+      t.trajectoires
+        .slice(0, 15)
+        .map((l) => [
+          l.annee, pct(l.loyers_irl), pct(l.gros_entretien), pct(l.gestion), pct(l.tfpb), pct(l.livret_a),
+        ]),
+    ),
+  ];
+
+  $('#contenu-parametres').innerHTML = blocs.join('');
 }
 
 // ---------------------------------------------------------------- boucle de calcul
 
 let dernierResultat = null;
 
+/** Champs numeriques obligatoires : on refuse de calculer avec un zero implicite. */
+function champsManquants() {
+  const manquants = [];
+  if (nul(etat.dates.duree_simulation_ans)) manquants.push('durée de simulation');
+  etat.lots.forEach((l, i) => {
+    if (nul(l.nb_logements)) manquants.push(`nombre de logements de la tranche ${i + 1}`);
+    if (nul(l.shab_m2)) manquants.push(`SHAB de la tranche ${i + 1}`);
+  });
+  return manquants;
+}
+
 function recalculer() {
   const pastille = $('#etat-calcul');
   pastille.textContent = 'calcul…';
   pastille.className = 'pastille pastille--calcul';
 
+  const manquants = champsManquants();
+  if (manquants.length) {
+    $('#erreur').hidden = false;
+    $('#erreur').textContent = `Saisie incomplète : ${manquants.join(', ')}.`;
+    pastille.textContent = 'incomplet';
+    return;
+  }
+
   try {
     // Le moteur est pur : on peut l'appeler a chaque frappe sans effet de bord.
-    const r = calculer(structuredClone(etat), referentiels);
+    // En mode « CDC theoriques », on ne lui transmet aucun pret : c'est l'absence
+    // de pret saisi qui declenche le calcul theorique (R-FIN-4).
+    const entrees = structuredClone(etat);
+    if (etat.mode_prets === 'theoriques') entrees.prets = [];
+    const r = calculer(entrees, referentiels);
     dernierResultat = r;
     $('#erreur').hidden = true;
-    rendreResultats(r);
+    $('#version-moteur').textContent = `v${r.version_moteur}`;
+
+    rendreCalendrier(r);
+    rendreProgramme(r);
+    rendrePostes(r);
+    rendreSubventions(r);
+    rendrePrets(r);
+    rendreFinancement(r);
+
     pastille.textContent = 'à jour';
     pastille.className = 'pastille pastille--ok';
   } catch (e) {
-    const erreur = $('#erreur');
-    erreur.hidden = false;
-    erreur.textContent = `Saisie incomplète ou incohérente : ${/** @type {Error} */ (e).message}`;
+    $('#erreur').hidden = false;
+    $('#erreur').textContent = `Calcul impossible : ${/** @type {Error} */ (e).message}`;
     pastille.textContent = 'erreur';
-    pastille.className = 'pastille pastille--calcul';
   }
 }
 
@@ -3252,40 +3731,89 @@ document.addEventListener('input', (ev) => {
   if (!chemin) return;
 
   let valeur;
-  if (el.dataset.type === 'nombre') {
-    valeur = el.value === '' ? 0 : Number(el.value);
-    if (Number.isNaN(valeur)) return; // saisie transitoire, on attend
+  if (el.dataset.type === 'nombre' || el.dataset.type === 'pourcentage') {
+    // Un champ vide reste vide : il ne devient jamais zero silencieusement.
+    if (el.value === '') valeur = null;
+    else {
+      const n = Number(el.value);
+      if (Number.isNaN(n)) return; // saisie transitoire
+      valeur = el.dataset.type === 'pourcentage' ? n / 100 : n;
+    }
   } else if (el.dataset.type === 'booleen') {
     valeur = el.checked;
   } else {
-    valeur = el.value;
+    valeur = el.value === '' ? null : el.value;
   }
 
-  definirParChemin(etat, chemin, valeur);
+  ecrireChemin(etat, chemin, valeur);
 
-  // Le produit du lot suit celui de l'operation : un seul endroit ou le dire.
-  if (chemin === 'identite.produit') etat.lots[0].code_produit = valeur;
+  // Changer le produit principal aligne la premiere tranche si elle est seule.
+  if (chemin === 'identite.produit' && etat.lots.length === 1) {
+    etat.lots[0].code_produit = valeur;
+  }
+
+  // Une saisie dans un tableau en modifie les colonnes calculees : on garde le
+  // focus en ne rendant que les resultats, pas la structure de la table.
+  const dansTable = Boolean(el.closest('tbody'));
+  const focus = /** @type {HTMLElement} */ (document.activeElement);
+  const cheminFocus = focus?.dataset?.champ;
+  const position = /** @type {HTMLInputElement} */ (focus)?.selectionStart ?? null;
 
   recalculer();
+
+  if (dansTable && cheminFocus) {
+    const cible = /** @type {HTMLInputElement} */ (
+      document.querySelector(`[data-champ="${cheminFocus}"]`)
+    );
+    if (cible && cible !== document.activeElement) {
+      cible.focus();
+      if (position !== null && cible.setSelectionRange) {
+        try { cible.setSelectionRange(position, position); } catch { /* type non compatible */ }
+      }
+    }
+  }
 });
 
 document.addEventListener('click', (ev) => {
   const el = /** @type {HTMLElement} */ (ev.target);
 
+  const onglet = el.closest('[data-ecran]');
+  if (onglet) {
+    const cible = /** @type {HTMLElement} */ (onglet).dataset.ecran;
+    for (const o of document.querySelectorAll('[data-ecran]')) {
+      o.setAttribute('aria-selected', String(/** @type {HTMLElement} */ (o).dataset.ecran === cible));
+    }
+    for (const e of document.querySelectorAll('.ecran')) {
+      /** @type {HTMLElement} */ (e).hidden = e.id !== `ecran-${cible}`;
+    }
+    if (cible === 'parametres') rendreParametres();
+    return;
+  }
+
+  const mode = el.dataset?.modePrets;
+  if (mode) {
+    // Le mode ne DETRUIT PAS la saisie : les prets saisis restent dans l'etat et
+    // sont simplement ignores le temps du mode theorique. Basculer et revenir
+    // doit etre sans perte.
+    etat.mode_prets = mode;
+    recalculer();
+    return;
+  }
+
   const aAjouter = el.dataset?.ajouter;
   if (aAjouter) {
     const modeles = {
+      lots: { code_produit: etat.identite.produit, nb_logements: 0, shab_m2: 0, surfaces_annexes_m2: 0, marge_locale_eur_m2: 0 },
       postes_bilan: { chapitre: 'batiment', libelle: 'Nouveau poste', montant_ht_eur: 0, taux_tva: 0.1 },
       subventions: { libelle: 'Nouvelle subvention', montant_eur: 0, gratuite: false },
       prets: {
         code: `PRET_${etat.prets.length + 1}`, libelle: 'Nouveau prêt', nature: 'autre',
         montant_eur: 0, taux: 0.02, progressivite: 0, duree_ans: 40,
-        annee_premiere_echeance: etat.dates.annee_mise_en_location, revisabilite: 'TAUX FIXE',
-        livret_a_origine: 0.024, livret_a_par_annee: { 2028: 0.02 },
+        annee_premiere_echeance: dernierResultat?.calendrier?.annee_mise_en_location ?? 2028,
+        revisabilite: 'TAUX FIXE', differe_ans: 0,
       },
     };
     etat[aAjouter].push(structuredClone(modeles[aAjouter]));
-    rendreListes();
     recalculer();
     return;
   }
@@ -3293,7 +3821,6 @@ document.addEventListener('click', (ev) => {
   const aSupprimer = el.dataset?.supprimer;
   if (aSupprimer) {
     etat[aSupprimer].splice(Number(el.dataset.index), 1);
-    rendreListes();
     recalculer();
     return;
   }
@@ -3309,8 +3836,8 @@ document.addEventListener('click', (ev) => {
 
 // ---------------------------------------------------------------- demarrage
 
+rendreSelectProduit();
 rendreChampsStatiques();
-rendreListes();
 recalculer();
 
 })();

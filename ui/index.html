@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Moteur de simulation — saisie et plan de financement</title>
+    <title>Moteur de simulation — montage d'opération</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!-- Manrope (charte SFO). Degrade proprement sur les polices systeme hors ligne. -->
@@ -15,36 +15,65 @@
   </head>
   <body>
     <header class="entete">
-      <div class="entete__titre">
-        <h1>Simulation d'opération</h1>
+      <div class="entete__marque">
+        <h1>Montage d'opération</h1>
         <p class="entete__sous-titre">
-          Saisie et plan de financement — moteur <span id="version-moteur">…</span>
+          Logement social — saisie et plan de financement
+          <span class="entete__sep">·</span>
+          moteur <span id="version-moteur">…</span>
         </p>
       </div>
+
+      <nav class="onglets" role="tablist">
+        <button type="button" class="onglet" role="tab" data-ecran="operation" aria-selected="true">
+          Opération
+        </button>
+        <button type="button" class="onglet" role="tab" data-ecran="financement" aria-selected="false">
+          Plan de financement
+        </button>
+        <button type="button" class="onglet" role="tab" data-ecran="parametres" aria-selected="false">
+          Paramètres du modèle
+        </button>
+      </nav>
+
       <div class="entete__actions">
         <span id="etat-calcul" class="pastille pastille--ok">à jour</span>
-        <button type="button" id="btn-json" class="bouton bouton--discret">Voir le JSON</button>
+        <button type="button" id="btn-json" class="bouton bouton--discret">JSON</button>
       </div>
     </header>
 
-    <main class="grille">
-      <!-- ============ COLONNE DE SAISIE ============ -->
-      <section class="colonne colonne--saisie" aria-label="Saisie de l'opération">
-        <fieldset class="bloc">
-          <legend class="bloc__titre">Identité</legend>
+    <div id="erreur" class="erreur" hidden></div>
+
+    <!-- ================= ÉCRAN 1 — OPÉRATION ================= -->
+    <main class="ecran" id="ecran-operation" role="tabpanel">
+      <div class="colonnes">
+        <section class="bloc">
+          <h2 class="bloc__titre">Identification</h2>
           <div class="champs">
             <label class="champ champ--large">
               <span>Nom de l'opération</span>
               <input type="text" data-champ="identite.nom" />
             </label>
             <label class="champ">
-              <span>Produit</span>
+              <span>Version simulation</span>
+              <input type="text" data-champ="identite.version" placeholder="V1 - Faisabilité" />
+            </label>
+            <label class="champ">
+              <span>Commune</span>
+              <input type="text" data-champ="identite.commune" />
+            </label>
+            <label class="champ">
+              <span>Département</span>
+              <input type="text" data-champ="identite.departement" placeholder="Dordogne (24)" />
+            </label>
+            <label class="champ">
+              <span>Produit principal</span>
               <select data-champ="identite.produit" id="select-produit"></select>
             </label>
             <label class="champ">
-              <span>Type</span>
+              <span>Type d'opération</span>
               <select data-champ="identite.type_operation">
-                <option>Vefa</option>
+                <option>VEFA</option>
                 <option>Neuf</option>
                 <option>Acq-Amélio</option>
                 <option>Réhab</option>
@@ -68,84 +97,170 @@
                 <option>C</option>
               </select>
             </label>
+          </div>
+          <p class="aide">
+            Le produit principal détermine le taux de livraison à soi-même et le jeu de prêts CDC
+            par défaut. Le zonage applicable dépend du produit : 1/2/3 pour PLUS et PLAI, A/B/C
+            pour PLS.
+          </p>
+        </section>
+
+        <section class="bloc">
+          <h2 class="bloc__titre">Calendrier</h2>
+          <div class="champs" id="champs-calendrier">
+            <label class="champ">
+              <span>Début des travaux</span>
+              <input type="date" data-champ="dates.date_debut_travaux" />
+            </label>
+            <label class="champ">
+              <span>Durée du chantier (mois)</span>
+              <input type="number" step="1" min="0" data-champ="dates.duree_chantier_mois" data-type="nombre" />
+            </label>
+            <label class="champ">
+              <span>Livraison</span>
+              <input type="date" data-champ="dates.date_livraison" data-calcule="date_livraison" />
+            </label>
             <label class="champ">
               <span>Mise en location</span>
-              <input type="number" data-champ="dates.annee_mise_en_location" data-type="nombre" step="1" />
+              <input type="text" id="date-mel" class="champ--calcule" readonly tabindex="-1" />
             </label>
             <label class="champ">
-              <span>Durée simulation</span>
-              <input type="number" data-champ="dates.duree_simulation_ans" data-type="nombre" step="1" min="1" />
+              <span>Durée de simulation (ans)</span>
+              <input type="number" step="1" min="1" data-champ="dates.duree_simulation_ans" data-type="nombre" />
             </label>
           </div>
-        </fieldset>
-
-        <fieldset class="bloc">
-          <legend class="bloc__titre">Programme</legend>
-          <div class="champs">
-            <label class="champ">
-              <span>Logements</span>
-              <input type="number" data-champ="lots.0.nb_logements" data-type="nombre" step="1" min="0" />
-            </label>
-            <label class="champ">
-              <span>SHAB (m²)</span>
-              <input type="number" data-champ="lots.0.shab_m2" data-type="nombre" step="0.01" min="0" />
-            </label>
-            <label class="champ">
-              <span>Annexes (m²)</span>
-              <input type="number" data-champ="lots.0.surfaces_annexes_m2" data-type="nombre" step="0.01" min="0" />
-            </label>
-            <label class="champ">
-              <span>Marge locale (€/m²)</span>
-              <input type="number" data-champ="lots.0.marge_locale_eur_m2" data-type="nombre" step="0.01" />
-            </label>
-          </div>
-          <p class="aide" id="aide-surfaces"></p>
-        </fieldset>
-
-        <fieldset class="bloc">
-          <legend class="bloc__titre">
-            Prix de revient
-            <button type="button" class="bouton bouton--ajout" data-ajouter="postes_bilan">+ poste</button>
-          </legend>
-          <div class="liste" id="liste-postes"></div>
-        </fieldset>
-
-        <fieldset class="bloc">
-          <legend class="bloc__titre">
-            Subventions
-            <button type="button" class="bouton bouton--ajout" data-ajouter="subventions">+ subvention</button>
-          </legend>
-          <div class="liste" id="liste-subventions"></div>
-          <div class="champs">
-            <label class="champ">
-              <span>Fonds propres (€)</span>
-              <input type="number" data-champ="fonds_propres_eur" data-type="nombre" step="1" min="0" />
-            </label>
-          </div>
-        </fieldset>
-
-        <fieldset class="bloc">
-          <legend class="bloc__titre">
-            Prêts
-            <button type="button" class="bouton bouton--ajout" data-ajouter="prets">+ prêt</button>
-          </legend>
-          <div class="liste" id="liste-prets"></div>
           <p class="aide">
-            Chaque prêt porte sa propre année de première échéance (règle R-AMT-3).
+            ⚙ Livraison et mise en location sont déduites du début des travaux et de la durée de
+            chantier. Renseigner une date de livraison la fige (cas d'une VEFA contractuelle).
           </p>
-        </fieldset>
+        </section>
+      </div>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">
+          Programme
+          <button type="button" class="bouton bouton--ajout" data-ajouter="lots">+ tranche</button>
+        </h2>
+        <div class="table-defilante">
+          <table class="tableau tableau--saisie" id="table-programme">
+            <thead>
+              <tr>
+                <th>Financement</th>
+                <th class="num">Logements</th>
+                <th class="num">SHAB (m²)</th>
+                <th class="num">Annexes (m²)</th>
+                <th class="num calc">SU (m²)</th>
+                <th class="num calc">CS</th>
+                <th class="num calc">Plafond (€/m²/mois)</th>
+                <th class="num">Marge locale (€/m²/mois)</th>
+                <th class="num">Loyer forcé (€/m²/mois)</th>
+                <th class="num calc">Loyer sortie (€/m²/mois)</th>
+                <th class="num calc">Loyer annuel (€)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+        <p class="aide">
+          ⚙ Une ligne par tranche de financement, pas par logement : le coefficient de structure
+          porte sur la tranche entière (règle R-SURF-2). Les colonnes grisées sont calculées.
+          Laisser « Loyer forcé » vide applique le plafond réglementaire.
+        </p>
       </section>
 
-      <!-- ============ COLONNE RÉSULTATS ============ -->
-      <section class="colonne colonne--resultats" aria-label="Plan de financement">
-        <div id="erreur" class="erreur" hidden></div>
+      <section class="bloc">
+        <h2 class="bloc__titre">
+          Prix de revient
+          <button type="button" class="bouton bouton--ajout" data-ajouter="postes_bilan">+ poste</button>
+        </h2>
+        <div class="table-defilante">
+          <table class="tableau tableau--saisie" id="table-postes">
+            <thead>
+              <tr>
+                <th>Chapitre</th>
+                <th>Libellé</th>
+                <th class="num">Montant HT (€)</th>
+                <th class="num">TVA</th>
+                <th class="num calc">TVA (€)</th>
+                <th class="num calc">TTC saisie (€)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+        <div class="champs champs--serres">
+          <label class="champ">
+            <span>Modulation TTC (€)</span>
+            <input type="number" step="1" data-champ="modulation_ttc_eur" data-type="nombre" />
+          </label>
+        </div>
+        <p class="aide" id="aide-lasm"></p>
+      </section>
 
-        <div class="carte carte--equilibre" id="carte-equilibre">
-          <div class="equilibre__entete">
-            <h2>Plan de financement</h2>
-            <span id="badge-equilibre" class="badge">—</span>
+      <div class="colonnes">
+        <section class="bloc">
+          <h2 class="bloc__titre">
+            Subventions et fonds propres
+            <button type="button" class="bouton bouton--ajout" data-ajouter="subventions">+ subvention</button>
+          </h2>
+          <div class="table-defilante">
+            <table class="tableau tableau--saisie" id="table-subventions">
+              <thead>
+                <tr>
+                  <th>Libellé</th>
+                  <th class="num">Montant (€)</th>
+                  <th class="num">Gratuite</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+              <tfoot></tfoot>
+            </table>
           </div>
+          <div class="champs champs--serres">
+            <label class="champ">
+              <span>Fonds propres (€)</span>
+              <input type="number" step="1" min="0" data-champ="fonds_propres_eur" data-type="nombre" />
+            </label>
+          </div>
+          <p class="aide">
+            Une subvention gratuite ne se rembourse pas : elle réduit la charge foncière finançable
+            par prêt CDC (règle R-FIN-2).
+          </p>
+        </section>
 
+        <section class="bloc">
+          <h2 class="bloc__titre">
+            Prêts
+            <span class="bascule">
+              <button type="button" class="bascule__option" data-mode-prets="theoriques">CDC théoriques</button>
+              <button type="button" class="bascule__option" data-mode-prets="saisis">Saisis</button>
+            </span>
+          </h2>
+          <div id="prets-saisis">
+            <div class="liste" id="liste-prets"></div>
+            <button type="button" class="bouton bouton--ajout" data-ajouter="prets">+ prêt</button>
+          </div>
+          <div id="prets-theoriques" class="encadre" hidden></div>
+          <p class="aide">
+            ⚙ Chaque prêt porte sa propre année de première échéance (règle R-AMT-3). Barèmes,
+            spreads CDC et trajectoire du Livret A : voir Paramètres du modèle.
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <!-- ================= ÉCRAN 2 — PLAN DE FINANCEMENT ================= -->
+    <main class="ecran" id="ecran-financement" role="tabpanel" hidden>
+      <div id="bandeau-controle" class="bandeau"></div>
+
+      <div class="colonnes colonnes--balance">
+        <section class="bloc">
+          <h2 class="bloc__titre">Équilibre</h2>
           <div class="balance">
             <div class="balance__colonne">
               <div class="balance__libelle">Emplois</div>
@@ -158,43 +273,91 @@
               <div class="balance__total" id="total-ressources">—</div>
             </div>
           </div>
-
           <div class="legende" id="legende"></div>
-        </div>
+        </section>
 
-        <div class="carte">
-          <h2>Prêts</h2>
-          <table class="tableau" id="tableau-prets">
+        <section class="bloc">
+          <h2 class="bloc__titre">Indicateurs</h2>
+          <div class="indicateurs" id="indicateurs"></div>
+        </section>
+      </div>
+
+      <div class="colonnes">
+        <section class="bloc">
+          <h2 class="bloc__titre">Emplois</h2>
+          <div class="table-defilante">
+            <table class="tableau" id="table-emplois">
+              <thead>
+                <tr>
+                  <th>Chapitre</th>
+                  <th class="num">HT</th>
+                  <th class="num">TTC / LASM</th>
+                  <th class="num">Part</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+              <tfoot></tfoot>
+            </table>
+          </div>
+        </section>
+
+        <section class="bloc">
+          <h2 class="bloc__titre">Ressources</h2>
+          <div class="table-defilante">
+            <table class="tableau" id="table-ressources">
+              <thead>
+                <tr>
+                  <th>Nature</th>
+                  <th class="num">Montant</th>
+                  <th class="num">Part</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+              <tfoot></tfoot>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">Prêts</h2>
+        <div class="table-defilante">
+          <table class="tableau" id="table-prets">
             <thead>
               <tr>
                 <th>Prêt</th>
                 <th class="num">Montant</th>
+                <th class="num">Taux saisi</th>
                 <th class="num">Taux appliqué</th>
                 <th class="num">Durée</th>
+                <th class="num">1<sup>re</sup> échéance</th>
                 <th class="num">1<sup>re</sup> annuité</th>
-                <th class="num">Dernière</th>
+                <th class="num">Dernière annuité</th>
+                <th class="num">Total annuités</th>
               </tr>
             </thead>
             <tbody></tbody>
+            <tfoot></tfoot>
           </table>
-          <p class="aide" id="aide-taux"></p>
         </div>
-
-        <div class="carte">
-          <h2>Indicateurs</h2>
-          <div class="indicateurs" id="indicateurs"></div>
-        </div>
-
-        <div class="carte" id="carte-alertes" hidden>
-          <h2>Contrôles</h2>
-          <ul class="alertes" id="alertes"></ul>
-        </div>
+        <p class="aide" id="aide-taux"></p>
       </section>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">Contrôles</h2>
+        <ul class="controles" id="controles"></ul>
+      </section>
+    </main>
+
+    <!-- ================= ÉCRAN 3 — PARAMÈTRES ================= -->
+    <main class="ecran" id="ecran-parametres" role="tabpanel" hidden>
+      <div class="bandeau bandeau--info" id="bandeau-parametres"></div>
+      <div id="contenu-parametres"></div>
     </main>
 
     <dialog id="dialogue-json" class="dialogue">
       <div class="dialogue__entete">
-        <h2>Résultat brut</h2>
+        <h2>Résultat brut du moteur</h2>
         <button type="button" id="btn-fermer-json" class="bouton bouton--discret">Fermer</button>
       </div>
       <pre id="contenu-json"></pre>

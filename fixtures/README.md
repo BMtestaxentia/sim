@@ -46,6 +46,16 @@ l'échéancier année par année (taux, annuité, intérêts, amortissement, CRD
 ## Tolérances et pièges connus
 
 - Tolérances : ±1 EUR sur bilan et plan de financement ; ±0,1 % sur annuités et exploitation.
+- **Mulhouse LIBRE** : reproduit **bout en bout** par `calculer()` — prix de revient (écart 0,35 €),
+  équilibre exact, part de prêts identique à 4 décimales, et les 30 annuités à
+  **2,4 × 10⁻⁴ €** près, soit 2,9 × 10⁻⁷ %. C'est la fixture qui valide la chaîne complète.
+- **Mulhouse LLI** : bilan, plan de financement et montants reproduits. **Les annuités ne le sont
+  pas** : les deux prêts sont en révisabilité DOUBLE, donc suspendus à une trajectoire de Livret A
+  que le dépôt ne contient pas. Écart mesuré et analysé en question Q-25. Ce n'est pas masqué :
+  le test ne compare que ce qui est comparable, et dit pourquoi.
+- Les postes de ces deux annexes portent une **TVA nulle** et un TTC égal au HT : ils sont marqués
+  `hors_lasm` dans les tests. Sans cela le taux LIBRE de 20 % s'appliquerait et le prix de revient
+  serait faux de 413 k€. Voir Q-24.
 - Bergerac PLS : le moteur reproduit actuellement les deux tables à **1,8 × 10⁻¹¹ EUR près**
   (soit 10⁻¹³ %), c'est-à-dire au bruit flottant. La tolérance de ±0,1 % n'est donc pas
   « juste tenue » : tout écart visible sur cette fixture signale une régression réelle.

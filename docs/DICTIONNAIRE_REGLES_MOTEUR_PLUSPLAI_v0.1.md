@@ -52,7 +52,7 @@ Reconstruit depuis ParaPLUS, SimPLUS!A8:A42, ParaGLOB, validé par l'onglet IN d
 
 - **R-TVA-1** ✅ Saisie HT + taux → TVA → TTC, séparément Coll/Ind (BilPLUS!D:J).
 - **R-TVA-2** ✅ TVA finale (livraison à soi-même) : TTC_final(poste) = HT × (1 + taux_LASM), taux_LASM_PLUSPLAI = 10 % (⚠️ le tableau ParaGEN!A78 affiche 5,5 % mais LEON utilise le taux réduit de la simulation ParaGLOB!J44 = 10 % — documenté dans baremes_2025.json). PR TTC réf = BilPLUS!V86.
-- **R-TVA-3** ✅ Clé de répartition : % SU (défaut), % SDP ou % SHAB.
+- **R-TVA-3** ✅ Clé de répartition : **% SU**, clé unique pour toute l'opération (arbitrage du 05/08/2026, conforme à `PDR!B3` de la maquette LEON REWORK : « Saisie HT globale, ventilation au prorata SU »). Chaque poste est saisi une fois, globalement, puis réparti entre les tranches au prorata de leur surface utile ; **chaque tranche applique ensuite son propre taux de LASM** (R-TVA-2), ce qui est tout l'intérêt de la ventilation : un PLAI et un LIBRE ne portent pas la même TVA finale sur le même poste. Aucun arrondi pendant la ventilation ; aux totaux, la répartition en euros entiers conserve exactement la somme (méthode du plus grand reste, `arrondirEnConservantLaSomme`). Les variantes % SDP et % SHAB restent possibles sans changer la signature. Source `PDR` (46 postes, 5 chapitres).
 - **R-TVA-4** ✅ Modulation du PR : PR_TTC_modulé = PRTTC + modulation (TTC non finançable saisi), ventilé par qpSU.
 - **R-TVA-5** ✅ TVA sur intérêts de préfi (ParaPLUS!F47/J47, 0 ou 5 %).
 

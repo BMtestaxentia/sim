@@ -694,6 +694,27 @@ input.champ--requis-vide { border-color: var(--rouge); background: var(--rouge-c
         </section>
       </div>
 
+      <section class="bloc" id="bloc-ventilation">
+        <h2 class="bloc__titre">Prix de revient par tranche</h2>
+        <div class="table-defilante">
+          <table class="tableau" id="table-ventilation">
+            <thead>
+              <tr>
+                <th>Tranche</th>
+                <th class="num">SU (m²)</th>
+                <th class="num">Part</th>
+                <th class="num">HT</th>
+                <th class="num">Taux LASM</th>
+                <th class="num">TTC / LASM</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+        <p class="aide" id="aide-ventilation"></p>
+      </section>
+
       <section class="bloc">
         <h2 class="bloc__titre">Prêts</h2>
         <div class="table-defilante">
@@ -869,6 +890,38 @@ function arrondiMillierSup(eur) {
  */
 function arrondiSurface(m2) {
   return arrondi(m2, 2);
+}
+
+/**
+ * Repartit des valeurs en euros entiers dont la somme vaut EXACTEMENT l'arrondi
+ * de la somme exacte (methode du plus grand reste).
+ *
+ * Arrondir chaque part independamment fait deriver le total : trois parts de
+ * 3,33 EUR arrondies donnent 9 EUR pour un total de 10 EUR. Sur un prix de
+ * revient ventile par tranche, l'ecart se voit immediatement et decredibilise
+ * la restitution. Le reliquat est attribue aux plus grands restes, puis, a
+ * egalite, dans l'ordre fourni : le resultat est deterministe.
+ *
+ * @param {number[]} valeurs valeurs exactes, non arrondies
+ * @returns {number[]} entiers de meme longueur, sommant a arrondiEuro(somme)
+ */
+function arrondirEnConservantLaSomme(valeurs) {
+  const total = arrondiEuro(valeurs.reduce((s, v) => s + v, 0));
+  const bas = valeurs.map((v) => Math.floor(v));
+  const reliquat = total - bas.reduce((s, v) => s + v, 0);
+
+  const ordre = valeurs
+    .map((v, i) => ({ i, reste: v - Math.floor(v) }))
+    .sort((a, b) => b.reste - a.reste || a.i - b.i);
+
+  const resultat = bas.slice();
+  // Le reliquat peut etre negatif si les valeurs le sont : on distribue dans le
+  // sens qui convient, une unite a la fois.
+  const pas = reliquat >= 0 ? 1 : -1;
+  for (let k = 0; k < Math.abs(reliquat); k++) {
+    resultat[ordre[k % ordre.length].i] += pas;
+  }
+  return resultat;
 }
 
 /**
@@ -2087,6 +2140,145 @@ function prixDeRevient({ code_produit, postes, modulation_ttc_eur = 0 }, referen
 }
 
 /**
+ * R-TVA-2/3 — Prix de revient VENTILE par tranche de financement.
+ *
+ * Methode reprise de la maquette LEON REWORK (`PDR!B3` : « Saisie HT globale,
+ * ventilation au prorata SU ») : chaque poste est saisi une fois, globalement,
+ * puis reparti entre les tranches au prorata de leur surface utile. Chaque
+ * tranche applique ENSUITE son propre taux de livraison a soi-meme, ce qui est
+ * tout l'interet de la ventilation : un PLAI et un LIBRE ne portent pas la meme
+ * TVA finale sur le meme poste.
+ *
+ * La cle est unique pour toute l'operation (arbitrage de Bastien du 05/08/2026 :
+ * « ventile tout en SU »), conformement au titre de l'onglet source. Une cle par
+ * chapitre ou par poste reste possible plus tard sans changer cette signature.
+ *
+ * Aucun arrondi n'intervient pendant la ventilation : les montants restent
+ * exacts jusqu'aux totaux, ou `arrondirEnConservantLaSomme` garantit que la
+ * somme des tranches vaut exactement le total de l'operation.
+ *
+ * @param {Object} p
+ * @param {Poste[]} p.postes
+ * @param {Record<string, number>} p.su_par_produit  surface utile de chaque tranche
+ * @param {number} [p.modulation_ttc_eur]  TTC non finançable, ventile lui aussi
+ * @param {any} referentiels
+ */
+function prixDeRevientVentile(
+  { postes, su_par_produit, modulation_ttc_eur = 0 },
+  referentiels,
+) {
+  const codes = Object.keys(su_par_produit);
+  const suTotale = Object.values(su_par_produit).reduce((s, v) => s + v, 0);
+
+  // Sans surface, aucune ventilation n'a de sens : on retombe sur le calcul
+  // mono-produit plutot que de diviser par zero.
+  /** @type {Record<string, number>} */
+  const parts = {};
+  for (const code of codes) parts[code] = suTotale > 0 ? su_par_produit[code] / suTotale : 0;
+
+  /** @type {Record<string, number>} */
+  const tauxLasmParTranche = {};
+  for (const code of codes) tauxLasmParTranche[code] = tauxLASM(code, referentiels);
+
+  /** Accumulateurs exacts par tranche, arrondis seulement a la fin. */
+  const cumul = Object.fromEntries(
+    codes.map((c) => [c, { ht: 0, tva: 0, ttc: 0, ttcLasm: 0, modulation: 0 }]),
+  );
+
+  /** Cumuls exacts par chapitre, pour que la somme des chapitres vaille le total. */
+  const chapitresExacts = {};
+
+  const detail = postes.map((poste) => {
+    const v = ventilerPoste(poste);
+    const ch = (chapitresExacts[poste.chapitre] ??= { ht: 0, tva: 0, ttc: 0, ttcLasm: 0 });
+    const parTranche = {};
+    for (const code of codes) {
+      const ht = poste.montant_ht_eur * parts[code];
+      const tva = ht * poste.taux_tva;
+      // R-TVA-2 : un poste hors champ LASM conserve la TVA de saisie.
+      const ttcLasm = poste.hors_lasm ? ht + tva : ht * (1 + tauxLasmParTranche[code]);
+      parTranche[code] = {
+        part: parts[code],
+        ht_eur: ht,
+        tva_eur: tva,
+        ttc_eur: ht + tva,
+        ttc_lasm_eur: ttcLasm,
+      };
+      cumul[code].ht += ht;
+      cumul[code].tva += tva;
+      cumul[code].ttc += ht + tva;
+      cumul[code].ttcLasm += ttcLasm;
+      ch.ht += ht;
+      ch.tva += tva;
+      ch.ttc += ht + tva;
+      ch.ttcLasm += ttcLasm;
+    }
+    return {
+      chapitre: poste.chapitre,
+      libelle: poste.libelle,
+      taux_tva: poste.taux_tva,
+      ht_eur: arrondiEuro(v.ht_eur),
+      par_tranche: parTranche,
+    };
+  });
+
+  for (const code of codes) cumul[code].modulation = modulation_ttc_eur * parts[code];
+
+  // Arrondis finaux : chaque grandeur est repartie en entiers dont la somme vaut
+  // exactement le total de l'operation.
+  const cle = (nom) => codes.map((c) => cumul[c][nom]);
+  const htArrondi = arrondirEnConservantLaSomme(cle('ht'));
+  const tvaArrondi = arrondirEnConservantLaSomme(cle('tva'));
+  const ttcArrondi = arrondirEnConservantLaSomme(cle('ttc'));
+  const lasmArrondi = arrondirEnConservantLaSomme(cle('ttcLasm'));
+  const moduleArrondi = arrondirEnConservantLaSomme(
+    codes.map((c) => cumul[c].ttcLasm + cumul[c].modulation),
+  );
+
+  /** @type {Record<string, any>} */
+  const parTranche = {};
+  codes.forEach((code, i) => {
+    parTranche[code] = {
+      part_su: parts[code],
+      su_m2: su_par_produit[code],
+      taux_lasm: tauxLasmParTranche[code],
+      total_ht_eur: htArrondi[i],
+      total_tva_eur: tvaArrondi[i],
+      total_ttc_eur: ttcArrondi[i],
+      total_ttc_lasm_eur: lasmArrondi[i],
+      total_ttc_module_eur: moduleArrondi[i],
+    };
+  });
+
+  // Chapitres arrondis en conservant leur somme, pour la meme raison.
+  const nomsChapitres = Object.keys(chapitresExacts);
+  const chapHt = arrondirEnConservantLaSomme(nomsChapitres.map((n) => chapitresExacts[n].ht));
+  const chapTva = arrondirEnConservantLaSomme(nomsChapitres.map((n) => chapitresExacts[n].tva));
+  const chapTtc = arrondirEnConservantLaSomme(nomsChapitres.map((n) => chapitresExacts[n].ttc));
+  const chapLasm = arrondirEnConservantLaSomme(nomsChapitres.map((n) => chapitresExacts[n].ttcLasm));
+  /** @type {Record<string, any>} */
+  const chapitres = {};
+  nomsChapitres.forEach((nom, i) => {
+    chapitres[nom] = {
+      ht_eur: chapHt[i], tva_eur: chapTva[i], ttc_eur: chapTtc[i], ttc_lasm_eur: chapLasm[i],
+    };
+  });
+
+  return {
+    cle_ventilation: 'surface_utile',
+    parts,
+    par_tranche: parTranche,
+    chapitres,
+    postes: detail,
+    total_ht_eur: htArrondi.reduce((s, v) => s + v, 0),
+    total_tva_eur: tvaArrondi.reduce((s, v) => s + v, 0),
+    total_ttc_eur: ttcArrondi.reduce((s, v) => s + v, 0),
+    total_ttc_lasm_eur: lasmArrondi.reduce((s, v) => s + v, 0),
+    total_ttc_module_eur: moduleArrondi.reduce((s, v) => s + v, 0),
+  };
+}
+
+/**
  * R-TVA-3 — Cle de repartition d'un montant global entre produits.
  * Defaut : quote-part de surface utile. Les variantes SDP et SHAB se demandent
  * explicitement, elles ne sont pas un branchement cache.
@@ -2981,15 +3173,39 @@ function calculer(entrees, referentiels) {
   }
 
   // --- 3. Prix de revient (R-TVA) ---
+  // Le bilan reste calcule globalement (chapitres, detail par poste) ET ventile
+  // par tranche au prorata de surface utile, chaque tranche portant son propre
+  // taux de livraison a soi-meme.
   const produitPrincipal = identite.produit ?? lots[0]?.code_produit;
+  const postesBilan = entrees.postes_bilan ?? [];
+  const modulation = entrees.modulation_ttc_eur ?? 0;
+
   const bilan = prixDeRevient(
-    {
-      code_produit: produitPrincipal,
-      postes: entrees.postes_bilan ?? [],
-      modulation_ttc_eur: entrees.modulation_ttc_eur ?? 0,
-    },
+    { code_produit: produitPrincipal, postes: postesBilan, modulation_ttc_eur: modulation },
     baremes,
   );
+
+  if (codesPresents.length) {
+    const ventilation = prixDeRevientVentile(
+      { postes: postesBilan, su_par_produit: suParProduit, modulation_ttc_eur: modulation },
+      baremes,
+    );
+    // La ventilation fait FOI des qu'elle existe : elle applique a chaque tranche
+    // son propre taux de livraison a soi-meme, la version globale n'en applique
+    // qu'un seul. Les chapitres viennent d'elle aussi, faute de quoi leur somme
+    // ne vaudrait plus le total en operation multi-tranches.
+    bilan.ventilation = ventilation;
+    bilan.chapitres = ventilation.chapitres;
+    bilan.par_tranche = ventilation.par_tranche;
+    bilan.total_ht_eur = ventilation.total_ht_eur;
+    bilan.total_tva_eur = ventilation.total_tva_eur;
+    bilan.total_ttc_eur = ventilation.total_ttc_eur;
+    bilan.total_ttc_lasm_eur = ventilation.total_ttc_lasm_eur;
+    bilan.total_ttc_module_eur = ventilation.total_ttc_module_eur;
+    bilan.taux_lasm_par_tranche = Object.fromEntries(
+      codesPresents.map((c) => [c, ventilation.par_tranche[c].taux_lasm]),
+    );
+  }
 
   // --- 4. Subventions (R-SUB) ---
   const subventions = agregerSubventions(entrees.subventions ?? [], quotesParts);
@@ -3156,15 +3372,6 @@ function calculer(entrees, referentiels) {
     }
   }
 
-  // Le prix de revient applique un taux de LASM unique, celui du produit
-  // principal : sur une operation a plusieurs tranches, c'est une approximation.
-  if (codesPresents.length > 1) {
-    alertes.push(
-      `Operation a ${codesPresents.length} tranches (${codesPresents.join(', ')}) mais un seul ` +
-        `taux de livraison a soi-meme applique, celui du ${produitPrincipal}. ` +
-        'Le prix de revient par tranche n est pas encore ventile.',
-    );
-  }
 
   // --- 7. Fiscalite (R-FISC) ---
   const tfpb = exonerationTFPB(
@@ -3748,6 +3955,30 @@ function rendreFinancement(r) {
       <td class="num">${eur(r.financement.solde_a_financer_eur)}</td>
       <td class="num" style="font-weight:400;color:var(--encre-doux)">hors prêts CDC</td></tr>`;
 
+  // --- Prix de revient ventile par tranche ---
+  const vent = r.bilan.ventilation;
+  const tV = $('#table-ventilation');
+  if (vent) {
+    tV.querySelector('tbody').innerHTML = Object.entries(vent.par_tranche)
+      .map(
+        ([code, t]) => `<tr><td>${att(code)}</td><td class="num">${nb(t.su_m2)}</td>
+          <td class="num">${pct(t.part_su, 1)}</td><td class="num">${eur(t.total_ht_eur)}</td>
+          <td class="num">${pct(t.taux_lasm, 1)}</td><td class="num">${eur(t.total_ttc_lasm_eur)}</td></tr>`,
+      )
+      .join('');
+    tV.querySelector('tfoot').innerHTML = `<tr><td class="libelle">Total</td>
+      <td class="num">${nb(ind.su_m2)}</td><td class="num">100 %</td>
+      <td class="num">${eur(vent.total_ht_eur)}</td><td></td>
+      <td class="num">${eur(vent.total_ttc_lasm_eur)}</td></tr>`;
+    const taux = [...new Set(Object.values(vent.par_tranche).map((t) => t.taux_lasm))];
+    $('#aide-ventilation').textContent =
+      `⚙ Chaque poste est saisi globalement puis réparti au prorata de surface utile, ` +
+      `puis chaque tranche applique son propre taux de livraison à soi-même` +
+      `${taux.length > 1 ? ` (${taux.map((x) => pct(x, 1)).join(' et ')} ici)` : ''}. ` +
+      `C'est ce total qui doit être couvert par le plan de financement.`;
+  }
+  $('#bloc-ventilation').hidden = !vent;
+
   const corps = $('#table-prets').querySelector('tbody');
   const pied = $('#table-prets').querySelector('tfoot');
   if (!r.amortissements.length) {
@@ -3806,7 +4037,6 @@ function rendreFinancement(r) {
 function rendreControles(r) {
   const eq = r.financement.equilibre;
   const alerteHorizon = r.alertes.find((a) => /horizon de simulation/i.test(a));
-  const alerteTranches = r.alertes.find((a) => /tranches/i.test(a));
   const alerteLignes = r.alertes.find((a) => /lignes de programme/i.test(a));
   const loyerHorsPlafond = r.loyers.filter((l) => l.force && l.loyer_pratique_eur_m2 > l.loyer_max_base_eur_m2);
   const sansProgramme = !r.indicateurs.nb_logements || !r.indicateurs.su_m2;
@@ -3839,8 +4069,14 @@ function rendreControles(r) {
       libelle: alerteHorizon ?? 'Toutes les annuités tombent dans l’horizon de simulation',
     },
     {
-      ok: !alerteTranches,
-      libelle: alerteTranches ?? 'Opération mono-produit : taux de livraison à soi-même unique',
+      // Depuis la ventilation, le multi-tranches n'est plus une approximation :
+      // le controle constate la cle appliquee au lieu de signaler un defaut.
+      ok: true,
+      libelle: r.bilan.ventilation
+        ? `Prix de revient ventilé au prorata de surface utile sur ` +
+          `${r.surfaces.tranches.length} tranche${r.surfaces.tranches.length > 1 ? 's' : ''} ` +
+          `(${r.surfaces.tranches.join(', ')})`
+        : 'Aucune tranche à ventiler',
     },
     {
       ok: !alerteLignes,
@@ -3862,7 +4098,7 @@ function rendreControles(r) {
 
   // Toute alerte du moteur non reprise par un controle est affichee telle quelle :
   // aucun message du moteur ne doit se perdre en route.
-  const reprises = [alerteHorizon, alerteTranches, alerteLignes].filter(Boolean);
+  const reprises = [alerteHorizon, alerteLignes].filter(Boolean);
   const restantes = r.alertes.filter((a) => !reprises.includes(a) && !/ratio prets cdc/i.test(a));
   $('#messages-moteur').innerHTML = restantes.length
     ? `<p class="aide" style="margin-top:14px"><strong>Autres messages du moteur</strong></p>

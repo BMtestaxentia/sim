@@ -444,6 +444,30 @@ function rendreFinancement(r) {
       <td class="num">${eur(r.financement.solde_a_financer_eur)}</td>
       <td class="num" style="font-weight:400;color:var(--encre-doux)">hors prêts CDC</td></tr>`;
 
+  // --- Prix de revient ventile par tranche ---
+  const vent = r.bilan.ventilation;
+  const tV = $('#table-ventilation');
+  if (vent) {
+    tV.querySelector('tbody').innerHTML = Object.entries(vent.par_tranche)
+      .map(
+        ([code, t]) => `<tr><td>${att(code)}</td><td class="num">${nb(t.su_m2)}</td>
+          <td class="num">${pct(t.part_su, 1)}</td><td class="num">${eur(t.total_ht_eur)}</td>
+          <td class="num">${pct(t.taux_lasm, 1)}</td><td class="num">${eur(t.total_ttc_lasm_eur)}</td></tr>`,
+      )
+      .join('');
+    tV.querySelector('tfoot').innerHTML = `<tr><td class="libelle">Total</td>
+      <td class="num">${nb(ind.su_m2)}</td><td class="num">100 %</td>
+      <td class="num">${eur(vent.total_ht_eur)}</td><td></td>
+      <td class="num">${eur(vent.total_ttc_lasm_eur)}</td></tr>`;
+    const taux = [...new Set(Object.values(vent.par_tranche).map((t) => t.taux_lasm))];
+    $('#aide-ventilation').textContent =
+      `⚙ Chaque poste est saisi globalement puis réparti au prorata de surface utile, ` +
+      `puis chaque tranche applique son propre taux de livraison à soi-même` +
+      `${taux.length > 1 ? ` (${taux.map((x) => pct(x, 1)).join(' et ')} ici)` : ''}. ` +
+      `C'est ce total qui doit être couvert par le plan de financement.`;
+  }
+  $('#bloc-ventilation').hidden = !vent;
+
   const corps = $('#table-prets').querySelector('tbody');
   const pied = $('#table-prets').querySelector('tfoot');
   if (!r.amortissements.length) {
@@ -502,7 +526,6 @@ function rendreFinancement(r) {
 function rendreControles(r) {
   const eq = r.financement.equilibre;
   const alerteHorizon = r.alertes.find((a) => /horizon de simulation/i.test(a));
-  const alerteTranches = r.alertes.find((a) => /tranches/i.test(a));
   const alerteLignes = r.alertes.find((a) => /lignes de programme/i.test(a));
   const loyerHorsPlafond = r.loyers.filter((l) => l.force && l.loyer_pratique_eur_m2 > l.loyer_max_base_eur_m2);
   const sansProgramme = !r.indicateurs.nb_logements || !r.indicateurs.su_m2;
@@ -535,8 +558,14 @@ function rendreControles(r) {
       libelle: alerteHorizon ?? 'Toutes les annuités tombent dans l’horizon de simulation',
     },
     {
-      ok: !alerteTranches,
-      libelle: alerteTranches ?? 'Opération mono-produit : taux de livraison à soi-même unique',
+      // Depuis la ventilation, le multi-tranches n'est plus une approximation :
+      // le controle constate la cle appliquee au lieu de signaler un defaut.
+      ok: true,
+      libelle: r.bilan.ventilation
+        ? `Prix de revient ventilé au prorata de surface utile sur ` +
+          `${r.surfaces.tranches.length} tranche${r.surfaces.tranches.length > 1 ? 's' : ''} ` +
+          `(${r.surfaces.tranches.join(', ')})`
+        : 'Aucune tranche à ventiler',
     },
     {
       ok: !alerteLignes,
@@ -558,7 +587,7 @@ function rendreControles(r) {
 
   // Toute alerte du moteur non reprise par un controle est affichee telle quelle :
   // aucun message du moteur ne doit se perdre en route.
-  const reprises = [alerteHorizon, alerteTranches, alerteLignes].filter(Boolean);
+  const reprises = [alerteHorizon, alerteLignes].filter(Boolean);
   const restantes = r.alertes.filter((a) => !reprises.includes(a) && !/ratio prets cdc/i.test(a));
   $('#messages-moteur').innerHTML = restantes.length
     ? `<p class="aide" style="margin-top:14px"><strong>Autres messages du moteur</strong></p>

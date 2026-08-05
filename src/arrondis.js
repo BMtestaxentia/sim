@@ -64,6 +64,38 @@ export function arrondiSurface(m2) {
 }
 
 /**
+ * Repartit des valeurs en euros entiers dont la somme vaut EXACTEMENT l'arrondi
+ * de la somme exacte (methode du plus grand reste).
+ *
+ * Arrondir chaque part independamment fait deriver le total : trois parts de
+ * 3,33 EUR arrondies donnent 9 EUR pour un total de 10 EUR. Sur un prix de
+ * revient ventile par tranche, l'ecart se voit immediatement et decredibilise
+ * la restitution. Le reliquat est attribue aux plus grands restes, puis, a
+ * egalite, dans l'ordre fourni : le resultat est deterministe.
+ *
+ * @param {number[]} valeurs valeurs exactes, non arrondies
+ * @returns {number[]} entiers de meme longueur, sommant a arrondiEuro(somme)
+ */
+export function arrondirEnConservantLaSomme(valeurs) {
+  const total = arrondiEuro(valeurs.reduce((s, v) => s + v, 0));
+  const bas = valeurs.map((v) => Math.floor(v));
+  const reliquat = total - bas.reduce((s, v) => s + v, 0);
+
+  const ordre = valeurs
+    .map((v, i) => ({ i, reste: v - Math.floor(v) }))
+    .sort((a, b) => b.reste - a.reste || a.i - b.i);
+
+  const resultat = bas.slice();
+  // Le reliquat peut etre negatif si les valeurs le sont : on distribue dans le
+  // sens qui convient, une unite a la fois.
+  const pas = reliquat >= 0 ? 1 : -1;
+  for (let k = 0; k < Math.abs(reliquat); k++) {
+    resultat[ordre[k % ordre.length].i] += pas;
+  }
+  return resultat;
+}
+
+/**
  * CRD pour le test d'arret du tableau d'amortissement : 4 decimales
  * (R-AMT-4 : « si ROUND(CRD,4) <= 0 -> derniere annuite ajustee », SimPLUS!FF117 sq.).
  * @param {number} eur

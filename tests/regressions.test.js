@@ -123,7 +123,14 @@ describe('V3 — le coefficient de structure porte sur la tranche, pas sur la li
       REFERENTIELS,
     );
     expect(r.surfaces.tranches).toEqual(['PLAI', 'PLUS', 'PLS']);
-    expect(r.alertes.some((a) => /tranches/i.test(a))).toBe(true); // LASM unique signale
+    // Le prix de revient est desormais ventile : chaque tranche porte son propre
+    // taux de livraison a soi-meme, il n'y a plus d'approximation a signaler.
+    expect(r.bilan.ventilation.cle_ventilation).toBe('surface_utile');
+    expect(Object.keys(r.bilan.par_tranche).sort()).toEqual(['PLAI', 'PLS', 'PLUS']);
+    expect(r.alertes.some((a) => /un seul taux de livraison/i.test(a))).toBe(false);
+    // Et la somme des tranches vaut exactement le total.
+    const somme = Object.values(r.bilan.par_tranche).reduce((s, t) => s + t.total_ttc_lasm_eur, 0);
+    expect(somme).toBe(r.bilan.total_ttc_lasm_eur);
   });
 });
 

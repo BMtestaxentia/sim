@@ -7,7 +7,10 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { ventilerPoste, tauxLASM, prixDeRevient, ventilerParQuotePart } from '../src/bilan.js';
+import {
+  ventilerPoste, tauxLASM, prixDeRevient, prixDeRevientVentile, ventilerParQuotePart,
+} from '../src/bilan.js';
+import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
 import { agregerSubventions, surchargeFonciere, subventionEtat } from '../src/subventions.js';
 import {
   soldeAFinancer,
@@ -292,5 +295,99 @@ describe('R-FISC — fiscalite', () => {
     expect(tfpbAnnee({ ...commun, annee: 2052 })).toBe(0);
     expect(tfpbAnnee({ ...commun, annee: 2053 })).toBe(2070); // 6 x 345
     expect(tfpbAnnee({ ...commun, annee: 2054, taux_indexation: 0.05 })).toBe(Math.round(2070 * 1.05));
+  });
+});
+
+describe('R-TVA-2/3 — ventilation du prix de revient par tranche', () => {
+  const POSTES_V = [
+    { chapitre: 'charge_fonciere', libelle: 'VEFA', montant_ht_eur: 1000000, taux_tva: 0.055 },
+    { chapitre: 'honoraires', libelle: 'Honoraires', montant_ht_eur: 100000, taux_tva: 0.2 },
+  ];
+
+  it('repartit au prorata de surface utile', () => {
+    const v = prixDeRevientVentile(
+      { postes: POSTES_V, su_par_produit: { PLAI: 600, LIBRE: 400 } },
+      baremes,
+    );
+    expect(v.cle_ventilation).toBe('surface_utile');
+    expect(v.parts.PLAI).toBeCloseTo(0.6, 12);
+    expect(v.parts.LIBRE).toBeCloseTo(0.4, 12);
+    expect(v.par_tranche.PLAI.total_ht_eur).toBe(660000);
+    expect(v.par_tranche.LIBRE.total_ht_eur).toBe(440000);
+  });
+
+  it('applique a chaque tranche SON taux de livraison a soi-meme', () => {
+    const v = prixDeRevientVentile(
+      { postes: POSTES_V, su_par_produit: { PLAI: 600, LIBRE: 400 } },
+      baremes,
+    );
+    expect(v.par_tranche.PLAI.taux_lasm).toBe(0.1);
+    expect(v.par_tranche.LIBRE.taux_lasm).toBe(0.2);
+    expect(v.par_tranche.PLAI.total_ttc_lasm_eur).toBe(726000); // 660 000 x 1,10
+    expect(v.par_tranche.LIBRE.total_ttc_lasm_eur).toBe(528000); // 440 000 x 1,20
+    // Un taux unique aurait donne 1 210 000 : l'ecart est materiel.
+    expect(v.total_ttc_lasm_eur).toBe(1254000);
+  });
+
+  it('la somme des tranches vaut EXACTEMENT le total, malgre les arrondis', () => {
+    // Trois tranches aux parts non representables donnent des centimes partout.
+    const v = prixDeRevientVentile(
+      {
+        postes: [{ chapitre: 'batiment', libelle: 'T', montant_ht_eur: 10, taux_tva: 0.1 }],
+        su_par_produit: { PLAI: 1, PLUS: 1, PLS: 1 },
+      },
+      baremes,
+    );
+    const somme = (cle) => Object.values(v.par_tranche).reduce((s, t) => s + t[cle], 0);
+    expect(somme('total_ht_eur')).toBe(v.total_ht_eur);
+    expect(somme('total_ttc_lasm_eur')).toBe(v.total_ttc_lasm_eur);
+    expect(somme('total_ttc_module_eur')).toBe(v.total_ttc_module_eur);
+  });
+
+  it('la somme des chapitres vaut le total', () => {
+    const v = prixDeRevientVentile(
+      { postes: POSTES_V, su_par_produit: { PLAI: 600, LIBRE: 400 } },
+      baremes,
+    );
+    const somme = Object.values(v.chapitres).reduce((s, c) => s + c.ttc_lasm_eur, 0);
+    expect(somme).toBe(v.total_ttc_lasm_eur);
+  });
+
+  it('ventile aussi la modulation', () => {
+    const v = prixDeRevientVentile(
+      { postes: POSTES_V, su_par_produit: { PLAI: 600, LIBRE: 400 }, modulation_ttc_eur: 10000 },
+      baremes,
+    );
+    expect(v.par_tranche.PLAI.total_ttc_module_eur).toBe(726000 + 6000);
+    expect(v.par_tranche.LIBRE.total_ttc_module_eur).toBe(528000 + 4000);
+  });
+
+  it('sur une seule tranche, redonne le calcul mono-produit', () => {
+    const v = prixDeRevientVentile({ postes: POSTES_V, su_par_produit: { PLAI: 1000 } }, baremes);
+    const m = prixDeRevient({ code_produit: 'PLAI', postes: POSTES_V }, baremes);
+    expect(v.parts.PLAI).toBe(1);
+    expect(v.total_ht_eur).toBe(m.total_ht_eur);
+    expect(v.total_ttc_lasm_eur).toBe(m.total_ttc_lasm_eur);
+  });
+
+  it('sans surface, ne divise pas par zero', () => {
+    const v = prixDeRevientVentile({ postes: POSTES_V, su_par_produit: { PLAI: 0 } }, baremes);
+    expect(v.parts.PLAI).toBe(0);
+    expect(v.total_ht_eur).toBe(0);
+  });
+});
+
+describe('arrondi conservant la somme (R-CONV)', () => {
+  it('la somme des arrondis vaut l arrondi de la somme', () => {
+    expect(arrondirEnConservantLaSomme([3.334, 3.333, 3.333])).toEqual([4, 3, 3]);
+    expect(arrondirEnConservantLaSomme([1 / 3, 1 / 3, 1 / 3])).toEqual([1, 0, 0]);
+  });
+
+  it('est deterministe a egalite de reste', () => {
+    expect(arrondirEnConservantLaSomme([0.5, 0.5, 0.5, 0.5])).toEqual([1, 1, 0, 0]);
+  });
+
+  it('gere les valeurs deja entieres', () => {
+    expect(arrondirEnConservantLaSomme([10, 20, 30])).toEqual([10, 20, 30]);
   });
 });

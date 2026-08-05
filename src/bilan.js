@@ -15,7 +15,7 @@
  *
  * Unites : montants en euros.
  */
-import { arrondiEuro } from './arrondis.js';
+import { arrondiEuro, arrondirEnConservantLaSomme } from './arrondis.js';
 import { produit } from './produits.js';
 
 /** @typedef {'charge_fonciere'|'batiment'|'honoraires'|'frais_divers'} Chapitre */
@@ -135,6 +135,145 @@ export function prixDeRevient({ code_produit, postes, modulation_ttc_eur = 0 }, 
     /** R-TVA-4 : prix de revient module, reference de l'equilibre R-FIN-1. */
     total_ttc_module_eur: arrondiEuro(ttcLasm + modulation_ttc_eur),
     modulation_ttc_eur,
+  };
+}
+
+/**
+ * R-TVA-2/3 — Prix de revient VENTILE par tranche de financement.
+ *
+ * Methode reprise de la maquette LEON REWORK (`PDR!B3` : « Saisie HT globale,
+ * ventilation au prorata SU ») : chaque poste est saisi une fois, globalement,
+ * puis reparti entre les tranches au prorata de leur surface utile. Chaque
+ * tranche applique ENSUITE son propre taux de livraison a soi-meme, ce qui est
+ * tout l'interet de la ventilation : un PLAI et un LIBRE ne portent pas la meme
+ * TVA finale sur le meme poste.
+ *
+ * La cle est unique pour toute l'operation (arbitrage de Bastien du 05/08/2026 :
+ * « ventile tout en SU »), conformement au titre de l'onglet source. Une cle par
+ * chapitre ou par poste reste possible plus tard sans changer cette signature.
+ *
+ * Aucun arrondi n'intervient pendant la ventilation : les montants restent
+ * exacts jusqu'aux totaux, ou `arrondirEnConservantLaSomme` garantit que la
+ * somme des tranches vaut exactement le total de l'operation.
+ *
+ * @param {Object} p
+ * @param {Poste[]} p.postes
+ * @param {Record<string, number>} p.su_par_produit  surface utile de chaque tranche
+ * @param {number} [p.modulation_ttc_eur]  TTC non finançable, ventile lui aussi
+ * @param {any} referentiels
+ */
+export function prixDeRevientVentile(
+  { postes, su_par_produit, modulation_ttc_eur = 0 },
+  referentiels,
+) {
+  const codes = Object.keys(su_par_produit);
+  const suTotale = Object.values(su_par_produit).reduce((s, v) => s + v, 0);
+
+  // Sans surface, aucune ventilation n'a de sens : on retombe sur le calcul
+  // mono-produit plutot que de diviser par zero.
+  /** @type {Record<string, number>} */
+  const parts = {};
+  for (const code of codes) parts[code] = suTotale > 0 ? su_par_produit[code] / suTotale : 0;
+
+  /** @type {Record<string, number>} */
+  const tauxLasmParTranche = {};
+  for (const code of codes) tauxLasmParTranche[code] = tauxLASM(code, referentiels);
+
+  /** Accumulateurs exacts par tranche, arrondis seulement a la fin. */
+  const cumul = Object.fromEntries(
+    codes.map((c) => [c, { ht: 0, tva: 0, ttc: 0, ttcLasm: 0, modulation: 0 }]),
+  );
+
+  /** Cumuls exacts par chapitre, pour que la somme des chapitres vaille le total. */
+  const chapitresExacts = {};
+
+  const detail = postes.map((poste) => {
+    const v = ventilerPoste(poste);
+    const ch = (chapitresExacts[poste.chapitre] ??= { ht: 0, tva: 0, ttc: 0, ttcLasm: 0 });
+    const parTranche = {};
+    for (const code of codes) {
+      const ht = poste.montant_ht_eur * parts[code];
+      const tva = ht * poste.taux_tva;
+      // R-TVA-2 : un poste hors champ LASM conserve la TVA de saisie.
+      const ttcLasm = poste.hors_lasm ? ht + tva : ht * (1 + tauxLasmParTranche[code]);
+      parTranche[code] = {
+        part: parts[code],
+        ht_eur: ht,
+        tva_eur: tva,
+        ttc_eur: ht + tva,
+        ttc_lasm_eur: ttcLasm,
+      };
+      cumul[code].ht += ht;
+      cumul[code].tva += tva;
+      cumul[code].ttc += ht + tva;
+      cumul[code].ttcLasm += ttcLasm;
+      ch.ht += ht;
+      ch.tva += tva;
+      ch.ttc += ht + tva;
+      ch.ttcLasm += ttcLasm;
+    }
+    return {
+      chapitre: poste.chapitre,
+      libelle: poste.libelle,
+      taux_tva: poste.taux_tva,
+      ht_eur: arrondiEuro(v.ht_eur),
+      par_tranche: parTranche,
+    };
+  });
+
+  for (const code of codes) cumul[code].modulation = modulation_ttc_eur * parts[code];
+
+  // Arrondis finaux : chaque grandeur est repartie en entiers dont la somme vaut
+  // exactement le total de l'operation.
+  const cle = (nom) => codes.map((c) => cumul[c][nom]);
+  const htArrondi = arrondirEnConservantLaSomme(cle('ht'));
+  const tvaArrondi = arrondirEnConservantLaSomme(cle('tva'));
+  const ttcArrondi = arrondirEnConservantLaSomme(cle('ttc'));
+  const lasmArrondi = arrondirEnConservantLaSomme(cle('ttcLasm'));
+  const moduleArrondi = arrondirEnConservantLaSomme(
+    codes.map((c) => cumul[c].ttcLasm + cumul[c].modulation),
+  );
+
+  /** @type {Record<string, any>} */
+  const parTranche = {};
+  codes.forEach((code, i) => {
+    parTranche[code] = {
+      part_su: parts[code],
+      su_m2: su_par_produit[code],
+      taux_lasm: tauxLasmParTranche[code],
+      total_ht_eur: htArrondi[i],
+      total_tva_eur: tvaArrondi[i],
+      total_ttc_eur: ttcArrondi[i],
+      total_ttc_lasm_eur: lasmArrondi[i],
+      total_ttc_module_eur: moduleArrondi[i],
+    };
+  });
+
+  // Chapitres arrondis en conservant leur somme, pour la meme raison.
+  const nomsChapitres = Object.keys(chapitresExacts);
+  const chapHt = arrondirEnConservantLaSomme(nomsChapitres.map((n) => chapitresExacts[n].ht));
+  const chapTva = arrondirEnConservantLaSomme(nomsChapitres.map((n) => chapitresExacts[n].tva));
+  const chapTtc = arrondirEnConservantLaSomme(nomsChapitres.map((n) => chapitresExacts[n].ttc));
+  const chapLasm = arrondirEnConservantLaSomme(nomsChapitres.map((n) => chapitresExacts[n].ttcLasm));
+  /** @type {Record<string, any>} */
+  const chapitres = {};
+  nomsChapitres.forEach((nom, i) => {
+    chapitres[nom] = {
+      ht_eur: chapHt[i], tva_eur: chapTva[i], ttc_eur: chapTtc[i], ttc_lasm_eur: chapLasm[i],
+    };
+  });
+
+  return {
+    cle_ventilation: 'surface_utile',
+    parts,
+    par_tranche: parTranche,
+    chapitres,
+    postes: detail,
+    total_ht_eur: htArrondi.reduce((s, v) => s + v, 0),
+    total_tva_eur: tvaArrondi.reduce((s, v) => s + v, 0),
+    total_ttc_eur: ttcArrondi.reduce((s, v) => s + v, 0),
+    total_ttc_lasm_eur: lasmArrondi.reduce((s, v) => s + v, 0),
+    total_ttc_module_eur: moduleArrondi.reduce((s, v) => s + v, 0),
   };
 }
 

@@ -18,7 +18,7 @@ import { surfaceUtile, quotesPartsSU, loyerProduit, loyerAnnexesSeparees, contro
 import { normaliserTrajectoires } from './trajectoires.js';
 import { calendrierOperation } from './calendrier.js';
 import { pretsDefautResolus, ORDRE_PRODUITS } from './produits.js';
-import { prixDeRevient } from './bilan.js';
+import { prixDeRevient, prixDeRevientVentile } from './bilan.js';
 import { agregerSubventions, surchargeFonciere } from './subventions.js';
 import {
   soldeAFinancer,
@@ -149,15 +149,39 @@ export function calculer(entrees, referentiels) {
   }
 
   // --- 3. Prix de revient (R-TVA) ---
+  // Le bilan reste calcule globalement (chapitres, detail par poste) ET ventile
+  // par tranche au prorata de surface utile, chaque tranche portant son propre
+  // taux de livraison a soi-meme.
   const produitPrincipal = identite.produit ?? lots[0]?.code_produit;
+  const postesBilan = entrees.postes_bilan ?? [];
+  const modulation = entrees.modulation_ttc_eur ?? 0;
+
   const bilan = prixDeRevient(
-    {
-      code_produit: produitPrincipal,
-      postes: entrees.postes_bilan ?? [],
-      modulation_ttc_eur: entrees.modulation_ttc_eur ?? 0,
-    },
+    { code_produit: produitPrincipal, postes: postesBilan, modulation_ttc_eur: modulation },
     baremes,
   );
+
+  if (codesPresents.length) {
+    const ventilation = prixDeRevientVentile(
+      { postes: postesBilan, su_par_produit: suParProduit, modulation_ttc_eur: modulation },
+      baremes,
+    );
+    // La ventilation fait FOI des qu'elle existe : elle applique a chaque tranche
+    // son propre taux de livraison a soi-meme, la version globale n'en applique
+    // qu'un seul. Les chapitres viennent d'elle aussi, faute de quoi leur somme
+    // ne vaudrait plus le total en operation multi-tranches.
+    bilan.ventilation = ventilation;
+    bilan.chapitres = ventilation.chapitres;
+    bilan.par_tranche = ventilation.par_tranche;
+    bilan.total_ht_eur = ventilation.total_ht_eur;
+    bilan.total_tva_eur = ventilation.total_tva_eur;
+    bilan.total_ttc_eur = ventilation.total_ttc_eur;
+    bilan.total_ttc_lasm_eur = ventilation.total_ttc_lasm_eur;
+    bilan.total_ttc_module_eur = ventilation.total_ttc_module_eur;
+    bilan.taux_lasm_par_tranche = Object.fromEntries(
+      codesPresents.map((c) => [c, ventilation.par_tranche[c].taux_lasm]),
+    );
+  }
 
   // --- 4. Subventions (R-SUB) ---
   const subventions = agregerSubventions(entrees.subventions ?? [], quotesParts);
@@ -324,15 +348,6 @@ export function calculer(entrees, referentiels) {
     }
   }
 
-  // Le prix de revient applique un taux de LASM unique, celui du produit
-  // principal : sur une operation a plusieurs tranches, c'est une approximation.
-  if (codesPresents.length > 1) {
-    alertes.push(
-      `Operation a ${codesPresents.length} tranches (${codesPresents.join(', ')}) mais un seul ` +
-        `taux de livraison a soi-meme applique, celui du ${produitPrincipal}. ` +
-        'Le prix de revient par tranche n est pas encore ventile.',
-    );
-  }
 
   // --- 7. Fiscalite (R-FISC) ---
   const tfpb = exonerationTFPB(

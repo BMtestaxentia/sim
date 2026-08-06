@@ -358,3 +358,95 @@ describe('golden — MULHOUSE 3307 LLI (bilan et plan de financement)', () => {
     expect(resultat.financement.total_prets_eur).toBe(T.total_prets);
   });
 });
+
+/**
+ * ORLEANS 3463 — foyer PLUS/PLAI, la PREMIERE fixture du perimetre V1 declare.
+ *
+ * C'est le test le plus exigeant du moteur d'amortissement : quatre prets CDC en
+ * revisabilite DOUBLE avec progressivite -0,5 %, sur une trajectoire de Livret A
+ * NON constante (1,5 % en 2029 puis 2 %), embarquee dans l'annexe elle-meme
+ * (Presentation CA, colonne K). C'est exactement la donnee dont l'absence
+ * bloquait les annuites LLI (Q-25).
+ *
+ * La colonne ANNUITES de l'annexe agrege les 4 prets CDC et le collecteur : la
+ * comparaison porte donc sur la SOMME des cinq tableaux.
+ *
+ * Hors perimetre ici : le compte d'exploitation en mode foyer (redevance,
+ * Q-27) et le bilan (les postes ne sont pas repris dans cette fixture).
+ */
+describe('golden — ORLEANS 3463 PLUS/PLAI (revisabilite DOUBLE, trajectoire LA reelle)', () => {
+  const entrees = fixture('orleans_3463_fplus_fplai', 'entrees.json');
+  const attendus = fixture('orleans_3463_fplus_fplai', 'attendus.json');
+
+  const la0 = entrees.taux_evolution.livret_a_origine;
+  const laParAnnee = entrees.livret_a_par_annee;
+
+  const tables = entrees.prets.map((p) =>
+    tableauAmortissement({
+      montant_eur: p.montant_eur,
+      taux: p.taux,
+      progressivite: p.progressivite,
+      duree_ans: p.duree_ans,
+      annee_premiere_echeance: entrees.dates.annee_premiere_echeance,
+      revisabilite: p.revisabilite,
+      livret_a_origine: la0,
+      livret_a_par_annee: laParAnnee,
+    }),
+  );
+
+  it('le taux de chaque pret CDC vaut LA d origine plus sa marge (R-AMT-1)', () => {
+    for (const p of entrees.prets.filter((x) => x.marge !== undefined)) {
+      expect(p.taux, p.libelle).toBeCloseTo(la0 + p.marge, 10);
+    }
+  });
+
+  it('reproduit les 60 annees d annuites agregees a +/-0,1 %', () => {
+    let comparees = 0;
+    for (const a of attendus.annuites_par_annee) {
+      if (!a.annuites_keur) continue;
+      const somme =
+        tables.reduce((s, t) => s + (t.find((l) => l.annee === a.annee)?.annuite_eur ?? 0), 0) / 1000;
+      expect(
+        Math.abs(somme - a.annuites_keur) / a.annuites_keur,
+        `annee ${a.annee} : ${somme} vs ${a.annuites_keur} kEUR`,
+      ).toBeLessThanOrEqual(0.001);
+      comparees++;
+    }
+    expect(comparees).toBe(60);
+  });
+
+  it('reproduit la rupture de 2069 : extinction des prets travaux 40 ans', () => {
+    // Derniere echeance travaux en 2068 (2029 + 40 - 1) : la serie de l'annexe
+    // tombe de ~199 a ~54 kEUR en 2069, ou seuls les fonciers 60 ans subsistent.
+    const s2068 = attendus.annuites_par_annee.find((a) => a.annee === 2068);
+    const s2069 = attendus.annuites_par_annee.find((a) => a.annee === 2069);
+    expect(s2068.annuites_keur).toBeGreaterThan(150);
+    expect(s2069.annuites_keur).toBeLessThan(60);
+    for (const t of tables.filter((x) => x.length === 40)) {
+      expect(t.at(-1)?.annee).toBe(2068);
+    }
+  });
+
+  it('reproduit les interets d emprunts de la premiere annee', () => {
+    const attendu = attendus.resultat_par_annee[0].interets_emprunts_eur;
+    const somme = tables.reduce((s, t) => s + (t[0]?.interets_eur ?? 0), 0);
+    expect(Math.abs(somme - attendu) / attendu).toBeLessThanOrEqual(0.001);
+  });
+
+  it('chaque pret solde exactement son capital', () => {
+    tables.forEach((t, i) => {
+      const somme = t.reduce((s, l) => s + l.amortissement_eur, 0);
+      expect(Math.abs(somme - entrees.prets[i].montant_eur), entrees.prets[i].libelle).toBeLessThanOrEqual(0.01);
+      expect(t.at(-1)?.crd_eur).toBeCloseTo(0, 4);
+    });
+  });
+
+  it('le plan de financement de l annexe s equilibre a l arrondi de presentation pres', () => {
+    const T = attendus.totaux_plan_financement;
+    const ressources = T.total_prets + T.total_subventions + T.fonds_propres;
+    expect(Math.abs(ressources - T.total_financements)).toBeLessThanOrEqual(1);
+    // L'annexe affiche un ecart de 0,44 EUR entre PR et financements : arrondi
+    // de presentation LEON, comme sur la fixture LLI.
+    expect(Math.abs(T.total_financements - T.prix_revient_ttc)).toBeLessThanOrEqual(1);
+  });
+});

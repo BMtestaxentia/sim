@@ -1,0 +1,50 @@
+{
+  "profil": "HER PMT 2026-2035",
+  "source": "20260717 - HER - 1 Indices et Taux.xlsx, onglet « Indices et taux », annexe a la note de cadrage « budget 2027 / pmt 2026-2035 » du GIE Habitat en Region (15/06/2026, parametres confirmes le 20/07/2026 apres retour BPCE).",
+  "extrait_le": "2026-08-06",
+  "annee_reference": 2025,
+  "note": "Valeurs saisies en POURCENTAGE dans la source, converties ici en fractions. Les taux 2036 et suivants reconduisent la derniere ligne du tableau (« 2036 a 2075 » dans le tableur, « 2036 a 2074 » dans la note : l'ecart d'un an est sans effet, la valeur etant constante). Les postes du tableur ne portent aucune indexation sur l'inflation (colonne « Indexation sur inflation » a Non).",
+  "avertissement_millesime": "Ce profil est le PMT 2026. Les annexes Mulhouse du depot ont ete calculees avec le profil « AXENTIA HER 2026 (PMT 2025) », millesime PRECEDENT, conserve dans trajectoires_axentia_2026.json. Ne pas confondre : une trajectoire est versionnee par millesime de PMT, et rejouer une annexe ancienne avec le profil courant donnerait des ecarts legitimes mais trompeurs.",
+
+  "taux_reference_livret_a": null,
+  "note_taux_reference": "Le Livret A d'origine d'un pret (LA_0, plage nommee Tx_LA dans LEON) n'est PAS dans ce document : c'est une propriete du pret a sa date de montage, pas une hypothese macro. Il reste a fournir par la simulation. Question ouverte Q-8.",
+
+  "trajectoires": [
+    { "annee": 2025, "inflation": 0.013, "icc": -0.01, "loyers_irl": 0.035, "livret_a": 0.022, "remuneration_tresorerie": 0.022 },
+    { "annee": 2026, "inflation": 0.011, "icc": -0.028, "loyers_irl": 0.01, "livret_a": 0.0158333333333333, "remuneration_tresorerie": 0.016 },
+    { "annee": 2027, "inflation": 0.017, "icc": -0.02, "loyers_irl": 0.012, "livret_a": 0.02125, "remuneration_tresorerie": 0.0221 },
+    { "annee": 2028, "inflation": 0.017, "icc": 0.019, "loyers_irl": 0.017, "livret_a": 0.02, "remuneration_tresorerie": 0.021 },
+    { "annee": 2029, "inflation": 0.018, "icc": 0.02, "loyers_irl": 0.017, "livret_a": 0.0214166666666667, "remuneration_tresorerie": 0.02 },
+    { "annee": 2030, "inflation": 0.018, "icc": 0.02, "loyers_irl": 0.018, "livret_a": 0.021, "remuneration_tresorerie": 0.02 },
+    { "annee": 2031, "inflation": 0.018, "icc": 0.02, "loyers_irl": 0.018, "livret_a": 0.022, "remuneration_tresorerie": 0.02 },
+    { "annee": 2032, "inflation": 0.018, "icc": 0.02, "loyers_irl": 0.018, "livret_a": 0.022, "remuneration_tresorerie": 0.02 },
+    { "annee": 2033, "inflation": 0.018, "icc": 0.02, "loyers_irl": 0.018, "livret_a": 0.022, "remuneration_tresorerie": 0.02 },
+    { "annee": 2034, "inflation": 0.018, "icc": 0.02, "loyers_irl": 0.018, "livret_a": 0.022, "remuneration_tresorerie": 0.02 },
+    { "annee": 2035, "inflation": 0.018, "icc": 0.02, "loyers_irl": 0.018, "livret_a": 0.022, "remuneration_tresorerie": 0.02 },
+    { "annee": 2036, "inflation": 0.018, "icc": 0.02, "loyers_irl": 0.018, "livret_a": 0.022, "remuneration_tresorerie": 0.02 }
+  ],
+
+  "reconduction": "Au-dela de 2036, la derniere valeur connue est reconduite. C'est la convention de la source (« 2036 a 2075 ») et celle des consommateurs du moteur (facteurIndexation et livretAPourAnnee reconduisent le dernier taux).",
+
+  "ecarts_publies": {
+    "note": "La source publie aussi trois ecarts derives, conserves ici pour controle : ils doivent se recalculer exactement depuis les series ci-dessus.",
+    "livret_a_moins_inflation": { "2025": 0.009, "2026": 0.00483333333333333, "2027": 0.00425, "2028": 0.003 },
+    "livret_a_moins_irl": { "2025": -0.013, "2026": 0.00583333333333333, "2027": 0.00925, "2028": 0.003 },
+    "livret_a_moins_remuneration_tresorerie": { "2025": 0, "2026": -0.000166666666666668, "2027": -0.00085, "2028": -0.001 }
+  },
+
+  "regles_de_cadrage": {
+    "source": "Note de cadrage PMT 2026-2035, section « Hypotheses »",
+    "exoneration_tfpb_ans": 25,
+    "exoneration_tfpb_note": "« Maintien de l'exoneration de Taxe Fonciere sur 25 ans pour les operations nouvelles durant la duree complete du PMT ». Confirme la duree par defaut du referentiel de baremes.",
+    "exoneration_tfpb_qpv": "Maintenue en 2026 et annees suivantes, par neutralite entre depense et recette.",
+    "degrevement_tfpb_enr": "Supprime (etiquette F en 2028, E en 2035).",
+    "rls": "A partir de 2027, application d'une RLS a 1,1 Md EUR, integree au taux de modulation de la RLS de la CGLLS.",
+    "suspension_produits_locatifs_par_dpe": {
+      "G": 2025,
+      "F": 2028,
+      "E": 2034,
+      "note": "Suspension des produits issus de la location des logements non rehabilites, a compter de l'annee indiquee."
+    }
+  }
+}

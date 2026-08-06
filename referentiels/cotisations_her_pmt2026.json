@@ -1,0 +1,79 @@
+{
+  "libelle": "Cotisations et prelevements du secteur (CGLLS, ANCOLS, RLS)",
+  "source": "20260717 - HER - PMT Hypotheses Macro.docx, note de cadrage PMT 2026-2035 du GIE Habitat en Region. Extraction verifiee ligne a ligne contre le texte source le 06/08/2026 (31 parametres controles, corrections appliquees).",
+  "extrait_le": "2026-08-06",
+  "annees_couvertes": "2025 a 2034. Le PMT court jusqu'en 2035 mais le tableau source s'arrete en 2034 : AUCUNE valeur 2035 n'est fournie. La prolongation eventuelle est un choix a documenter, pas une donnee.",
+  "note_unites": "Taux stockes en FRACTION (0.02416 = 2,416 %). Les forfaits sont en euros. Les cles d'assiette precisent sur quoi porte chaque taux.",
+
+  "cglls_cotisation_de_base": {
+    "source_regle": "Reproduction des taux 2026 sur les annees suivantes (mail du 28 mai 2026 cite par la note)",
+    "taux_produits_locatifs_hors_sls": {
+      "assiette": "produits locatifs hors supplement de loyer de solidarite",
+      "par_annee": { "2025": 0.02565, "2026": 0.02416, "2027": 0.02416, "2028": 0.02416, "2029": 0.02416, "2030": 0.02416, "2031": 0.02416, "2032": 0.02416, "2033": 0.02416, "2034": 0.02416 }
+    },
+    "taux_assiette_sls": {
+      "assiette": "supplement de loyer de solidarite ; part de l'assiette retenue",
+      "par_annee": { "2025": 0.85, "2026": 0.85, "2027": 0.85, "2028": 0.85, "2029": 0.85, "2030": 0.85, "2031": 0.85, "2032": 0.85, "2033": 0.85, "2034": 0.85 }
+    },
+    "reduction_mise_en_service_eur_par_logement": {
+      "assiette": "chaque mise en service de logement et foyer, en deduction de la cotisation",
+      "par_annee": { "2025": 720, "2026": 720, "2027": 720, "2028": 720, "2029": 720, "2030": 720, "2031": 720, "2032": 720, "2033": 720, "2034": 720 }
+    },
+    "part_locataires_apl": {
+      "assiette": "part des locataires beneficiaires de l'APL, assiette de la reduction ci-dessous",
+      "par_annee": { "2025": 0.457, "2026": 0.4603, "2027": 0.4603, "2028": 0.4603, "2029": 0.4603, "2030": 0.4603, "2031": 0.4603, "2032": 0.4603, "2033": 0.4603, "2034": 0.4603 }
+    },
+    "reduction_par_beneficiaire_apl_eur": {
+      "par_annee": { "2025": 36, "2026": 36, "2027": 36, "2028": 36, "2029": 36, "2030": 36, "2031": 36, "2032": 36, "2033": 36, "2034": 36 }
+    },
+    "part_logements_foyers_qpv": {
+      "assiette": "part des logements et foyers situes en QPV",
+      "par_annee": { "2025": 0.2437, "2026": 0.2437, "2027": 0.2906, "2028": 0.2906, "2029": 0.2906, "2030": 0.2906, "2031": 0.2906, "2032": 0.2906, "2033": 0.2906, "2034": 0.2906 }
+    },
+    "reduction_logement_foyer_qpv_eur": {
+      "par_annee": { "2025": 29, "2026": 29, "2027": 29, "2028": 29, "2029": 29, "2030": 29, "2031": 29, "2032": 29, "2033": 29, "2034": 29 }
+    }
+  },
+
+  "cglls_cotisation_additionnelle": {
+    "part_forfaitaire": {
+      "valeur": 0.035,
+      "avertissement": "Affichee « % » dans la source (3,5), mais un forfait en euros par logement serait plausible pour cette composante. Unite a confirmer avant tout cablage (arbitrage metier)."
+    },
+    "taux_taxation_autofinancement_locatif": {
+      "par_annee": { "2025": 0.02915, "2026": 0.02915, "2027": 0.02915, "2028": 0.02915, "2029": 0.02915, "2030": 0.02915, "2031": 0.02915, "2032": 0.02915, "2033": 0.02915, "2034": 0.02915 }
+    },
+    "taux_refaction": {
+      "par_annee": { "2025": 0.075, "2026": 0.075, "2027": 0.075, "2028": 0.075, "2029": 0.075, "2030": 0.075, "2031": 0.075, "2032": 0.075, "2033": 0.075, "2034": 0.075 }
+    }
+  },
+
+  "ancols": {
+    "taux_cotisation": {
+      "assiette": "a confirmer (produits locatifs)",
+      "par_annee": { "2025": 0.000432, "2026": 0.00045, "2027": 0.00045, "2028": 0.00045, "2029": 0.00045, "2030": 0.00045, "2031": 0.00045, "2032": 0.00045, "2033": 0.00045, "2034": 0.00045 }
+    }
+  },
+
+  "rls": {
+    "note": "Reduction de loyer de solidarite. A partir de 2027 : RLS a 1,1 Md EUR (integre dans le taux de modulation de la RLS de la CGLLS). Le 0,9 Md EUR de 2026 est DEDUIT de la mention « 1,1 Mds/0,9 Mds EUR » du paragraphe d'ajustement, pas donne explicitement.",
+    "taux_moyen_lissage": {
+      "par_annee": { "2025": 0.036504, "2026": 0.034538, "2027": 0.0414, "2028": 0.04, "2029": 0.04, "2030": 0.04, "2031": 0.04, "2032": 0.04, "2033": 0.04, "2034": 0.036 }
+    },
+    "coefficient_variation": {
+      "note": "Coefficient MULTIPLICATIF malgre le « % » affiche par la source (valeurs 0,79 a 1,02). Ne pas diviser par 100.",
+      "par_annee": { "2025": 0.7934, "2026": 0.7737, "2027": 0.9456, "2028": 1.0, "2029": 1.0, "2030": 1.0, "2031": 1.0, "2032": 1.0, "2033": 1.0, "2034": 1.02 }
+    },
+    "taux_quittance": {
+      "valeur": 0.04,
+      "avertissement": "4 % sur 9 annees consecutives pour le patrimoine de reference comme pour les operations nouvelles, mais le tableau source aligne 11 en-tetes d'annees pour 9 valeurs : la plage exacte est INDETERMINEE. La valeur est sure, pas les bornes. Cible enoncee par la note : « un taux de RLS projete sur les operations nouvelles a 4 % »."
+    }
+  },
+
+  "incoherences_source": [
+    "L'ajustement 2027 du taux de RLS est annonce a +23 % alors que 1,1/0,9 donne +22,2 %.",
+    "Les etiquettes E sont datees de 2034 pour la suspension des produits locatifs mais de 2035 pour la suppression du degrevement de TF ENR.",
+    "La phrase « Pas d'augmentation du parc HLM de 2 % par an » est ambigue (croissance nulle, ou croissance non repercutee sur le coefficient) : elle est consignee ici en toutes lettres et AUCUN parametre n'en est derive.",
+    "La regle de moyennage du Livret A (prorata mensuel, janvier au taux precedent) reconstitue exactement les moyennes 2027, 2028 et 2029 du tableur mais echoue sur 2026 et 2030 : une des deux donnees (dates de revision ou moyennes) est fausse dans la source."
+  ]
+}

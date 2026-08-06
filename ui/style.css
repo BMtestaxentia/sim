@@ -702,6 +702,23 @@ input[type='number']::-webkit-inner-spin-button {
   .pret__entete { flex-wrap: wrap; }
   .pret__montant, .pret__nature { flex: 1 1 120px; }
 }
+/* Ressources d'une tranche : meme grammaire que les prets — une ligne compacte
+   et son jeton de lecture — pour qu'un plan de financement se parcoure d'un
+   seul mouvement au lieu d'alterner tables et cartes. */
+.ligne--ressource { border-left: 3px solid var(--cat, var(--cat-6)); padding: 9px 11px; }
+.ligne--fp { background: var(--bg-tertiary); border-left-width: 4px; }
+.ressource__libelle { flex: 0 1 270px; min-width: 110px; font-weight: 650; font-size: 13px; }
+/* Les fonds propres ne se renomment pas : leur libelle est un texte, pas un champ. */
+span.ressource__libelle {
+  font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.03em; color: var(--text-secondary);
+}
+/* Chaine de calcul : les jetons se lisent de gauche a droite, separes d'une
+   fleche pour dire qu'ils s'enchainent et ne se juxtaposent pas. La fleche est
+   un element a part : en pseudo-element du jeton, elle tomberait DANS sa boite. */
+.jetons--chaine { align-items: center; gap: 4px; }
+.jetons__lien { color: var(--text-tertiary); font-size: 11px; user-select: none; }
+
 .ligne__pied {
   display: flex; flex-wrap: wrap; align-items: center; gap: 9px;
   margin-top: 9px; padding-top: 9px; border-top: 1px dashed var(--border-color);

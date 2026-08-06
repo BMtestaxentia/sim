@@ -716,6 +716,23 @@ input[type='number']::-webkit-inner-spin-button {
   .pret__entete { flex-wrap: wrap; }
   .pret__montant, .pret__nature { flex: 1 1 120px; }
 }
+/* Ressources d'une tranche : meme grammaire que les prets — une ligne compacte
+   et son jeton de lecture — pour qu'un plan de financement se parcoure d'un
+   seul mouvement au lieu d'alterner tables et cartes. */
+.ligne--ressource { border-left: 3px solid var(--cat, var(--cat-6)); padding: 9px 11px; }
+.ligne--fp { background: var(--bg-tertiary); border-left-width: 4px; }
+.ressource__libelle { flex: 0 1 270px; min-width: 110px; font-weight: 650; font-size: 13px; }
+/* Les fonds propres ne se renomment pas : leur libelle est un texte, pas un champ. */
+span.ressource__libelle {
+  font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.03em; color: var(--text-secondary);
+}
+/* Chaine de calcul : les jetons se lisent de gauche a droite, separes d'une
+   fleche pour dire qu'ils s'enchainent et ne se juxtaposent pas. La fleche est
+   un element a part : en pseudo-element du jeton, elle tomberait DANS sa boite. */
+.jetons--chaine { align-items: center; gap: 4px; }
+.jetons__lien { color: var(--text-tertiary); font-size: 11px; user-select: none; }
+
 .ligne__pied {
   display: flex; flex-wrap: wrap; align-items: center; gap: 9px;
   margin-top: 9px; padding-top: 9px; border-top: 1px dashed var(--border-color);
@@ -5142,50 +5159,55 @@ function rendreStructureTranches() {
                 <input type="number" step="0.01" min="0" data-champ="loyers_par_produit.${code}.loyer_sortie_force" data-type="nombre" value="${valNum(L.loyer_sortie_force)}" />
               </label>
             </div>
-            <div class="table-defilante" style="margin-top:12px">
-              <table class="tableau" data-detail-loyer="${code}">
-                <tbody></tbody>
-              </table>
-            </div>
+            <!-- La chaine de calcul du loyer en JETONS et non en table : c'est la
+                 meme grammaire que les prets, et cinq lignes de tableau pour
+                 cinq nombres pesaient plus que ce qu'elles montraient. -->
+            <div class="jetons jetons--chaine" data-jetons-loyer="${code}"></div>
             <p class="aide">
               ⚙ La majoration s'applique au loyer plafond après coefficient de structure
-              (R-LOYER-5). La marge locale s'ajoute au barème avant le CS (R-LOYER-1).
-              Un loyer forcé court-circuite tout le calcul.
+              (R-LOYER-5). Un loyer forcé court-circuite tout le calcul.
             </p>
           </section>
 
-          <section class="bloc">
-            <h2 class="bloc__titre">Fonds propres et subventions</h2>
-            <div class="champs champs--serres">
-              <label class="champ">
-                <span>Fonds propres (€)</span>
-                <input type="number" step="1" min="0" data-champ="fonds_propres_par_produit.${code}" data-type="nombre" value="${valNum(etat.fonds_propres_par_produit[code])}" />
-              </label>
+          <section class="bloc bloc--tranche">
+            <h2 class="bloc__titre">
+              Fonds propres et subventions
+              <button type="button" class="bouton bouton--ajout" data-ajouter-tranche="subventions" data-produit="${code}">+ subvention</button>
+            </h2>
+            <div class="liste">
+              <div class="ligne ligne--ressource ligne--fp">
+                <div class="pret__entete">
+                  <span class="ressource__libelle">Fonds propres</span>
+                  <input type="number" step="1" min="0" class="pret__montant"
+                    data-champ="fonds_propres_par_produit.${code}" data-type="nombre"
+                    value="${valNum(etat.fonds_propres_par_produit[code])}" />
+                </div>
+                <div class="jetons"><span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-fp="${code}">—</span></span></div>
+              </div>
+              ${
+                subs.length
+                  ? subs
+                      .map(
+                        ({ s, i }) => `<div class="ligne ligne--ressource">
+                <div class="pret__entete">
+                  <input type="text" class="ressource__libelle" data-champ="subventions.${i}.libelle" value="${att(s.libelle)}" />
+                  <input type="number" step="1" class="pret__montant" data-champ="subventions.${i}.montant_eur"
+                    data-type="nombre" value="${valNum(s.montant_eur)}" />
+                  <span class="pret__actions">
+                    <button type="button" class="bouton--supprimer" data-supprimer="subventions" data-index="${i}"
+                      data-nom="${att(s.libelle)}" title="Supprimer">×</button>
+                  </span>
+                </div>
+                <div class="jetons"><span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-sub="${i}">—</span></span></div>
+              </div>`,
+                      )
+                      .join('')
+                  : '<p class="aide">Aucune subvention sur cette tranche.</p>'
+              }
             </div>
-            <div class="table-defilante" style="margin-top:10px">
-              <table class="tableau tableau--saisie">
-                <thead><tr><th>Subvention</th><th class="num">Montant (€)</th><th></th></tr></thead>
-                <tbody>
-                  ${
-                    subs.length
-                      ? subs
-                          .map(
-                            ({ s, i }) => `<tr>
-                    <td><input type="text" data-champ="subventions.${i}.libelle" value="${att(s.libelle)}" /></td>
-                    <td><input type="number" step="1" data-champ="subventions.${i}.montant_eur" data-type="nombre" value="${valNum(s.montant_eur)}" /></td>
-                    <td><button type="button" class="bouton--supprimer" data-supprimer="subventions" data-index="${i}"
-                      data-nom="${att(s.libelle)}" title="Supprimer">×</button></td>
-                  </tr>`,
-                          )
-                          .join('')
-                      : '<tr><td colspan="3" class="vide">Aucune subvention sur cette tranche</td></tr>'
-                  }
-                </tbody>
-              </table>
-            </div>
-            <button type="button" class="bouton bouton--ajout" data-ajouter-tranche="subventions" data-produit="${code}">+ subvention</button>
             <p class="aide">
-              Toute subvention réduit le droit à prêt foncier CDC, au prorata de son poids dans le prix de revient (R-FIN-2).
+              ⚙ Toute subvention réduit le droit à prêt foncier CDC, au prorata de son poids
+              dans le prix de revient (R-FIN-2). Les prêts de la tranche s'ajustent en conséquence.
             </p>
           </section>
         </div>
@@ -5784,18 +5806,30 @@ function rendreValeurs(r) {
         ),
       ].join('');
     }
-    const detail = document.querySelector(`[data-detail-loyer="${code}"] tbody`);
-    if (detail && l) {
-      detail.innerHTML = [
-        ['Barème de zone + marge locale', `${nb(l.loyer_base_eur_m2)} €/m²/mois`],
-        ['Coefficient de structure', nb(l.cs)],
-        ['Loyer plafond (barème × CS)', `${nb(l.loyer_max_base_eur_m2)} €/m²/mois`],
-        [l.force ? 'Loyer forcé appliqué' : 'Loyer de sortie (plafond × majoration)', `${nb(l.loyer_pratique_eur_m2)} €/m²/mois`],
-        ['Loyer annuel de la tranche', eur(l.loyer_annuel_eur)],
-      ]
-        .map(([k, v]) => `<tr><td>${k}</td><td class="num">${v}</td></tr>`)
-        .join('');
+    // Chaine de calcul du loyer en jetons, dans l'ordre ou elle se lit :
+    // bareme, coefficient de structure, plafond, sortie, annuel.
+    const chaine = document.querySelector(`[data-jetons-loyer="${code}"]`);
+    if (chaine && l) {
+      chaine.innerHTML = [
+        jeton('barème de zone', `${nb(l.loyer_base_eur_m2)} €/m²`),
+        jeton('coef. structure', nb(l.cs)),
+        jeton('plafond', `${nb(l.loyer_max_base_eur_m2)} €/m²`),
+        jeton(l.force ? 'loyer forcé' : 'loyer de sortie', `${nb(l.loyer_pratique_eur_m2)} €/m²`),
+        jeton('loyer annuel', eur(l.loyer_annuel_eur)),
+      ].join('<span class="jetons__lien">→</span>');
     }
+
+    // Poids de chaque ressource dans le prix de revient de SA tranche : c'est
+    // la lecture utile, un montant seul ne dit pas s'il pese.
+    const pr = t.prix_revient_ttc_eur ?? 0;
+    const partFP = document.querySelector(`[data-part-fp="${code}"]`);
+    if (partFP) partFP.textContent = pr > 0 ? pct((t.fonds_propres_eur ?? 0) / pr, 1) : '—';
+  }
+
+  for (const el of document.querySelectorAll('[data-part-sub]')) {
+    const s = etat.subventions[Number(/** @type {HTMLElement} */ (el).dataset.partSub)];
+    const pr = recap[s?.affectation]?.prix_revient_ttc_eur ?? 0;
+    el.textContent = pr > 0 ? pct((Number(s?.montant_eur) || 0) / pr, 1) : '—';
   }
 
   // --- Postes : le detail vient du moteur, apparie par IDENTIFIANT et non par

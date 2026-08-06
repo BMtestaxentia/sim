@@ -160,7 +160,7 @@ const etat = {
   loyers_par_produit: {
     PLS: { marge_majoration: 0, marge_locale_eur_m2: 0, loyer_sortie_force: null },
   },
-  subventions: [{ libelle: 'Ville', montant_eur: 20000, gratuite: true, affectation: 'PLS' }],
+  subventions: [{ libelle: 'Ville', montant_eur: 20000, affectation: 'PLS' }],
   fonds_propres_par_produit: { PLS: 50000 },
   mode_prets: 'saisis',
   // Les prets CDC de chaque tranche sont crees a la volee par
@@ -537,7 +537,7 @@ function rendreStructureTranches() {
             </div>
             <div class="table-defilante" style="margin-top:10px">
               <table class="tableau tableau--saisie">
-                <thead><tr><th>Subvention</th><th class="num">Montant (€)</th><th class="num">Gratuite</th><th></th></tr></thead>
+                <thead><tr><th>Subvention</th><th class="num">Montant (€)</th><th></th></tr></thead>
                 <tbody>
                   ${
                     subs.length
@@ -546,20 +546,19 @@ function rendreStructureTranches() {
                             ({ s, i }) => `<tr>
                     <td><input type="text" data-champ="subventions.${i}.libelle" value="${att(s.libelle)}" /></td>
                     <td><input type="number" step="1" data-champ="subventions.${i}.montant_eur" data-type="nombre" value="${valNum(s.montant_eur)}" /></td>
-                    <td class="num"><input type="checkbox" data-champ="subventions.${i}.gratuite" data-type="booleen" ${s.gratuite ? 'checked' : ''} /></td>
                     <td><button type="button" class="bouton--supprimer" data-supprimer="subventions" data-index="${i}"
                       data-nom="${att(s.libelle)}" title="Supprimer">×</button></td>
                   </tr>`,
                           )
                           .join('')
-                      : '<tr><td colspan="4" class="vide">Aucune subvention sur cette tranche</td></tr>'
+                      : '<tr><td colspan="3" class="vide">Aucune subvention sur cette tranche</td></tr>'
                   }
                 </tbody>
               </table>
             </div>
             <button type="button" class="bouton bouton--ajout" data-ajouter-tranche="subventions" data-produit="${code}">+ subvention</button>
             <p class="aide">
-              Une subvention gratuite réduit la charge foncière finançable par prêt CDC (R-FIN-2).
+              Toute subvention réduit le droit à prêt foncier CDC, au prorata de son poids dans le prix de revient (R-FIN-2).
             </p>
           </section>
         </div>
@@ -2125,7 +2124,7 @@ document.addEventListener('click', (ev) => {
   if (cible) {
     const produit = el.dataset.produit;
     if (cible === 'subventions') {
-      etat.subventions.push({ libelle: 'Nouvelle subvention', montant_eur: 0, gratuite: false, affectation: produit });
+      etat.subventions.push({ libelle: 'Nouvelle subvention', montant_eur: 0, affectation: produit });
     } else {
       etat.prets.push({
         code: `PRET_${etat.prets.length + 1}`, libelle: 'Nouveau prêt', nature: 'autre', produit,

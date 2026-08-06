@@ -34,12 +34,23 @@ export function soldeAFinancer({
 
 /**
  * R-FIN-2 — Part de charge fonciere finançable.
+ *
+ *   foncier_financable = charge_fonciere x (1 - subventions / prix_de_revient)
+ *
  * Methode globale (ParaGEN!A64 = "global") : la charge fonciere est reduite au
- * prorata des financements gratuits deja obtenus sur l'operation, puis repartie
- * au prorata des surfaces utiles.
+ * prorata des subventions deja obtenues sur l'operation, puis repartie au
+ * prorata des surfaces utiles.
+ *
+ * L'assiette est celle de la CALCULETTE CDC (« production LS juin 2026 »,
+ * Construction!AT37) : TOUTES les subventions du plan, et non les seules
+ * subventions gratuites comme le faisait LEON. Arbitrage de Bastien du
+ * 06/08/2026 (Q-30) : c'est le preteur qui fixe la regle de son propre pret.
+ * L'ancien nom du parametre, `financements_gratuits_eur`, aurait menti sur ce
+ * qu'il contient.
+ *
  * @param {Object} p
  * @param {number} p.charge_fonciere_eur
- * @param {number} [p.financements_gratuits_eur]
+ * @param {number} [p.subventions_eur]   toutes subventions confondues
  * @param {number} [p.prix_revient_operation_eur]
  * @param {number} [p.quote_part_su]  defaut 1 (operation mono-produit)
  * @returns {number}
@@ -91,12 +102,12 @@ export function redresserBesoins(besoins, quotesParts) {
 
 export function foncierFinancable({
   charge_fonciere_eur,
-  financements_gratuits_eur = 0,
+  subventions_eur = 0,
   prix_revient_operation_eur = 0,
   quote_part_su = 1,
 }) {
   const reduction =
-    prix_revient_operation_eur > 0 ? financements_gratuits_eur / prix_revient_operation_eur : 0;
+    prix_revient_operation_eur > 0 ? subventions_eur / prix_revient_operation_eur : 0;
   return arrondiEuro(charge_fonciere_eur * (1 - reduction) * quote_part_su);
 }
 

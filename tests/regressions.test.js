@@ -716,3 +716,58 @@ describe('R-FIN-3 — prets CDC par tranche, ajustes au besoin de financement', 
     expect(r.alertes.some((a) => /Surfinancement/i.test(a))).toBe(true);
   });
 });
+
+describe('R-FIN-2 — assiette CDC du droit a pret foncier (Q-30, arbitrage 06/08/2026)', () => {
+  const op = (subventions) => ({
+    identite: { zone_123: 2, zone_ABC: 'B1' },
+    dates: { annee_mise_en_location: 2028, duree_simulation_ans: 20 },
+    lots: [
+      { code_produit: 'PLUS', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 40 },
+      { code_produit: 'PLAI', nb_logements: 4, shab_m2: 240, surfaces_annexes_m2: 24 },
+    ],
+    postes_bilan: [
+      { chapitre: 'charge_fonciere', libelle: 'Terrain', montant_ht_eur: 900000, taux_tva: 0.055 },
+      { chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 900000, taux_tva: 0.1 },
+    ],
+    subventions,
+    fonds_propres_par_produit: { PLUS: 20000, PLAI: 10000 },
+  });
+  const calc = (s) => calculer(op(s), REFERENTIELS);
+  const foncier = (r) =>
+    r.amortissements.filter((a) => a.nature === 'foncier').reduce((s, a) => s + a.montant_eur, 0);
+
+  it('une subvention NON gratuite reduit le droit a pret foncier', () => {
+    // Sous la regle LEON, seules les subventions gratuites comptaient : le
+    // foncier n'aurait pas bouge. La CDC ne fait pas cette distinction.
+    const sans = calc([]);
+    const avec = calc([{ libelle: 'Département', montant_eur: 200000, gratuite: false }]);
+    expect(foncier(avec)).toBeLessThan(foncier(sans));
+  });
+
+  it('gratuite ou non, une subvention du meme montant a le meme effet', () => {
+    const g = calc([{ libelle: 'A', montant_eur: 200000, gratuite: true }]);
+    const ng = calc([{ libelle: 'A', montant_eur: 200000, gratuite: false }]);
+    expect(foncier(ng)).toBe(foncier(g));
+  });
+
+  it('une subvention flechee sur UNE tranche reduit le droit de TOUTE l operation', () => {
+    // Le droit a pret foncier se calcule globalement puis se repartit au prorata
+    // SU (calculette CDC, AT37 puis M49) : flecher ne concentre pas l effet.
+    const flechee = calc([{ libelle: 'A', montant_eur: 200000, affectation: 'PLAI' }]);
+    const globale = calc([{ libelle: 'A', montant_eur: 200000 }]);
+    expect(foncier(flechee)).toBe(foncier(globale));
+  });
+
+  it('foncier et construction d une tranche somment exactement au besoin', () => {
+    // Arrondir les deux separement laissait fuir un euro, le reste etant
+    // calcule sur un foncier non arrondi.
+    const r = calc([{ libelle: 'A', montant_eur: 123457, affectation: 'PLAI' }]);
+    expect(r.financement.equilibre.ecart_eur).toBe(0);
+    for (const c of ['PLUS', 'PLAI']) {
+      const somme = r.amortissements
+        .filter((a) => a.produit === c)
+        .reduce((s, a) => s + a.montant_eur, 0);
+      expect(Number.isInteger(somme), `${c} : ${somme}`).toBe(true);
+    }
+  });
+});

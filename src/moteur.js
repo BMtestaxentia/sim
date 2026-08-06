@@ -257,7 +257,7 @@ export function calculer(entrees, referentiels) {
           solde_eur: solde,
           foncier_financable_eur: foncierFinancable({
             charge_fonciere_eur: bilan.chapitres.charge_fonciere?.ttc_lasm_eur ?? 0,
-            financements_gratuits_eur: subventions.gratuites_eur,
+            subventions_eur: subventionsTotal,
             prix_revient_operation_eur: bilan.total_ttc_module_eur,
           }),
           prefinancement_eur: prefi?.interets_eur ?? 0,
@@ -347,14 +347,22 @@ export function calculer(entrees, referentiels) {
     // FINANCABLE de la charge fonciere de la tranche (R-FIN-2), le reste va a la
     // construction. Sans ce plafond, un terrain cher absorberait tout le pret
     // long et fausserait la duree moyenne de la dette.
+    //
+    // Le droit a pret foncier se calcule GLOBALEMENT puis se repartit au prorata
+    // de surface utile, et non tranche par tranche : c'est la marche de la
+    // calculette CDC (`Construction!AT37` pour le total, `M49` pour la
+    // repartition). La difference n'est pas cosmetique — une subvention flechee
+    // sur une seule tranche reduit le droit a pret foncier de TOUTE l'operation,
+    // pas seulement celui de la tranche qui la recoit.
+    const droitFoncierTotal = foncierFinancable({
+      charge_fonciere_eur: bilan.chapitres.charge_fonciere?.ttc_lasm_eur ?? 0,
+      subventions_eur: subventionsTotal,
+      prix_revient_operation_eur: bilan.total_ttc_module_eur,
+    });
     /** @type {Record<string, number>} */
     const plafondFoncier = {};
     for (const c of codesFinances) {
-      plafondFoncier[c] = foncierFinancable({
-        charge_fonciere_eur: bilan.chapitres.charge_fonciere?.par_tranche?.[c]?.ttc_lasm_eur ?? 0,
-        financements_gratuits_eur: subventions.gratuites_eur * (quotesParts[c] ?? 0),
-        prix_revient_operation_eur: bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0,
-      });
+      plafondFoncier[c] = droitFoncierTotal * (quotesParts[c] ?? 0);
     }
 
     pretsACalculer = [];
@@ -380,24 +388,30 @@ export function calculer(entrees, referentiels) {
       return defautsTranche[code];
     };
 
+    // Montants automatiques resolus PAR TRANCHE et arrondis ENSEMBLE : le
+    // foncier se sert le premier dans la limite de son plafond, la construction
+    // prend le reste. Arrondir les deux separement laissait fuir un euro, le
+    // reste etant calcule sur un foncier non arrondi.
+    /** @type {Record<string, Record<string, number>>} */
+    const montantsAuto = {};
+    for (const c of codesFinances) {
+      const aFoncierAuto = prets.some(
+        (x) => auto(x) && x.nature === 'foncier' && (x.produit ?? trancheUnique) === c,
+      );
+      const foncierExact = aFoncierAuto ? Math.min(besoin[c] ?? 0, plafondFoncier[c] ?? 0) : 0;
+      const constructionExact = Math.max(0, (besoin[c] ?? 0) - foncierExact);
+      const [f, b] = arrondirEnConservantLaSomme(
+        [foncierExact, constructionExact],
+        arrondiEuro(foncierExact + constructionExact),
+      );
+      montantsAuto[c] = { foncier: f, construction: b };
+    }
+
     for (const p of prets) {
       const code = p.produit ?? trancheUnique;
       let montant = p.montant_eur;
       if (auto(p) && code) {
-        // Le foncier se sert le premier, dans la limite de son plafond ; la
-        // construction prend ce qui reste. L'ordre importe, pas la position du
-        // pret dans la liste.
-        if (p.nature === 'foncier') {
-          montant = Math.min(besoin[code] ?? 0, plafondFoncier[code] ?? 0);
-        } else if (p.nature === 'construction') {
-          const foncierAuto = prets.some((x) => auto(x) && x.nature === 'foncier' && (x.produit ?? trancheUnique) === code)
-            ? Math.min(besoin[code] ?? 0, plafondFoncier[code] ?? 0)
-            : 0;
-          montant = Math.max(0, (besoin[code] ?? 0) - foncierAuto);
-        } else {
-          montant = 0;
-        }
-        montant = arrondiEuro(montant);
+        montant = montantsAuto[code]?.[p.nature] ?? 0;
       }
       // Les valeurs du pret ne sont reprises que si elles sont RENSEIGNEES :
       // etaler `p` tel quel ecraserait un taux par defaut avec un `undefined`,

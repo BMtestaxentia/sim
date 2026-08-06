@@ -155,15 +155,29 @@ describe('R-FIN — plan de financement', () => {
     ).toBe(830000);
   });
 
-  it('R-FIN-2 : le foncier finançable est reduit par les financements gratuits', () => {
+  it('R-FIN-2 : le foncier finançable est reduit par TOUTES les subventions', () => {
     // 500 000 x (1 - 100 000 / 1 000 000) = 450 000
+    // Assiette de la calculette CDC (Construction!AT37) : toutes les subventions
+    // du plan, et non les seules subventions gratuites comme le faisait LEON.
     expect(
       foncierFinancable({
         charge_fonciere_eur: 500000,
-        financements_gratuits_eur: 100000,
+        subventions_eur: 100000,
         prix_revient_operation_eur: 1000000,
       }),
     ).toBe(450000);
+  });
+
+  it('R-FIN-2 : une subvention NON gratuite reduit desormais le droit a pret', () => {
+    // C'est tout l'effet de l'arbitrage : sous la regle LEON, seules les
+    // subventions gratuites comptaient et le foncier restait a 500 000.
+    expect(
+      foncierFinancable({
+        charge_fonciere_eur: 500000,
+        subventions_eur: 200000,
+        prix_revient_operation_eur: 1000000,
+      }),
+    ).toBe(400000);
   });
 
   it('quotites VEFA lues par zone ABC', () => {

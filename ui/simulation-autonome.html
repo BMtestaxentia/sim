@@ -5170,25 +5170,36 @@ function rendreStructureTranches() {
           </section>
 
           <section class="bloc bloc--tranche">
-            <h2 class="bloc__titre">
-              Fonds propres et subventions
-              <button type="button" class="bouton bouton--ajout" data-ajouter-tranche="subventions" data-produit="${code}">+ subvention</button>
-            </h2>
+            <h2 class="bloc__titre">Fonds propres</h2>
             <div class="liste">
               <div class="ligne ligne--ressource ligne--fp">
                 <div class="pret__entete">
-                  <span class="ressource__libelle">Fonds propres</span>
+                  <span class="ressource__libelle">Apport de la tranche</span>
                   <input type="number" step="1" min="0" class="pret__montant"
                     data-champ="fonds_propres_par_produit.${code}" data-type="nombre"
                     value="${valNum(etat.fonds_propres_par_produit[code])}" />
                 </div>
                 <div class="jetons"><span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-fp="${code}">—</span></span></div>
               </div>
-              ${
-                subs.length
-                  ? subs
-                      .map(
-                        ({ s, i }) => `<div class="ligne ligne--ressource">
+            </div>
+            <p class="aide">
+              ⚙ Ce qui reste à la charge de l'organisme. Augmenter les fonds propres réduit
+              d'autant les prêts CDC de la tranche.
+            </p>
+          </section>
+        </div>
+
+        <section class="bloc bloc--tranche">
+          <h2 class="bloc__titre">
+            Subventions de la tranche
+            <button type="button" class="bouton bouton--ajout" data-ajouter-tranche="subventions" data-produit="${code}">+ subvention</button>
+          </h2>
+          <div class="liste">
+            ${
+              subs.length
+                ? subs
+                    .map(
+                      ({ s, i }) => `<div class="ligne ligne--ressource">
                 <div class="pret__entete">
                   <input type="text" class="ressource__libelle" data-champ="subventions.${i}.libelle" value="${att(s.libelle)}" />
                   <input type="number" step="1" class="pret__montant" data-champ="subventions.${i}.montant_eur"
@@ -5200,17 +5211,16 @@ function rendreStructureTranches() {
                 </div>
                 <div class="jetons"><span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-sub="${i}">—</span></span></div>
               </div>`,
-                      )
-                      .join('')
-                  : '<p class="aide">Aucune subvention sur cette tranche.</p>'
-              }
-            </div>
-            <p class="aide">
-              ⚙ Toute subvention réduit le droit à prêt foncier CDC, au prorata de son poids
-              dans le prix de revient (R-FIN-2). Les prêts de la tranche s'ajustent en conséquence.
-            </p>
-          </section>
-        </div>
+                    )
+                    .join('')
+                : '<p class="aide">Aucune subvention sur cette tranche.</p>'
+            }
+          </div>
+          <p class="aide">
+            ⚙ Toute subvention réduit le droit à prêt foncier CDC, au prorata de son poids
+            dans le prix de revient (R-FIN-2). Les prêts de la tranche s'ajustent en conséquence.
+          </p>
+        </section>
 
         <section class="bloc">
           <h2 class="bloc__titre">

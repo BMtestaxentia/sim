@@ -30,6 +30,7 @@ const referentiels = {
   trajectoires: await (await fetch('../referentiels/trajectoires_axentia_2026.json')).json(),
   nomenclature_pdr: await (await fetch('../referentiels/nomenclature_pdr.json')).json(),
   zonage_communes: await (await fetch('../referentiels/zonage_communes.json')).json(),
+  departements: await (await fetch('../referentiels/departements.json')).json(),
 };
 // __REFERENTIELS_FIN__
 
@@ -303,7 +304,10 @@ const afficherTVA = () => tvaVisible;
  */
 function zonageDeLaCommune(commune, departement) {
   if (!commune || !departement) return null;
-  const dep = String(departement).match(/\d{2,3}/)?.[0];
+  // Le departement est stocke sous la forme « Nom (code) ». Le code se lit
+  // ENTRE PARENTHESES et non par les premiers chiffres rencontres : la Corse
+  // s'ecrit 2A et 2B, et « Corse-du-Sud (2A) » donnerait sinon « 2 ».
+  const dep = String(departement).match(/\(([0-9AB]{2,3})\)/)?.[1] ?? String(departement).match(/^[0-9AB]{2,3}$/)?.[0];
   if (!dep) return null;
   const nom = String(commune)
     .normalize('NFD')
@@ -366,7 +370,19 @@ const enPourcent = (v) => (nul(v) ? null : Number((v * 100).toPrecision(12)));
 
 // ---------------------------------------------------------------- rendu de structure
 
+/** Liste des departements, remplie une fois : elle ne depend d'aucune saisie. */
+function rendreSelectDepartement() {
+  const sel = document.getElementById('select-departement');
+  if (!sel || sel.children.length) return;
+  sel.innerHTML =
+    '<option value=""></option>' +
+    referentiels.departements.departements
+      .map((d) => `<option value="${att(d.libelle)}">${att(d.libelle)}</option>`)
+      .join('');
+}
+
 function rendreChampsStatiques() {
+  rendreSelectDepartement();
   for (const el of document.querySelectorAll('[data-champ]')) {
     const champ = /** @type {HTMLInputElement} */ (el);
     if (champ.closest('tbody') || champ.closest('.liste')) continue;

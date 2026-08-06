@@ -1,0 +1,486 @@
+{
+  "libelle": "Departements de France metropolitaine",
+  "note": "Liste de reference pour la saisie. Les DOM sont hors perimetre (decision du 06/08/2026), la Corse figure sous 2A et 2B et non sous 20. Le libelle affiche est « Nom (code) » ; c'est lui qui est stocke, pour qu'un export reste lisible sans table de correspondance.",
+  "departements": [
+    {
+      "code": "01",
+      "nom": "Ain",
+      "libelle": "Ain (01)"
+    },
+    {
+      "code": "02",
+      "nom": "Aisne",
+      "libelle": "Aisne (02)"
+    },
+    {
+      "code": "03",
+      "nom": "Allier",
+      "libelle": "Allier (03)"
+    },
+    {
+      "code": "04",
+      "nom": "Alpes-de-Haute-Provence",
+      "libelle": "Alpes-de-Haute-Provence (04)"
+    },
+    {
+      "code": "05",
+      "nom": "Hautes-Alpes",
+      "libelle": "Hautes-Alpes (05)"
+    },
+    {
+      "code": "06",
+      "nom": "Alpes-Maritimes",
+      "libelle": "Alpes-Maritimes (06)"
+    },
+    {
+      "code": "07",
+      "nom": "Ardèche",
+      "libelle": "Ardèche (07)"
+    },
+    {
+      "code": "08",
+      "nom": "Ardennes",
+      "libelle": "Ardennes (08)"
+    },
+    {
+      "code": "09",
+      "nom": "Ariège",
+      "libelle": "Ariège (09)"
+    },
+    {
+      "code": "10",
+      "nom": "Aube",
+      "libelle": "Aube (10)"
+    },
+    {
+      "code": "11",
+      "nom": "Aude",
+      "libelle": "Aude (11)"
+    },
+    {
+      "code": "12",
+      "nom": "Aveyron",
+      "libelle": "Aveyron (12)"
+    },
+    {
+      "code": "13",
+      "nom": "Bouches-du-Rhône",
+      "libelle": "Bouches-du-Rhône (13)"
+    },
+    {
+      "code": "14",
+      "nom": "Calvados",
+      "libelle": "Calvados (14)"
+    },
+    {
+      "code": "15",
+      "nom": "Cantal",
+      "libelle": "Cantal (15)"
+    },
+    {
+      "code": "16",
+      "nom": "Charente",
+      "libelle": "Charente (16)"
+    },
+    {
+      "code": "17",
+      "nom": "Charente-Maritime",
+      "libelle": "Charente-Maritime (17)"
+    },
+    {
+      "code": "18",
+      "nom": "Cher",
+      "libelle": "Cher (18)"
+    },
+    {
+      "code": "19",
+      "nom": "Corrèze",
+      "libelle": "Corrèze (19)"
+    },
+    {
+      "code": "2A",
+      "nom": "Corse-du-Sud",
+      "libelle": "Corse-du-Sud (2A)"
+    },
+    {
+      "code": "2B",
+      "nom": "Haute-Corse",
+      "libelle": "Haute-Corse (2B)"
+    },
+    {
+      "code": "21",
+      "nom": "Côte-d'Or",
+      "libelle": "Côte-d'Or (21)"
+    },
+    {
+      "code": "22",
+      "nom": "Côtes-d'Armor",
+      "libelle": "Côtes-d'Armor (22)"
+    },
+    {
+      "code": "23",
+      "nom": "Creuse",
+      "libelle": "Creuse (23)"
+    },
+    {
+      "code": "24",
+      "nom": "Dordogne",
+      "libelle": "Dordogne (24)"
+    },
+    {
+      "code": "25",
+      "nom": "Doubs",
+      "libelle": "Doubs (25)"
+    },
+    {
+      "code": "26",
+      "nom": "Drôme",
+      "libelle": "Drôme (26)"
+    },
+    {
+      "code": "27",
+      "nom": "Eure",
+      "libelle": "Eure (27)"
+    },
+    {
+      "code": "28",
+      "nom": "Eure-et-Loir",
+      "libelle": "Eure-et-Loir (28)"
+    },
+    {
+      "code": "29",
+      "nom": "Finistère",
+      "libelle": "Finistère (29)"
+    },
+    {
+      "code": "30",
+      "nom": "Gard",
+      "libelle": "Gard (30)"
+    },
+    {
+      "code": "31",
+      "nom": "Haute-Garonne",
+      "libelle": "Haute-Garonne (31)"
+    },
+    {
+      "code": "32",
+      "nom": "Gers",
+      "libelle": "Gers (32)"
+    },
+    {
+      "code": "33",
+      "nom": "Gironde",
+      "libelle": "Gironde (33)"
+    },
+    {
+      "code": "34",
+      "nom": "Hérault",
+      "libelle": "Hérault (34)"
+    },
+    {
+      "code": "35",
+      "nom": "Ille-et-Vilaine",
+      "libelle": "Ille-et-Vilaine (35)"
+    },
+    {
+      "code": "36",
+      "nom": "Indre",
+      "libelle": "Indre (36)"
+    },
+    {
+      "code": "37",
+      "nom": "Indre-et-Loire",
+      "libelle": "Indre-et-Loire (37)"
+    },
+    {
+      "code": "38",
+      "nom": "Isère",
+      "libelle": "Isère (38)"
+    },
+    {
+      "code": "39",
+      "nom": "Jura",
+      "libelle": "Jura (39)"
+    },
+    {
+      "code": "40",
+      "nom": "Landes",
+      "libelle": "Landes (40)"
+    },
+    {
+      "code": "41",
+      "nom": "Loir-et-Cher",
+      "libelle": "Loir-et-Cher (41)"
+    },
+    {
+      "code": "42",
+      "nom": "Loire",
+      "libelle": "Loire (42)"
+    },
+    {
+      "code": "43",
+      "nom": "Haute-Loire",
+      "libelle": "Haute-Loire (43)"
+    },
+    {
+      "code": "44",
+      "nom": "Loire-Atlantique",
+      "libelle": "Loire-Atlantique (44)"
+    },
+    {
+      "code": "45",
+      "nom": "Loiret",
+      "libelle": "Loiret (45)"
+    },
+    {
+      "code": "46",
+      "nom": "Lot",
+      "libelle": "Lot (46)"
+    },
+    {
+      "code": "47",
+      "nom": "Lot-et-Garonne",
+      "libelle": "Lot-et-Garonne (47)"
+    },
+    {
+      "code": "48",
+      "nom": "Lozère",
+      "libelle": "Lozère (48)"
+    },
+    {
+      "code": "49",
+      "nom": "Maine-et-Loire",
+      "libelle": "Maine-et-Loire (49)"
+    },
+    {
+      "code": "50",
+      "nom": "Manche",
+      "libelle": "Manche (50)"
+    },
+    {
+      "code": "51",
+      "nom": "Marne",
+      "libelle": "Marne (51)"
+    },
+    {
+      "code": "52",
+      "nom": "Haute-Marne",
+      "libelle": "Haute-Marne (52)"
+    },
+    {
+      "code": "53",
+      "nom": "Mayenne",
+      "libelle": "Mayenne (53)"
+    },
+    {
+      "code": "54",
+      "nom": "Meurthe-et-Moselle",
+      "libelle": "Meurthe-et-Moselle (54)"
+    },
+    {
+      "code": "55",
+      "nom": "Meuse",
+      "libelle": "Meuse (55)"
+    },
+    {
+      "code": "56",
+      "nom": "Morbihan",
+      "libelle": "Morbihan (56)"
+    },
+    {
+      "code": "57",
+      "nom": "Moselle",
+      "libelle": "Moselle (57)"
+    },
+    {
+      "code": "58",
+      "nom": "Nièvre",
+      "libelle": "Nièvre (58)"
+    },
+    {
+      "code": "59",
+      "nom": "Nord",
+      "libelle": "Nord (59)"
+    },
+    {
+      "code": "60",
+      "nom": "Oise",
+      "libelle": "Oise (60)"
+    },
+    {
+      "code": "61",
+      "nom": "Orne",
+      "libelle": "Orne (61)"
+    },
+    {
+      "code": "62",
+      "nom": "Pas-de-Calais",
+      "libelle": "Pas-de-Calais (62)"
+    },
+    {
+      "code": "63",
+      "nom": "Puy-de-Dôme",
+      "libelle": "Puy-de-Dôme (63)"
+    },
+    {
+      "code": "64",
+      "nom": "Pyrénées-Atlantiques",
+      "libelle": "Pyrénées-Atlantiques (64)"
+    },
+    {
+      "code": "65",
+      "nom": "Hautes-Pyrénées",
+      "libelle": "Hautes-Pyrénées (65)"
+    },
+    {
+      "code": "66",
+      "nom": "Pyrénées-Orientales",
+      "libelle": "Pyrénées-Orientales (66)"
+    },
+    {
+      "code": "67",
+      "nom": "Bas-Rhin",
+      "libelle": "Bas-Rhin (67)"
+    },
+    {
+      "code": "68",
+      "nom": "Haut-Rhin",
+      "libelle": "Haut-Rhin (68)"
+    },
+    {
+      "code": "69",
+      "nom": "Rhône",
+      "libelle": "Rhône (69)"
+    },
+    {
+      "code": "70",
+      "nom": "Haute-Saône",
+      "libelle": "Haute-Saône (70)"
+    },
+    {
+      "code": "71",
+      "nom": "Saône-et-Loire",
+      "libelle": "Saône-et-Loire (71)"
+    },
+    {
+      "code": "72",
+      "nom": "Sarthe",
+      "libelle": "Sarthe (72)"
+    },
+    {
+      "code": "73",
+      "nom": "Savoie",
+      "libelle": "Savoie (73)"
+    },
+    {
+      "code": "74",
+      "nom": "Haute-Savoie",
+      "libelle": "Haute-Savoie (74)"
+    },
+    {
+      "code": "75",
+      "nom": "Paris",
+      "libelle": "Paris (75)"
+    },
+    {
+      "code": "76",
+      "nom": "Seine-Maritime",
+      "libelle": "Seine-Maritime (76)"
+    },
+    {
+      "code": "77",
+      "nom": "Seine-et-Marne",
+      "libelle": "Seine-et-Marne (77)"
+    },
+    {
+      "code": "78",
+      "nom": "Yvelines",
+      "libelle": "Yvelines (78)"
+    },
+    {
+      "code": "79",
+      "nom": "Deux-Sèvres",
+      "libelle": "Deux-Sèvres (79)"
+    },
+    {
+      "code": "80",
+      "nom": "Somme",
+      "libelle": "Somme (80)"
+    },
+    {
+      "code": "81",
+      "nom": "Tarn",
+      "libelle": "Tarn (81)"
+    },
+    {
+      "code": "82",
+      "nom": "Tarn-et-Garonne",
+      "libelle": "Tarn-et-Garonne (82)"
+    },
+    {
+      "code": "83",
+      "nom": "Var",
+      "libelle": "Var (83)"
+    },
+    {
+      "code": "84",
+      "nom": "Vaucluse",
+      "libelle": "Vaucluse (84)"
+    },
+    {
+      "code": "85",
+      "nom": "Vendée",
+      "libelle": "Vendée (85)"
+    },
+    {
+      "code": "86",
+      "nom": "Vienne",
+      "libelle": "Vienne (86)"
+    },
+    {
+      "code": "87",
+      "nom": "Haute-Vienne",
+      "libelle": "Haute-Vienne (87)"
+    },
+    {
+      "code": "88",
+      "nom": "Vosges",
+      "libelle": "Vosges (88)"
+    },
+    {
+      "code": "89",
+      "nom": "Yonne",
+      "libelle": "Yonne (89)"
+    },
+    {
+      "code": "90",
+      "nom": "Territoire de Belfort",
+      "libelle": "Territoire de Belfort (90)"
+    },
+    {
+      "code": "91",
+      "nom": "Essonne",
+      "libelle": "Essonne (91)"
+    },
+    {
+      "code": "92",
+      "nom": "Hauts-de-Seine",
+      "libelle": "Hauts-de-Seine (92)"
+    },
+    {
+      "code": "93",
+      "nom": "Seine-Saint-Denis",
+      "libelle": "Seine-Saint-Denis (93)"
+    },
+    {
+      "code": "94",
+      "nom": "Val-de-Marne",
+      "libelle": "Val-de-Marne (94)"
+    },
+    {
+      "code": "95",
+      "nom": "Val-d'Oise",
+      "libelle": "Val-d'Oise (95)"
+    }
+  ]
+}

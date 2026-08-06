@@ -73,11 +73,18 @@ export function arrondiSurface(m2) {
  * la restitution. Le reliquat est attribue aux plus grands restes, puis, a
  * egalite, dans l'ordre fourni : le resultat est deterministe.
  *
+ * Un total peut etre IMPOSE : c'est le cas quand la somme a respecter a deja
+ * ete arrondie ailleurs et fait autorite. Ventiler un sous-total de chapitre
+ * entre tranches doit retomber sur le sous-total AFFICHE, pas sur l'arrondi
+ * de la somme exacte, faute de quoi la ligne ne s'additionne pas a l'ecran.
+ *
  * @param {number[]} valeurs valeurs exactes, non arrondies
- * @returns {number[]} entiers de meme longueur, sommant a arrondiEuro(somme)
+ * @param {number} [totalImpose] somme a atteindre exactement
+ * @returns {number[]} entiers de meme longueur, sommant au total
  */
-export function arrondirEnConservantLaSomme(valeurs) {
-  const total = arrondiEuro(valeurs.reduce((s, v) => s + v, 0));
+export function arrondirEnConservantLaSomme(valeurs, totalImpose) {
+  const total =
+    totalImpose !== undefined ? totalImpose : arrondiEuro(valeurs.reduce((s, v) => s + v, 0));
   const bas = valeurs.map((v) => Math.floor(v));
   const reliquat = total - bas.reduce((s, v) => s + v, 0);
 

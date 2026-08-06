@@ -228,7 +228,12 @@ export function prixDeRevientVentile(
 
   const detail = postes.map((poste) => {
     const v = ventilerPoste(poste);
-    const ch = (chapitresExacts[poste.chapitre] ??= { ht: 0, tva: 0, ttc: 0, ttcLasm: 0 });
+    const ch = (chapitresExacts[poste.chapitre] ??= {
+      ht: 0, tva: 0, ttc: 0, ttcLasm: 0,
+      // Croisement chapitre x tranche : c'est lui qui alimente le sous-total
+      // affiche sous chaque colonne de tranche.
+      parTranche: Object.fromEntries(codes.map((c) => [c, { ht: 0, tva: 0, ttc: 0, ttcLasm: 0 }])),
+    });
     // Une ligne saisie tranche par tranche impose sa repartition ; les autres
     // suivent la cle de l'operation (prorata de surface utile).
     const explicite = poste.montants_ht_par_produit;
@@ -258,6 +263,11 @@ export function prixDeRevientVentile(
       ch.tva += tva;
       ch.ttc += ht + tva;
       ch.ttcLasm += ttcLasm;
+      const cht = ch.parTranche[code];
+      cht.ht += ht;
+      cht.tva += tva;
+      cht.ttc += ht + tva;
+      cht.ttcLasm += ttcLasm;
     }
     // Totaux de LIGNE recomposes depuis les tranches, et non recalcules au taux
     // global : des que les taux different d'une tranche a l'autre, le produit
@@ -316,8 +326,27 @@ export function prixDeRevientVentile(
   /** @type {Record<string, any>} */
   const chapitres = {};
   nomsChapitres.forEach((nom, i) => {
+    const exact = chapitresExacts[nom];
+    // Ventilation du sous-total de chapitre entre tranches. Le total IMPOSE est
+    // le sous-total deja arrondi : la ligne doit s'additionner a l'ecran, or ce
+    // sous-total a lui-meme ete ajuste pour que la colonne des chapitres somme
+    // au prix de revient. L'exactitude est donc garantie LIGNE par ligne ; la
+    // colonne d'une tranche peut s'ecarter d'un euro de son total, un arrondi
+    // ne pouvant satisfaire les deux sens a la fois.
+    const repartir = (cle, total) =>
+      arrondirEnConservantLaSomme(codes.map((c) => exact.parTranche[c][cle]), total);
+    const htTr = repartir('ht', chapHt[i]);
+    const tvaTr = repartir('tva', chapTva[i]);
+    const ttcTr = repartir('ttc', chapTtc[i]);
+    const lasmTr = repartir('ttcLasm', chapLasm[i]);
     chapitres[nom] = {
       ht_eur: chapHt[i], tva_eur: chapTva[i], ttc_eur: chapTtc[i], ttc_lasm_eur: chapLasm[i],
+      par_tranche: Object.fromEntries(
+        codes.map((c, j) => [
+          c,
+          { ht_eur: htTr[j], tva_eur: tvaTr[j], ttc_eur: ttcTr[j], ttc_lasm_eur: lasmTr[j] },
+        ]),
+      ),
     };
   });
 

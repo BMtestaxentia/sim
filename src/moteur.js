@@ -441,8 +441,12 @@ export function calculer(entrees, referentiels) {
     annee_mise_en_location: anneeMEL,
     duree_ans: dates.duree_simulation_ans ?? 50,
     mode: exp.mode ?? 'loyers',
+    mode_redevance: exp.mode_redevance ?? 'forfaitaire',
     redevance_annuelle_eur: exp.redevance_annuelle_eur ?? 0,
-    index_redevance: exp.index_redevance ?? 'gestion',
+    redevance_annee_valeur: exp.redevance_annee_valeur,
+    index_redevance: exp.index_redevance ?? 'loyers_irl',
+    annuite_fonds_propres_eur: exp.annuite_fonds_propres_eur ?? 0,
+    nb_lits: exp.nb_lits ?? 0,
     qp_subventions_annuelle_eur: exp.qp_subventions_annuelle_eur ?? 0,
     duree_qp_subventions_ans: exp.duree_qp_subventions_ans ?? 0,
     prix_revient_ttc_eur: bilan.total_ttc_module_eur,
@@ -496,6 +500,23 @@ export function calculer(entrees, referentiels) {
   );
   exploitation.fonds_propres_eur = fondsPropres;
   exploitation.charges_diverses_actives = chargesDiverses;
+
+  // En transparence, la redevance vaut la somme des charges (annexe RA44). Un
+  // taux de vacance la rabote donc SANS que les charges baissent : le compte
+  // sort en deficit permanent de ce taux, ce qui ressemble a un bug de modele
+  // alors que c'est une hypothese de saisie. Sous bail a gestionnaire la
+  // redevance est garantie et la vacance vaut zero.
+  if (
+    (exp.mode ?? 'loyers') === 'redevance' &&
+    (exp.mode_redevance ?? 'forfaitaire') === 'transparence' &&
+    (exp.taux_vacance_impayes ?? 0) > 0
+  ) {
+    alertes.push(
+      `Redevance en transparence avec ${((exp.taux_vacance_impayes ?? 0) * 100).toFixed(1)} % de ` +
+        'vacance : la redevance refacture les charges mais la vacance en retranche une part, ' +
+        "d'ou un deficit permanent de ce meme taux. Mettre la vacance a 0 % sous bail a gestionnaire.",
+    );
+  }
   // Postes du compte que le moteur ne sait pas encore produire, listes pour que
   // l'ecran le dise plutot que de laisser croire a un compte complet. TEOM,
   // CGLLS, ANCOLS et assurance PNO en sont sortis : ils sont desormais des

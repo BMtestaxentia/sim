@@ -860,33 +860,42 @@ input[type='number'] { text-align: right; font-variant-numeric: tabular-nums; }
       </section>
 
       <section class="bloc">
-        <h2 class="bloc__titre">Mode foyer (redevance forfaitaire)</h2>
+        <h2 class="bloc__titre">
+          Mode foyer (redevance)
+          <span class="bloc__outils" id="bascule-redevance" hidden>
+            <span class="bascule">
+              <button type="button" class="bascule__option" data-mode-redevance="forfaitaire">Forfaitaire</button>
+              <button type="button" class="bascule__option" data-mode-redevance="transparence">En transparence</button>
+            </span>
+          </span>
+        </h2>
         <label class="champ champ--interrupteur">
           <input type="checkbox" data-champ="exploitation.mode" data-type="mode-redevance" data-structure="1" />
           <span>Les produits sont une redevance, pas un loyer au m²</span>
         </label>
         <div class="champs" id="champs-redevance">
-          <label class="champ">
-            <span>Redevance annuelle, année 1 (€)</span>
+          <label class="champ" data-si-redevance="forfaitaire">
+            <span>Redevance annuelle (€)</span>
             <input type="number" step="1" min="0" data-champ="exploitation.redevance_annuelle_eur" data-type="nombre" />
           </label>
-          <label class="champ">
-            <span>Quote-part de subventions virée au résultat (€/an)</span>
-            <input type="number" step="1" min="0" data-champ="exploitation.qp_subventions_annuelle_eur" data-type="nombre" />
+          <label class="champ" data-si-redevance="forfaitaire">
+            <span>Année de valeur de la redevance</span>
+            <input type="number" step="1" data-champ="exploitation.redevance_annee_valeur" data-type="nombre" placeholder="mise en location" />
           </label>
           <label class="champ">
-            <span>Durée d'étalement de la quote-part (ans, 0 = sans fin)</span>
-            <input type="number" step="1" min="0" data-champ="exploitation.duree_qp_subventions_ans" data-type="nombre" />
+            <span>Annuité de fonds propres (€/an)</span>
+            <input type="number" step="1" min="0" data-champ="exploitation.annuite_fonds_propres_eur" data-type="nombre" />
+          </label>
+          <label class="champ">
+            <span>Nombre de lits ou places</span>
+            <input type="number" step="1" min="0" data-champ="exploitation.nb_lits" data-type="nombre" />
           </label>
         </div>
+        <p class="aide" id="aide-redevance"></p>
         <p class="aide">
-          ⚙ Vérifié sur l'annexe Orléans : la redevance est un montant d'année 1 indexé sur la
-          trajectoire de gestion, elle n'est pas recomposée depuis les charges. Les loyers au m²
-          et le coefficient de structure cessent alors de piloter les produits.
-        </p>
-        <p class="aide">
-          ⚙ Le taux de vacance et les frais de gestion en % s'appliquent alors à la redevance.
-          Sous bail à gestionnaire, la redevance est garantie : mettre la vacance à 0 %.
+          ⚙ L'annuité de fonds propres est une charge refacturée au même titre que les annuités
+          d'emprunt (colonne « ANNUITÉS DE FP » de la table de transparence). Le nombre de lits
+          sert au prix de journée.
         </p>
       </section>
 
@@ -1020,13 +1029,6 @@ input[type='number'] { text-align: right; font-variant-numeric: tabular-nums; }
             <tfoot></tfoot>
           </table>
         </div>
-        <div class="champs champs--serres">
-          <label class="champ">
-            <span>Modulation TTC (€)</span>
-            <input type="number" step="1" data-champ="modulation_ttc_eur" data-type="nombre" />
-          </label>
-        </div>
-        <p class="aide" id="aide-lasm"></p>
       </section>
 
       <section class="bloc" id="bloc-ventilation-pdr">
@@ -1307,11 +1309,18 @@ function arrondiSurface(m2) {
  * la restitution. Le reliquat est attribue aux plus grands restes, puis, a
  * egalite, dans l'ordre fourni : le resultat est deterministe.
  *
+ * Un total peut etre IMPOSE : c'est le cas quand la somme a respecter a deja
+ * ete arrondie ailleurs et fait autorite. Ventiler un sous-total de chapitre
+ * entre tranches doit retomber sur le sous-total AFFICHE, pas sur l'arrondi
+ * de la somme exacte, faute de quoi la ligne ne s'additionne pas a l'ecran.
+ *
  * @param {number[]} valeurs valeurs exactes, non arrondies
- * @returns {number[]} entiers de meme longueur, sommant a arrondiEuro(somme)
+ * @param {number} [totalImpose] somme a atteindre exactement
+ * @returns {number[]} entiers de meme longueur, sommant au total
  */
-function arrondirEnConservantLaSomme(valeurs) {
-  const total = arrondiEuro(valeurs.reduce((s, v) => s + v, 0));
+function arrondirEnConservantLaSomme(valeurs, totalImpose) {
+  const total =
+    totalImpose !== undefined ? totalImpose : arrondiEuro(valeurs.reduce((s, v) => s + v, 0));
   const bas = valeurs.map((v) => Math.floor(v));
   const reliquat = total - bas.reduce((s, v) => s + v, 0);
 
@@ -2633,7 +2642,12 @@ function prixDeRevientVentile(
 
   const detail = postes.map((poste) => {
     const v = ventilerPoste(poste);
-    const ch = (chapitresExacts[poste.chapitre] ??= { ht: 0, tva: 0, ttc: 0, ttcLasm: 0 });
+    const ch = (chapitresExacts[poste.chapitre] ??= {
+      ht: 0, tva: 0, ttc: 0, ttcLasm: 0,
+      // Croisement chapitre x tranche : c'est lui qui alimente le sous-total
+      // affiche sous chaque colonne de tranche.
+      parTranche: Object.fromEntries(codes.map((c) => [c, { ht: 0, tva: 0, ttc: 0, ttcLasm: 0 }])),
+    });
     // Une ligne saisie tranche par tranche impose sa repartition ; les autres
     // suivent la cle de l'operation (prorata de surface utile).
     const explicite = poste.montants_ht_par_produit;
@@ -2663,6 +2677,11 @@ function prixDeRevientVentile(
       ch.tva += tva;
       ch.ttc += ht + tva;
       ch.ttcLasm += ttcLasm;
+      const cht = ch.parTranche[code];
+      cht.ht += ht;
+      cht.tva += tva;
+      cht.ttc += ht + tva;
+      cht.ttcLasm += ttcLasm;
     }
     // Totaux de LIGNE recomposes depuis les tranches, et non recalcules au taux
     // global : des que les taux different d'une tranche a l'autre, le produit
@@ -2721,8 +2740,27 @@ function prixDeRevientVentile(
   /** @type {Record<string, any>} */
   const chapitres = {};
   nomsChapitres.forEach((nom, i) => {
+    const exact = chapitresExacts[nom];
+    // Ventilation du sous-total de chapitre entre tranches. Le total IMPOSE est
+    // le sous-total deja arrondi : la ligne doit s'additionner a l'ecran, or ce
+    // sous-total a lui-meme ete ajuste pour que la colonne des chapitres somme
+    // au prix de revient. L'exactitude est donc garantie LIGNE par ligne ; la
+    // colonne d'une tranche peut s'ecarter d'un euro de son total, un arrondi
+    // ne pouvant satisfaire les deux sens a la fois.
+    const repartir = (cle, total) =>
+      arrondirEnConservantLaSomme(codes.map((c) => exact.parTranche[c][cle]), total);
+    const htTr = repartir('ht', chapHt[i]);
+    const tvaTr = repartir('tva', chapTva[i]);
+    const ttcTr = repartir('ttc', chapTtc[i]);
+    const lasmTr = repartir('ttcLasm', chapLasm[i]);
     chapitres[nom] = {
       ht_eur: chapHt[i], tva_eur: chapTva[i], ttc_eur: chapTtc[i], ttc_lasm_eur: chapLasm[i],
+      par_tranche: Object.fromEntries(
+        codes.map((c, j) => [
+          c,
+          { ht_eur: htTr[j], tva_eur: tvaTr[j], ttc_eur: ttcTr[j], ttc_lasm_eur: lasmTr[j] },
+        ]),
+      ),
     };
   });
 
@@ -3262,6 +3300,9 @@ function tfpbAnnee({
  * Unites : montants en euros, taux en fraction.
  */
 
+/** Base du prix de journee d'un foyer (constante calendaire, pas un bareme). */
+const JOURS_PAR_AN = 365;
+
 /**
  * Facteur d'indexation composee entre deux annees, a partir d'une trajectoire
  * de taux annuels. Une annee absente de la trajectoire reconduit le dernier
@@ -3304,7 +3345,8 @@ function facteurIndexation(trajectoire, annee_debut, annee) {
  * @property {number} annee_mise_en_location
  * @property {number} duree_ans                        horizon de simulation
  * @property {'loyers'|'redevance'} [mode]             'redevance' pour les foyers (Q-27)
- * @property {number} [redevance_annuelle_eur]         mode foyer : redevance de l'annee 1
+ * @property {number} [redevance_annuelle_eur]         mode foyer : redevance annuelle
+ * @property {number} [redevance_annee_valeur]         annee de VALEUR de cette redevance
  * @property {string} [index_redevance]                trajectoire qui indexe la redevance
  * @property {number} [qp_subventions_annuelle_eur]    quote-part de subventions virée au résultat
  * @property {number} [duree_qp_subventions_ans]       au-dela, la quote-part s'eteint
@@ -3344,8 +3386,12 @@ function compteExploitation(e) {
     annee_mise_en_location,
     duree_ans,
     mode = 'loyers',
+    mode_redevance = 'forfaitaire',
     redevance_annuelle_eur = 0,
-    index_redevance = 'gestion',
+    redevance_annee_valeur,
+    index_redevance = 'loyers_irl',
+    annuite_fonds_propres_eur = 0,
+    nb_lits = 0,
     qp_subventions_annuelle_eur = 0,
     duree_qp_subventions_ans = 0,
     prix_revient_ttc_eur = 0,
@@ -3404,7 +3450,70 @@ function compteExploitation(e) {
     // Orleans, ou redevance, frais de gestion et assurance suivent EXACTEMENT la
     // meme trajectoire sur 60 ans (ecart relatif 5,6e-15).
     const foyer = mode === 'redevance';
-    const redevance = foyer ? redevance_annuelle_eur * idx(index_redevance) : 0;
+    const transparence = foyer && mode_redevance === 'transparence';
+
+    // Charges INDEPENDANTES des produits : elles sont calculees d'abord, parce
+    // qu'en transparence ce sont elles qui determinent la redevance.
+    const annuitesAnnee = annuitesParAnnee[annee] ?? 0;
+    const fraisGestionForfait = frais_gestion_annuels_eur * nb_logements * idxGestion;
+    const tfpb =
+      annee >= annee_debut_tfpb ? nb_logements * tfpb_par_logement_eur * idxTFPB : 0;
+    const grosEntretien = gros_entretien_eur_m2 * shab_m2 * idxGE;
+    const rel = rel_annuel_eur * nb_logements * idxGestion;
+    // « ANNUITES DE FP » de la table de transparence : la remuneration des
+    // fonds propres est une charge refacturee au meme titre que les annuites
+    // d'emprunt (source : annexe 3204 STRASBOURG RA44, Presentation CA D126).
+    const annuiteFP = annuite_fonds_propres_eur;
+
+    // Charges diverses : celles a assiette FIXE entrent dans le socle, celles a
+    // assiette locative dependent de la redevance et attendent son calcul.
+    const applicable = (c) =>
+      !(c.annee_debut !== undefined && annee < c.annee_debut) &&
+      !(c.annee_fin !== undefined && annee > c.annee_fin);
+    const assietteFixe = { logement: nb_logements, shab: shab_m2, prix_revient_ttc: prix_revient_ttc_eur, forfait: 1 };
+    let chargesFixes = 0;
+    let tauxBruts = 0;
+    let tauxNets = 0;
+    for (const c of charges_diverses) {
+      if (!applicable(c)) continue;
+      if (c.assiette === 'produits_locatifs_bruts') tauxBruts += c.valeur;
+      else if (c.assiette === 'produits_locatifs_nets') tauxNets += c.valeur;
+      else if (assietteFixe[c.assiette] !== undefined) chargesFixes += c.valeur * assietteFixe[c.assiette] * idx(c.index);
+      else throw new Error(`Assiette de charge inconnue : ${c.assiette} (poste ${c.code})`);
+    }
+
+    // --- Produits ---
+    // Mode foyer (R-EXP, Q-27), deux regimes :
+    //  - FORFAITAIRE : la redevance est un montant negocie, indexe depuis son
+    //    annee de valeur. Verifie sur l'annexe Orleans, ou redevance, frais de
+    //    gestion et assurance suivent EXACTEMENT la meme trajectoire sur 60 ans
+    //    (ecart relatif 5,6e-15) sans aucune trace des ruptures de charges.
+    //  - TRANSPARENCE : le bailleur REFACTURE ses frais, la redevance vaut donc
+    //    la somme des charges de l'exercice (annexe RA44 : annuites d'emprunts +
+    //    annuites de FP + PGERC + frais de gestion + TFPB & TEOM + assurances).
+    //
+    // En transparence, les cotisations assises sur les produits locatifs sont
+    // elles-memes refacturees : R = C0 + t x R, resolu en forme fermee plutot
+    // qu'en iterant, R = C0 / (1 - t). Sans taux de ce genre, t vaut 0 et la
+    // redevance est la simple somme des charges.
+    let redevance = 0;
+    if (transparence) {
+      const socle =
+        annuitesAnnee + tfpb + grosEntretien + rel + annuiteFP + chargesFixes +
+        (frais_gestion_pct_loyers > 0 ? 0 : fraisGestionForfait);
+      const t = frais_gestion_pct_loyers + tauxBruts + tauxNets * (1 - taux_vacance_impayes);
+      redevance = t < 1 ? socle / (1 - t) : socle;
+    } else if (foyer) {
+      // La redevance porte une ANNEE DE VALEUR : le montant negocie date d'un
+      // exercice donne, et l'indexation court depuis CET exercice, pas depuis la
+      // mise en location. Une redevance en valeur 2026 pour une livraison en 2029
+      // arrive donc deja indexee de trois ans en annee 1.
+      redevance =
+        redevance_annuelle_eur *
+        (redevance_annee_valeur
+          ? facteurIndexation(trajectoires[index_redevance] ?? 0, redevance_annee_valeur, annee)
+          : idx(index_redevance));
+    }
     const loyersLogements = foyer ? 0 : loyers_logements_annuels_eur * idxLoyers;
     const loyersAnnexes = foyer ? 0 : loyers_annexes_annuels_eur * idxLoyers;
     const loyersDivers = foyer ? 0 : loyers_divers_annuels_eur * idxLoyers;
@@ -3424,15 +3533,10 @@ function compteExploitation(e) {
     const produits = loyersNets + qpSubventions + produitsFinanciers;
 
     // --- Charges ---
-    const annuitesAnnee = annuitesParAnnee[annee] ?? 0;
+    // Les assiettes locatives sont maintenant connues : on peut evaluer les
+    // charges qui en dependent.
     const fraisGestion =
-      frais_gestion_pct_loyers > 0
-        ? loyersBruts * frais_gestion_pct_loyers
-        : frais_gestion_annuels_eur * nb_logements * idxGestion;
-    const tfpb =
-      annee >= annee_debut_tfpb ? nb_logements * tfpb_par_logement_eur * idxTFPB : 0;
-    const grosEntretien = gros_entretien_eur_m2 * shab_m2 * idxGE;
-    const rel = rel_annuel_eur * nb_logements * idxGestion;
+      frais_gestion_pct_loyers > 0 ? loyersBruts * frais_gestion_pct_loyers : fraisGestionForfait;
 
     // Charges diverses pilotees par la donnee (Q-16) : TEOM, assurance PNO,
     // CGLLS, ANCOLS. Le moteur ne connait aucun de ces postes par son nom, il
@@ -3441,25 +3545,19 @@ function compteExploitation(e) {
     const detailChargesDiverses = [];
     let chargesDiverses = 0;
     for (const c of charges_diverses) {
-      if (c.annee_debut !== undefined && annee < c.annee_debut) continue;
-      if (c.annee_fin !== undefined && annee > c.annee_fin) continue;
+      if (!applicable(c)) continue;
       const assiette = {
-        logement: nb_logements,
+        ...assietteFixe,
         produits_locatifs_bruts: loyersBruts,
         produits_locatifs_nets: loyersNets,
-        shab: shab_m2,
-        prix_revient_ttc: prix_revient_ttc_eur,
-        forfait: 1,
       }[c.assiette];
-      if (assiette === undefined) {
-        throw new Error(`Assiette de charge inconnue : ${c.assiette} (poste ${c.code})`);
-      }
       const montant = c.valeur * assiette * idx(c.index);
       detailChargesDiverses.push({ code: c.code, libelle: c.libelle, montant_eur: arrondiEuro(montant) });
       chargesDiverses += montant;
     }
 
-    const charges = annuitesAnnee + fraisGestion + tfpb + grosEntretien + rel + chargesDiverses;
+    const charges =
+      annuitesAnnee + fraisGestion + tfpb + grosEntretien + rel + annuiteFP + chargesDiverses;
 
     // --- Soldes ---
     const resultat = produits - charges;
@@ -3472,6 +3570,10 @@ function compteExploitation(e) {
       // compte pour les moyennes).
       taux_marge: produits > 0 ? resultat / produits : null,
       redevance_eur: arrondiEuro(redevance),
+      // Prix de journee : la redevance ramenee a la place et au jour, indicateur
+      // de reference des foyers (annexe RA44, Presentation CA colonne N).
+      prix_journee_eur: nb_lits > 0 ? redevance / (nb_lits * JOURS_PAR_AN) : null,
+      annuite_fonds_propres_eur: arrondiEuro(annuiteFP),
       loyers_logements_eur: arrondiEuro(loyersLogements),
       loyers_annexes_eur: arrondiEuro(loyersAnnexes),
       loyers_divers_eur: arrondiEuro(loyersDivers),
@@ -4088,8 +4190,12 @@ function calculer(entrees, referentiels) {
     annee_mise_en_location: anneeMEL,
     duree_ans: dates.duree_simulation_ans ?? 50,
     mode: exp.mode ?? 'loyers',
+    mode_redevance: exp.mode_redevance ?? 'forfaitaire',
     redevance_annuelle_eur: exp.redevance_annuelle_eur ?? 0,
-    index_redevance: exp.index_redevance ?? 'gestion',
+    redevance_annee_valeur: exp.redevance_annee_valeur,
+    index_redevance: exp.index_redevance ?? 'loyers_irl',
+    annuite_fonds_propres_eur: exp.annuite_fonds_propres_eur ?? 0,
+    nb_lits: exp.nb_lits ?? 0,
     qp_subventions_annuelle_eur: exp.qp_subventions_annuelle_eur ?? 0,
     duree_qp_subventions_ans: exp.duree_qp_subventions_ans ?? 0,
     prix_revient_ttc_eur: bilan.total_ttc_module_eur,
@@ -4143,6 +4249,23 @@ function calculer(entrees, referentiels) {
   );
   exploitation.fonds_propres_eur = fondsPropres;
   exploitation.charges_diverses_actives = chargesDiverses;
+
+  // En transparence, la redevance vaut la somme des charges (annexe RA44). Un
+  // taux de vacance la rabote donc SANS que les charges baissent : le compte
+  // sort en deficit permanent de ce taux, ce qui ressemble a un bug de modele
+  // alors que c'est une hypothese de saisie. Sous bail a gestionnaire la
+  // redevance est garantie et la vacance vaut zero.
+  if (
+    (exp.mode ?? 'loyers') === 'redevance' &&
+    (exp.mode_redevance ?? 'forfaitaire') === 'transparence' &&
+    (exp.taux_vacance_impayes ?? 0) > 0
+  ) {
+    alertes.push(
+      `Redevance en transparence avec ${((exp.taux_vacance_impayes ?? 0) * 100).toFixed(1)} % de ` +
+        'vacance : la redevance refacture les charges mais la vacance en retranche une part, ' +
+        "d'ou un deficit permanent de ce meme taux. Mettre la vacance a 0 % sous bail a gestionnaire.",
+    );
+  }
   // Postes du compte que le moteur ne sait pas encore produire, listes pour que
   // l'ecran le dise plutot que de laisser croire a un compte complet. TEOM,
   // CGLLS, ANCOLS et assurance PNO en sont sortis : ils sont desormais des
@@ -4403,7 +4526,6 @@ const etat = {
     cf_notaire: { montant_ht_eur: 12000, taux_tva: 0.055 },
     hon_architecte: { montant_ht_eur: 18000, taux_tva: 0.2 },
   }),
-  modulation_ttc_eur: 0,
   // Parametres de loyer PAR TRANCHE : c'est leur niveau naturel, le CS et le
   // plafond ne se calculent qu'a ce niveau.
   loyers_par_produit: {
@@ -4433,9 +4555,11 @@ const etat = {
     // ajoute au referentiel entre deux ouvertures.
     charges_diverses: CATALOGUE_CHARGES.map((c) => ({ code: c.code, actif: false, valeur: c.valeur })),
     mode: 'loyers',
+    mode_redevance: 'forfaitaire',
     redevance_annuelle_eur: null,
-    qp_subventions_annuelle_eur: null,
-    duree_qp_subventions_ans: null,
+    redevance_annee_valeur: null,
+    annuite_fonds_propres_eur: null,
+    nb_lits: null,
   },
   options: {},
 };
@@ -4630,7 +4754,7 @@ function libelleProduit(code) {
 function rendreStructureTranches() {
   const codes = tranchesActives();
   for (const code of codes) {
-    etat.loyers_par_produit[code] ??= { marge_majoration: 0, marge_locale_eur_m2: 0, loyer_sortie_force: null };
+    etat.loyers_par_produit[code] ??= { marge_majoration: 0, loyer_sortie_force: null };
   }
 
   $('#onglets-tranches').innerHTML = codes
@@ -4648,19 +4772,15 @@ function rendreStructureTranches() {
       const subs = etat.subventions.map((s, i) => ({ s, i })).filter(({ s }) => s.affectation === code);
       return `
       <main class="ecran" id="ecran-tranche-${code}" role="tabpanel" hidden style="--cat:${catProduit(code)}">
-        <div class="bandeau bandeau--info" data-recap-tranche="${code}"></div>
+        <div class="indicateurs" data-recap-tranche="${code}"></div>
 
         <div class="colonnes">
           <section class="bloc bloc--tranche">
             <h2 class="bloc__titre">Loyer de la tranche ${att(libelleProduit(code))}</h2>
-            <div class="champs">
+            <div class="champs champs--serres">
               <label class="champ">
                 <span>Majoration (%)</span>
                 <input type="number" step="0.1" data-champ="loyers_par_produit.${code}.marge_majoration" data-type="pourcentage" value="${valNum(enPourcent(L.marge_majoration))}" />
-              </label>
-              <label class="champ">
-                <span>Marge locale (€/m²/mois)</span>
-                <input type="number" step="0.01" data-champ="loyers_par_produit.${code}.marge_locale_eur_m2" data-type="nombre" value="${valNum(L.marge_locale_eur_m2)}" />
               </label>
               <label class="champ">
                 <span>Loyer forcé (€/m²/mois)</span>
@@ -4840,10 +4960,48 @@ function rendreStructureCharges() {
       }).join('')
     : '<tr><td colspan="6" class="vide">Aucun poste au référentiel.</td></tr>';
 
-  // En mode loyers, les champs de redevance n'ont pas de sens : les masquer vaut
-  // mieux que les laisser saisissables et sans effet.
-  const champsRedevance = document.getElementById('champs-redevance');
-  if (champsRedevance) champsRedevance.hidden = etat.exploitation.mode !== 'redevance';
+  rendreBlocRedevance();
+}
+
+/**
+ * Q-27 — Bloc foyer. Deux regimes, et ils ne se saisissent pas pareil :
+ *  - FORFAITAIRE : un montant negocie et son annee de valeur ;
+ *  - TRANSPARENCE : rien a saisir, la redevance EST la somme des charges.
+ * Afficher un champ « redevance » en transparence laisserait croire qu'il agit.
+ */
+function rendreBlocRedevance() {
+  const e = etat.exploitation;
+  const foyer = e.mode === 'redevance';
+  const champs = document.getElementById('champs-redevance');
+  const bascule = document.getElementById('bascule-redevance');
+  if (!champs) return;
+
+  champs.hidden = !foyer;
+  if (bascule) bascule.hidden = !foyer;
+  for (const b of document.querySelectorAll('[data-mode-redevance]')) {
+    b.setAttribute(
+      'aria-pressed',
+      String(/** @type {HTMLElement} */ (b).dataset.modeRedevance === (e.mode_redevance ?? 'forfaitaire')),
+    );
+  }
+  for (const el of champs.querySelectorAll('[data-si-redevance]')) {
+    /** @type {HTMLElement} */ (el).hidden =
+      /** @type {HTMLElement} */ (el).dataset.siRedevance !== (e.mode_redevance ?? 'forfaitaire');
+  }
+
+  const aide = document.getElementById('aide-redevance');
+  if (aide) {
+    aide.textContent =
+      (e.mode_redevance ?? 'forfaitaire') === 'transparence'
+        ? '⚙ En transparence, le bailleur refacture ses frais : la redevance vaut la somme des ' +
+          'charges de l’exercice (annuités d’emprunt et de fonds propres, gros entretien, gestion, ' +
+          'taxe foncière, assurances). Elle suit chaque rupture de charges, et les cotisations ' +
+          'assises sur la redevance sont refacturées elles aussi. Le résultat est nul, sauf si un ' +
+          'taux de vacance vient retrancher une part de la redevance sans réduire les charges.'
+        : '⚙ En forfaitaire, la redevance est un montant négocié, indexé depuis son année de valeur. ' +
+          'Elle ne suit pas les charges : vérifié sur l’annexe Orléans, où aucune rupture de charges ' +
+          'ne laisse de trace sur 60 ans.';
+  }
 }
 
 function rendreStructure() {
@@ -5023,11 +5181,26 @@ function rendreTablePrixRevient() {
       </tr>`);
     }
 
+    // Sous-total du chapitre, decline SOUS CHAQUE COLONNE DE TRANCHE : une
+    // colonne qu'on ne peut pas additionner ne sert qu'a moitie.
+    const sousTotauxTranches = parTranche
+      ? codes
+          .map(
+            (c) =>
+              `<td class="num col-tranche" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="ht_eur"></td>` +
+              (tva
+                ? `<td class="num col-tranche" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="tva_eur"></td>`
+                : ''),
+          )
+          .join('')
+      : '';
     lignes.push(
       `<tr class="chapitre-total" data-chapitre-total="${ch.code}">
         <td></td><td class="libelle">Sous-total ${att(ch.libelle.toLowerCase())}</td>
         <td class="num" data-total="ht"></td>
-        <td colspan="${nbCols - 5}"></td>
+        <td></td>
+        ${tva ? '<td></td>' : ''}
+        ${sousTotauxTranches}
         <td class="num" data-total="tva"></td><td class="num" data-total="ttc"></td>
       </tr>`,
     );
@@ -5115,13 +5288,30 @@ function rendreValeurs(r) {
   for (const code of r.surfaces.tranches) {
     const t = recap[code] ?? {};
     const l = r.loyers.find((x) => x.code_produit === code);
+    // Bandeau d'indicateurs plutot qu'une phrase : sept nombres alignes dans une
+    // phrase se relisent mal, et c'est la premiere chose qu'on regarde en
+    // arrivant sur la tranche.
     const bandeau = document.querySelector(`[data-recap-tranche="${code}"]`);
     if (bandeau) {
-      bandeau.innerHTML =
-        `<span class="bandeau__principal">${att(libelleProduit(code))}</span>` +
-        `<span class="bandeau__detail">${nb(t.nb_logements)} logements · ${nb(t.su_m2)} m² SU ` +
-        `(${pct(t.quote_part_su, 1)} de l'opération) · prix de revient ${eur(t.prix_revient_ttc_eur)} · ` +
-        `subventions ${eur(t.subventions_eur)} · fonds propres ${eur(t.fonds_propres_eur)}</span>`;
+      const pretsTranche = (r.amortissements ?? []).filter((a) => a.produit === code);
+      const totalPrets = pretsTranche.reduce((s, a) => s + a.montant_eur, 0);
+      const ressources = totalPrets + (t.subventions_eur ?? 0) + (t.fonds_propres_eur ?? 0);
+      const reste = (t.prix_revient_ttc_eur ?? 0) - ressources;
+      const tuile = (l, v, d) =>
+        `<div class="indicateur"><div class="indicateur__libelle">${l}</div>` +
+        `<div class="indicateur__valeur">${v}</div><div class="indicateur__detail">${d}</div></div>`;
+      bandeau.innerHTML = [
+        tuile('Programme', `${nb(t.nb_logements)} lgts`, `${nb(t.su_m2)} m² SU · ${pct(t.quote_part_su, 1)} de l’opération`),
+        tuile('Loyer de sortie', l ? `${nb(l.loyer_pratique_eur_m2)} €` : '—', 'par m² SU et par mois'),
+        tuile('Loyer annuel', l ? eur(l.loyer_annuel_eur) : '—', `coefficient de structure ${l ? nb(l.cs) : '—'}`),
+        tuile('Prix de revient', eur(t.prix_revient_ttc_eur), 'TTC / LASM de la tranche'),
+        tuile('Ressources', eur(ressources), `${eur(totalPrets)} de prêts · ${eur(t.subventions_eur)} de subventions`),
+        tuile(
+          reste > 0 ? 'Reste à financer' : 'Financement',
+          reste > 0 ? eur(reste) : 'couvert',
+          reste > 0 ? 'ressources inférieures au prix de revient' : `${eur(t.fonds_propres_eur)} de fonds propres`,
+        ),
+      ].join('');
     }
     const detail = document.querySelector(`[data-detail-loyer="${code}"] tbody`);
     if (detail && l) {
@@ -5185,6 +5375,13 @@ function rendreValeurs(r) {
     set('ht', c ? eur(c.ht_eur) : eur(0));
     set('tva', c ? eur(c.tva_eur) : eur(0));
     set('ttc', c ? eur(c.ttc_eur) : eur(0));
+    // Declinaison par tranche : la somme des cellules vaut le sous-total, le
+    // moteur s'en charge (total impose a `arrondirEnConservantLaSomme`).
+    for (const td of tr.querySelectorAll('[data-sous-total]')) {
+      const e = /** @type {HTMLElement} */ (td);
+      const t = c?.par_tranche?.[e.dataset.sousTotal];
+      td.textContent = t ? eur(t[e.dataset.cle]) : '';
+    }
   }
   const renseignes = etat.postes_bilan.filter((p) => !nul(totalPoste(p))).length;
   const ventiles = etat.postes_bilan.filter((p) => estVentile(p) && !nul(totalPoste(p))).length;
@@ -5225,11 +5422,6 @@ function rendreValeurs(r) {
         }
       </td>
     </tr>`;
-  $('#aide-lasm').textContent =
-    `⚙ La base finançable applique le taux de livraison à soi-même du produit principal ` +
-    `(${pct(b.taux_lasm, 1)}), et non les taux de TVA de saisie. C'est elle que le plan de ` +
-    `financement doit couvrir.`;
-
   // --- Repartition du prix de revient, sur l'ecran Prix de revient ---
   const vent = r.bilan.ventilation;
   const tvp = $('#table-ventilation-pdr');
@@ -5603,7 +5795,11 @@ function rendreExploitation(r) {
     }</span>` +
     `<span class="bandeau__detail">${e.lignes.length} années simulées, de ${e.lignes[0]?.annee} à ` +
     `${e.lignes.at(-1)?.annee}${deficit ? `, de ${ind.premiere_annee_deficitaire} à ${ind.derniere_annee_deficitaire}` : ''}. ` +
-    `${e.mode === 'redevance' ? 'Produits en redevance forfaitaire (mode foyer). ' : ''}` +
+    `${
+      e.mode === 'redevance'
+        ? `Produits en redevance ${etat.exploitation.mode_redevance === 'transparence' ? 'en transparence' : 'forfaitaire'} (mode foyer). `
+        : ''
+    }` +
     `Compte partiel : ${e.postes_absents.length} familles de postes ne sont pas encore modélisées.</span>`;
 
   // Colonne « Année 1 » de la table des charges diverses : remplie depuis le
@@ -5943,6 +6139,13 @@ document.addEventListener('click', (ev) => {
   const onglet = el.closest('[data-ecran]');
   if (onglet) {
     afficherEcran(/** @type {HTMLElement} */ (onglet).dataset.ecran);
+    return;
+  }
+
+  const modeRedev = el.closest('[data-mode-redevance]');
+  if (modeRedev) {
+    etat.exploitation.mode_redevance = /** @type {HTMLElement} */ (modeRedev).dataset.modeRedevance;
+    rafraichirTout();
     return;
   }
 

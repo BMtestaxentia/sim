@@ -153,7 +153,6 @@ const etat = {
     cf_notaire: { montant_ht_eur: 12000, taux_tva: 0.055 },
     hon_architecte: { montant_ht_eur: 18000, taux_tva: 0.2 },
   }),
-  modulation_ttc_eur: 0,
   // Parametres de loyer PAR TRANCHE : c'est leur niveau naturel, le CS et le
   // plafond ne se calculent qu'a ce niveau.
   loyers_par_produit: {
@@ -183,9 +182,11 @@ const etat = {
     // ajoute au referentiel entre deux ouvertures.
     charges_diverses: CATALOGUE_CHARGES.map((c) => ({ code: c.code, actif: false, valeur: c.valeur })),
     mode: 'loyers',
+    mode_redevance: 'forfaitaire',
     redevance_annuelle_eur: null,
-    qp_subventions_annuelle_eur: null,
-    duree_qp_subventions_ans: null,
+    redevance_annee_valeur: null,
+    annuite_fonds_propres_eur: null,
+    nb_lits: null,
   },
   options: {},
 };
@@ -380,7 +381,7 @@ function libelleProduit(code) {
 function rendreStructureTranches() {
   const codes = tranchesActives();
   for (const code of codes) {
-    etat.loyers_par_produit[code] ??= { marge_majoration: 0, marge_locale_eur_m2: 0, loyer_sortie_force: null };
+    etat.loyers_par_produit[code] ??= { marge_majoration: 0, loyer_sortie_force: null };
   }
 
   $('#onglets-tranches').innerHTML = codes
@@ -398,19 +399,15 @@ function rendreStructureTranches() {
       const subs = etat.subventions.map((s, i) => ({ s, i })).filter(({ s }) => s.affectation === code);
       return `
       <main class="ecran" id="ecran-tranche-${code}" role="tabpanel" hidden style="--cat:${catProduit(code)}">
-        <div class="bandeau bandeau--info" data-recap-tranche="${code}"></div>
+        <div class="indicateurs" data-recap-tranche="${code}"></div>
 
         <div class="colonnes">
           <section class="bloc bloc--tranche">
             <h2 class="bloc__titre">Loyer de la tranche ${att(libelleProduit(code))}</h2>
-            <div class="champs">
+            <div class="champs champs--serres">
               <label class="champ">
                 <span>Majoration (%)</span>
                 <input type="number" step="0.1" data-champ="loyers_par_produit.${code}.marge_majoration" data-type="pourcentage" value="${valNum(enPourcent(L.marge_majoration))}" />
-              </label>
-              <label class="champ">
-                <span>Marge locale (€/m²/mois)</span>
-                <input type="number" step="0.01" data-champ="loyers_par_produit.${code}.marge_locale_eur_m2" data-type="nombre" value="${valNum(L.marge_locale_eur_m2)}" />
               </label>
               <label class="champ">
                 <span>Loyer forcé (€/m²/mois)</span>
@@ -590,10 +587,48 @@ function rendreStructureCharges() {
       }).join('')
     : '<tr><td colspan="6" class="vide">Aucun poste au référentiel.</td></tr>';
 
-  // En mode loyers, les champs de redevance n'ont pas de sens : les masquer vaut
-  // mieux que les laisser saisissables et sans effet.
-  const champsRedevance = document.getElementById('champs-redevance');
-  if (champsRedevance) champsRedevance.hidden = etat.exploitation.mode !== 'redevance';
+  rendreBlocRedevance();
+}
+
+/**
+ * Q-27 — Bloc foyer. Deux regimes, et ils ne se saisissent pas pareil :
+ *  - FORFAITAIRE : un montant negocie et son annee de valeur ;
+ *  - TRANSPARENCE : rien a saisir, la redevance EST la somme des charges.
+ * Afficher un champ « redevance » en transparence laisserait croire qu'il agit.
+ */
+function rendreBlocRedevance() {
+  const e = etat.exploitation;
+  const foyer = e.mode === 'redevance';
+  const champs = document.getElementById('champs-redevance');
+  const bascule = document.getElementById('bascule-redevance');
+  if (!champs) return;
+
+  champs.hidden = !foyer;
+  if (bascule) bascule.hidden = !foyer;
+  for (const b of document.querySelectorAll('[data-mode-redevance]')) {
+    b.setAttribute(
+      'aria-pressed',
+      String(/** @type {HTMLElement} */ (b).dataset.modeRedevance === (e.mode_redevance ?? 'forfaitaire')),
+    );
+  }
+  for (const el of champs.querySelectorAll('[data-si-redevance]')) {
+    /** @type {HTMLElement} */ (el).hidden =
+      /** @type {HTMLElement} */ (el).dataset.siRedevance !== (e.mode_redevance ?? 'forfaitaire');
+  }
+
+  const aide = document.getElementById('aide-redevance');
+  if (aide) {
+    aide.textContent =
+      (e.mode_redevance ?? 'forfaitaire') === 'transparence'
+        ? '⚙ En transparence, le bailleur refacture ses frais : la redevance vaut la somme des ' +
+          'charges de l’exercice (annuités d’emprunt et de fonds propres, gros entretien, gestion, ' +
+          'taxe foncière, assurances). Elle suit chaque rupture de charges, et les cotisations ' +
+          'assises sur la redevance sont refacturées elles aussi. Le résultat est nul, sauf si un ' +
+          'taux de vacance vient retrancher une part de la redevance sans réduire les charges.'
+        : '⚙ En forfaitaire, la redevance est un montant négocié, indexé depuis son année de valeur. ' +
+          'Elle ne suit pas les charges : vérifié sur l’annexe Orléans, où aucune rupture de charges ' +
+          'ne laisse de trace sur 60 ans.';
+  }
 }
 
 function rendreStructure() {
@@ -773,11 +808,26 @@ function rendreTablePrixRevient() {
       </tr>`);
     }
 
+    // Sous-total du chapitre, decline SOUS CHAQUE COLONNE DE TRANCHE : une
+    // colonne qu'on ne peut pas additionner ne sert qu'a moitie.
+    const sousTotauxTranches = parTranche
+      ? codes
+          .map(
+            (c) =>
+              `<td class="num col-tranche" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="ht_eur"></td>` +
+              (tva
+                ? `<td class="num col-tranche" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="tva_eur"></td>`
+                : ''),
+          )
+          .join('')
+      : '';
     lignes.push(
       `<tr class="chapitre-total" data-chapitre-total="${ch.code}">
         <td></td><td class="libelle">Sous-total ${att(ch.libelle.toLowerCase())}</td>
         <td class="num" data-total="ht"></td>
-        <td colspan="${nbCols - 5}"></td>
+        <td></td>
+        ${tva ? '<td></td>' : ''}
+        ${sousTotauxTranches}
         <td class="num" data-total="tva"></td><td class="num" data-total="ttc"></td>
       </tr>`,
     );
@@ -865,13 +915,30 @@ function rendreValeurs(r) {
   for (const code of r.surfaces.tranches) {
     const t = recap[code] ?? {};
     const l = r.loyers.find((x) => x.code_produit === code);
+    // Bandeau d'indicateurs plutot qu'une phrase : sept nombres alignes dans une
+    // phrase se relisent mal, et c'est la premiere chose qu'on regarde en
+    // arrivant sur la tranche.
     const bandeau = document.querySelector(`[data-recap-tranche="${code}"]`);
     if (bandeau) {
-      bandeau.innerHTML =
-        `<span class="bandeau__principal">${att(libelleProduit(code))}</span>` +
-        `<span class="bandeau__detail">${nb(t.nb_logements)} logements · ${nb(t.su_m2)} m² SU ` +
-        `(${pct(t.quote_part_su, 1)} de l'opération) · prix de revient ${eur(t.prix_revient_ttc_eur)} · ` +
-        `subventions ${eur(t.subventions_eur)} · fonds propres ${eur(t.fonds_propres_eur)}</span>`;
+      const pretsTranche = (r.amortissements ?? []).filter((a) => a.produit === code);
+      const totalPrets = pretsTranche.reduce((s, a) => s + a.montant_eur, 0);
+      const ressources = totalPrets + (t.subventions_eur ?? 0) + (t.fonds_propres_eur ?? 0);
+      const reste = (t.prix_revient_ttc_eur ?? 0) - ressources;
+      const tuile = (l, v, d) =>
+        `<div class="indicateur"><div class="indicateur__libelle">${l}</div>` +
+        `<div class="indicateur__valeur">${v}</div><div class="indicateur__detail">${d}</div></div>`;
+      bandeau.innerHTML = [
+        tuile('Programme', `${nb(t.nb_logements)} lgts`, `${nb(t.su_m2)} m² SU · ${pct(t.quote_part_su, 1)} de l’opération`),
+        tuile('Loyer de sortie', l ? `${nb(l.loyer_pratique_eur_m2)} €` : '—', 'par m² SU et par mois'),
+        tuile('Loyer annuel', l ? eur(l.loyer_annuel_eur) : '—', `coefficient de structure ${l ? nb(l.cs) : '—'}`),
+        tuile('Prix de revient', eur(t.prix_revient_ttc_eur), 'TTC / LASM de la tranche'),
+        tuile('Ressources', eur(ressources), `${eur(totalPrets)} de prêts · ${eur(t.subventions_eur)} de subventions`),
+        tuile(
+          reste > 0 ? 'Reste à financer' : 'Financement',
+          reste > 0 ? eur(reste) : 'couvert',
+          reste > 0 ? 'ressources inférieures au prix de revient' : `${eur(t.fonds_propres_eur)} de fonds propres`,
+        ),
+      ].join('');
     }
     const detail = document.querySelector(`[data-detail-loyer="${code}"] tbody`);
     if (detail && l) {
@@ -935,6 +1002,13 @@ function rendreValeurs(r) {
     set('ht', c ? eur(c.ht_eur) : eur(0));
     set('tva', c ? eur(c.tva_eur) : eur(0));
     set('ttc', c ? eur(c.ttc_eur) : eur(0));
+    // Declinaison par tranche : la somme des cellules vaut le sous-total, le
+    // moteur s'en charge (total impose a `arrondirEnConservantLaSomme`).
+    for (const td of tr.querySelectorAll('[data-sous-total]')) {
+      const e = /** @type {HTMLElement} */ (td);
+      const t = c?.par_tranche?.[e.dataset.sousTotal];
+      td.textContent = t ? eur(t[e.dataset.cle]) : '';
+    }
   }
   const renseignes = etat.postes_bilan.filter((p) => !nul(totalPoste(p))).length;
   const ventiles = etat.postes_bilan.filter((p) => estVentile(p) && !nul(totalPoste(p))).length;
@@ -975,11 +1049,6 @@ function rendreValeurs(r) {
         }
       </td>
     </tr>`;
-  $('#aide-lasm').textContent =
-    `⚙ La base finançable applique le taux de livraison à soi-même du produit principal ` +
-    `(${pct(b.taux_lasm, 1)}), et non les taux de TVA de saisie. C'est elle que le plan de ` +
-    `financement doit couvrir.`;
-
   // --- Repartition du prix de revient, sur l'ecran Prix de revient ---
   const vent = r.bilan.ventilation;
   const tvp = $('#table-ventilation-pdr');
@@ -1353,7 +1422,11 @@ function rendreExploitation(r) {
     }</span>` +
     `<span class="bandeau__detail">${e.lignes.length} années simulées, de ${e.lignes[0]?.annee} à ` +
     `${e.lignes.at(-1)?.annee}${deficit ? `, de ${ind.premiere_annee_deficitaire} à ${ind.derniere_annee_deficitaire}` : ''}. ` +
-    `${e.mode === 'redevance' ? 'Produits en redevance forfaitaire (mode foyer). ' : ''}` +
+    `${
+      e.mode === 'redevance'
+        ? `Produits en redevance ${etat.exploitation.mode_redevance === 'transparence' ? 'en transparence' : 'forfaitaire'} (mode foyer). `
+        : ''
+    }` +
     `Compte partiel : ${e.postes_absents.length} familles de postes ne sont pas encore modélisées.</span>`;
 
   // Colonne « Année 1 » de la table des charges diverses : remplie depuis le
@@ -1693,6 +1766,13 @@ document.addEventListener('click', (ev) => {
   const onglet = el.closest('[data-ecran]');
   if (onglet) {
     afficherEcran(/** @type {HTMLElement} */ (onglet).dataset.ecran);
+    return;
+  }
+
+  const modeRedev = el.closest('[data-mode-redevance]');
+  if (modeRedev) {
+    etat.exploitation.mode_redevance = /** @type {HTMLElement} */ (modeRedev).dataset.modeRedevance;
+    rafraichirTout();
     return;
   }
 

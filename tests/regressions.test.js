@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { calculer } from '../src/moteur.js';
 import { prixDeRevientVentile } from '../src/bilan.js';
+import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
 import { coefficientStructure } from '../src/loyers.js';
 import { adapterTrajectoires, normaliserTrajectoires } from '../src/trajectoires.js';
 import { calendrierOperation, decalerMois } from '../src/calendrier.js';
@@ -508,5 +509,111 @@ describe('R-TVA-3 — prix de revient saisi par tranche', () => {
     const somme = ['PLAI', 'PLUS', 'PLS'].reduce((s, c) => s + v.par_tranche[c].total_ht_eur, 0);
     expect(somme).toBe(v.total_ht_eur);
     expect(v.total_ht_eur).toBe(1000);
+  });
+});
+
+describe('R-TVA-3 — sous-totaux de chapitre par tranche', () => {
+  const v = () =>
+    prixDeRevientVentile(
+      {
+        postes: [
+          { chapitre: 'charge_fonciere', libelle: 'Terrain', montant_ht_eur: 642780, taux_tva: 0.055 },
+          { chapitre: 'charge_fonciere', libelle: 'Notaire', montant_ht_eur: 12000, taux_tva: 0.055 },
+          { chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1100000, taux_tva: 0.1 },
+        ],
+        su_par_produit: { PLAI: 252, PLS: 420 },
+      },
+      baremes,
+    );
+
+  it('croise chaque chapitre avec chaque tranche', () => {
+    const ch = v().chapitres.charge_fonciere;
+    expect(Object.keys(ch.par_tranche).sort()).toEqual(['PLAI', 'PLS']);
+    expect(ch.par_tranche.PLAI.ht_eur).toBeGreaterThan(0);
+  });
+
+  it('la LIGNE de sous-total s additionne exactement, c est elle qu on lit', () => {
+    // La somme des cellules de tranche doit valoir le sous-total affiche du
+    // chapitre. Un ecart d un euro se voit immediatement sur une seule ligne.
+    for (const [nom, ch] of Object.entries(v().chapitres)) {
+      const somme = Object.values(ch.par_tranche).reduce((s, t) => s + t.ht_eur, 0);
+      expect(somme, `${nom} HT`).toBe(ch.ht_eur);
+      const sommeTva = Object.values(ch.par_tranche).reduce((s, t) => s + t.tva_eur, 0);
+      expect(sommeTva, `${nom} TVA`).toBe(ch.tva_eur);
+      const sommeTtc = Object.values(ch.par_tranche).reduce((s, t) => s + t.ttc_eur, 0);
+      expect(sommeTtc, `${nom} TTC`).toBe(ch.ttc_eur);
+    }
+  });
+
+  it('respecte la ventilation manuelle d une ligne dans le sous-total', () => {
+    const r = prixDeRevientVentile(
+      {
+        postes: [
+          { chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1000, taux_tva: 0 },
+          { chapitre: 'batiment', libelle: 'Ascenseur A', taux_tva: 0, montants_ht_par_produit: { PLAI: 500, PLS: 0 } },
+        ],
+        su_par_produit: { PLAI: 500, PLS: 500 },
+      },
+      baremes,
+    );
+    const ch = r.chapitres.batiment;
+    // 500 (moitie des travaux) + 500 (ascenseur entier) contre 500 seulement.
+    expect(ch.par_tranche.PLAI.ht_eur).toBe(1000);
+    expect(ch.par_tranche.PLS.ht_eur).toBe(500);
+    expect(ch.ht_eur).toBe(1500);
+  });
+});
+
+describe('arrondirEnConservantLaSomme — total impose', () => {
+  it('atteint exactement un total impose different de l arrondi naturel', () => {
+    // Somme exacte 10, mais le total a respecter vaut 11 : c'est le cas quand
+    // le sous-total a deja ete ajuste pour boucler sur le prix de revient.
+    const parts = arrondirEnConservantLaSomme([3.33, 3.33, 3.34], 11);
+    expect(parts.reduce((s, v) => s + v, 0)).toBe(11);
+  });
+
+  it('sans total impose, garde le comportement d origine', () => {
+    const parts = arrondirEnConservantLaSomme([3.33, 3.33, 3.34]);
+    expect(parts.reduce((s, v) => s + v, 0)).toBe(10);
+  });
+});
+
+describe('Q-27 — la vacance en transparence est signalee, pas subie en silence', () => {
+  const foyer = (exploitation) =>
+    calculer(
+      {
+        identite: { zone_123: 2, zone_ABC: 'B1' },
+        dates: { annee_mise_en_location: 2028, duree_simulation_ans: 5 },
+        lots: [{ code_produit: 'PLAI', nb_logements: 44, shab_m2: 1500 }],
+        postes_bilan: [{ chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1000000, taux_tva: 0.1 }],
+        fonds_propres_eur: 100000,
+        exploitation: { mode: 'redevance', mode_redevance: 'transparence', ...exploitation },
+      },
+      REFERENTIELS,
+    );
+
+  it('sans vacance, la redevance couvre exactement les charges', () => {
+    const r = foyer({ annuite_fonds_propres_eur: 4000 });
+    for (const l of r.exploitation.lignes) {
+      expect(l.redevance_eur, `année ${l.annee}`).toBe(l.total_charges_eur);
+      expect(l.resultat_eur, `année ${l.annee}`).toBe(0);
+    }
+    expect(r.alertes.some((a) => /transparence/.test(a))).toBe(false);
+  });
+
+  it('avec vacance, le deficit permanent est annonce', () => {
+    const r = foyer({ annuite_fonds_propres_eur: 4000, taux_vacance_impayes: 0.02 });
+    // Le deficit vaut exactement le taux de vacance applique a la redevance.
+    const l = r.exploitation.lignes[0];
+    expect(l.resultat_eur).toBeLessThan(0);
+    expect(Math.abs(l.resultat_eur)).toBe(Math.round(l.redevance_eur * 0.02));
+    expect(r.alertes.some((a) => /transparence/.test(a) && /vacance/.test(a))).toBe(true);
+  });
+
+  it('le mode forfaitaire ne declenche pas cette alerte', () => {
+    const r = foyer({
+      mode_redevance: 'forfaitaire', redevance_annuelle_eur: 200000, taux_vacance_impayes: 0.02,
+    });
+    expect(r.alertes.some((a) => /transparence/.test(a))).toBe(false);
   });
 });

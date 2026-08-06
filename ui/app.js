@@ -187,8 +187,6 @@ const etat = {
     mode_redevance: 'forfaitaire',
     redevance_annuelle_eur: null,
     redevance_annee_valeur: null,
-    annuite_fonds_propres_eur: null,
-    nb_lits: null,
   },
   options: {},
 };
@@ -200,7 +198,21 @@ const fNombre = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
 
 const nul = (v) => v === null || v === undefined || (typeof v === 'number' && Number.isNaN(v));
 const eur = (v) => (nul(v) ? '—' : fEuro.format(v));
-const pct = (v, d = 2) => (nul(v) ? '—' : `${(v * 100).toFixed(d)} %`);
+/**
+ * Pourcentage en ecriture francaise : « 97,3 % » et non « 97.3 % ».
+ * `toFixed` produit un point decimal, seul reliquat anglo-saxon d'un ecran ou
+ * tous les autres nombres passent par `Intl`. Un formateur par nombre de
+ * decimales, memoise : en construire un a chaque appel coute cher en boucle.
+ */
+const FORMATS_PCT = {};
+const pct = (v, d = 2) => {
+  if (nul(v)) return '—';
+  FORMATS_PCT[d] ??= new Intl.NumberFormat('fr-FR', {
+    minimumFractionDigits: d,
+    maximumFractionDigits: d,
+  });
+  return `${FORMATS_PCT[d].format(v * 100)} %`;
+};
 const nb = (v) => (nul(v) ? '—' : fNombre.format(v));
 
 /**
@@ -661,9 +673,6 @@ function rendreStructureCharges() {
  * prerempli sans provenance laisse croire a une saisie de l'utilisateur.
  */
 function rendreZonage() {
-  const aide = document.getElementById('aide-zonage');
-  if (!aide) return;
-
   // La liste des communes suit le departement choisi : on choisit dans l'arrete
   // plutot que de saisir un nom, ce qui supprime la faute de frappe et rend la
   // correspondance exacte.
@@ -681,31 +690,14 @@ function rendreZonage() {
     select.value = etat.identite.commune ?? '';
   }
 
+  // La zone A/B/C suit la commune. On ne touche QUE ce select : repasser par
+  // `rendreChampsStatiques` reecrirait tous les champs, curseur compris.
   const z = zonageDeLaCommune(etat.identite.commune, etat.identite.departement);
-  const ref = referentiels.zonage_abc;
-
-  if (z) {
-    // On ne touche QUE le select de zone ABC. Repasser par
-    // `rendreChampsStatiques` reecrirait tous les champs, curseur compris.
-    if (etat.identite.zone_ABC !== z.zone_ABC) {
-      etat.identite.zone_ABC = z.zone_ABC;
-      const el = /** @type {HTMLSelectElement} */ (document.querySelector('[data-champ="identite.zone_ABC"]'));
-      if (el) el.value = z.zone_ABC;
-    }
-    aide.textContent =
-      `⚙ ${z.nom} (INSEE ${z.code_insee}) est en zone ${z.zone_ABC}, d'après l'arrêté en vigueur ` +
-      `depuis le ${ref.en_vigueur_depuis} (${ref.source}). ` +
-      'La zone 1/2/3, qui commande les loyers PLUS et PLAI, relève d’un autre arrêté sans table ' +
-      'nationale ouverte : elle reste à saisir.';
-    return;
+  if (z && etat.identite.zone_ABC !== z.zone_ABC) {
+    etat.identite.zone_ABC = z.zone_ABC;
+    const el = /** @type {HTMLSelectElement} */ (document.querySelector('[data-champ="identite.zone_ABC"]'));
+    if (el) el.value = z.zone_ABC;
   }
-
-  aide.textContent = etat.identite.departement
-    ? `⚙ Choisir la commune pour que la zone A/B/C se déduise (${communes.length} communes dans ce ` +
-      `département, arrêté du ${ref.en_vigueur_depuis}). La zone 1/2/3 reste à saisir.`
-    : `⚙ Choisir le département, puis la commune : la zone A/B/C se déduit de l’arrêté ` +
-      `(${ref.nb_communes.toLocaleString('fr-FR')} communes). Elle commande les loyers plafonds du ` +
-      'PLS et du PLI. La zone 1/2/3, celle du PLUS et du PLAI, reste à saisir.';
 }
 
 /**
@@ -1264,13 +1256,19 @@ function rendreFinancement(r) {
   rendreBarre($('#barre-ressources'), ressources, echelle);
   $('#total-emplois').textContent = eur(totalEmplois);
   $('#total-ressources').textContent = eur(totalRessources);
-  $('#legende').innerHTML = [...emplois, ...ressources]
-    .filter((s) => s.montant > 0)
-    .map(
-      (s) => `<div class="legende__item"><span class="legende__puce" style="background:${s.couleur}"></span>
-        <span>${att(s.libelle)}</span><span class="legende__montant">${eur(s.montant)}</span></div>`,
-    )
-    .join('');
+  // Une legende PAR COTE, et le poids de chaque poste dans SON total : la part
+  // d'un pret se lit dans les ressources, pas dans le prix de revient.
+  const legende = (segments, total) =>
+    segments
+      .filter((s) => s.montant > 0)
+      .map(
+        (s) => `<div class="legende__item"><span class="legende__puce" style="background:${s.couleur}"></span>
+        <span>${att(s.libelle)}</span><span class="legende__montant">${eur(s.montant)}</span>
+        <span class="legende__part">${total ? pct(s.montant / total, 1) : '—'}</span></div>`,
+      )
+      .join('');
+  $('#legende-emplois').innerHTML = legende(emplois, totalEmplois);
+  $('#legende-ressources').innerHTML = legende(ressources, totalRessources);
 
   const part = (m, t) => (t ? pct(m / t, 1) : '—');
 
@@ -1447,7 +1445,8 @@ function viderRestitution(message) {
   bandeau.innerHTML = `<span class="bandeau__principal">Aucun résultat</span>
     <span class="bandeau__detail">${att(message)}</span>`;
   for (const sel of [
-    '#barre-emplois', '#barre-ressources', '#legende', '#indicateurs', '#controles',
+    '#barre-emplois', '#barre-ressources', '#legende-emplois', '#legende-ressources',
+    '#indicateurs', '#controles',
     '#messages-moteur', '#tuiles-exploitation', '#graphe-exploitation', '#postes-absents',
   ]) {
     $(sel).innerHTML = '';

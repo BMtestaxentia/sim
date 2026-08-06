@@ -446,7 +446,9 @@ export function calculer(entrees, referentiels) {
     redevance_annee_valeur: exp.redevance_annee_valeur,
     index_redevance: exp.index_redevance ?? 'loyers_irl',
     annuite_fonds_propres_eur: exp.annuite_fonds_propres_eur ?? 0,
-    nb_lits: exp.nb_lits ?? 0,
+    // Le nombre de places d'un foyer, c'est son nombre de lots : le programme
+    // le porte deja, le redemander serait une saisie a tenir en double.
+    nb_lits: exp.nb_lits ?? nbLogements,
     qp_subventions_annuelle_eur: exp.qp_subventions_annuelle_eur ?? 0,
     duree_qp_subventions_ans: exp.duree_qp_subventions_ans ?? 0,
     prix_revient_ttc_eur: bilan.total_ttc_module_eur,

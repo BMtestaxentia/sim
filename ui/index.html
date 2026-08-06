@@ -111,7 +111,6 @@
               </select>
             </label>
           </div>
-          <p class="aide" id="aide-zonage"></p>
         </section>
 
         <section class="bloc">
@@ -209,21 +208,8 @@
             <span>Année de valeur de la redevance</span>
             <input type="number" step="1" data-champ="exploitation.redevance_annee_valeur" data-type="nombre" placeholder="mise en location" />
           </label>
-          <label class="champ">
-            <span>Annuité de fonds propres (€/an)</span>
-            <input type="number" step="1" min="0" data-champ="exploitation.annuite_fonds_propres_eur" data-type="nombre" />
-          </label>
-          <label class="champ">
-            <span>Nombre de lits ou places</span>
-            <input type="number" step="1" min="0" data-champ="exploitation.nb_lits" data-type="nombre" />
-          </label>
         </div>
         <p class="aide" id="aide-redevance"></p>
-        <p class="aide">
-          ⚙ L'annuité de fonds propres est une charge refacturée au même titre que les annuités
-          d'emprunt (colonne « ANNUITÉS DE FP » de la table de transparence). Le nombre de lits
-          sert au prix de journée.
-        </p>
       </section>
 
       <section class="bloc">
@@ -391,18 +377,21 @@
         <section class="bloc">
           <h2 class="bloc__titre">Équilibre</h2>
           <div class="balance">
+            <!-- Chaque colonne porte SA legende : une legende commune obligeait
+                 a deviner de quel cote tombait chaque poste. -->
             <div class="balance__colonne">
               <div class="balance__libelle">Emplois</div>
               <div class="barre" id="barre-emplois"></div>
               <div class="balance__total" id="total-emplois">—</div>
+              <div class="legende" id="legende-emplois"></div>
             </div>
             <div class="balance__colonne">
               <div class="balance__libelle">Ressources</div>
               <div class="barre" id="barre-ressources"></div>
               <div class="balance__total" id="total-ressources">—</div>
+              <div class="legende" id="legende-ressources"></div>
             </div>
           </div>
-          <div class="legende" id="legende"></div>
         </section>
 
         <section class="bloc">

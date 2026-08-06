@@ -4850,10 +4850,11 @@ function rendreParametres() {
       produitsOrdonnes().flatMap((p) => p.prets_defaut.map((d) => [p.libelle, d.nature, d.taux_ref, d.duree_ref, d.revisabilite]))),
     tableau('Taux de livraison à soi-même', b.tva.source, ['Clé', 'Taux'],
       Object.entries(b.tva.lasm_par_produit).filter(([, v]) => typeof v === 'number').map(([k, v]) => [k, pct(v, 1)])),
+    // La variante DOM n'est plus implementee (hors perimetre) : elle ne figure
+    // donc plus ici. N'afficher que des parametres reellement lus par le moteur.
     tableau('Coefficient de structure', cs.source, ['Cas', 'Base', 'Facteur logements'], [
       ['Métropole habitat', nb(cs.metropole_habitat.base), nb(cs.metropole_habitat.facteur_nl)],
       ['Foyers', nb(cs.metropole_habitat.base), nb(cs.foyers.facteur_nl)],
-      ['DOM', nb(cs.dom.base), nb(cs.dom.facteur_nl)],
     ]),
     tableau('Trajectoires macro',
       `${t.source} — ${t.trajectoires.length} années, de ${t.trajectoires[0].annee} à ${t.trajectoires.at(-1).annee}. ` +

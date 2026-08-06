@@ -430,10 +430,44 @@ input[type='number'] { text-align: right; font-variant-numeric: tabular-nums; }
    peser autant qu'une ligne portant un montant. */
 .poste--vide .libelle-poste, .poste--vide .num-poste { color: var(--text-tertiary); }
 
-/* Colonnes de tranche : un filet a la teinte du produit, pour retrouver d'un
-   coup d'oeil a quelle tranche appartient une colonne dans une table large. */
-.col-tranche { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--cat, var(--cat-6)) 55%, transparent); }
-.tableau th.col-tranche { color: var(--cat, var(--cat-6)); }
+/* ---------- Code couleur des tranches dans une table large ----------
+   Une tranche est un BLOC de colonnes, pas une colonne isolee : son en-tete la
+   coiffe, un fond teinte la porte jusqu'en bas, et un filet plein ouvre le bloc.
+   Le filet ne se repete PAS entre HT et TVA d'un meme produit, sans quoi il
+   separerait ce qu'il doit rassembler. */
+.col-tranche { background: color-mix(in srgb, var(--cat, var(--cat-6)) 9%, transparent); }
+.col-tranche--debut { border-left: 2px solid var(--cat, var(--cat-6)); }
+/* Le survol de ligne ne doit pas effacer l'appartenance a une tranche. */
+.tableau tbody tr:hover td.col-tranche {
+  background: color-mix(in srgb, var(--cat, var(--cat-6)) 16%, var(--bg-secondary));
+}
+
+/* En-tete de groupe : le nom du produit coiffe ses colonnes. */
+.tableau th.col-groupe {
+  text-align: center; color: var(--cat, var(--cat-6));
+  font-size: 10.5px; letter-spacing: 0.06em;
+  background: color-mix(in srgb, var(--cat, var(--cat-6)) 15%, transparent);
+  border-left: 2px solid var(--cat, var(--cat-6));
+  border-bottom: 2px solid var(--cat, var(--cat-6));
+  padding: 5px 9px 4px;
+}
+.col-groupe__puce {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--cat, var(--cat-6)); margin-right: 6px; vertical-align: 1px;
+}
+.tableau th.col-tranche {
+  color: var(--cat, var(--cat-6));
+  background: color-mix(in srgb, var(--cat, var(--cat-6)) 9%, transparent);
+}
+/* Les lignes structurantes gardent leur fond propre par-dessus la teinte. */
+.tableau--nomenclature .chapitre-entete td { position: relative; z-index: 1; }
+.tableau--nomenclature .chapitre-total td.col-tranche {
+  background: color-mix(in srgb, var(--cat, var(--cat-6)) 15%, var(--bg-secondary));
+}
+.tableau tfoot td.col-tranche {
+  background: color-mix(in srgb, var(--cat, var(--cat-6)) 15%, transparent);
+}
+
 .col-action { width: 1%; padding-left: 0 !important; padding-right: 2px !important; }
 
 /* Bouton de ventilation d'une ligne de prix de revient. */

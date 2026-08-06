@@ -29,6 +29,7 @@ const referentiels = {
   baremes: await (await fetch('../referentiels/baremes_2025.json')).json(),
   trajectoires: await (await fetch('../referentiels/trajectoires_axentia_2026.json')).json(),
   nomenclature_pdr: await (await fetch('../referentiels/nomenclature_pdr.json')).json(),
+  zonage_communes: await (await fetch('../referentiels/zonage_communes.json')).json(),
 };
 // __REFERENTIELS_FIN__
 
@@ -287,6 +288,31 @@ const valNum = (v) => (nul(v) ? '' : v);
  */
 let tvaVisible = true;
 const afficherTVA = () => tvaVisible;
+
+/**
+ * Zonage deduit de la commune et du departement.
+ *
+ * Le zonage n'est pas une opinion : il est fixe par arrete, et il commande le
+ * loyer plafond, donc le loyer de sortie, donc tout l'equilibre. Le referentiel
+ * ne contient que des communes ATTESTEES ; une commune inconnue est dite comme
+ * telle et laissee a la saisie, plutot que devinee depuis son departement.
+ *
+ * @param {string} commune
+ * @param {string} departement peut valoir « Dordogne (24) » : seuls les chiffres comptent
+ * @returns {{zone_123: number, zone_ABC: string, nom: string, source: string}|null}
+ */
+function zonageDeLaCommune(commune, departement) {
+  if (!commune || !departement) return null;
+  const dep = String(departement).match(/\d{2,3}/)?.[0];
+  if (!dep) return null;
+  const nom = String(commune)
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  return referentiels.zonage_communes.communes[`${dep}-${nom}`] ?? null;
+}
 
 /** Une ligne de prix de revient est-elle saisie tranche par tranche ? */
 const estVentile = (p) => Boolean(p.montants_ht_par_produit);
@@ -588,6 +614,47 @@ function rendreStructureCharges() {
     : '<tr><td colspan="6" class="vide">Aucun poste au référentiel.</td></tr>';
 
   rendreBlocRedevance();
+  rendreZonage();
+}
+
+/**
+ * Zonage : deduit de la commune quand elle est au referentiel, saisi sinon.
+ *
+ * Les deux selects restent presents dans les deux cas — le zonage doit toujours
+ * etre lisible et corrigeable — mais l'ecran DIT d'ou vient la valeur. Un champ
+ * prerempli sans provenance laisse croire a une saisie de l'utilisateur.
+ */
+function rendreZonage() {
+  const aide = document.getElementById('aide-zonage');
+  if (!aide) return;
+  const z = zonageDeLaCommune(etat.identite.commune, etat.identite.departement);
+
+  if (z) {
+    // On ne touche QUE les deux selects de zone. Repasser par
+    // `rendreChampsStatiques` reecrirait la valeur du champ commune pendant
+    // qu'on le saisit, au risque de deplacer le curseur a chaque frappe.
+    const poser = (chemin, valeur) => {
+      if (etat.identite[chemin] === valeur) return;
+      etat.identite[chemin] = valeur;
+      const el = /** @type {HTMLSelectElement} */ (document.querySelector(`[data-champ="identite.${chemin}"]`));
+      if (el) el.value = String(valeur);
+    };
+    poser('zone_123', z.zone_123);
+    poser('zone_ABC', z.zone_ABC);
+    aide.textContent =
+      `⚙ Zonage déduit de ${z.nom} (${z.departement}) : zone ${z.zone_123} et zone ${z.zone_ABC}. ` +
+      `Source : ${z.source}. Corriger les listes si l'arrêté a changé.`;
+    return;
+  }
+
+  const connues = Object.keys(referentiels.zonage_communes.communes).length;
+  aide.textContent = etat.identite.commune
+    ? `⚙ ${etat.identite.commune} n'est pas au référentiel de zonage (${connues} communes attestées) : ` +
+      'les deux zones restent à saisir. Le zonage commande le loyer plafond, il n’est pas deviné ' +
+      'depuis le département — deux communes voisines peuvent relever de zones différentes.'
+    : '⚙ Renseigner commune et département pour que le zonage se déduise, quand la commune est ' +
+      'au référentiel. Chaque tranche lit ensuite celui qui la concerne : 1/2/3 pour PLUS et PLAI, ' +
+      'A/B/C pour PLS.';
 }
 
 /**
@@ -700,24 +767,43 @@ function rendreTablePrixRevient() {
   const caseTVA = /** @type {HTMLInputElement} */ (document.getElementById('afficher-tva'));
   if (caseTVA) caseTVA.checked = tvaVisible;
 
-  // --- En-tete, dependant des tranches presentes et de l'affichage de la TVA ---
-  const colonnesTranches = codes
+  // --- En-tete sur DEUX rangees ---
+  // La tranche coiffe ses colonnes au lieu d'etre repetee dans chacune : HT et
+  // TVA d'un meme produit se lisent alors comme un bloc, et deux tranches
+  // voisines ne se confondent plus. Un filet colore ouvre chaque bloc, un fond
+  // teinte le porte jusqu'au bas du tableau.
+  const groupes = codes
     .map(
       (c) =>
-        `<th class="num col-tranche" style="--cat:${catProduit(c)}">${att(libelleProduit(c))} HT</th>` +
+        `<th class="col-groupe" colspan="${tva ? 2 : 1}" style="--cat:${catProduit(c)}">` +
+        `<span class="col-groupe__puce"></span>${att(libelleProduit(c))}</th>`,
+    )
+    .join('');
+  const sousColonnes = codes
+    .map(
+      (c) =>
+        `<th class="num col-tranche col-tranche--debut" style="--cat:${catProduit(c)}">HT (€)</th>` +
         (tva ? `<th class="num col-tranche" style="--cat:${catProduit(c)}">TVA</th>` : ''),
     )
     .join('');
-  table.querySelector('thead').innerHTML = `<tr>
-      <th class="num">N°</th>
-      <th>Poste</th>
-      <th class="num">Total HT (€)</th>
-      <th></th>
-      ${tva ? '<th class="num">TVA</th>' : ''}
-      ${parTranche ? colonnesTranches : ''}
-      <th class="num calc">TVA (€)</th>
-      <th class="num calc">TTC saisie (€)</th>
-    </tr>`;
+
+  const fixes = [
+    ['num', 'N°'],
+    ['', 'Poste'],
+    ['num', 'Total HT (€)'],
+    ['', ''],
+    ...(tva ? [['num', 'TVA']] : []),
+  ];
+  const fin = [
+    ['num calc', 'TVA (€)'],
+    ['num calc', 'TTC saisie (€)'],
+  ];
+  const cellulesFixes = (l) =>
+    l.map(([cl, t]) => `<th class="${cl}" ${parTranche ? 'rowspan="2"' : ''}>${t}</th>`).join('');
+
+  table.querySelector('thead').innerHTML = parTranche
+    ? `<tr>${cellulesFixes(fixes)}${groupes}${cellulesFixes(fin)}</tr><tr>${sousColonnes}</tr>`
+    : `<tr>${cellulesFixes(fixes)}${cellulesFixes(fin)}</tr>`;
   const nbCols =
     4 + (tva ? 1 : 0) + (parTranche ? codes.length * (tva ? 2 : 1) : 0) + 2;
 
@@ -767,16 +853,19 @@ function rendreTablePrixRevient() {
         ? codes
             .map((c) => {
               const style = `style="--cat:${catProduit(c)}"`;
+              // `--debut` porte le filet colore : il ouvre le bloc de la
+              // tranche, il ne separe pas HT de sa TVA.
+              const deb = 'col-tranche col-tranche--debut';
               if (!ventile) {
                 // Ligne non ventilee : on montre ce que la cle SU donnerait,
                 // en lecture seule. C'est un apercu, pas une saisie.
                 return (
-                  `<td class="num calc col-tranche" ${style} data-apercu="${c}"></td>` +
+                  `<td class="num calc ${deb}" ${style} data-apercu="${c}"></td>` +
                   (tva ? `<td class="num calc col-tranche" ${style}></td>` : '')
                 );
               }
               return (
-                `<td class="col-tranche" ${style}><input type="number" step="1"
+                `<td class="${deb}" ${style}><input type="number" step="1"
                    data-champ="postes_bilan.${i}.montants_ht_par_produit.${c}" data-type="nombre"
                    value="${valNum(p.montants_ht_par_produit?.[c])}" /></td>` +
                 (tva
@@ -814,7 +903,7 @@ function rendreTablePrixRevient() {
       ? codes
           .map(
             (c) =>
-              `<td class="num col-tranche" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="ht_eur"></td>` +
+              `<td class="num col-tranche col-tranche--debut" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="ht_eur"></td>` +
               (tva
                 ? `<td class="num col-tranche" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="tva_eur"></td>`
                 : ''),
@@ -1013,20 +1102,21 @@ function rendreValeurs(r) {
   const renseignes = etat.postes_bilan.filter((p) => !nul(totalPoste(p))).length;
   const ventiles = etat.postes_bilan.filter((p) => estVentile(p) && !nul(totalPoste(p))).length;
   // Le pied suit la largeur variable de l'en-tete : les colonnes de tranche
-  // apparaissent et disparaissent avec le programme.
-  const nbCols = $('#table-postes').querySelectorAll('thead th').length || 6;
+  // apparaissent et disparaissent avec le programme. Le compte est RECALCULE et
+  // non lu sur le `thead`, qui tient desormais sur deux rangees.
   const codesTr = tranchesActives();
   const tvaVisible = afficherTVA();
-  const totauxTranches =
-    codesTr.length > 1
-      ? codesTr
-          .map(
-            (c) =>
-              `<td class="num col-tranche" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_ht_eur)}</td>` +
-              (tvaVisible ? `<td class="num col-tranche" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_tva_eur)}</td>` : ''),
-          )
-          .join('')
-      : '';
+  const parTr = codesTr.length > 1;
+  const nbCols = 4 + (tvaVisible ? 1 : 0) + (parTr ? codesTr.length * (tvaVisible ? 2 : 1) : 0) + 2;
+  const totauxTranches = parTr
+    ? codesTr
+        .map(
+          (c) =>
+            `<td class="num col-tranche col-tranche--debut" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_ht_eur)}</td>` +
+            (tvaVisible ? `<td class="num col-tranche" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_tva_eur)}</td>` : ''),
+        )
+        .join('')
+    : '';
 
   $('#table-postes').querySelector('tfoot').innerHTML = `<tr>
       <td></td><td class="libelle">Prix de revient total</td>
@@ -1606,6 +1696,11 @@ function champsManquants() {
 function recalculer() {
   const pastille = $('#etat-calcul');
   const erreur = $('#erreur');
+
+  // Le zonage se deduit de la commune, qui se saisit lettre par lettre : il doit
+  // etre reevalue a chaque frappe, et non au seul rendu de structure. Il doit
+  // aussi l'etre AVANT le calcul, puisqu'il en change les loyers plafonds.
+  rendreZonage();
 
   const manquants = champsManquants();
   if (manquants.length) {

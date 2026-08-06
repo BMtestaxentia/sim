@@ -444,10 +444,44 @@ input[type='number'] { text-align: right; font-variant-numeric: tabular-nums; }
    peser autant qu'une ligne portant un montant. */
 .poste--vide .libelle-poste, .poste--vide .num-poste { color: var(--text-tertiary); }
 
-/* Colonnes de tranche : un filet a la teinte du produit, pour retrouver d'un
-   coup d'oeil a quelle tranche appartient une colonne dans une table large. */
-.col-tranche { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--cat, var(--cat-6)) 55%, transparent); }
-.tableau th.col-tranche { color: var(--cat, var(--cat-6)); }
+/* ---------- Code couleur des tranches dans une table large ----------
+   Une tranche est un BLOC de colonnes, pas une colonne isolee : son en-tete la
+   coiffe, un fond teinte la porte jusqu'en bas, et un filet plein ouvre le bloc.
+   Le filet ne se repete PAS entre HT et TVA d'un meme produit, sans quoi il
+   separerait ce qu'il doit rassembler. */
+.col-tranche { background: color-mix(in srgb, var(--cat, var(--cat-6)) 9%, transparent); }
+.col-tranche--debut { border-left: 2px solid var(--cat, var(--cat-6)); }
+/* Le survol de ligne ne doit pas effacer l'appartenance a une tranche. */
+.tableau tbody tr:hover td.col-tranche {
+  background: color-mix(in srgb, var(--cat, var(--cat-6)) 16%, var(--bg-secondary));
+}
+
+/* En-tete de groupe : le nom du produit coiffe ses colonnes. */
+.tableau th.col-groupe {
+  text-align: center; color: var(--cat, var(--cat-6));
+  font-size: 10.5px; letter-spacing: 0.06em;
+  background: color-mix(in srgb, var(--cat, var(--cat-6)) 15%, transparent);
+  border-left: 2px solid var(--cat, var(--cat-6));
+  border-bottom: 2px solid var(--cat, var(--cat-6));
+  padding: 5px 9px 4px;
+}
+.col-groupe__puce {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--cat, var(--cat-6)); margin-right: 6px; vertical-align: 1px;
+}
+.tableau th.col-tranche {
+  color: var(--cat, var(--cat-6));
+  background: color-mix(in srgb, var(--cat, var(--cat-6)) 9%, transparent);
+}
+/* Les lignes structurantes gardent leur fond propre par-dessus la teinte. */
+.tableau--nomenclature .chapitre-entete td { position: relative; z-index: 1; }
+.tableau--nomenclature .chapitre-total td.col-tranche {
+  background: color-mix(in srgb, var(--cat, var(--cat-6)) 15%, var(--bg-secondary));
+}
+.tableau tfoot td.col-tranche {
+  background: color-mix(in srgb, var(--cat, var(--cat-6)) 15%, transparent);
+}
+
 .col-action { width: 1%; padding-left: 0 !important; padding-right: 2px !important; }
 
 /* Bouton de ventilation d'une ligne de prix de revient. */
@@ -779,12 +813,7 @@ input[type='number'] { text-align: right; font-variant-numeric: tabular-nums; }
               </select>
             </label>
           </div>
-          <p class="aide">
-            ⚙ Il n'y a pas de produit principal. Chaque financement du programme forme une
-            tranche qui porte ses propres règles : son taux de TVA, son zonage (1/2/3 pour
-            PLUS et PLAI, A/B/C pour PLS) et son jeu de prêts CDC par défaut. Les deux zonages
-            sont saisis ici, chaque tranche lit celui qui la concerne.
-          </p>
+          <p class="aide" id="aide-zonage"></p>
         </section>
 
         <section class="bloc">
@@ -4403,7 +4432,7 @@ function calculer(entrees, referentiels) {
 
 const $ = (sel) => /** @type {HTMLElement} */ (document.querySelector(sel));
 
-const referentiels = {"baremes":{"date_valeur":"2025-01-01","source":"LEON 2025-042d, onglet ParaGEN, profil AXENTIA HER 2026 (PMT 2025), extrait le 2026-08-04","note":"Baremes reglementaires versionnes. Toutes les valeurs sont lues dans la matrice, aucune n'est inventee. Les cellules sources sont citees pour audit.","loyers_max_zone_123":{"unite":"EUR/m2 SU/mois","source":"ParaGEN!D22:G24 (plage LMZone_Neuf)","zones":["zone_1","zone_2","zone_3","zone_1bis"],"PLUS":[7.32,6.42,5.95,7.77],"PLAI":[6.5,5.71,5.28,6.93],"LIBRE":[15,11,8,18]},"loyers_max_zone_ABC":{"unite":"EUR/m2 SU/mois","source":"ParaGEN!D56:H59","zones":["A","A_bis","B1","B2","C"],"PLS":[11.68,15.16,10.07,9.64,8.94],"PLI":[14.49,19.51,11.68,10.15,10.15],"PSLA_plafond_loyer":[11.75,15.3,10.13,9.73,9],"PSLA_plafond_prix_vente_ht":[4675,6170,3744,3269,2857]},"valeurs_de_base":{"unite":"EUR/m2","usage":"Assiette subvention (VB), MQECO ; selectionne par zone_123 x neuf/acquisition x collectif/individuel","source":"ParaGEN!D36:G41","zones":["zone_1","zone_2","zone_3","zone_1bis"],"neuf":{"collectif":[1767,1473,1473,1767],"individuel":[1767,1619,1619,1767]},"acquisition":{"collectif":[1767,1382,1382,1767],"individuel":[1767,1473,1473,1767]}},"taxe_amenagement":{"unite":"EUR/m2 (valeur forfaitaire)","source":"ParaGEN!B31:B32 ; selection IdF si zone A ou A bis (calculs!B1254)","hors_idf":930,"idf":1054,"abattement_logement_social":0.5,"abattement_source":"50 % reglementaire, applique via ParaGLOB!H54 dans l'assiette (calculs!B1255)"},"versement_sous_densite":{"plafond_valeur_terrain":0.25,"part_valeur_terrain":0.5,"source":"R-FISC-3 ; MIN(valeur_terrain/2 * (1 - SDP/(seuil*surface)), 25 % * valeur_terrain)"},"quotites_foncier_vefa":{"usage":"Ventilation d'un prix global en foncier/batiment. Ligne 'terrain' = quote-part terrain pour le pret foncier ; ligne 'ssf_pge' = quote-part pour l'assiette SSF et la valeur comptable terrain.","source":"ParaGEN!C61:H69 (plage qpFonc_VEFA), mode de calcul du pret foncier : ParaGEN!A64 = 'global'","zones":["A","A_bis","B1","B2","C"],"terrain_vefa":[0.35,0.45,0.3,0.25,0.2],"terrain_acq_amelioration":[0.35,0.45,0.3,0.25,0.2],"valeur_comptable_terrain_vefa":[0.25,0.25,0.13,0.13,0.11],"ssf_pge_acq_amelioration":[0.6,0.6,0.6,0.6,0.6]},"tva":{"source":"calculs!B1223:B1228, ParaGLOB!J44/J46, ParaGEN!A77:H78","taux_reduit_simulation":0.1,"taux_normal":0.2,"lasm_par_produit":{"note":"PLUS/PLAI utilise le taux reduit de la simulation (ParaGLOB!J44 = 10 % actuellement) et non la valeur 5,5 % du tableau historique ParaGEN!A78. Les autres produits lisent ParaGEN!78.","PLUS_PLAI":0.1,"PLUS_CD":0.055,"PLS":0.1,"LLI_PLI":0.1,"LIBRE":0.2,"ACCESSION":0.2,"REHAB":0.1,"FOYER_PLUS":0.055}},"constantes_reglementaires":{"coefficient_surface_annexes":{"valeur":0.5,"usage":"Surface utile = SHAB + 0,5 x surfaces annexes (R-SURF-1)","source":"calculs!D384 (terme 0.5*ParaCD!$F$28), regle reglementaire"},"coefficient_structure":{"source":"calculs!D91:D116","metropole_habitat":{"base":0.77,"facteur_nl":20,"formule":"CS = 0.77 * (1 + 20 * NL / SU)"},"foyers":{"facteur_nl":38},"dom":{"base":0.685,"facteur_nl":31,"formule":"CS = 0.685 * (31 * NL + SF) / SF"}},"majoration_plus_33":0.33,"majoration_loyers_depassement_plafonds":{"valeur":0.33,"source":"COMMUN!B22"},"marge_locale_plafond_defaut":{"valeur":0.12,"source":"ParaPLUS!AD30 (saisi par simulation)"},"majoration_lcr":{"regle":"ratio < seuil_bas -> 0 ; ratio > seuil_haut -> majoration_au_dessus ; sinon ratio/100","seuil_bas":10,"seuil_haut":20,"majoration_au_dessus":0.02,"source":"calculs!B152:B153"},"ssf":{"seuil_participation_collectivites":0.4,"part_max_depassement":0.5,"plafond_si_sous_seuil":"min(taux_depassement_plafonne * reference, part_max_depassement * depassement)","taux_subvention":{"neuf":2,"neuf_dom":3,"acq_amelioration":0.4},"taux_depassement_plafonne":{"neuf":1,"acq_amelioration":0.2},"source":"calculs!D275:G276"},"prets_cdc_defauts":{"source":"SimPLUS!AL10:AP21","taux":{"PLUS":"LA + 0.006","PLAI":"LA - 0.002"},"duree_construction_ans":40,"duree_foncier_ans":{"zones_B2_C":50,"autres_zones":60},"revisabilite":"DOUBLE","progressivite_axentia":-0.005,"premiere_echeance":"annee(mise_en_location) + 1 an (+0 si demembrement)"},"controle_ratio_prets_cdc_min":{"valeur":0.5,"source":"calculs!B1234:B1235"},"tfpb":{"montant_par_logement_eur":345,"duree_exoneration_defaut_ans":25,"source":"SimPLUS!A37/G37 ; duree parametrable par simulation (irregularite I-7 du dictionnaire)"},"arrondi_prets":"milliers superieurs si option active (SimPLUS!AR26)","arrondi_cs_loyers":{"flag_global":"ParaGEN!B26 (NON chez AXENTIA)","cs_decimales":4,"loyers_decimales":2}},"charges_exploitation":{"note":"Postes de charge du compte d'exploitation autres que les annuites, les frais de gestion, la TFPB et le gros entretien, qui ont leur propre entree. Reponse a la question Q-16. Chaque poste est une DONNEE : son assiette, sa valeur et sa trajectoire d'indexation se lisent ici, aucun n'est cable dans le code (lecon I-2). AUCUN n'est actif par defaut : c'est la saisie qui les active, sans quoi les fixtures existantes changeraient de resultat en silence.","assiettes_admises":{"logement":"valeur en EUR par logement et par an","produits_locatifs_bruts":"taux applique aux loyers (ou a la redevance en foyer) avant vacance et impayes","produits_locatifs_nets":"taux applique aux produits locatifs apres vacance et impayes","shab":"valeur en EUR par m2 de surface habitable et par an","prix_revient_ttc":"taux applique au prix de revient TTC module","forfait":"montant annuel en EUR, independant du programme"},"postes":[{"code":"teom","libelle":"Taxe d'enlèvement des ordures ménagères","assiette":"logement","valeur":117,"index":"tfpb","source":"Maquette LEON REWORK, ADMIN. Dans LEON la TEOM etait fondue dans la TFPB sous la forme `345+117*0` (irregularite I-2) : la maquette les separe, le moteur aussi."},{"code":"assurance_pno","libelle":"Assurance propriétaire non occupant","assiette":"logement","valeur":75,"index":"gestion","source":"Maquette LEON REWORK, ADMIN."},{"code":"cgls","libelle":"Cotisation CGLLS","assiette":"produits_locatifs_bruts","valeur":0.0034,"index":null,"source":"Maquette LEON REWORK, ADMIN. Taux NET, deja diminue des reductions legales. Le referentiel cotisations_her_pmt2026.json porte le taux BRUT de 2,416 % et ses reductions : les deux ne se cumulent pas, voir Q-29."},{"code":"ancols","libelle":"Cotisation ANCOLS","assiette":"produits_locatifs_bruts","valeur":0.00045,"index":null,"source":"cotisations_her_pmt2026.json, taux 2026 reconduit. L'assiette exacte reste a confirmer (la note HER dit « a confirmer (produits locatifs) »)."}]}},"trajectoires":{"profil":"AXENTIA HER 2026 (PMT 2025)","source":"LEON 2025-042d, ParaGEN!GS22:HE72, extrait le 2026-08-04","taux_livret_a_courant":0.017,"marge_anticipee_livret_a":0,"note":"Taux d'evolution annuels par poste et trajectoire Livret A du scenario. Colonnes GT20/GU20/GW20/GZ20 (flags OUI/NON) indiquent si la trajectoire calendaire est active par poste ; sinon LEON applique un taux constant.","trajectoires":[{"annee":2023,"gros_entretien":0.053,"gestion":0.035,"vacance_impayes":null,"loyers_irl":0.035,"frais_financiers":0.029,"produits_financiers":0.029,"tfpb":0.078,"livret_a":0.029,"rel":0,"crl":0},{"annee":2024,"gros_entretien":0.028,"gestion":0.035,"vacance_impayes":null,"loyers_irl":0.035,"frais_financiers":0.03,"produits_financiers":0.03,"tfpb":0.053,"livret_a":0.03,"rel":0,"crl":0},{"annee":2025,"gros_entretien":0.027,"gestion":0.0326,"vacance_impayes":null,"loyers_irl":0.0326,"frais_financiers":0.0275,"produits_financiers":0.0275,"tfpb":0.055,"livret_a":0.0275,"rel":0,"crl":0},{"annee":2026,"gros_entretien":0.025,"gestion":0.023,"vacance_impayes":null,"loyers_irl":0.023,"frais_financiers":0.0225,"produits_financiers":0.0225,"tfpb":0.05,"livret_a":0.0225,"rel":0,"crl":0},{"annee":2027,"gros_entretien":0.024,"gestion":0.022,"vacance_impayes":null,"loyers_irl":0.022,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2028,"gros_entretien":0.023,"gestion":0.021,"vacance_impayes":null,"loyers_irl":0.021,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2029,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2030,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2031,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2032,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2033,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2034,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2035,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2036,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2037,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2038,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2039,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2040,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2041,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2042,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2043,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2044,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2045,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2046,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2047,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2048,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2049,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2050,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2051,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2052,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2053,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2054,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2055,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2056,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2057,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2058,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2059,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2060,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2061,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2062,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2063,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2064,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2065,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2066,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2067,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2068,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2069,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2070,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2071,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2072,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2073,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0}]},"nomenclature_pdr":{"libelle":"Nomenclature du prix de revient","source":"Maquette LEON REWORK, onglet PDR (B8:C67). 5 chapitres, 46 postes.","extrait_le":"2026-08-05","note":"La numerotation comporte des trous (17 a 19 et 28 absents) : elle est reservee par chapitre et n'est pas une simple sequence. Elle est conservee telle quelle pour que la saisie reste comparable a la maquette. L'identifiant `id` est STABLE et independant du numero : c'est lui qui doit servir de cle, jamais le numero ni le rang d'affichage.","chapitres":[{"code":"charge_fonciere","numero":"I","libelle":"Charge foncière","postes":[{"id":"cf_acquisition","numero":1,"libelle":"Acquisition / Terrain"},{"id":"cf_sondages","numero":2,"libelle":"Sondages / Études de sols"},{"id":"cf_demolition","numero":3,"libelle":"Démolition"},{"id":"cf_vrd","numero":4,"libelle":"Travaux VRD"},{"id":"cf_vrd_actualisation","numero":5,"libelle":"Actualisation VRD"},{"id":"cf_vrd_revision","numero":6,"libelle":"Révision VRD"},{"id":"cf_branchements","numero":7,"libelle":"Branchements"},{"id":"cf_taxe_assainissement","numero":8,"libelle":"Taxe assainissement"},{"id":"cf_notaire","numero":9,"libelle":"Frais de notaire"},{"id":"cf_commission_achat","numero":10,"libelle":"Commission achat"},{"id":"cf_taxes_amenagement","numero":11,"libelle":"Taxes aménagement & VSD"},{"id":"cf_fondations_speciales","numero":12,"libelle":"Fondations spéciales"},{"id":"cf_desamiantage","numero":13,"libelle":"Désamiantage"},{"id":"cf_divers_1","numero":14,"libelle":"Divers foncier 1"},{"id":"cf_divers_2","numero":15,"libelle":"Divers foncier 2"},{"id":"cf_divers_3","numero":16,"libelle":"Divers foncier 3"}]},{"code":"batiment","numero":"II","libelle":"Bâtiment","postes":[{"id":"bat_travaux","numero":20,"libelle":"Travaux de construction"},{"id":"bat_actualisation","numero":21,"libelle":"Actual. bâtiment"},{"id":"bat_revision","numero":22,"libelle":"Révision bâtiment"},{"id":"bat_aleas","numero":23,"libelle":"Aléas"},{"id":"bat_divers_1","numero":24,"libelle":"Divers bât. 1"},{"id":"bat_divers_2","numero":25,"libelle":"Divers bât. 2"},{"id":"bat_divers_3","numero":26,"libelle":"Divers bât. 3"},{"id":"bat_divers_4","numero":27,"libelle":"Divers bât. 4"}]},{"code":"honoraires","numero":"III","libelle":"Honoraires","postes":[{"id":"hon_vrd","numero":29,"libelle":"Honoraires VRD"},{"id":"hon_architecte","numero":30,"libelle":"Architecte"},{"id":"hon_bureau_etudes","numero":31,"libelle":"Bureau d'études"},{"id":"hon_amo","numero":32,"libelle":"AMO"},{"id":"hon_geometre","numero":33,"libelle":"Géomètre"},{"id":"hon_opc","numero":34,"libelle":"OPC / Pilotage"},{"id":"hon_controleur","numero":35,"libelle":"Contrôleur technique"},{"id":"hon_assurances","numero":36,"libelle":"Assurances (DO/TRC)"},{"id":"hon_sps","numero":37,"libelle":"SPS / Coord. sécurité"},{"id":"hon_labellisation","numero":38,"libelle":"Labellisation / Certif."},{"id":"hon_conduite_operation","numero":39,"libelle":"Conduite d'opération"},{"id":"hon_dir_investissement","numero":40,"libelle":"Dir. d'investissement"},{"id":"hon_etudes","numero":41,"libelle":"Études"},{"id":"hon_faisabilite","numero":42,"libelle":"Étude de faisabilité"},{"id":"hon_interets_immobilisables","numero":43,"libelle":"Intérêts immobilisables"},{"id":"hon_divers_1","numero":44,"libelle":"Divers hon. 1"},{"id":"hon_divers_2","numero":45,"libelle":"Divers hon. 2"}]},{"code":"frais_divers","numero":"IV","libelle":"Frais divers","postes":[{"id":"fd_actualisation_hon","numero":46,"libelle":"Actual./Rév. hon."},{"id":"fd_divers_1","numero":47,"libelle":"Divers frais 1"},{"id":"fd_divers_2","numero":48,"libelle":"Divers frais 2"}]},{"code":"frais_financiers","numero":"V","libelle":"Frais financiers","postes":[{"id":"ff_interets_prefi","numero":49,"libelle":"Intérêts préfin."},{"id":"ff_divers","numero":50,"libelle":"Frais fin. divers"}]}]}};
+const referentiels = {"baremes":{"date_valeur":"2025-01-01","source":"LEON 2025-042d, onglet ParaGEN, profil AXENTIA HER 2026 (PMT 2025), extrait le 2026-08-04","note":"Baremes reglementaires versionnes. Toutes les valeurs sont lues dans la matrice, aucune n'est inventee. Les cellules sources sont citees pour audit.","loyers_max_zone_123":{"unite":"EUR/m2 SU/mois","source":"ParaGEN!D22:G24 (plage LMZone_Neuf)","zones":["zone_1","zone_2","zone_3","zone_1bis"],"PLUS":[7.32,6.42,5.95,7.77],"PLAI":[6.5,5.71,5.28,6.93],"LIBRE":[15,11,8,18]},"loyers_max_zone_ABC":{"unite":"EUR/m2 SU/mois","source":"ParaGEN!D56:H59","zones":["A","A_bis","B1","B2","C"],"PLS":[11.68,15.16,10.07,9.64,8.94],"PLI":[14.49,19.51,11.68,10.15,10.15],"PSLA_plafond_loyer":[11.75,15.3,10.13,9.73,9],"PSLA_plafond_prix_vente_ht":[4675,6170,3744,3269,2857]},"valeurs_de_base":{"unite":"EUR/m2","usage":"Assiette subvention (VB), MQECO ; selectionne par zone_123 x neuf/acquisition x collectif/individuel","source":"ParaGEN!D36:G41","zones":["zone_1","zone_2","zone_3","zone_1bis"],"neuf":{"collectif":[1767,1473,1473,1767],"individuel":[1767,1619,1619,1767]},"acquisition":{"collectif":[1767,1382,1382,1767],"individuel":[1767,1473,1473,1767]}},"taxe_amenagement":{"unite":"EUR/m2 (valeur forfaitaire)","source":"ParaGEN!B31:B32 ; selection IdF si zone A ou A bis (calculs!B1254)","hors_idf":930,"idf":1054,"abattement_logement_social":0.5,"abattement_source":"50 % reglementaire, applique via ParaGLOB!H54 dans l'assiette (calculs!B1255)"},"versement_sous_densite":{"plafond_valeur_terrain":0.25,"part_valeur_terrain":0.5,"source":"R-FISC-3 ; MIN(valeur_terrain/2 * (1 - SDP/(seuil*surface)), 25 % * valeur_terrain)"},"quotites_foncier_vefa":{"usage":"Ventilation d'un prix global en foncier/batiment. Ligne 'terrain' = quote-part terrain pour le pret foncier ; ligne 'ssf_pge' = quote-part pour l'assiette SSF et la valeur comptable terrain.","source":"ParaGEN!C61:H69 (plage qpFonc_VEFA), mode de calcul du pret foncier : ParaGEN!A64 = 'global'","zones":["A","A_bis","B1","B2","C"],"terrain_vefa":[0.35,0.45,0.3,0.25,0.2],"terrain_acq_amelioration":[0.35,0.45,0.3,0.25,0.2],"valeur_comptable_terrain_vefa":[0.25,0.25,0.13,0.13,0.11],"ssf_pge_acq_amelioration":[0.6,0.6,0.6,0.6,0.6]},"tva":{"source":"calculs!B1223:B1228, ParaGLOB!J44/J46, ParaGEN!A77:H78","taux_reduit_simulation":0.1,"taux_normal":0.2,"lasm_par_produit":{"note":"PLUS/PLAI utilise le taux reduit de la simulation (ParaGLOB!J44 = 10 % actuellement) et non la valeur 5,5 % du tableau historique ParaGEN!A78. Les autres produits lisent ParaGEN!78.","PLUS_PLAI":0.1,"PLUS_CD":0.055,"PLS":0.1,"LLI_PLI":0.1,"LIBRE":0.2,"ACCESSION":0.2,"REHAB":0.1,"FOYER_PLUS":0.055}},"constantes_reglementaires":{"coefficient_surface_annexes":{"valeur":0.5,"usage":"Surface utile = SHAB + 0,5 x surfaces annexes (R-SURF-1)","source":"calculs!D384 (terme 0.5*ParaCD!$F$28), regle reglementaire"},"coefficient_structure":{"source":"calculs!D91:D116","metropole_habitat":{"base":0.77,"facteur_nl":20,"formule":"CS = 0.77 * (1 + 20 * NL / SU)"},"foyers":{"facteur_nl":38},"dom":{"base":0.685,"facteur_nl":31,"formule":"CS = 0.685 * (31 * NL + SF) / SF"}},"majoration_plus_33":0.33,"majoration_loyers_depassement_plafonds":{"valeur":0.33,"source":"COMMUN!B22"},"marge_locale_plafond_defaut":{"valeur":0.12,"source":"ParaPLUS!AD30 (saisi par simulation)"},"majoration_lcr":{"regle":"ratio < seuil_bas -> 0 ; ratio > seuil_haut -> majoration_au_dessus ; sinon ratio/100","seuil_bas":10,"seuil_haut":20,"majoration_au_dessus":0.02,"source":"calculs!B152:B153"},"ssf":{"seuil_participation_collectivites":0.4,"part_max_depassement":0.5,"plafond_si_sous_seuil":"min(taux_depassement_plafonne * reference, part_max_depassement * depassement)","taux_subvention":{"neuf":2,"neuf_dom":3,"acq_amelioration":0.4},"taux_depassement_plafonne":{"neuf":1,"acq_amelioration":0.2},"source":"calculs!D275:G276"},"prets_cdc_defauts":{"source":"SimPLUS!AL10:AP21","taux":{"PLUS":"LA + 0.006","PLAI":"LA - 0.002"},"duree_construction_ans":40,"duree_foncier_ans":{"zones_B2_C":50,"autres_zones":60},"revisabilite":"DOUBLE","progressivite_axentia":-0.005,"premiere_echeance":"annee(mise_en_location) + 1 an (+0 si demembrement)"},"controle_ratio_prets_cdc_min":{"valeur":0.5,"source":"calculs!B1234:B1235"},"tfpb":{"montant_par_logement_eur":345,"duree_exoneration_defaut_ans":25,"source":"SimPLUS!A37/G37 ; duree parametrable par simulation (irregularite I-7 du dictionnaire)"},"arrondi_prets":"milliers superieurs si option active (SimPLUS!AR26)","arrondi_cs_loyers":{"flag_global":"ParaGEN!B26 (NON chez AXENTIA)","cs_decimales":4,"loyers_decimales":2}},"charges_exploitation":{"note":"Postes de charge du compte d'exploitation autres que les annuites, les frais de gestion, la TFPB et le gros entretien, qui ont leur propre entree. Reponse a la question Q-16. Chaque poste est une DONNEE : son assiette, sa valeur et sa trajectoire d'indexation se lisent ici, aucun n'est cable dans le code (lecon I-2). AUCUN n'est actif par defaut : c'est la saisie qui les active, sans quoi les fixtures existantes changeraient de resultat en silence.","assiettes_admises":{"logement":"valeur en EUR par logement et par an","produits_locatifs_bruts":"taux applique aux loyers (ou a la redevance en foyer) avant vacance et impayes","produits_locatifs_nets":"taux applique aux produits locatifs apres vacance et impayes","shab":"valeur en EUR par m2 de surface habitable et par an","prix_revient_ttc":"taux applique au prix de revient TTC module","forfait":"montant annuel en EUR, independant du programme"},"postes":[{"code":"teom","libelle":"Taxe d'enlèvement des ordures ménagères","assiette":"logement","valeur":117,"index":"tfpb","source":"Maquette LEON REWORK, ADMIN. Dans LEON la TEOM etait fondue dans la TFPB sous la forme `345+117*0` (irregularite I-2) : la maquette les separe, le moteur aussi."},{"code":"assurance_pno","libelle":"Assurance propriétaire non occupant","assiette":"logement","valeur":75,"index":"gestion","source":"Maquette LEON REWORK, ADMIN."},{"code":"cgls","libelle":"Cotisation CGLLS","assiette":"produits_locatifs_bruts","valeur":0.0034,"index":null,"source":"Maquette LEON REWORK, ADMIN. Taux NET, deja diminue des reductions legales. Le referentiel cotisations_her_pmt2026.json porte le taux BRUT de 2,416 % et ses reductions : les deux ne se cumulent pas, voir Q-29."},{"code":"ancols","libelle":"Cotisation ANCOLS","assiette":"produits_locatifs_bruts","valeur":0.00045,"index":null,"source":"cotisations_her_pmt2026.json, taux 2026 reconduit. L'assiette exacte reste a confirmer (la note HER dit « a confirmer (produits locatifs) »)."}]}},"trajectoires":{"profil":"AXENTIA HER 2026 (PMT 2025)","source":"LEON 2025-042d, ParaGEN!GS22:HE72, extrait le 2026-08-04","taux_livret_a_courant":0.017,"marge_anticipee_livret_a":0,"note":"Taux d'evolution annuels par poste et trajectoire Livret A du scenario. Colonnes GT20/GU20/GW20/GZ20 (flags OUI/NON) indiquent si la trajectoire calendaire est active par poste ; sinon LEON applique un taux constant.","trajectoires":[{"annee":2023,"gros_entretien":0.053,"gestion":0.035,"vacance_impayes":null,"loyers_irl":0.035,"frais_financiers":0.029,"produits_financiers":0.029,"tfpb":0.078,"livret_a":0.029,"rel":0,"crl":0},{"annee":2024,"gros_entretien":0.028,"gestion":0.035,"vacance_impayes":null,"loyers_irl":0.035,"frais_financiers":0.03,"produits_financiers":0.03,"tfpb":0.053,"livret_a":0.03,"rel":0,"crl":0},{"annee":2025,"gros_entretien":0.027,"gestion":0.0326,"vacance_impayes":null,"loyers_irl":0.0326,"frais_financiers":0.0275,"produits_financiers":0.0275,"tfpb":0.055,"livret_a":0.0275,"rel":0,"crl":0},{"annee":2026,"gros_entretien":0.025,"gestion":0.023,"vacance_impayes":null,"loyers_irl":0.023,"frais_financiers":0.0225,"produits_financiers":0.0225,"tfpb":0.05,"livret_a":0.0225,"rel":0,"crl":0},{"annee":2027,"gros_entretien":0.024,"gestion":0.022,"vacance_impayes":null,"loyers_irl":0.022,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2028,"gros_entretien":0.023,"gestion":0.021,"vacance_impayes":null,"loyers_irl":0.021,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2029,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2030,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2031,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2032,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2033,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2034,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2035,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2036,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2037,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2038,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2039,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2040,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2041,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2042,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2043,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2044,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2045,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2046,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2047,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2048,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2049,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2050,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2051,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2052,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2053,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2054,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2055,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2056,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2057,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2058,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2059,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2060,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2061,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2062,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2063,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2064,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2065,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2066,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2067,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2068,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2069,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2070,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2071,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2072,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2073,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0}]},"nomenclature_pdr":{"libelle":"Nomenclature du prix de revient","source":"Maquette LEON REWORK, onglet PDR (B8:C67). 5 chapitres, 46 postes.","extrait_le":"2026-08-05","note":"La numerotation comporte des trous (17 a 19 et 28 absents) : elle est reservee par chapitre et n'est pas une simple sequence. Elle est conservee telle quelle pour que la saisie reste comparable a la maquette. L'identifiant `id` est STABLE et independant du numero : c'est lui qui doit servir de cle, jamais le numero ni le rang d'affichage.","chapitres":[{"code":"charge_fonciere","numero":"I","libelle":"Charge foncière","postes":[{"id":"cf_acquisition","numero":1,"libelle":"Acquisition / Terrain"},{"id":"cf_sondages","numero":2,"libelle":"Sondages / Études de sols"},{"id":"cf_demolition","numero":3,"libelle":"Démolition"},{"id":"cf_vrd","numero":4,"libelle":"Travaux VRD"},{"id":"cf_vrd_actualisation","numero":5,"libelle":"Actualisation VRD"},{"id":"cf_vrd_revision","numero":6,"libelle":"Révision VRD"},{"id":"cf_branchements","numero":7,"libelle":"Branchements"},{"id":"cf_taxe_assainissement","numero":8,"libelle":"Taxe assainissement"},{"id":"cf_notaire","numero":9,"libelle":"Frais de notaire"},{"id":"cf_commission_achat","numero":10,"libelle":"Commission achat"},{"id":"cf_taxes_amenagement","numero":11,"libelle":"Taxes aménagement & VSD"},{"id":"cf_fondations_speciales","numero":12,"libelle":"Fondations spéciales"},{"id":"cf_desamiantage","numero":13,"libelle":"Désamiantage"},{"id":"cf_divers_1","numero":14,"libelle":"Divers foncier 1"},{"id":"cf_divers_2","numero":15,"libelle":"Divers foncier 2"},{"id":"cf_divers_3","numero":16,"libelle":"Divers foncier 3"}]},{"code":"batiment","numero":"II","libelle":"Bâtiment","postes":[{"id":"bat_travaux","numero":20,"libelle":"Travaux de construction"},{"id":"bat_actualisation","numero":21,"libelle":"Actual. bâtiment"},{"id":"bat_revision","numero":22,"libelle":"Révision bâtiment"},{"id":"bat_aleas","numero":23,"libelle":"Aléas"},{"id":"bat_divers_1","numero":24,"libelle":"Divers bât. 1"},{"id":"bat_divers_2","numero":25,"libelle":"Divers bât. 2"},{"id":"bat_divers_3","numero":26,"libelle":"Divers bât. 3"},{"id":"bat_divers_4","numero":27,"libelle":"Divers bât. 4"}]},{"code":"honoraires","numero":"III","libelle":"Honoraires","postes":[{"id":"hon_vrd","numero":29,"libelle":"Honoraires VRD"},{"id":"hon_architecte","numero":30,"libelle":"Architecte"},{"id":"hon_bureau_etudes","numero":31,"libelle":"Bureau d'études"},{"id":"hon_amo","numero":32,"libelle":"AMO"},{"id":"hon_geometre","numero":33,"libelle":"Géomètre"},{"id":"hon_opc","numero":34,"libelle":"OPC / Pilotage"},{"id":"hon_controleur","numero":35,"libelle":"Contrôleur technique"},{"id":"hon_assurances","numero":36,"libelle":"Assurances (DO/TRC)"},{"id":"hon_sps","numero":37,"libelle":"SPS / Coord. sécurité"},{"id":"hon_labellisation","numero":38,"libelle":"Labellisation / Certif."},{"id":"hon_conduite_operation","numero":39,"libelle":"Conduite d'opération"},{"id":"hon_dir_investissement","numero":40,"libelle":"Dir. d'investissement"},{"id":"hon_etudes","numero":41,"libelle":"Études"},{"id":"hon_faisabilite","numero":42,"libelle":"Étude de faisabilité"},{"id":"hon_interets_immobilisables","numero":43,"libelle":"Intérêts immobilisables"},{"id":"hon_divers_1","numero":44,"libelle":"Divers hon. 1"},{"id":"hon_divers_2","numero":45,"libelle":"Divers hon. 2"}]},{"code":"frais_divers","numero":"IV","libelle":"Frais divers","postes":[{"id":"fd_actualisation_hon","numero":46,"libelle":"Actual./Rév. hon."},{"id":"fd_divers_1","numero":47,"libelle":"Divers frais 1"},{"id":"fd_divers_2","numero":48,"libelle":"Divers frais 2"}]},{"code":"frais_financiers","numero":"V","libelle":"Frais financiers","postes":[{"id":"ff_interets_prefi","numero":49,"libelle":"Intérêts préfin."},{"id":"ff_divers","numero":50,"libelle":"Frais fin. divers"}]}]},"zonage_communes":{"libelle":"Zonage des communes : A/B/C (loyers et agrement) et 1/2/3 (financement)","avertissement":"CE REFERENTIEL EST PARTIEL, ET C'EST DELIBERE. Le zonage A/Abis/B1/B2/C et le zonage 1/2/3 sont fixes par arrete et couvrent environ 35 000 communes. Cette table ne contient QUE les communes dont le zonage est atteste par une piece du depot, chacune avec sa source. Aucune valeur n'y est deduite d'un departement, d'une taille de commune ou d'une intuition : un zonage faux change le loyer plafond, donc le loyer de sortie, donc tout l'equilibre. Une commune absente est signalee comme telle et se saisit a la main.","pour_completer":"Verser la table officielle de l'arrete de zonage (source publique : data.gouv.fr / DHUP, un enregistrement par code INSEE) sous la cle `communes`, en conservant le champ `source` par ligne. Le mecanisme de recherche n'a pas a changer.","cle":"Les cles sont de la forme `DEPARTEMENT-NOM_NORMALISE` : departement sur deux ou trois caracteres, nom en majuscules sans accent ni ponctuation, espaces remplaces par des tirets. La normalisation est faite par le code appelant, pas ici.","communes":{"68-MULHOUSE":{"nom":"Mulhouse","departement":"68","zone_123":2,"zone_ABC":"B1","source":"Annexe LEON MULHOUSE 3307/3308 (onglet IN), operations reelles AXENTIA"},"45-ORLEANS":{"nom":"Orléans","departement":"45","zone_123":2,"zone_ABC":"B1","source":"Annexe LEON ORLEANS 3463 (onglet IN), operation reelle AXENTIA"}}}};
 
 /**
  * Postes de prix de revient : la nomenclature complete est PRESENTE d'emblee,
@@ -4660,6 +4689,31 @@ const valNum = (v) => (nul(v) ? '' : v);
  */
 let tvaVisible = true;
 const afficherTVA = () => tvaVisible;
+
+/**
+ * Zonage deduit de la commune et du departement.
+ *
+ * Le zonage n'est pas une opinion : il est fixe par arrete, et il commande le
+ * loyer plafond, donc le loyer de sortie, donc tout l'equilibre. Le referentiel
+ * ne contient que des communes ATTESTEES ; une commune inconnue est dite comme
+ * telle et laissee a la saisie, plutot que devinee depuis son departement.
+ *
+ * @param {string} commune
+ * @param {string} departement peut valoir « Dordogne (24) » : seuls les chiffres comptent
+ * @returns {{zone_123: number, zone_ABC: string, nom: string, source: string}|null}
+ */
+function zonageDeLaCommune(commune, departement) {
+  if (!commune || !departement) return null;
+  const dep = String(departement).match(/\d{2,3}/)?.[0];
+  if (!dep) return null;
+  const nom = String(commune)
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  return referentiels.zonage_communes.communes[`${dep}-${nom}`] ?? null;
+}
 
 /** Une ligne de prix de revient est-elle saisie tranche par tranche ? */
 const estVentile = (p) => Boolean(p.montants_ht_par_produit);
@@ -4961,6 +5015,47 @@ function rendreStructureCharges() {
     : '<tr><td colspan="6" class="vide">Aucun poste au référentiel.</td></tr>';
 
   rendreBlocRedevance();
+  rendreZonage();
+}
+
+/**
+ * Zonage : deduit de la commune quand elle est au referentiel, saisi sinon.
+ *
+ * Les deux selects restent presents dans les deux cas — le zonage doit toujours
+ * etre lisible et corrigeable — mais l'ecran DIT d'ou vient la valeur. Un champ
+ * prerempli sans provenance laisse croire a une saisie de l'utilisateur.
+ */
+function rendreZonage() {
+  const aide = document.getElementById('aide-zonage');
+  if (!aide) return;
+  const z = zonageDeLaCommune(etat.identite.commune, etat.identite.departement);
+
+  if (z) {
+    // On ne touche QUE les deux selects de zone. Repasser par
+    // `rendreChampsStatiques` reecrirait la valeur du champ commune pendant
+    // qu'on le saisit, au risque de deplacer le curseur a chaque frappe.
+    const poser = (chemin, valeur) => {
+      if (etat.identite[chemin] === valeur) return;
+      etat.identite[chemin] = valeur;
+      const el = /** @type {HTMLSelectElement} */ (document.querySelector(`[data-champ="identite.${chemin}"]`));
+      if (el) el.value = String(valeur);
+    };
+    poser('zone_123', z.zone_123);
+    poser('zone_ABC', z.zone_ABC);
+    aide.textContent =
+      `⚙ Zonage déduit de ${z.nom} (${z.departement}) : zone ${z.zone_123} et zone ${z.zone_ABC}. ` +
+      `Source : ${z.source}. Corriger les listes si l'arrêté a changé.`;
+    return;
+  }
+
+  const connues = Object.keys(referentiels.zonage_communes.communes).length;
+  aide.textContent = etat.identite.commune
+    ? `⚙ ${etat.identite.commune} n'est pas au référentiel de zonage (${connues} communes attestées) : ` +
+      'les deux zones restent à saisir. Le zonage commande le loyer plafond, il n’est pas deviné ' +
+      'depuis le département — deux communes voisines peuvent relever de zones différentes.'
+    : '⚙ Renseigner commune et département pour que le zonage se déduise, quand la commune est ' +
+      'au référentiel. Chaque tranche lit ensuite celui qui la concerne : 1/2/3 pour PLUS et PLAI, ' +
+      'A/B/C pour PLS.';
 }
 
 /**
@@ -5073,24 +5168,43 @@ function rendreTablePrixRevient() {
   const caseTVA = /** @type {HTMLInputElement} */ (document.getElementById('afficher-tva'));
   if (caseTVA) caseTVA.checked = tvaVisible;
 
-  // --- En-tete, dependant des tranches presentes et de l'affichage de la TVA ---
-  const colonnesTranches = codes
+  // --- En-tete sur DEUX rangees ---
+  // La tranche coiffe ses colonnes au lieu d'etre repetee dans chacune : HT et
+  // TVA d'un meme produit se lisent alors comme un bloc, et deux tranches
+  // voisines ne se confondent plus. Un filet colore ouvre chaque bloc, un fond
+  // teinte le porte jusqu'au bas du tableau.
+  const groupes = codes
     .map(
       (c) =>
-        `<th class="num col-tranche" style="--cat:${catProduit(c)}">${att(libelleProduit(c))} HT</th>` +
+        `<th class="col-groupe" colspan="${tva ? 2 : 1}" style="--cat:${catProduit(c)}">` +
+        `<span class="col-groupe__puce"></span>${att(libelleProduit(c))}</th>`,
+    )
+    .join('');
+  const sousColonnes = codes
+    .map(
+      (c) =>
+        `<th class="num col-tranche col-tranche--debut" style="--cat:${catProduit(c)}">HT (€)</th>` +
         (tva ? `<th class="num col-tranche" style="--cat:${catProduit(c)}">TVA</th>` : ''),
     )
     .join('');
-  table.querySelector('thead').innerHTML = `<tr>
-      <th class="num">N°</th>
-      <th>Poste</th>
-      <th class="num">Total HT (€)</th>
-      <th></th>
-      ${tva ? '<th class="num">TVA</th>' : ''}
-      ${parTranche ? colonnesTranches : ''}
-      <th class="num calc">TVA (€)</th>
-      <th class="num calc">TTC saisie (€)</th>
-    </tr>`;
+
+  const fixes = [
+    ['num', 'N°'],
+    ['', 'Poste'],
+    ['num', 'Total HT (€)'],
+    ['', ''],
+    ...(tva ? [['num', 'TVA']] : []),
+  ];
+  const fin = [
+    ['num calc', 'TVA (€)'],
+    ['num calc', 'TTC saisie (€)'],
+  ];
+  const cellulesFixes = (l) =>
+    l.map(([cl, t]) => `<th class="${cl}" ${parTranche ? 'rowspan="2"' : ''}>${t}</th>`).join('');
+
+  table.querySelector('thead').innerHTML = parTranche
+    ? `<tr>${cellulesFixes(fixes)}${groupes}${cellulesFixes(fin)}</tr><tr>${sousColonnes}</tr>`
+    : `<tr>${cellulesFixes(fixes)}${cellulesFixes(fin)}</tr>`;
   const nbCols =
     4 + (tva ? 1 : 0) + (parTranche ? codes.length * (tva ? 2 : 1) : 0) + 2;
 
@@ -5140,16 +5254,19 @@ function rendreTablePrixRevient() {
         ? codes
             .map((c) => {
               const style = `style="--cat:${catProduit(c)}"`;
+              // `--debut` porte le filet colore : il ouvre le bloc de la
+              // tranche, il ne separe pas HT de sa TVA.
+              const deb = 'col-tranche col-tranche--debut';
               if (!ventile) {
                 // Ligne non ventilee : on montre ce que la cle SU donnerait,
                 // en lecture seule. C'est un apercu, pas une saisie.
                 return (
-                  `<td class="num calc col-tranche" ${style} data-apercu="${c}"></td>` +
+                  `<td class="num calc ${deb}" ${style} data-apercu="${c}"></td>` +
                   (tva ? `<td class="num calc col-tranche" ${style}></td>` : '')
                 );
               }
               return (
-                `<td class="col-tranche" ${style}><input type="number" step="1"
+                `<td class="${deb}" ${style}><input type="number" step="1"
                    data-champ="postes_bilan.${i}.montants_ht_par_produit.${c}" data-type="nombre"
                    value="${valNum(p.montants_ht_par_produit?.[c])}" /></td>` +
                 (tva
@@ -5187,7 +5304,7 @@ function rendreTablePrixRevient() {
       ? codes
           .map(
             (c) =>
-              `<td class="num col-tranche" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="ht_eur"></td>` +
+              `<td class="num col-tranche col-tranche--debut" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="ht_eur"></td>` +
               (tva
                 ? `<td class="num col-tranche" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="tva_eur"></td>`
                 : ''),
@@ -5386,20 +5503,21 @@ function rendreValeurs(r) {
   const renseignes = etat.postes_bilan.filter((p) => !nul(totalPoste(p))).length;
   const ventiles = etat.postes_bilan.filter((p) => estVentile(p) && !nul(totalPoste(p))).length;
   // Le pied suit la largeur variable de l'en-tete : les colonnes de tranche
-  // apparaissent et disparaissent avec le programme.
-  const nbCols = $('#table-postes').querySelectorAll('thead th').length || 6;
+  // apparaissent et disparaissent avec le programme. Le compte est RECALCULE et
+  // non lu sur le `thead`, qui tient desormais sur deux rangees.
   const codesTr = tranchesActives();
   const tvaVisible = afficherTVA();
-  const totauxTranches =
-    codesTr.length > 1
-      ? codesTr
-          .map(
-            (c) =>
-              `<td class="num col-tranche" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_ht_eur)}</td>` +
-              (tvaVisible ? `<td class="num col-tranche" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_tva_eur)}</td>` : ''),
-          )
-          .join('')
-      : '';
+  const parTr = codesTr.length > 1;
+  const nbCols = 4 + (tvaVisible ? 1 : 0) + (parTr ? codesTr.length * (tvaVisible ? 2 : 1) : 0) + 2;
+  const totauxTranches = parTr
+    ? codesTr
+        .map(
+          (c) =>
+            `<td class="num col-tranche col-tranche--debut" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_ht_eur)}</td>` +
+            (tvaVisible ? `<td class="num col-tranche" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_tva_eur)}</td>` : ''),
+        )
+        .join('')
+    : '';
 
   $('#table-postes').querySelector('tfoot').innerHTML = `<tr>
       <td></td><td class="libelle">Prix de revient total</td>
@@ -5979,6 +6097,11 @@ function champsManquants() {
 function recalculer() {
   const pastille = $('#etat-calcul');
   const erreur = $('#erreur');
+
+  // Le zonage se deduit de la commune, qui se saisit lettre par lettre : il doit
+  // etre reevalue a chaque frappe, et non au seul rendu de structure. Il doit
+  // aussi l'etre AVANT le calcul, puisqu'il en change les loyers plafonds.
+  rendreZonage();
 
   const manquants = champsManquants();
   if (manquants.length) {

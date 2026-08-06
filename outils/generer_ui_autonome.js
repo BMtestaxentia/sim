@@ -105,6 +105,7 @@ const referentiels = {
   baremes: JSON.parse(lire('referentiels', 'baremes_2025.json')),
   trajectoires: JSON.parse(lire('referentiels', 'trajectoires_axentia_2026.json')),
   nomenclature_pdr: JSON.parse(lire('referentiels', 'nomenclature_pdr.json')),
+  zonage_communes: JSON.parse(lire('referentiels', 'zonage_communes.json')),
 };
 
 // Garde-fou : tout referentiel charge par l'UI doit etre inline ici, sinon la

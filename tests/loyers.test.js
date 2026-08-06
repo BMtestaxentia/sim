@@ -54,9 +54,18 @@ describe('R-SURF-2 — coefficient de structure', () => {
     expect(foyer).toBeCloseTo(0.77 * (1 + (38 * 10) / 500), 4);
   });
 
-  it('DOM : formule et base distinctes', () => {
-    const cs = coefficientStructure({ nb_logements: 10, su_m2: 500, dom: true }, baremes);
-    expect(cs).toBeCloseTo((0.685 * (31 * 10 + 500)) / 500, 4);
+  it('la variante DOM n est plus implementee : le drapeau est sans effet', () => {
+    // Hors perimetre (06/08/2026). Le referentiel garde ses coefficients DOM
+    // pour memoire, mais aucun code ne les lit : un appel portant `dom: true`
+    // doit donner exactement le meme resultat qu'un appel metropole, et surtout
+    // pas retomber silencieusement sur l'ancienne formule.
+    const metropole = coefficientStructure({ nb_logements: 10, su_m2: 500 }, baremes);
+    const avecDrapeau = coefficientStructure(
+      /** @type {any} */ ({ nb_logements: 10, su_m2: 500, dom: true }),
+      baremes,
+    );
+    expect(avecDrapeau).toBe(metropole);
+    expect(avecDrapeau).not.toBeCloseTo((0.685 * (31 * 10 + 500)) / 500, 4);
   });
 
   it('SU nulle : CS nul, pas de division par zero', () => {

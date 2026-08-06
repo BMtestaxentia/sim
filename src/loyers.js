@@ -32,39 +32,40 @@ const MOIS_PAR_AN = 12;
  * @param {{constantes_reglementaires: any}} referentiels
  * @returns {number} surface utile arrondie a 2 decimales
  */
-export function surfaceUtile({ shab_m2, surfaces_annexes_m2 = 0, su_forcee_m2 }, referentiels) {
-  if (su_forcee_m2 !== undefined && su_forcee_m2 !== null) return arrondiSurface(su_forcee_m2);
+export function surfaceUtile({ shab_m2, surfaces_annexes_m2 = 0, su_forcee_m2, arrondir = true }, referentiels) {
   const k = referentiels.constantes_reglementaires.coefficient_surface_annexes.valeur;
-  return arrondiSurface(shab_m2 + k * surfaces_annexes_m2);
+  const su =
+    su_forcee_m2 !== undefined && su_forcee_m2 !== null
+      ? su_forcee_m2
+      : shab_m2 + k * surfaces_annexes_m2;
+  // `arrondir: false` sert a l'agregation lot par lot : la surface utile est une
+  // grandeur de TRANCHE (R-SURF-1), et arrondir chaque lot avant de sommer fait
+  // deriver le total (six lots a 70,005 m2 donnent 420,06 au lieu de 420).
+  return arrondir ? arrondiSurface(su) : su;
 }
 
 /**
- * R-SURF-2 — Coefficient de structure.
- * Metropole : `CS = base x (1 + facteur_nl x NL / SU)`.
- * DOM       : `CS = base_dom x (facteur_dom x NL + SF) / SF`.
- * `facteur_nl` vaut 20 en habitat/etudiant et 38 en foyers (referentiel).
+ * R-SURF-2 — Coefficient de structure : `CS = base x (1 + facteur_nl x NL / SU)`.
+ * `facteur_nl` vaut 20 en habitat et 38 en foyers (referentiel).
+ *
+ * La variante DOM du dictionnaire n'est PAS implementee : hors perimetre
+ * (decision du 06/08/2026). Le referentiel conserve ses coefficients pour
+ * memoire, mais aucun code ne les lit — mieux vaut une absence franche qu'une
+ * branche jamais exercee et donc jamais testee.
+ *
  * @param {Object} p
  * @param {number} p.nb_logements
- * @param {number} p.su_m2            surface utile (ou surface financee en DOM)
- * @param {boolean} [p.dom]
+ * @param {number} p.su_m2
  * @param {boolean} [p.foyer]
  * @param {boolean} [p.arrondir]      applique l'arrondi 4 decimales (option LEON)
  * @param {{constantes_reglementaires: any}} referentiels
  * @returns {number}
  */
-export function coefficientStructure(
-  { nb_logements, su_m2, dom = false, foyer = false, arrondir = true },
-  referentiels,
-) {
+export function coefficientStructure({ nb_logements, su_m2, foyer = false, arrondir = true }, referentiels) {
   if (!(su_m2 > 0)) return 0;
   const cfg = referentiels.constantes_reglementaires.coefficient_structure;
-  let cs;
-  if (dom) {
-    cs = (cfg.dom.base * (cfg.dom.facteur_nl * nb_logements + su_m2)) / su_m2;
-  } else {
-    const facteur = foyer ? cfg.foyers.facteur_nl : cfg.metropole_habitat.facteur_nl;
-    cs = cfg.metropole_habitat.base * (1 + (facteur * nb_logements) / su_m2);
-  }
+  const facteur = foyer ? cfg.foyers.facteur_nl : cfg.metropole_habitat.facteur_nl;
+  const cs = cfg.metropole_habitat.base * (1 + (facteur * nb_logements) / su_m2);
   return arrondir ? arrondiCS(cs) : cs;
 }
 
@@ -168,7 +169,6 @@ export function majorationLCR(ratio_lcr, referentiels) {
  * @param {number} [p.marge_locale_eur_m2]
  * @param {number} [p.marge_majoration]     fraction deja plafonnee (R-LOYER-3)
  * @param {number} [p.loyer_sortie_force]   EUR/m2/mois, court-circuite le calcul
- * @param {boolean} [p.dom]
  * @param {boolean} [p.foyer]
  * @param {any} referentiels
  * @returns {{cs: number, loyer_base_eur_m2: number, loyer_max_base_eur_m2: number,
@@ -183,14 +183,13 @@ export function loyerProduit(
     marge_locale_eur_m2 = 0,
     marge_majoration = 0,
     loyer_sortie_force,
-    dom = false,
     foyer = false,
   },
   referentiels,
 ) {
   const def = produit(/** @type {any} */ (code_produit));
   const cs = def.coefficient_structure
-    ? coefficientStructure({ nb_logements, su_m2, dom, foyer }, referentiels)
+    ? coefficientStructure({ nb_logements, su_m2, foyer }, referentiels)
     : 1;
 
   const loyerBase = loyerDeBase({ code_produit, zones, marge_locale_eur_m2 }, referentiels);

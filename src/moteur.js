@@ -39,7 +39,7 @@ import {
   indicateursExploitation,
   jalonsExploitation,
 } from './exploitation.js';
-import { arrondiEuro } from './arrondis.js';
+import { arrondiEuro, arrondiSurface } from './arrondis.js';
 
 /** Version du moteur, reportee dans les resultats pour la tracabilite. */
 export const VERSION_MOTEUR = '0.4.0';
@@ -78,9 +78,13 @@ export function calculer(entrees, referentiels) {
   const anneeMEL = calendrier.annee_mise_en_location;
 
   // --- 1. Surfaces (R-SURF) ---
+  // La SU de chaque lot est conservee EXACTE pour l'agregation ; l'arrondi a
+  // 2 decimales n'intervient qu'a la tranche, seul niveau ou R-SURF-1 le
+  // prescrit. Arrondir lot par lot ferait deriver le total de l'operation.
   const surfaces = lots.map((lot) => ({
     ...lot,
-    su_m2: surfaceUtile(lot, baremes),
+    su_m2: arrondiSurface(surfaceUtile(lot, baremes)),
+    su_exacte_m2: surfaceUtile({ ...lot, arrondir: false }, baremes),
   }));
 
   // Agregation PAR TRANCHE DE FINANCEMENT avant tout calcul de loyer : le
@@ -92,11 +96,13 @@ export function calculer(entrees, referentiels) {
   for (const s of surfaces) {
     const t = (tranches[s.code_produit] ??= { nb_logements: 0, su_m2: 0, shab_m2: 0, lignes: [] });
     t.nb_logements += s.nb_logements ?? 0;
-    t.su_m2 += s.su_m2 ?? 0;
+    t.su_m2 += s.su_exacte_m2 ?? s.su_m2 ?? 0;
     t.shab_m2 += s.shab_m2 ?? 0;
     t.lignes.push(s);
   }
 
+  // Arrondi de la SU au niveau de la TRANCHE, une fois les lots sommes.
+  for (const t of Object.values(tranches)) t.su_m2 = arrondiSurface(t.su_m2);
   const suParProduit = Object.fromEntries(
     Object.entries(tranches).map(([code, t]) => [code, t.su_m2]),
   );
@@ -108,10 +114,14 @@ export function calculer(entrees, referentiels) {
   );
 
   // --- 2. Loyers (R-LOYER), une ligne par TRANCHE ---
+  // Les parametres de loyer (majoration, marge locale, loyer force) sont des
+  // proprietes de la TRANCHE, pas du lot : `entrees.loyers_par_produit` est leur
+  // emplacement officiel. Les valeurs portees par un lot restent acceptees en
+  // repli (fixtures et anciens appels), premiere valeur renseignee retenue.
+  const parametresLoyer = entrees.loyers_par_produit ?? {};
   const loyers = codesPresents.map((code) => {
     const t = tranches[code];
-    // Les surcharges de loyer se saisissent au niveau de la tranche : on prend
-    // la premiere valeur renseignee parmi ses lignes.
+    const params = parametresLoyer[code] ?? {};
     const premiere = t.lignes.find((l) => l.marge_locale_eur_m2 !== undefined) ?? t.lignes[0];
     const forcee = t.lignes.find((l) => l.loyer_sortie_force !== undefined && l.loyer_sortie_force !== null);
     const l = loyerProduit(
@@ -120,10 +130,9 @@ export function calculer(entrees, referentiels) {
         su_m2: t.su_m2,
         nb_logements: t.nb_logements,
         zones,
-        marge_locale_eur_m2: premiere?.marge_locale_eur_m2,
-        marge_majoration: premiere?.marge_majoration,
-        loyer_sortie_force: forcee?.loyer_sortie_force,
-        dom: identite.dom,
+        marge_locale_eur_m2: params.marge_locale_eur_m2 ?? premiere?.marge_locale_eur_m2,
+        marge_majoration: params.marge_majoration ?? premiere?.marge_majoration,
+        loyer_sortie_force: params.loyer_sortie_force ?? forcee?.loyer_sortie_force,
         foyer: identite.foyer,
       },
       baremes,
@@ -143,14 +152,23 @@ export function calculer(entrees, referentiels) {
   );
   const loyersAnnexesAnnuels = loyerAnnexesSeparees(entrees.annexes_louees ?? []);
 
-  // Deux lignes de saisie portant le meme produit sont agregees en une tranche :
-  // le loyer et le coefficient de structure ne se calculent qu'a ce niveau. On le
-  // signale, sans quoi la saisie laisse croire a deux tranches distinctes.
-  if (lots.length > codesPresents.length) {
-    alertes.push(
-      `${lots.length} lignes de programme pour ${codesPresents.length} tranche(s) : les lignes ` +
-        "d'un meme produit sont agregees, et leurs marges ou loyers forces ne sont pris qu'une fois.",
-    );
+  // La saisie lot par lot est le mode normal : plusieurs lignes d'un meme
+  // produit forment une tranche, sans avertissement. On ne signale que le cas
+  // reellement dangereux : des parametres de loyer DIVERGENTS portes par les
+  // lots d'une meme tranche, dont seul le premier serait retenu.
+  for (const [code, t] of Object.entries(tranches)) {
+    for (const cle of ['marge_locale_eur_m2', 'marge_majoration', 'loyer_sortie_force']) {
+      const valeurs = new Set(
+        t.lignes.map((l) => l[cle]).filter((x) => x !== undefined && x !== null),
+      );
+      if (valeurs.size > 1) {
+        alertes.push(
+          `Tranche ${code} : plusieurs valeurs de ${cle} portees par les lots ` +
+            `(${[...valeurs].join(', ')}), seule la premiere est retenue. ` +
+            'Ce parametre se definit par tranche (entrees.loyers_par_produit).',
+        );
+      }
+    }
   }
 
   // --- 3. Prix de revient (R-TVA) ---
@@ -196,7 +214,12 @@ export function calculer(entrees, referentiels) {
   const subventionsTotal = arrondiEuro(subventions.total_eur + (ssf?.subvention_eur ?? 0));
 
   // --- 5. Financement (R-FIN) ---
-  const fondsPropres = entrees.fonds_propres_eur ?? 0;
+  // Les fonds propres se saisissent par tranche (onglets Tranches de l'UI). Le
+  // scalaire global reste accepte pour les appels anciens et les fixtures.
+  const fpParProduit = entrees.fonds_propres_par_produit ?? null;
+  const fondsPropres = fpParProduit
+    ? Object.values(fpParProduit).reduce((s, v) => s + (Number(v) || 0), 0)
+    : (entrees.fonds_propres_eur ?? 0);
   const pretsSaisis = entrees.prets ?? [];
   const autresPretsEur = pretsSaisis
     .filter((p) => p.nature === 'autre')
@@ -290,6 +313,7 @@ export function calculer(entrees, referentiels) {
       libelle: p.libelle ?? p.code,
       montant_eur: p.montant_eur,
       nature: p.nature ?? 'autre',
+      produit: p.produit ?? produitPrincipal,
       taux_saisi: p.taux,
       annee_premiere_echeance:
         p.annee_premiere_echeance ??
@@ -495,6 +519,25 @@ export function calculer(entrees, referentiels) {
       quotes_parts: quotesParts,
       tranches: codesPresents,
       detail: surfaces,
+      // Recapitulatif par tranche, ce que les onglets Tranches restituent.
+      recapitulatif: Object.fromEntries(
+        codesPresents.map((c) => [
+          c,
+          {
+            nb_lots: tranches[c].lignes.length,
+            nb_logements: tranches[c].nb_logements,
+            shab_m2: arrondiSurface(tranches[c].shab_m2),
+            su_m2: arrondiSurface(tranches[c].su_m2),
+            quote_part_su: quotesParts[c],
+            fonds_propres_eur: fpParProduit?.[c] ?? null,
+            subventions_eur: subventions.par_produit[c] ?? 0,
+            prix_revient_ttc_eur: bilan.par_tranche?.[c]?.total_ttc_module_eur ?? null,
+            prets: amortissements
+              .filter((a) => (a.produit ?? produitPrincipal) === c)
+              .map((a) => ({ code: a.code, libelle: a.libelle, montant_eur: a.montant_eur })),
+          },
+        ]),
+      ),
     },
     loyers,
     bilan,

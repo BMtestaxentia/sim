@@ -54,6 +54,45 @@ function nomenclatureEnPostes(valeursInitiales = {}) {
   );
 }
 
+/** Typologies proposees a la saisie, reprises de l'onglet LOTS de la maquette. */
+const TYPOLOGIES = ['T1', "T1'", 'T1 bis', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+
+/**
+ * Repartit une surface TOTALE entre N lots, en conservant exactement la somme.
+ *
+ * Diviser puis arrondir chaque part ferait deriver le total (six lots de
+ * 66,666 m2 donnent 399,96 et non 400) : le reliquat de centimetres carres est
+ * distribue aux premiers lots. C'est la meme discipline que
+ * `arrondirEnConservantLaSomme` cote moteur, appliquee aux surfaces.
+ *
+ * @param {{code_produit: string, nombre: number, shab_totale: number,
+ *          annexes_totales?: number, typologie?: string, batiment?: string,
+ *          etage?: string}} p
+ * @returns {Array<Object>} lots, un par logement
+ */
+function repartirEnLots({ code_produit, nombre, shab_totale, annexes_totales = 0, typologie = '', batiment = '', etage = '' }) {
+  const n = Math.max(1, Math.round(nombre));
+  const partager = (total) => {
+    const centiemes = Math.round((Number(total) || 0) * 100);
+    const base = Math.floor(centiemes / n);
+    const reste = centiemes - base * n;
+    return Array.from({ length: n }, (_, i) => (base + (i < reste ? 1 : 0)) / 100);
+  };
+  const shab = partager(shab_totale);
+  const annexes = partager(annexes_totales);
+  return Array.from({ length: n }, (_, i) => ({
+    code_produit,
+    // Chaque lot est UN logement : c'est ce qui alimente le nombre de logements
+    // de la tranche, donc le coefficient de structure.
+    nb_logements: 1,
+    typologie,
+    batiment,
+    etage,
+    shab_m2: shab[i],
+    surfaces_annexes_m2: annexes[i],
+  }));
+}
+
 // ---------------------------------------------------------------- etat initial
 
 /**
@@ -82,26 +121,32 @@ const etat = {
     // qui couvre aussi la duree des prets fonciers de l'operation de depart.
     duree_simulation_ans: 50,
   },
-  lots: [
-    { code_produit: 'PLS', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 40, marge_locale_eur_m2: 0 },
-  ],
+  // Un lot = un logement. Le coefficient de structure et le loyer restent
+  // calcules par le moteur sur la TRANCHE entiere (R-SURF-2) : le decoupage en
+  // lots est une commodite de saisie, il n'influe sur aucun calcul.
+  lots: repartirEnLots({ code_produit: 'PLS', nombre: 6, shab_totale: 400, annexes_totales: 40, typologie: 'T2', batiment: 'A' }),
   postes_bilan: nomenclatureEnPostes({
     cf_acquisition: { montant_ht_eur: 642780, taux_tva: 0.055 },
     cf_notaire: { montant_ht_eur: 12000, taux_tva: 0.055 },
     hon_architecte: { montant_ht_eur: 18000, taux_tva: 0.2 },
   }),
   modulation_ttc_eur: 0,
-  subventions: [{ libelle: 'Ville', montant_eur: 20000, gratuite: true }],
-  fonds_propres_eur: 50000,
+  // Parametres de loyer PAR TRANCHE : c'est leur niveau naturel, le CS et le
+  // plafond ne se calculent qu'a ce niveau.
+  loyers_par_produit: {
+    PLS: { marge_majoration: 0, marge_locale_eur_m2: 0, loyer_sortie_force: null },
+  },
+  subventions: [{ libelle: 'Ville', montant_eur: 20000, gratuite: true, affectation: 'PLS' }],
+  fonds_propres_par_produit: { PLS: 50000 },
   mode_prets: 'saisis',
   prets: [
     {
-      code: 'PLS_CONSTRUCTION', libelle: 'PLS construction', nature: 'construction',
+      code: 'PLS_CONSTRUCTION', libelle: 'PLS construction', nature: 'construction', produit: 'PLS',
       montant_eur: 494023, taux: 0.0351, progressivite: 0, duree_ans: 40,
       annee_premiere_echeance: 2028, revisabilite: 'SIMPLE', differe_ans: 0, differe_type: 2,
     },
     {
-      code: 'PLS_FONCIER', libelle: 'PLS foncier', nature: 'foncier',
+      code: 'PLS_FONCIER', libelle: 'PLS foncier', nature: 'foncier', produit: 'PLS',
       montant_eur: 176035, taux: 0.0351, progressivite: 0, duree_ans: 50,
       annee_premiere_echeance: 2028, revisabilite: 'SIMPLE', differe_ans: 0, differe_type: 2,
     },
@@ -198,29 +243,212 @@ function rendreChampsStatiques() {
  * des lignes change : la reconstruire a chaque frappe detruit le focus et coupe la
  * saisie d'un decimal au moment du separateur.
  */
+/** Produits presents au programme, dans l'ordre canonique. */
+function tranchesActives() {
+  const utilises = new Set(etat.lots.map((l) => l.code_produit));
+  return produitsOrdonnes().filter((p) => utilises.has(p.code)).map((p) => p.code);
+}
+
+/** Libelle affichable d'un produit. */
+function libelleProduit(code) {
+  return produitsOrdonnes().find((p) => p.code === code)?.libelle ?? code;
+}
+
+/**
+ * Onglets et ecrans de tranche : un par produit present au programme.
+ *
+ * Ils sont GENERES a partir des lots, pas declares : ajouter un lot PLAI fait
+ * apparaitre l'onglet PLAI, retirer le dernier le fait disparaitre. Chaque
+ * tranche y porte ses marges de loyer, ses prets, ses subventions et ses fonds
+ * propres.
+ */
+function rendreStructureTranches() {
+  const codes = tranchesActives();
+  for (const code of codes) {
+    etat.loyers_par_produit[code] ??= { marge_majoration: 0, marge_locale_eur_m2: 0, loyer_sortie_force: null };
+  }
+
+  $('#onglets-tranches').innerHTML = codes
+    .map(
+      (c) =>
+        `<button type="button" class="onglet onglet--tranche" role="tab" data-ecran="tranche-${c}" aria-selected="false">${att(libelleProduit(c))}</button>`,
+    )
+    .join('');
+
+  $('#ecrans-tranches').innerHTML = codes
+    .map((code) => {
+      const L = etat.loyers_par_produit[code];
+      const prets = etat.prets.map((p, i) => ({ p, i })).filter(({ p }) => (p.produit ?? code) === code);
+      const subs = etat.subventions.map((s, i) => ({ s, i })).filter(({ s }) => s.affectation === code);
+      return `
+      <main class="ecran" id="ecran-tranche-${code}" role="tabpanel" hidden>
+        <div class="bandeau bandeau--info" data-recap-tranche="${code}"></div>
+
+        <div class="colonnes">
+          <section class="bloc">
+            <h2 class="bloc__titre">Loyer de la tranche ${att(libelleProduit(code))}</h2>
+            <div class="champs">
+              <label class="champ">
+                <span>Majoration (%)</span>
+                <input type="number" step="0.1" data-champ="loyers_par_produit.${code}.marge_majoration" data-type="pourcentage" value="${valNum(nul(L.marge_majoration) ? null : L.marge_majoration * 100)}" />
+              </label>
+              <label class="champ">
+                <span>Marge locale (€/m²/mois)</span>
+                <input type="number" step="0.01" data-champ="loyers_par_produit.${code}.marge_locale_eur_m2" data-type="nombre" value="${valNum(L.marge_locale_eur_m2)}" />
+              </label>
+              <label class="champ">
+                <span>Loyer forcé (€/m²/mois)</span>
+                <input type="number" step="0.01" min="0" data-champ="loyers_par_produit.${code}.loyer_sortie_force" data-type="nombre" value="${valNum(L.loyer_sortie_force)}" />
+              </label>
+            </div>
+            <div class="table-defilante" style="margin-top:12px">
+              <table class="tableau" data-detail-loyer="${code}">
+                <tbody></tbody>
+              </table>
+            </div>
+            <p class="aide">
+              ⚙ La majoration s'applique au loyer plafond après coefficient de structure
+              (R-LOYER-5). La marge locale s'ajoute au barème avant le CS (R-LOYER-1).
+              Un loyer forcé court-circuite tout le calcul.
+            </p>
+          </section>
+
+          <section class="bloc">
+            <h2 class="bloc__titre">Fonds propres et subventions</h2>
+            <div class="champs champs--serres">
+              <label class="champ">
+                <span>Fonds propres (€)</span>
+                <input type="number" step="1" min="0" data-champ="fonds_propres_par_produit.${code}" data-type="nombre" value="${valNum(etat.fonds_propres_par_produit[code])}" />
+              </label>
+            </div>
+            <div class="table-defilante" style="margin-top:10px">
+              <table class="tableau tableau--saisie">
+                <thead><tr><th>Subvention</th><th class="num">Montant (€)</th><th class="num">Gratuite</th><th></th></tr></thead>
+                <tbody>
+                  ${
+                    subs.length
+                      ? subs
+                          .map(
+                            ({ s, i }) => `<tr>
+                    <td><input type="text" data-champ="subventions.${i}.libelle" value="${att(s.libelle)}" /></td>
+                    <td><input type="number" step="1" data-champ="subventions.${i}.montant_eur" data-type="nombre" value="${valNum(s.montant_eur)}" /></td>
+                    <td class="num"><input type="checkbox" data-champ="subventions.${i}.gratuite" data-type="booleen" ${s.gratuite ? 'checked' : ''} /></td>
+                    <td><button type="button" class="bouton--supprimer" data-supprimer="subventions" data-index="${i}" title="Supprimer">×</button></td>
+                  </tr>`,
+                          )
+                          .join('')
+                      : '<tr><td colspan="4" class="vide">Aucune subvention sur cette tranche</td></tr>'
+                  }
+                </tbody>
+              </table>
+            </div>
+            <button type="button" class="bouton bouton--ajout" data-ajouter-tranche="subventions" data-produit="${code}">+ subvention</button>
+            <p class="aide">
+              Une subvention gratuite réduit la charge foncière finançable par prêt CDC (R-FIN-2).
+            </p>
+          </section>
+        </div>
+
+        <section class="bloc">
+          <h2 class="bloc__titre">
+            Prêts de la tranche
+            <button type="button" class="bouton bouton--ajout" data-ajouter-tranche="prets" data-produit="${code}">+ prêt</button>
+          </h2>
+          <div class="liste">
+            ${
+              prets.length
+                ? prets.map(({ p, i }) => gabaritPret(p, i)).join('')
+                : '<p class="aide">Aucun prêt saisi sur cette tranche.</p>'
+            }
+          </div>
+        </section>
+      </main>`;
+    })
+    .join('');
+}
+
+/** Bloc de saisie d'un pret, partage par tous les ecrans de tranche. */
+function gabaritPret(p, i) {
+  return `
+    <div class="ligne ligne--pret">
+      <label class="champ"><span>Libellé</span>
+        <input type="text" data-champ="prets.${i}.libelle" value="${att(p.libelle)}" /></label>
+      <label class="champ"><span>Montant (€)</span>
+        <input type="number" step="1" min="0" data-champ="prets.${i}.montant_eur" data-type="nombre" value="${valNum(p.montant_eur)}" /></label>
+      <label class="champ"><span>Nature</span>
+        <select data-champ="prets.${i}.nature">
+          ${['construction', 'foncier', 'autre'].map((n) => `<option value="${n}" ${n === p.nature ? 'selected' : ''}>${n}</option>`).join('')}
+        </select></label>
+      <button type="button" class="bouton--supprimer" data-supprimer="prets" data-index="${i}" title="Supprimer">×</button>
+      <div class="ligne__pied">
+        <label class="champ"><span>Taux saisi (%)</span>
+          <input type="number" step="0.01" data-champ="prets.${i}.taux" data-type="pourcentage" value="${valNum(nul(p.taux) ? null : p.taux * 100)}" /></label>
+        <label class="champ"><span>Durée (ans)</span>
+          <input type="number" step="1" min="1" data-champ="prets.${i}.duree_ans" data-type="nombre" value="${valNum(p.duree_ans)}" /></label>
+        <label class="champ"><span>1re échéance (année)</span>
+          <input type="number" step="1" data-champ="prets.${i}.annee_premiere_echeance" data-type="nombre" value="${valNum(p.annee_premiere_echeance)}" /></label>
+      </div>
+      <div class="ligne__pied">
+        <label class="champ"><span>Révisabilité</span>
+          <select data-champ="prets.${i}.revisabilite">
+            ${OPTIONS_REVISABILITE.map((v) => `<option value="${v}" ${v === p.revisabilite ? 'selected' : ''}>${v}</option>`).join('')}
+          </select></label>
+        <label class="champ"><span>Progressivité (%)</span>
+          <input type="number" step="0.1" data-champ="prets.${i}.progressivite" data-type="pourcentage" value="${valNum(nul(p.progressivite) ? null : p.progressivite * 100)}" /></label>
+        <label class="champ"><span>Différé (ans)</span>
+          <input type="number" step="1" min="0" data-champ="prets.${i}.differe_ans" data-type="nombre" value="${valNum(p.differe_ans)}" /></label>
+      </div>
+      <div class="ligne__pied">
+        <label class="champ"><span>Type de différé</span>
+          <select data-champ="prets.${i}.differe_type" data-type="nombre">
+            ${OPTIONS_DIFFERE.map((o) => `<option value="${o.v}" ${o.v === p.differe_type ? 'selected' : ''}>${o.l}</option>`).join('')}
+          </select></label>
+      </div>
+    </div>`;
+}
+
 function rendreStructure() {
-  // --- Programme : une ligne par tranche ---
-  $('#table-programme').querySelector('tbody').innerHTML = etat.lots
-    .map((lot, i) => {
-      const options = produitsOrdonnes()
-        .map((p) => `<option value="${p.code}" ${p.code === lot.code_produit ? 'selected' : ''} ${p.v1 ? '' : 'disabled'}>${p.libelle}</option>`)
-        .join('');
-      return `<tr data-tranche="${i}">
-        <td><select data-champ="lots.${i}.code_produit" data-structure="1">${options}</select></td>
-        <td><input type="number" step="1" min="0" data-champ="lots.${i}.nb_logements" data-type="nombre" value="${valNum(lot.nb_logements)}" /></td>
+  // --- Programme : une ligne par LOT ---
+  const optionsProduit = (selection) =>
+    produitsOrdonnes()
+      .map((p) => `<option value="${p.code}" ${p.code === selection ? 'selected' : ''} ${p.v1 ? '' : 'disabled'}>${p.libelle}</option>`)
+      .join('');
+
+  $('#table-lots').querySelector('tbody').innerHTML = etat.lots.length
+    ? etat.lots
+        .map(
+          (lot, i) => `<tr data-lot="${i}">
+        <td class="num num-poste">${i + 1}</td>
+        <td><input type="text" data-champ="lots.${i}.batiment" value="${att(lot.batiment)}" /></td>
+        <td><input type="text" data-champ="lots.${i}.etage" value="${att(lot.etage)}" /></td>
+        <td><select data-champ="lots.${i}.typologie">
+          <option value=""></option>
+          ${TYPOLOGIES.map((t) => `<option value="${t}" ${t === lot.typologie ? 'selected' : ''}>${t}</option>`).join('')}
+        </select></td>
+        <td><select data-champ="lots.${i}.code_produit" data-structure="1">${optionsProduit(lot.code_produit)}</select></td>
         <td><input type="number" step="0.01" min="0" data-champ="lots.${i}.shab_m2" data-type="nombre" value="${valNum(lot.shab_m2)}" /></td>
         <td><input type="number" step="0.01" min="0" data-champ="lots.${i}.surfaces_annexes_m2" data-type="nombre" value="${valNum(lot.surfaces_annexes_m2)}" /></td>
         <td class="calc" data-calc="su"></td>
-        <td class="calc" data-calc="cs"></td>
-        <td class="calc" data-calc="plafond"></td>
-        <td><input type="number" step="0.01" data-champ="lots.${i}.marge_locale_eur_m2" data-type="nombre" value="${valNum(lot.marge_locale_eur_m2)}" /></td>
-        <td><input type="number" step="0.01" min="0" data-champ="lots.${i}.loyer_sortie_force" data-type="nombre" value="${valNum(lot.loyer_sortie_force)}" /></td>
         <td class="calc" data-calc="loyer"></td>
-        <td class="calc" data-calc="loyer_annuel"></td>
         <td><button type="button" class="bouton--supprimer" data-supprimer="lots" data-index="${i}" title="Supprimer">×</button></td>
-      </tr>`;
-    })
-    .join('');
+      </tr>`,
+        )
+        .join('')
+    : '<tr><td colspan="10" class="vide">Aucun lot. Utiliser le générateur ci-dessus ou « + lot ».</td></tr>';
+
+  // --- Onglets et ecrans de tranche, un par produit present ---
+  rendreStructureTranches();
+
+  // Le generateur propose les produits du perimetre V1.
+  const selGen = /** @type {HTMLSelectElement} */ (document.getElementById('gen-produit'));
+  if (selGen && !selGen.options.length) {
+    selGen.innerHTML = produitsOrdonnes()
+      .filter((p) => p.v1)
+      .map((p) => `<option value="${p.code}">${p.libelle}</option>`)
+      .join('');
+    /** @type {HTMLSelectElement} */ (document.getElementById('gen-typologie')).innerHTML =
+      TYPOLOGIES.map((t) => `<option value="${t}" ${t === 'T2' ? 'selected' : ''}>${t}</option>`).join('');
+  }
 
   // --- Prix de revient : nomenclature complete, groupee par chapitre ---
   const masquerVides = /** @type {HTMLInputElement} */ (document.getElementById('masquer-vides'))?.checked;
@@ -262,62 +490,8 @@ function rendreStructure() {
     lignesPdr.join('') ||
     '<tr><td colspan="6" class="vide">Aucun poste renseigné. Décocher « Masquer les lignes non renseignées » pour saisir.</td></tr>';
 
-  // --- Subventions ---
-  $('#table-subventions').querySelector('tbody').innerHTML = etat.subventions.length
-    ? etat.subventions
-        .map(
-          (s, i) => `<tr>
-        <td><input type="text" data-champ="subventions.${i}.libelle" value="${att(s.libelle)}" /></td>
-        <td><input type="number" step="1" data-champ="subventions.${i}.montant_eur" data-type="nombre" value="${valNum(s.montant_eur)}" /></td>
-        <td class="num"><input type="checkbox" data-champ="subventions.${i}.gratuite" data-type="booleen" ${s.gratuite ? 'checked' : ''} /></td>
-        <td><button type="button" class="bouton--supprimer" data-supprimer="subventions" data-index="${i}" title="Supprimer">×</button></td>
-      </tr>`,
-        )
-        .join('')
-    : '<tr><td colspan="4" class="vide">Aucune subvention</td></tr>';
-
-  // --- Prets ---
-  $('#liste-prets').innerHTML = etat.prets
-    .map(
-      (p, i) => `
-      <div class="ligne ligne--pret">
-        <label class="champ"><span>Libellé</span>
-          <input type="text" data-champ="prets.${i}.libelle" value="${att(p.libelle)}" /></label>
-        <label class="champ"><span>Montant (€)</span>
-          <input type="number" step="1" min="0" data-champ="prets.${i}.montant_eur" data-type="nombre" value="${valNum(p.montant_eur)}" /></label>
-        <label class="champ"><span>Nature</span>
-          <select data-champ="prets.${i}.nature">
-            ${['construction', 'foncier', 'autre'].map((n) => `<option value="${n}" ${n === p.nature ? 'selected' : ''}>${n}</option>`).join('')}
-          </select></label>
-        <button type="button" class="bouton--supprimer" data-supprimer="prets" data-index="${i}" title="Supprimer">×</button>
-        <div class="ligne__pied">
-          <label class="champ"><span>Taux saisi (%)</span>
-            <input type="number" step="0.01" data-champ="prets.${i}.taux" data-type="pourcentage" value="${valNum(nul(p.taux) ? null : p.taux * 100)}" /></label>
-          <label class="champ"><span>Durée (ans)</span>
-            <input type="number" step="1" min="1" data-champ="prets.${i}.duree_ans" data-type="nombre" value="${valNum(p.duree_ans)}" /></label>
-          <label class="champ"><span>1re échéance (année)</span>
-            <input type="number" step="1" data-champ="prets.${i}.annee_premiere_echeance" data-type="nombre" value="${valNum(p.annee_premiere_echeance)}" /></label>
-        </div>
-        <div class="ligne__pied">
-          <label class="champ"><span>Révisabilité</span>
-            <select data-champ="prets.${i}.revisabilite">
-              ${OPTIONS_REVISABILITE.map((v) => `<option value="${v}" ${v === p.revisabilite ? 'selected' : ''}>${v}</option>`).join('')}
-            </select></label>
-          <label class="champ"><span>Progressivité (%)</span>
-            <input type="number" step="0.1" data-champ="prets.${i}.progressivite" data-type="pourcentage" value="${valNum(nul(p.progressivite) ? null : p.progressivite * 100)}" /></label>
-          <label class="champ"><span>Différé (ans)</span>
-            <input type="number" step="1" min="0" data-champ="prets.${i}.differe_ans" data-type="nombre" value="${valNum(p.differe_ans)}" /></label>
-        </div>
-        <div class="ligne__pied">
-          <label class="champ"><span>Type de différé</span>
-            <select data-champ="prets.${i}.differe_type" data-type="nombre">
-              ${OPTIONS_DIFFERE.map((o) => `<option value="${o.v}" ${o.v === p.differe_type ? 'selected' : ''}>${o.l}</option>`).join('')}
-            </select></label>
-        </div>
-      </div>`,
-    )
-    .join('');
 }
+
 
 // ---------------------------------------------------------------- rendu des valeurs
 
@@ -325,32 +499,97 @@ function rendreStructure() {
 function rendreValeurs(r) {
   const ind = r.indicateurs;
 
-  // --- Programme ---
+  // --- Programme : un lot par ligne ---
   const parProduit = {};
   for (const l of r.loyers) parProduit[l.code_produit] = l;
-  for (const tr of document.querySelectorAll('#table-programme tbody tr')) {
-    const i = Number(/** @type {HTMLElement} */ (tr).dataset.tranche);
+  // La SU d'un lot vient du moteur (`surfaces.detail`, meme ordre que `lots`) ;
+  // son loyer est celui de sa TRANCHE applique a sa surface utile.
+  for (const tr of document.querySelectorAll('#table-lots tbody tr[data-lot]')) {
+    const i = Number(/** @type {HTMLElement} */ (tr).dataset.lot);
+    const lot = r.surfaces.detail[i];
     const c = parProduit[etat.lots[i]?.code_produit];
     const set = (cle, v) => {
       const td = tr.querySelector(`[data-calc="${cle}"]`);
       if (td) td.textContent = v;
     };
-    set('su', c ? nb(c.su_m2) : '—');
-    set('cs', c ? nb(c.cs) : '—');
-    set('plafond', c ? nb(c.loyer_max_base_eur_m2) : '—');
-    set('loyer', c ? nb(c.loyer_pratique_eur_m2) : '—');
-    set('loyer_annuel', c ? eur(c.loyer_annuel_eur) : '—');
+    set('su', lot ? nb(lot.su_m2) : '—');
+    set('loyer', lot && c ? eur(lot.su_m2 * c.loyer_pratique_eur_m2) : '—');
   }
-  $('#table-programme').querySelector('tfoot').innerHTML = `<tr>
-      <td class="libelle">Total opération</td>
-      <td class="num">${nb(ind.nb_logements)}</td>
-      <td class="num">${nb(ind.shab_m2)}</td>
-      <td class="num">${nb(ind.surfaces_annexes_m2)}</td>
-      <td class="num">${nb(ind.su_m2)}</td>
-      <td colspan="5"></td>
-      <td class="num">${eur(ind.loyers_annuels_eur)}</td>
-      <td></td>
-    </tr>`;
+  $('#table-lots').querySelector('tfoot').innerHTML = etat.lots.length
+    ? `<tr>
+        <td colspan="5" class="libelle">Total — ${nb(ind.nb_logements)} logements</td>
+        <td class="num">${nb(ind.shab_m2)}</td>
+        <td class="num">${nb(ind.surfaces_annexes_m2)}</td>
+        <td class="num">${nb(ind.su_m2)}</td>
+        <td class="num">${eur(ind.loyers_annuels_eur ? ind.loyers_annuels_eur / 12 : 0)}</td>
+        <td></td>
+      </tr>`
+    : '';
+
+  // --- Synthese par tranche ---
+  const recap = r.surfaces.recapitulatif ?? {};
+  $('#table-synthese-tranches').querySelector('tbody').innerHTML = r.loyers.length
+    ? r.loyers
+        .map((l) => {
+          const t = recap[l.code_produit] ?? {};
+          return `<tr>
+            <td>${att(libelleProduit(l.code_produit))}</td>
+            <td class="num">${nb(t.nb_lots)}</td>
+            <td class="num">${nb(l.shab_m2)}</td>
+            <td class="num">${nb(l.su_m2)}</td>
+            <td class="num">${pct(t.quote_part_su, 1)}</td>
+            <td class="num">${nb(l.cs)}</td>
+            <td class="num">${nb(l.loyer_pratique_eur_m2)}</td>
+            <td class="num">${eur(l.loyer_annuel_eur)}</td>
+          </tr>`;
+        })
+        .join('')
+    : '<tr><td colspan="8" class="vide">Aucune tranche</td></tr>';
+  $('#table-synthese-tranches').querySelector('tfoot').innerHTML = r.loyers.length
+    ? `<tr><td class="libelle">Total</td><td class="num">${nb(etat.lots.length)}</td>
+        <td class="num">${nb(ind.shab_m2)}</td><td class="num">${nb(ind.su_m2)}</td>
+        <td class="num">100 %</td><td colspan="2"></td>
+        <td class="num">${eur(ind.loyers_annuels_eur)}</td></tr>`
+    : '';
+
+  // --- Recapitulatif de l'ecran Operation ---
+  $('#recap-operation').innerHTML = [
+    { l: 'Logements', v: nb(ind.nb_logements), d: `${etat.lots.length} lot${etat.lots.length > 1 ? 's' : ''} saisi${etat.lots.length > 1 ? 's' : ''}` },
+    { l: 'Tranches', v: r.surfaces.tranches.length, d: r.surfaces.tranches.map(libelleProduit).join(', ') || '—' },
+    { l: 'Surface utile', v: `${nb(ind.su_m2)} m²`, d: `${nb(ind.shab_m2)} m² SHAB` },
+    { l: 'Prix de revient', v: eur(ind.prix_revient_ttc_eur), d: `${eur(ind.prix_revient_par_logement_eur)} / logement` },
+    { l: 'Loyers annuels', v: eur(ind.loyers_annuels_eur), d: `RMO ${pct(ind.rmo)}` },
+    { l: 'Mise en location', v: r.calendrier.annee_mise_en_location, d: `${etat.dates.duree_simulation_ans} ans simulés` },
+  ]
+    .map((i) => `<div class="indicateur"><div class="indicateur__libelle">${i.l}</div>
+      <div class="indicateur__valeur">${i.v}</div><div class="indicateur__detail">${i.d}</div></div>`)
+    .join('');
+
+  // --- Ecrans de tranche : bandeau et detail du loyer ---
+  for (const code of r.surfaces.tranches) {
+    const t = recap[code] ?? {};
+    const l = r.loyers.find((x) => x.code_produit === code);
+    const bandeau = document.querySelector(`[data-recap-tranche="${code}"]`);
+    if (bandeau) {
+      bandeau.innerHTML =
+        `<span class="bandeau__principal">${att(libelleProduit(code))}</span>` +
+        `<span class="bandeau__detail">${nb(t.nb_logements)} logements · ${nb(t.su_m2)} m² SU ` +
+        `(${pct(t.quote_part_su, 1)} de l'opération) · prix de revient ${eur(t.prix_revient_ttc_eur)} · ` +
+        `subventions ${eur(t.subventions_eur)} · fonds propres ${eur(t.fonds_propres_eur)}</span>`;
+    }
+    const detail = document.querySelector(`[data-detail-loyer="${code}"] tbody`);
+    if (detail && l) {
+      detail.innerHTML = [
+        ['Barème de zone + marge locale', `${nb(l.loyer_base_eur_m2)} €/m²/mois`],
+        ['Coefficient de structure', nb(l.cs)],
+        ['Loyer plafond (barème × CS)', `${nb(l.loyer_max_base_eur_m2)} €/m²/mois`],
+        [l.force ? 'Loyer forcé appliqué' : 'Loyer de sortie (plafond × majoration)', `${nb(l.loyer_pratique_eur_m2)} €/m²/mois`],
+        ['Loyer annuel de la tranche', eur(l.loyer_annuel_eur)],
+      ]
+        .map(([k, v]) => `<tr><td>${k}</td><td class="num">${v}</td></tr>`)
+        .join('');
+    }
+  }
 
   // --- Postes : le detail vient du moteur, apparie par IDENTIFIANT et non par
   // rang, puisque les postes vides ne lui sont pas transmis. ---
@@ -405,35 +644,28 @@ function rendreValeurs(r) {
     `(${pct(b.taux_lasm, 1)}), et non les taux de TVA de saisie. C'est elle que le plan de ` +
     `financement doit couvrir.`;
 
-  // --- Subventions ---
-  $('#table-subventions').querySelector('tfoot').innerHTML = `<tr>
-      <td class="libelle">Total</td>
-      <td class="num">${eur(r.subventions.total_avec_ssf_eur)}</td>
-      <td class="num" colspan="2" style="font-weight:400;color:var(--encre-doux)">dont gratuites ${eur(r.subventions.gratuites_eur)}</td>
-    </tr>`;
-
-  // --- Prets ---
-  for (const bt of document.querySelectorAll('[data-mode-prets]')) {
-    bt.setAttribute('aria-pressed', String(bt.getAttribute('data-mode-prets') === etat.mode_prets));
-  }
-  const theorique = etat.mode_prets === 'theoriques';
-  $('#prets-saisis').hidden = theorique;
-  $('#prets-theoriques').hidden = !theorique;
-  if (theorique) {
-    const lignes = r.amortissements
+  // --- Repartition du prix de revient, sur l'ecran Prix de revient ---
+  const vent = r.bilan.ventilation;
+  const tvp = $('#table-ventilation-pdr');
+  if (vent && tvp) {
+    tvp.querySelector('tbody').innerHTML = Object.entries(vent.par_tranche)
       .map(
-        (a) =>
-          `<div><strong>${att(a.libelle)}</strong> — ${eur(a.montant_eur)}, ${a.tableau.length} ans, ` +
-          `taux appliqué ${pct(a.tableau[0].taux)}, 1<sup>re</sup> échéance ${a.annee_premiere_echeance}</div>`,
+        ([code, t]) => `<tr><td>${att(libelleProduit(code))}</td><td class="num">${nb(t.su_m2)}</td>
+          <td class="num">${pct(t.part_su, 1)}</td><td class="num">${eur(t.total_ht_eur)}</td>
+          <td class="num">${pct(t.taux_lasm, 1)}</td><td class="num">${eur(t.total_ttc_lasm_eur)}</td></tr>`,
       )
       .join('');
-    $('#prets-theoriques').innerHTML =
-      (lignes ||
-        `<div class="vide">Aucun prêt CDC mobilisé : le solde à financer vaut ` +
-          `${eur(r.financement.solde_a_financer_eur)}.</div>`) +
-      `<p class="aide" style="margin-top:10px">Montants, durées et taux déduits du solde à financer ` +
-      `et des règles du produit (R-AMT-1, R-FIN-4). Basculer sur « Saisis » pour les reprendre à la main.</p>`;
+    tvp.querySelector('tfoot').innerHTML = `<tr><td class="libelle">Total</td>
+      <td class="num">${nb(ind.su_m2)}</td><td class="num">100 %</td>
+      <td class="num">${eur(vent.total_ht_eur)}</td><td></td>
+      <td class="num">${eur(vent.total_ttc_lasm_eur)}</td></tr>`;
+    const taux = [...new Set(Object.values(vent.par_tranche).map((t) => t.taux_lasm))];
+    $('#aide-ventilation-pdr').textContent =
+      `⚙ Chaque poste est saisi globalement puis réparti au prorata de surface utile, ` +
+      `puis chaque tranche applique son propre taux de livraison à soi-même` +
+      `${taux.length > 1 ? ` (${taux.map((x) => pct(x, 1)).join(' et ')} ici)` : ''}.`;
   }
+  if ($('#bloc-ventilation-pdr')) $('#bloc-ventilation-pdr').hidden = !vent;
 
   rendreFinancement(r);
   rendreExploitation(r);
@@ -517,30 +749,6 @@ function rendreFinancement(r) {
     <tr><td class="libelle">Restant à couvrir par prêt CDC</td>
       <td class="num">${eur(r.financement.solde_a_financer_eur)}</td>
       <td class="num" style="font-weight:400;color:var(--encre-doux)">hors prêts CDC</td></tr>`;
-
-  // --- Prix de revient ventile par tranche ---
-  const vent = r.bilan.ventilation;
-  const tV = $('#table-ventilation');
-  if (vent) {
-    tV.querySelector('tbody').innerHTML = Object.entries(vent.par_tranche)
-      .map(
-        ([code, t]) => `<tr><td>${att(code)}</td><td class="num">${nb(t.su_m2)}</td>
-          <td class="num">${pct(t.part_su, 1)}</td><td class="num">${eur(t.total_ht_eur)}</td>
-          <td class="num">${pct(t.taux_lasm, 1)}</td><td class="num">${eur(t.total_ttc_lasm_eur)}</td></tr>`,
-      )
-      .join('');
-    tV.querySelector('tfoot').innerHTML = `<tr><td class="libelle">Total</td>
-      <td class="num">${nb(ind.su_m2)}</td><td class="num">100 %</td>
-      <td class="num">${eur(vent.total_ht_eur)}</td><td></td>
-      <td class="num">${eur(vent.total_ttc_lasm_eur)}</td></tr>`;
-    const taux = [...new Set(Object.values(vent.par_tranche).map((t) => t.taux_lasm))];
-    $('#aide-ventilation').textContent =
-      `⚙ Chaque poste est saisi globalement puis réparti au prorata de surface utile, ` +
-      `puis chaque tranche applique son propre taux de livraison à soi-même` +
-      `${taux.length > 1 ? ` (${taux.map((x) => pct(x, 1)).join(' et ')} ici)` : ''}. ` +
-      `C'est ce total qui doit être couvert par le plan de financement.`;
-  }
-  $('#bloc-ventilation').hidden = !vent;
 
   const corps = $('#table-prets').querySelector('tbody');
   const pied = $('#table-prets').querySelector('tfoot');
@@ -960,10 +1168,9 @@ function champsManquants() {
   if (!d.date_livraison && (nul(d.date_debut_travaux) || nul(d.duree_chantier_mois))) {
     m.push('calendrier (début des travaux et durée de chantier, ou date de livraison)');
   }
-  if (!etat.lots.length) m.push('au moins une tranche de programme');
+  if (!etat.lots.length) m.push('au moins un lot au programme');
   etat.lots.forEach((l, i) => {
-    if (nul(l.nb_logements)) m.push(`nombre de logements de la ligne ${i + 1}`);
-    if (nul(l.shab_m2)) m.push(`SHAB de la ligne ${i + 1}`);
+    if (nul(l.shab_m2)) m.push(`SHAB du lot ${i + 1}`);
   });
   if (etat.mode_prets === 'saisis') {
     etat.prets.forEach((p, i) => {
@@ -1100,33 +1307,65 @@ document.addEventListener('click', (ev) => {
     return;
   }
 
-  const aAjouter = el.dataset?.ajouter;
-  if (aAjouter) {
-    if (aAjouter === 'lots') {
-      // Une ligne = une tranche de financement. Proposer un produit deja present
-      // creerait deux lignes agregees en une seule, aux valeurs identiques.
-      const utilises = new Set(etat.lots.map((l) => l.code_produit));
-      const libre = produitsOrdonnes().find((p) => p.v1 && !utilises.has(p.code));
-      if (!libre) {
-        window.alert('Tous les produits du périmètre V1 sont déjà présents dans le programme.');
-        return;
-      }
-      etat.lots.push({
-        code_produit: libre.code, nb_logements: 0, shab_m2: 0,
-        surfaces_annexes_m2: 0, marge_locale_eur_m2: 0,
-      });
-    } else {
-      const modeles = {
-        subventions: { libelle: 'Nouvelle subvention', montant_eur: 0, gratuite: false },
-        prets: {
-          code: `PRET_${etat.prets.length + 1}`, libelle: 'Nouveau prêt', nature: 'autre',
-          montant_eur: 0, taux: 0.02, progressivite: 0, duree_ans: 40,
-          annee_premiere_echeance: dernierResultat?.calendrier?.annee_mise_en_location ?? 2028,
-          revisabilite: 'TAUX FIXE', differe_ans: 0, differe_type: 2,
-        },
-      };
-      etat[aAjouter].push(structuredClone(modeles[aAjouter]));
+  // --- Generateur de lots ---
+  if (el.id === 'btn-generer') {
+    const lire = (id) => /** @type {HTMLInputElement} */ (document.getElementById(id)).value;
+    const nombre = Number(lire('gen-nombre'));
+    if (!(nombre > 0)) {
+      window.alert('Indiquer un nombre de lots supérieur à zéro.');
+      return;
     }
+    etat.lots.push(
+      ...repartirEnLots({
+        code_produit: lire('gen-produit'),
+        nombre,
+        shab_totale: Number(lire('gen-shab')) || 0,
+        annexes_totales: Number(lire('gen-annexes')) || 0,
+        typologie: lire('gen-typologie'),
+        batiment: lire('gen-batiment'),
+      }),
+    );
+    rafraichirTout();
+    return;
+  }
+
+  if (el.id === 'btn-vider-lots') {
+    if (etat.lots.length && !window.confirm(`Supprimer les ${etat.lots.length} lots du programme ?`)) return;
+    etat.lots = [];
+    rafraichirTout();
+    return;
+  }
+
+  // --- Ajout depuis un ecran de tranche : l'element cree est AFFECTE a la tranche ---
+  const cible = el.dataset?.ajouterTranche;
+  if (cible) {
+    const produit = el.dataset.produit;
+    if (cible === 'subventions') {
+      etat.subventions.push({ libelle: 'Nouvelle subvention', montant_eur: 0, gratuite: false, affectation: produit });
+    } else {
+      etat.prets.push({
+        code: `PRET_${etat.prets.length + 1}`, libelle: 'Nouveau prêt', nature: 'autre', produit,
+        montant_eur: 0, taux: 0.02, progressivite: 0, duree_ans: 40,
+        annee_premiere_echeance: dernierResultat?.calendrier?.annee_mise_en_location ?? 2028,
+        revisabilite: 'TAUX FIXE', differe_ans: 0, differe_type: 2,
+      });
+    }
+    rafraichirTout();
+    return;
+  }
+
+  const aAjouter = el.dataset?.ajouter;
+  if (aAjouter === 'lots') {
+    const dernier = etat.lots.at(-1);
+    etat.lots.push({
+      code_produit: dernier?.code_produit ?? etat.identite.produit,
+      nb_logements: 1,
+      typologie: dernier?.typologie ?? '',
+      batiment: dernier?.batiment ?? '',
+      etage: '',
+      shab_m2: null,
+      surfaces_annexes_m2: 0,
+    });
     rafraichirTout();
     return;
   }

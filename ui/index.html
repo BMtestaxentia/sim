@@ -23,10 +23,21 @@
         </p>
       </div>
 
-      <nav class="onglets" role="tablist">
+      <!--
+        Les onglets de TRANCHE sont ajoutes dynamiquement entre « Prix de revient »
+        et « Plan de financement », un par produit present au programme.
+      -->
+      <nav class="onglets" role="tablist" id="onglets">
         <button type="button" class="onglet" role="tab" data-ecran="operation" aria-selected="true">
           Opération
         </button>
+        <button type="button" class="onglet" role="tab" data-ecran="programme" aria-selected="false">
+          Programme
+        </button>
+        <button type="button" class="onglet" role="tab" data-ecran="prix-revient" aria-selected="false">
+          Prix de revient
+        </button>
+        <span class="onglets__tranches" id="onglets-tranches"></span>
         <button type="button" class="onglet" role="tab" data-ecran="financement" aria-selected="false">
           Plan de financement
         </button>
@@ -34,7 +45,7 @@
           Exploitation
         </button>
         <button type="button" class="onglet" role="tab" data-ecran="parametres" aria-selected="false">
-          Paramètres du modèle
+          Paramètres
         </button>
       </nav>
 
@@ -139,25 +150,95 @@
       </div>
 
       <section class="bloc">
+        <h2 class="bloc__titre">Hypothèses d'exploitation</h2>
+        <div class="champs">
+          <label class="champ">
+            <span>Frais de gestion (% des loyers)</span>
+            <input type="number" step="0.1" min="0" data-champ="exploitation.frais_gestion_pct_loyers" data-type="pourcentage" />
+          </label>
+          <label class="champ">
+            <span>Vacance et impayés (%)</span>
+            <input type="number" step="0.1" min="0" data-champ="exploitation.taux_vacance_impayes" data-type="pourcentage" />
+          </label>
+          <label class="champ">
+            <span>Gros entretien (€/m² SHAB/an)</span>
+            <input type="number" step="0.1" min="0" data-champ="exploitation.gros_entretien_eur_m2" data-type="nombre" />
+          </label>
+        </div>
+        <p class="aide">
+          ⚙ Ces trois hypothèses pilotent le compte d'exploitation, donc l'année de
+          reconstitution des fonds propres. L'indexation annuelle vient du profil du référentiel,
+          pas de ces champs.
+        </p>
+      </section>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">Récapitulatif de l'opération</h2>
+        <div class="indicateurs" id="recap-operation"></div>
+      </section>
+    </main>
+
+    <!-- ================= ÉCRAN — PROGRAMME (lot par lot) ================= -->
+    <main class="ecran" id="ecran-programme" role="tabpanel" hidden>
+      <section class="bloc">
+        <h2 class="bloc__titre">Génération de lots</h2>
+        <div class="champs generateur">
+          <label class="champ">
+            <span>Financement</span>
+            <select id="gen-produit"></select>
+          </label>
+          <label class="champ">
+            <span>Nombre de lots</span>
+            <input type="number" id="gen-nombre" step="1" min="1" value="6" />
+          </label>
+          <label class="champ">
+            <span>Typologie</span>
+            <select id="gen-typologie"></select>
+          </label>
+          <label class="champ">
+            <span>SHAB totale (m²)</span>
+            <input type="number" id="gen-shab" step="0.01" min="0" value="360" />
+          </label>
+          <label class="champ">
+            <span>Annexes totales (m²)</span>
+            <input type="number" id="gen-annexes" step="0.01" min="0" value="0" />
+          </label>
+          <label class="champ">
+            <span>Bâtiment</span>
+            <input type="text" id="gen-batiment" placeholder="A" />
+          </label>
+          <label class="champ champ--bouton">
+            <button type="button" class="bouton bouton--principal" id="btn-generer">Générer les lots</button>
+          </label>
+        </div>
+        <p class="aide">
+          ⚙ Les surfaces saisies sont des <strong>totaux</strong> : elles sont réparties à parts
+          égales entre les lots créés, le reliquat de centimètres carrés allant aux premiers lots
+          pour que la somme retombe exactement sur le total. Chaque lot reste modifiable ensuite.
+        </p>
+      </section>
+
+      <section class="bloc">
         <h2 class="bloc__titre">
-          Programme
-          <button type="button" class="bouton bouton--ajout" data-ajouter="lots">+ tranche</button>
+          Lots
+          <span class="bloc__outils">
+            <button type="button" class="bouton bouton--ajout" data-ajouter="lots">+ lot</button>
+            <button type="button" class="bouton bouton--ajout" id="btn-vider-lots">Tout supprimer</button>
+          </span>
         </h2>
         <div class="table-defilante">
-          <table class="tableau tableau--saisie" id="table-programme">
+          <table class="tableau tableau--saisie" id="table-lots">
             <thead>
               <tr>
+                <th class="num">N°</th>
+                <th>Bâtiment</th>
+                <th>Étage</th>
+                <th>Typologie</th>
                 <th>Financement</th>
-                <th class="num">Logements</th>
                 <th class="num">SHAB (m²)</th>
                 <th class="num">Annexes (m²)</th>
                 <th class="num calc">SU (m²)</th>
-                <th class="num calc">CS</th>
-                <th class="num calc">Plafond (€/m²/mois)</th>
-                <th class="num">Marge locale (€/m²/mois)</th>
-                <th class="num">Loyer forcé (€/m²/mois)</th>
-                <th class="num calc">Loyer sortie (€/m²/mois)</th>
-                <th class="num calc">Loyer annuel (€)</th>
+                <th class="num calc">Loyer (€/mois)</th>
                 <th></th>
               </tr>
             </thead>
@@ -166,12 +247,37 @@
           </table>
         </div>
         <p class="aide">
-          ⚙ Une ligne par tranche de financement, pas par logement : le coefficient de structure
-          porte sur la tranche entière (règle R-SURF-2). Les colonnes grisées sont calculées.
-          Laisser « Loyer forcé » vide applique le plafond réglementaire.
+          ⚙ Un lot = un logement. Le coefficient de structure et le loyer se calculent sur la
+          <strong>tranche entière</strong> (règle R-SURF-2) : le loyer affiché par lot est celui de
+          sa tranche, appliqué à sa surface utile.
         </p>
       </section>
 
+      <section class="bloc">
+        <h2 class="bloc__titre">Synthèse par tranche</h2>
+        <div class="table-defilante">
+          <table class="tableau" id="table-synthese-tranches">
+            <thead>
+              <tr>
+                <th>Financement</th>
+                <th class="num">Lots</th>
+                <th class="num">SHAB (m²)</th>
+                <th class="num">SU (m²)</th>
+                <th class="num">Part SU</th>
+                <th class="num">CS</th>
+                <th class="num">Loyer (€/m²/mois)</th>
+                <th class="num">Loyer annuel (€)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- ================= ÉCRAN — PRIX DE REVIENT ================= -->
+    <main class="ecran" id="ecran-prix-revient" role="tabpanel" hidden>
       <section class="bloc">
         <h2 class="bloc__titre">
           Prix de revient
@@ -207,81 +313,30 @@
         <p class="aide" id="aide-lasm"></p>
       </section>
 
-      <div class="colonnes">
-        <section class="bloc">
-          <h2 class="bloc__titre">
-            Subventions et fonds propres
-            <button type="button" class="bouton bouton--ajout" data-ajouter="subventions">+ subvention</button>
-          </h2>
-          <div class="table-defilante">
-            <table class="tableau tableau--saisie" id="table-subventions">
-              <thead>
-                <tr>
-                  <th>Libellé</th>
-                  <th class="num">Montant (€)</th>
-                  <th class="num">Gratuite</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-              <tfoot></tfoot>
-            </table>
-          </div>
-          <div class="champs champs--serres">
-            <label class="champ">
-              <span>Fonds propres (€)</span>
-              <input type="number" step="1" min="0" data-champ="fonds_propres_eur" data-type="nombre" />
-            </label>
-          </div>
-          <p class="aide">
-            Une subvention gratuite ne se rembourse pas : elle réduit la charge foncière finançable
-            par prêt CDC (règle R-FIN-2).
-          </p>
-        </section>
-
-        <section class="bloc">
-          <h2 class="bloc__titre">Hypothèses d'exploitation</h2>
-          <div class="champs">
-            <label class="champ">
-              <span>Frais de gestion (% des loyers)</span>
-              <input type="number" step="0.1" min="0" data-champ="exploitation.frais_gestion_pct_loyers" data-type="pourcentage" />
-            </label>
-            <label class="champ">
-              <span>Vacance et impayés (%)</span>
-              <input type="number" step="0.1" min="0" data-champ="exploitation.taux_vacance_impayes" data-type="pourcentage" />
-            </label>
-            <label class="champ">
-              <span>Gros entretien (€/m² SHAB/an)</span>
-              <input type="number" step="0.1" min="0" data-champ="exploitation.gros_entretien_eur_m2" data-type="nombre" />
-            </label>
-          </div>
-          <p class="aide">
-            ⚙ Ces trois hypothèses pilotent le compte d'exploitation, donc l'année de
-            reconstitution des fonds propres. Elles étaient figées dans le code avant d'être
-            exposées ici. L'indexation annuelle vient du profil du référentiel, pas de ces champs.
-          </p>
-        </section>
-
-        <section class="bloc">
-          <h2 class="bloc__titre">
-            Prêts
-            <span class="bascule">
-              <button type="button" class="bascule__option" data-mode-prets="theoriques">CDC théoriques</button>
-              <button type="button" class="bascule__option" data-mode-prets="saisis">Saisis</button>
-            </span>
-          </h2>
-          <div id="prets-saisis">
-            <div class="liste" id="liste-prets"></div>
-            <button type="button" class="bouton bouton--ajout" data-ajouter="prets">+ prêt</button>
-          </div>
-          <div id="prets-theoriques" class="encadre" hidden></div>
-          <p class="aide">
-            ⚙ Chaque prêt porte sa propre année de première échéance (règle R-AMT-3). Barèmes,
-            spreads CDC et trajectoire du Livret A : voir Paramètres du modèle.
-          </p>
-        </section>
-      </div>
+      <section class="bloc" id="bloc-ventilation-pdr">
+        <h2 class="bloc__titre">Répartition par financement</h2>
+        <div class="table-defilante">
+          <table class="tableau" id="table-ventilation-pdr">
+            <thead>
+              <tr>
+                <th>Tranche</th>
+                <th class="num">SU (m²)</th>
+                <th class="num">Part</th>
+                <th class="num">HT</th>
+                <th class="num">Taux LASM</th>
+                <th class="num">TTC / LASM</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+        <p class="aide" id="aide-ventilation-pdr"></p>
+      </section>
     </main>
+
+    <!-- ================= ÉCRANS — UNE TRANCHE PAR PRODUIT (generes) ========= -->
+    <div id="ecrans-tranches"></div>
 
     <!-- ================= ÉCRAN 2 — PLAN DE FINANCEMENT ================= -->
     <main class="ecran" id="ecran-financement" role="tabpanel" hidden>
@@ -348,26 +403,6 @@
         </section>
       </div>
 
-      <section class="bloc" id="bloc-ventilation">
-        <h2 class="bloc__titre">Prix de revient par tranche</h2>
-        <div class="table-defilante">
-          <table class="tableau" id="table-ventilation">
-            <thead>
-              <tr>
-                <th>Tranche</th>
-                <th class="num">SU (m²)</th>
-                <th class="num">Part</th>
-                <th class="num">HT</th>
-                <th class="num">Taux LASM</th>
-                <th class="num">TTC / LASM</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-            <tfoot></tfoot>
-          </table>
-        </div>
-        <p class="aide" id="aide-ventilation"></p>
-      </section>
 
       <section class="bloc">
         <h2 class="bloc__titre">Prêts</h2>

@@ -230,3 +230,68 @@ describe('calendrier de l operation', () => {
     expect(() => calculer({ ...BASE, dates: {}, prets: [] }, REFERENTIELS)).toThrow(/calendrier/i);
   });
 });
+
+describe('saisie lot par lot — la SU ne derive pas', () => {
+  it('donne la meme SU de tranche que la saisie agregee', () => {
+    // Six lots issus d'une repartition de 400 m2 SHAB et 40 m2 d'annexes.
+    // Arrondir la SU lot par lot avant de sommer donnerait 420,02 au lieu de 420.
+    const parLot = Array.from({ length: 6 }, (_, i) => ({
+      code_produit: 'PLS',
+      nb_logements: 1,
+      shab_m2: i < 4 ? 66.67 : 66.66,
+      surfaces_annexes_m2: i < 4 ? 6.67 : 6.66,
+    }));
+    const shabTotal = parLot.reduce((s, l) => s + l.shab_m2, 0);
+    const annexesTotal = parLot.reduce((s, l) => s + l.surfaces_annexes_m2, 0);
+
+    const enLots = calculer({ ...BASE, lots: parLot, prets: [PRET_CDC] }, REFERENTIELS);
+    const agrege = calculer(
+      {
+        ...BASE,
+        lots: [{ code_produit: 'PLS', nb_logements: 6, shab_m2: shabTotal, surfaces_annexes_m2: annexesTotal }],
+        prets: [PRET_CDC],
+      },
+      REFERENTIELS,
+    );
+
+    expect(enLots.indicateurs.su_m2).toBe(agrege.indicateurs.su_m2);
+    expect(enLots.indicateurs.nb_logements).toBe(6);
+    // Meme coefficient de structure, donc meme loyer : le decoupage en lots est
+    // une commodite de saisie et n'influe sur aucun calcul.
+    expect(enLots.loyers[0].cs).toBe(agrege.loyers[0].cs);
+    expect(enLots.loyers[0].loyer_annuel_eur).toBe(agrege.loyers[0].loyer_annuel_eur);
+  });
+
+  it('signale des parametres de loyer divergents entre lots d une meme tranche', () => {
+    const r = calculer(
+      {
+        ...BASE,
+        lots: [
+          { code_produit: 'PLS', nb_logements: 1, shab_m2: 60, marge_locale_eur_m2: 1 },
+          { code_produit: 'PLS', nb_logements: 1, shab_m2: 60, marge_locale_eur_m2: 2 },
+        ],
+        prets: [PRET_CDC],
+      },
+      REFERENTIELS,
+    );
+    expect(r.alertes.some((a) => /plusieurs valeurs de marge_locale/i.test(a))).toBe(true);
+  });
+
+  it('prend les parametres de loyer au niveau de la tranche quand ils y sont', () => {
+    const sans = calculer({ ...BASE, prets: [PRET_CDC] }, REFERENTIELS);
+    const avec = calculer(
+      { ...BASE, prets: [PRET_CDC], loyers_par_produit: { PLS: { marge_majoration: 0.05 } } },
+      REFERENTIELS,
+    );
+    expect(avec.loyers[0].loyer_pratique_eur_m2).toBeGreaterThan(sans.loyers[0].loyer_pratique_eur_m2);
+    expect(avec.alertes.some((a) => /plusieurs valeurs/i.test(a))).toBe(false);
+  });
+
+  it('totalise les fonds propres saisis par tranche', () => {
+    const r = calculer(
+      { ...BASE, prets: [PRET_CDC], fonds_propres_par_produit: { PLS: 30000, PLAI: 20000 } },
+      REFERENTIELS,
+    );
+    expect(r.indicateurs.fonds_propres_eur).toBe(50000);
+  });
+});

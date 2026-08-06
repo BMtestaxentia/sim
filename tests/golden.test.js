@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { tableauAmortissement } from '../src/amortissement.js';
+import { compteExploitation } from '../src/exploitation.js';
 import { calculer } from '../src/moteur.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -448,5 +449,130 @@ describe('golden — ORLEANS 3463 PLUS/PLAI (revisabilite DOUBLE, trajectoire LA
     // L'annexe affiche un ecart de 0,44 EUR entre PR et financements : arrondi
     // de presentation LEON, comme sur la fixture LLI.
     expect(Math.abs(T.total_financements - T.prix_revient_ttc)).toBeLessThanOrEqual(1);
+  });
+
+  // --------------------------------------------------------------------------
+  // Q-27 — Compte d'exploitation en mode foyer (redevance forfaitaire).
+  //
+  // Les parametres ci-dessous ne sont PAS transcrits de l'onglet IN : ils ont ete
+  // IDENTIFIES sur les series de sortie de l'annexe. C'est pourquoi ils vivent
+  // dans le test et non dans `entrees.json`, qui ne doit contenir que de la
+  // donnee source. Ce qu'ils etablissent :
+  //
+  // - la redevance n'est PAS recomposee depuis les charges. Le rapport
+  //   redevance/charges derive continument de 0,814 a 1,88, et les deux ruptures
+  //   de charges (fin d'exoneration 2054, extinction des prets 40 ans en 2069)
+  //   n'y laissent aucune trace. « Forfaitaire » est a prendre au mot.
+  // - redevance, frais de gestion, TEOM et assurance suivent EXACTEMENT une seule
+  //   trajectoire (ecart relatif 5,6e-15 sur 60 ans) : +2,1799450549 % en 2030
+  //   puis +1,9 % constant.
+  // - la TFPB apparait en 2054 (25 ans d'exoneration) et croit a 2,9 % pile, un
+  //   taux distinct de la trajectoire generale, constant sur 34 transitions.
+  //
+  // Reste inconnu : d'ou vient le montant de redevance de l'annee 1.
+  const TRAJECTOIRE_GENERALE = { 2030: 0.021799450549450983, 2031: 0.019 };
+  const TRAJECTOIRE_TFPB = { 2030: 0.029 };
+  const TFPB_BASE_2029_EUR = 30172.8988;
+
+  describe('mode foyer (redevance forfaitaire, Q-27)', () => {
+    const annuites = tables.flatMap((t) =>
+      t.map((l) => ({ annee: l.annee, annuite_eur: l.annuite_eur })),
+    );
+    const T0 = attendus.annuites_par_annee[0];
+
+    const compte = compteExploitation({
+      annee_mise_en_location: 2029,
+      duree_ans: 60,
+      mode: 'redevance',
+      redevance_annuelle_eur: T0.redevance_eur,
+      index_redevance: 'general',
+      loyers_logements_annuels_eur: 0,
+      // Les montants de l'annexe sont des totaux d'operation : le nombre de
+      // logements n'y figure pas. Les postes passent donc en forfait plutot que
+      // par les assiettes « par logement », qui exigeraient un effectif invente.
+      nb_logements: 0,
+      annee_debut_tfpb: 9999,
+      annuites,
+      charges_diverses: [
+        { code: 'gestion', libelle: 'Frais de gestion', assiette: 'forfait',
+          valeur: T0.frais_gestion_keur * 1000, index: 'general' },
+        { code: 'teom', libelle: 'TEOM', assiette: 'forfait',
+          valeur: T0.tfpb_teom_keur * 1000, index: 'general' },
+        { code: 'tfpb', libelle: 'Taxe fonciere', assiette: 'forfait',
+          valeur: TFPB_BASE_2029_EUR, index: 'tfpb', annee_debut: 2054 },
+        { code: 'assurance', libelle: 'Assurance', assiette: 'forfait',
+          valeur: T0.assurance_keur * 1000, index: 'general' },
+      ],
+      trajectoires: {
+        general: TRAJECTOIRE_GENERALE,
+        gestion: TRAJECTOIRE_GENERALE,
+        tfpb: TRAJECTOIRE_TFPB,
+      },
+    });
+
+    /** Ecart relatif maximal d'un poste calcule contre la colonne de l'annexe. */
+    const ecartMax = (calcule, attendu) => {
+      let pire = 0;
+      let comparees = 0;
+      attendus.annuites_par_annee.forEach((att, i) => {
+        const cible = attendu(att);
+        if (!cible) return;
+        pire = Math.max(pire, Math.abs(calcule(compte.lignes[i], i) - cible) / Math.abs(cible));
+        comparees++;
+      });
+      return { pire, comparees };
+    };
+    const poste = (code) => (l) =>
+      l.detail_charges_diverses.find((d) => d.code === code)?.montant_eur ?? 0;
+
+    it('reproduit les 60 annees de redevance depuis le seul montant de l annee 1', () => {
+      const { pire, comparees } = ecartMax((l) => l.redevance_eur, (a) => a.redevance_eur);
+      expect(comparees).toBe(60);
+      expect(pire).toBeLessThanOrEqual(0.001);
+    });
+
+    it('reproduit frais de gestion et assurance sur la meme trajectoire', () => {
+      expect(ecartMax(poste('gestion'), (a) => a.frais_gestion_keur * 1000).pire).toBeLessThanOrEqual(0.001);
+      expect(ecartMax(poste('assurance'), (a) => a.assurance_keur * 1000).pire).toBeLessThanOrEqual(0.001);
+    });
+
+    it('reproduit la TFPB/TEOM et sa rupture d exoneration de 2054', () => {
+      const { pire, comparees } = ecartMax(
+        (l) => poste('teom')(l) + poste('tfpb')(l),
+        (a) => a.tfpb_teom_keur * 1000,
+      );
+      expect(comparees).toBe(60);
+      expect(pire).toBeLessThanOrEqual(0.001);
+
+      // La rupture doit etre PRODUITE par le moteur, pas seulement toleree : le
+      // poste quintuple entre 2053 et 2054, et pas avant.
+      const l2053 = compte.lignes.find((l) => l.annee === 2053);
+      const l2054 = compte.lignes.find((l) => l.annee === 2054);
+      expect(poste('tfpb')(l2053)).toBe(0);
+      expect(poste('tfpb')(l2054)).toBeGreaterThan(0);
+      expect(l2054.charges_diverses_eur / l2053.charges_diverses_eur).toBeGreaterThan(2);
+    });
+
+    it('reproduit le total des charges annuelles de l annexe', () => {
+      const { pire } = ecartMax(
+        (l) => l.total_charges_eur,
+        (a) =>
+          (a.annuites_keur + a.frais_gestion_keur + a.tfpb_teom_keur + a.assurance_keur) * 1000,
+      );
+      expect(pire).toBeLessThanOrEqual(0.001);
+    });
+
+    it('la redevance ne suit PAS les charges : c est un forfait indexe', () => {
+      // Garde-fou contre une future « amelioration » qui recomposerait la
+      // redevance depuis les charges. Le rapport doit rester monotone croissant
+      // et traverser 1, ce qu'une recomposition interdirait.
+      const rapports = attendus.annuites_par_annee.map(
+        (a) =>
+          a.redevance_eur /
+          ((a.annuites_keur + a.frais_gestion_keur + a.tfpb_teom_keur + a.assurance_keur) * 1000),
+      );
+      expect(rapports[0]).toBeLessThan(0.82);
+      expect(rapports.at(-1)).toBeGreaterThan(1.85);
+    });
   });
 });

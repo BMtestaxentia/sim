@@ -170,6 +170,55 @@
           reconstitution des fonds propres. L'indexation annuelle vient du profil du référentiel,
           pas de ces champs.
         </p>
+
+        <h3 class="sous-titre">Cotisations et charges diverses</h3>
+        <div class="table-defilante">
+          <table class="tableau" id="table-charges-diverses">
+            <thead>
+              <tr>
+                <th>Actif</th><th>Poste</th><th>Assiette</th>
+                <th class="num">Valeur</th><th>Indexation</th><th class="num">Année 1</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="aide">
+          ⚙ Ces postes viennent du référentiel : cocher suffit à les intégrer au compte.
+          Aucun n'est actif par défaut, pour qu'une simulation ne change jamais de résultat
+          sans qu'on l'ait décidé.
+        </p>
+      </section>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">Mode foyer (redevance forfaitaire)</h2>
+        <label class="champ champ--interrupteur">
+          <input type="checkbox" data-champ="exploitation.mode" data-type="mode-redevance" data-structure="1" />
+          <span>Les produits sont une redevance, pas un loyer au m²</span>
+        </label>
+        <div class="champs" id="champs-redevance">
+          <label class="champ">
+            <span>Redevance annuelle, année 1 (€)</span>
+            <input type="number" step="1" min="0" data-champ="exploitation.redevance_annuelle_eur" data-type="nombre" />
+          </label>
+          <label class="champ">
+            <span>Quote-part de subventions virée au résultat (€/an)</span>
+            <input type="number" step="1" min="0" data-champ="exploitation.qp_subventions_annuelle_eur" data-type="nombre" />
+          </label>
+          <label class="champ">
+            <span>Durée d'étalement de la quote-part (ans, 0 = sans fin)</span>
+            <input type="number" step="1" min="0" data-champ="exploitation.duree_qp_subventions_ans" data-type="nombre" />
+          </label>
+        </div>
+        <p class="aide">
+          ⚙ Vérifié sur l'annexe Orléans : la redevance est un montant d'année 1 indexé sur la
+          trajectoire de gestion, elle n'est pas recomposée depuis les charges. Les loyers au m²
+          et le coefficient de structure cessent alors de piloter les produits.
+        </p>
+        <p class="aide">
+          ⚙ Le taux de vacance et les frais de gestion en % s'appliquent alors à la redevance.
+          Sous bail à gestionnaire, la redevance est garantie : mettre la vacance à 0 %.
+        </p>
       </section>
 
       <section class="bloc">

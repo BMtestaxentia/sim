@@ -93,6 +93,28 @@ function repartirEnLots({ code_produit, nombre, shab_totale, annexes_totales = 0
   }));
 }
 
+// ---------------------------------------------------------------- charges diverses
+
+/** Catalogue des cotisations et charges diverses, lu au referentiel (Q-16). */
+const CATALOGUE_CHARGES = referentiels.baremes.charges_exploitation?.postes ?? [];
+
+/** Assiettes exprimees en TAUX : la saisie et l'affichage se font en pourcentage. */
+const ASSIETTES_EN_TAUX = new Set([
+  'produits_locatifs_bruts',
+  'produits_locatifs_nets',
+  'prix_revient_ttc',
+]);
+
+/** Libelles d'assiette, pour que la colonne dise sur QUOI porte la valeur. */
+const LIBELLES_ASSIETTE = {
+  logement: 'par logement et par an',
+  produits_locatifs_bruts: 'des produits locatifs bruts',
+  produits_locatifs_nets: 'des produits locatifs nets',
+  shab: 'par m² SHAB et par an',
+  prix_revient_ttc: 'du prix de revient TTC',
+  forfait: 'forfait annuel',
+};
+
 // ---------------------------------------------------------------- etat initial
 
 /**
@@ -155,6 +177,14 @@ const etat = {
     frais_gestion_pct_loyers: 0.07,
     taux_vacance_impayes: 0.02,
     gros_entretien_eur_m2: 5,
+    // Q-16 : le catalogue du referentiel est presente en entier, tout inactif.
+    // Une simulation ne doit jamais changer de resultat parce qu'un poste a ete
+    // ajoute au referentiel entre deux ouvertures.
+    charges_diverses: CATALOGUE_CHARGES.map((c) => ({ code: c.code, actif: false, valeur: c.valeur })),
+    mode: 'loyers',
+    redevance_annuelle_eur: null,
+    qp_subventions_annuelle_eur: null,
+    duree_qp_subventions_ans: null,
   },
   options: {},
 };
@@ -219,6 +249,13 @@ function att(v) {
 
 const valNum = (v) => (nul(v) ? '' : v);
 
+/**
+ * Fraction vers pourcentage POUR LA SAISIE, sans trainee flottante : 0,0034 x 100
+ * vaut 0,33999999999999997 en binaire, et c'est cela que le champ affichait.
+ * `toPrecision(12)` coupe le bruit bien en deca de la precision d'un taux.
+ */
+const enPourcent = (v) => (nul(v) ? null : Number((v * 100).toPrecision(12)));
+
 // ---------------------------------------------------------------- rendu de structure
 
 function rendreSelectProduit() {
@@ -232,8 +269,11 @@ function rendreChampsStatiques() {
     const champ = /** @type {HTMLInputElement} */ (el);
     if (champ.closest('tbody') || champ.closest('.liste')) continue;
     const v = lireChemin(etat, champ.dataset.champ ?? '');
-    if (champ.type === 'checkbox') champ.checked = Boolean(v);
-    else if (champ.dataset.type === 'pourcentage') champ.value = nul(v) ? '' : String(v * 100);
+    // Le mode d'exploitation est une CHAINE pilotee par une case a cocher :
+    // `Boolean('loyers')` vaut vrai, il faut donc tester la valeur elle-meme.
+    if (champ.dataset.type === 'mode-redevance') champ.checked = v === 'redevance';
+    else if (champ.type === 'checkbox') champ.checked = Boolean(v);
+    else if (champ.dataset.type === 'pourcentage') champ.value = nul(v) ? '' : String(enPourcent(v));
     else champ.value = nul(v) ? '' : String(v);
   }
 }
@@ -290,7 +330,7 @@ function rendreStructureTranches() {
             <div class="champs">
               <label class="champ">
                 <span>Majoration (%)</span>
-                <input type="number" step="0.1" data-champ="loyers_par_produit.${code}.marge_majoration" data-type="pourcentage" value="${valNum(nul(L.marge_majoration) ? null : L.marge_majoration * 100)}" />
+                <input type="number" step="0.1" data-champ="loyers_par_produit.${code}.marge_majoration" data-type="pourcentage" value="${valNum(enPourcent(L.marge_majoration))}" />
               </label>
               <label class="champ">
                 <span>Marge locale (€/m²/mois)</span>
@@ -382,7 +422,7 @@ function gabaritPret(p, i) {
       <button type="button" class="bouton--supprimer" data-supprimer="prets" data-index="${i}" title="Supprimer">×</button>
       <div class="ligne__pied">
         <label class="champ"><span>Taux saisi (%)</span>
-          <input type="number" step="0.01" data-champ="prets.${i}.taux" data-type="pourcentage" value="${valNum(nul(p.taux) ? null : p.taux * 100)}" /></label>
+          <input type="number" step="0.01" data-champ="prets.${i}.taux" data-type="pourcentage" value="${valNum(enPourcent(p.taux))}" /></label>
         <label class="champ"><span>Durée (ans)</span>
           <input type="number" step="1" min="1" data-champ="prets.${i}.duree_ans" data-type="nombre" value="${valNum(p.duree_ans)}" /></label>
         <label class="champ"><span>1re échéance (année)</span>
@@ -394,7 +434,7 @@ function gabaritPret(p, i) {
             ${OPTIONS_REVISABILITE.map((v) => `<option value="${v}" ${v === p.revisabilite ? 'selected' : ''}>${v}</option>`).join('')}
           </select></label>
         <label class="champ"><span>Progressivité (%)</span>
-          <input type="number" step="0.1" data-champ="prets.${i}.progressivite" data-type="pourcentage" value="${valNum(nul(p.progressivite) ? null : p.progressivite * 100)}" /></label>
+          <input type="number" step="0.1" data-champ="prets.${i}.progressivite" data-type="pourcentage" value="${valNum(enPourcent(p.progressivite))}" /></label>
         <label class="champ"><span>Différé (ans)</span>
           <input type="number" step="1" min="0" data-champ="prets.${i}.differe_ans" data-type="nombre" value="${valNum(p.differe_ans)}" /></label>
       </div>
@@ -405,6 +445,45 @@ function gabaritPret(p, i) {
           </select></label>
       </div>
     </div>`;
+}
+
+/**
+ * Q-16 — Table des cotisations et charges diverses. Le catalogue vient du
+ * referentiel ; l'ecran n'y ajoute que l'interrupteur et la surcharge de valeur.
+ * La colonne « Année 1 » est remplie par `rendreExploitation` depuis le resultat
+ * du moteur, jamais recalculee ici.
+ */
+function rendreStructureCharges() {
+  const table = document.getElementById('table-charges-diverses');
+  if (!table) return;
+  const saisie = etat.exploitation.charges_diverses ?? [];
+
+  table.querySelector('tbody').innerHTML = CATALOGUE_CHARGES.length
+    ? CATALOGUE_CHARGES.map((ref) => {
+        const i = saisie.findIndex((c) => c.code === ref.code);
+        const c = saisie[i] ?? { actif: false, valeur: ref.valeur };
+        const taux = ASSIETTES_EN_TAUX.has(ref.assiette);
+        const v = c.valeur ?? ref.valeur;
+        return `<tr data-charge="${ref.code}">
+        <td class="num"><input type="checkbox" data-champ="exploitation.charges_diverses.${i}.actif"
+          data-type="booleen" data-structure="1" ${c.actif ? 'checked' : ''} /></td>
+        <td>${att(ref.libelle)}</td>
+        <td class="discret">${att(LIBELLES_ASSIETTE[ref.assiette] ?? ref.assiette)}</td>
+        <td class="cellule-valeur"><input type="number" step="${taux ? '0.001' : '1'}" min="0"
+          data-champ="exploitation.charges_diverses.${i}.valeur"
+          data-type="${taux ? 'pourcentage' : 'nombre'}"
+          value="${valNum(taux ? enPourcent(v) : v)}" ${c.actif ? '' : 'disabled'} />
+          ${taux ? '<span class="unite">%</span>' : '<span class="unite">€</span>'}</td>
+        <td class="discret">${ref.index ? att(ref.index) : 'aucune'}</td>
+        <td class="num calc" data-charge-montant="${ref.code}"></td>
+      </tr>`;
+      }).join('')
+    : '<tr><td colspan="6" class="vide">Aucun poste au référentiel.</td></tr>';
+
+  // En mode loyers, les champs de redevance n'ont pas de sens : les masquer vaut
+  // mieux que les laisser saisissables et sans effet.
+  const champsRedevance = document.getElementById('champs-redevance');
+  if (champsRedevance) champsRedevance.hidden = etat.exploitation.mode !== 'redevance';
 }
 
 function rendreStructure() {
@@ -438,6 +517,7 @@ function rendreStructure() {
 
   // --- Onglets et ecrans de tranche, un par produit present ---
   rendreStructureTranches();
+  rendreStructureCharges();
 
   // Le generateur propose les produits du perimetre V1.
   const selGen = /** @type {HTMLSelectElement} */ (document.getElementById('gen-produit'));
@@ -1017,7 +1097,17 @@ function rendreExploitation(r) {
     }</span>` +
     `<span class="bandeau__detail">${e.lignes.length} années simulées, de ${e.lignes[0]?.annee} à ` +
     `${e.lignes.at(-1)?.annee}${deficit ? `, de ${ind.premiere_annee_deficitaire} à ${ind.derniere_annee_deficitaire}` : ''}. ` +
+    `${e.mode === 'redevance' ? 'Produits en redevance forfaitaire (mode foyer). ' : ''}` +
     `Compte partiel : ${e.postes_absents.length} familles de postes ne sont pas encore modélisées.</span>`;
+
+  // Colonne « Année 1 » de la table des charges diverses : remplie depuis le
+  // resultat du moteur, jamais recalculee ici (les taux portent sur des loyers
+  // que seul le moteur connait).
+  const detailAn1 = e.lignes[0]?.detail_charges_diverses ?? [];
+  for (const cel of document.querySelectorAll('[data-charge-montant]')) {
+    const d = detailAn1.find((x) => x.code === cel.getAttribute('data-charge-montant'));
+    cel.textContent = d ? eur(d.montant_eur) : '—';
+  }
 
   // --- Tuiles ---
   $('#tuiles-exploitation').innerHTML = [
@@ -1251,6 +1341,8 @@ document.addEventListener('input', (ev) => {
       if (Number.isNaN(n)) return;
       valeur = el.dataset.type === 'pourcentage' ? n / 100 : n;
     }
+  } else if (el.dataset.type === 'mode-redevance') {
+    valeur = el.checked ? 'redevance' : 'loyers';
   } else if (el.dataset.type === 'booleen') {
     valeur = el.checked;
   } else {

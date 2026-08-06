@@ -119,12 +119,37 @@ h1 { font-size: 16px; }
   letter-spacing: 0.07em; color: var(--navy-700);
 }
 
+/* Intertitre a l'interieur d'un bloc : plus discret que .bloc__titre, pour
+   separer deux tables sans laisser croire a deux sections independantes. */
+.sous-titre {
+  margin: 18px 0 8px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--encre-doux);
+}
+
+/* Colonne descriptive d'une table : presente sans concurrencer les chiffres. */
+.discret { color: var(--encre-doux); font-size: 11px; }
+/* Saisie suivie de son unite, sur une seule ligne : un champ de table occupe
+   toute la largeur de sa cellule, l'unite passerait sinon a la ligne. */
+.cellule-valeur { display: flex; align-items: center; gap: 5px; }
+.cellule-valeur > input { flex: 1; min-width: 0; }
+.unite { flex: none; font-size: 11px; color: var(--encre-doux); }
+
 /* ---------- Champs ---------- */
 .champs { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
 .champs--serres { grid-template-columns: repeat(auto-fit, minmax(160px, 220px)); margin-top: 10px; }
 .champ { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .champ--large { grid-column: 1 / -1; }
 .champ > span { font-size: 11px; font-weight: 500; color: var(--encre-doux); }
+/* Case a cocher et son libelle sur une seule ligne : le libelle EST la question,
+   il ne se pose pas au-dessus comme celui d'un champ de saisie. Doit suivre
+   `.champ`, de meme specificite, pour en renverser la direction. */
+.champ--interrupteur {
+  flex-direction: row; align-items: center; gap: 8px;
+  margin-bottom: 12px; cursor: pointer;
+}
+.champ--interrupteur > input { flex: none; width: auto; }
+.champ--interrupteur > span { font-size: 12px; font-weight: 500; color: var(--encre); }
 
 input, select {
   font: inherit; font-size: 13px; color: var(--encre);

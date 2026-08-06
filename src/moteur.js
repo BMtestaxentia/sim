@@ -35,6 +35,7 @@ import { tableauAmortissement, anneePremiereEcheance, prefinancement } from './a
 import { exonerationTFPB, taxeAmenagement } from './fiscalite.js';
 import {
   compteExploitation,
+  resoudreChargesExploitation,
   anneeReconstitutionFondsPropres,
   indicateursExploitation,
   jalonsExploitation,
@@ -398,9 +399,21 @@ export function calculer(entrees, referentiels) {
   const nbLogements = lots.reduce((s, l) => s + (l.nb_logements ?? 0), 0);
   const shabTotal = lots.reduce((s, l) => s + (l.shab_m2 ?? 0), 0);
 
+  // Q-16 : les postes de charge diverses viennent du referentiel, la saisie ne
+  // fait que les activer. Q-27 : le mode foyer remplace les loyers par une
+  // redevance forfaitaire indexee.
+  const chargesDiverses = resoudreChargesExploitation(exp.charges_diverses, baremes);
+
   const exploitation = compteExploitation({
     annee_mise_en_location: anneeMEL,
     duree_ans: dates.duree_simulation_ans ?? 50,
+    mode: exp.mode ?? 'loyers',
+    redevance_annuelle_eur: exp.redevance_annuelle_eur ?? 0,
+    index_redevance: exp.index_redevance ?? 'gestion',
+    qp_subventions_annuelle_eur: exp.qp_subventions_annuelle_eur ?? 0,
+    duree_qp_subventions_ans: exp.duree_qp_subventions_ans ?? 0,
+    prix_revient_ttc_eur: bilan.total_ttc_module_eur,
+    charges_diverses: chargesDiverses,
     loyers_logements_annuels_eur: loyersLogementsAnnuels,
     loyers_annexes_annuels_eur: loyersAnnexesAnnuels,
     loyers_divers_annuels_eur: exp.loyers_divers_annuels_eur ?? 0,
@@ -449,13 +462,15 @@ export function calculer(entrees, referentiels) {
     fondsPropres,
   );
   exploitation.fonds_propres_eur = fondsPropres;
+  exploitation.charges_diverses_actives = chargesDiverses;
   // Postes du compte que le moteur ne sait pas encore produire, listes pour que
-  // l'ecran le dise plutot que de laisser croire a un compte complet.
+  // l'ecran le dise plutot que de laisser croire a un compte complet. TEOM,
+  // CGLLS, ANCOLS et assurance PNO en sont sortis : ils sont desormais des
+  // postes du referentiel que la saisie active (Q-16).
   exploitation.postes_absents = [
     'Rémunération des fonds propres',
-    'Provision pour gros entretien (PCRC)',
-    'TEOM, CGLLS, assurance PNO, frais de structure',
-    'Dotation aux amortissements et autofinancement',
+    'Frais de structure',
+    'Dotation aux amortissements comptables',
     'Subvention d’exploitation à durée limitée',
   ];
 

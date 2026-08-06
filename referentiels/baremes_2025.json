@@ -120,5 +120,51 @@
     },
     "arrondi_prets": "milliers superieurs si option active (SimPLUS!AR26)",
     "arrondi_cs_loyers": { "flag_global": "ParaGEN!B26 (NON chez AXENTIA)", "cs_decimales": 4, "loyers_decimales": 2 }
+  },
+
+  "charges_exploitation": {
+    "note": "Postes de charge du compte d'exploitation autres que les annuites, les frais de gestion, la TFPB et le gros entretien, qui ont leur propre entree. Reponse a la question Q-16. Chaque poste est une DONNEE : son assiette, sa valeur et sa trajectoire d'indexation se lisent ici, aucun n'est cable dans le code (lecon I-2). AUCUN n'est actif par defaut : c'est la saisie qui les active, sans quoi les fixtures existantes changeraient de resultat en silence.",
+    "assiettes_admises": {
+      "logement": "valeur en EUR par logement et par an",
+      "produits_locatifs_bruts": "taux applique aux loyers (ou a la redevance en foyer) avant vacance et impayes",
+      "produits_locatifs_nets": "taux applique aux produits locatifs apres vacance et impayes",
+      "shab": "valeur en EUR par m2 de surface habitable et par an",
+      "prix_revient_ttc": "taux applique au prix de revient TTC module",
+      "forfait": "montant annuel en EUR, independant du programme"
+    },
+    "postes": [
+      {
+        "code": "teom",
+        "libelle": "Taxe d'enlèvement des ordures ménagères",
+        "assiette": "logement",
+        "valeur": 117,
+        "index": "tfpb",
+        "source": "Maquette LEON REWORK, ADMIN. Dans LEON la TEOM etait fondue dans la TFPB sous la forme `345+117*0` (irregularite I-2) : la maquette les separe, le moteur aussi."
+      },
+      {
+        "code": "assurance_pno",
+        "libelle": "Assurance propriétaire non occupant",
+        "assiette": "logement",
+        "valeur": 75,
+        "index": "gestion",
+        "source": "Maquette LEON REWORK, ADMIN."
+      },
+      {
+        "code": "cgls",
+        "libelle": "Cotisation CGLLS",
+        "assiette": "produits_locatifs_bruts",
+        "valeur": 0.0034,
+        "index": null,
+        "source": "Maquette LEON REWORK, ADMIN. Taux NET, deja diminue des reductions legales. Le referentiel cotisations_her_pmt2026.json porte le taux BRUT de 2,416 % et ses reductions : les deux ne se cumulent pas, voir Q-29."
+      },
+      {
+        "code": "ancols",
+        "libelle": "Cotisation ANCOLS",
+        "assiette": "produits_locatifs_bruts",
+        "valeur": 0.00045,
+        "index": null,
+        "source": "cotisations_her_pmt2026.json, taux 2026 reconduit. L'assiette exacte reste a confirmer (la note HER dit « a confirmer (produits locatifs) »)."
+      }
+    ]
   }
 }

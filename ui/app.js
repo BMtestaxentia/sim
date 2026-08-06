@@ -163,18 +163,9 @@ const etat = {
   subventions: [{ libelle: 'Ville', montant_eur: 20000, gratuite: true, affectation: 'PLS' }],
   fonds_propres_par_produit: { PLS: 50000 },
   mode_prets: 'saisis',
-  prets: [
-    {
-      code: 'PLS_CONSTRUCTION', libelle: 'PLS construction', nature: 'construction', produit: 'PLS',
-      montant_eur: 494023, taux: 0.0351, progressivite: 0, duree_ans: 40,
-      annee_premiere_echeance: 2028, revisabilite: 'SIMPLE', differe_ans: 0, differe_type: 2,
-    },
-    {
-      code: 'PLS_FONCIER', libelle: 'PLS foncier', nature: 'foncier', produit: 'PLS',
-      montant_eur: 176035, taux: 0.0351, progressivite: 0, duree_ans: 50,
-      annee_premiere_echeance: 2028, revisabilite: 'SIMPLE', differe_ans: 0, differe_type: 2,
-    },
-  ],
+  // Les prets CDC de chaque tranche sont crees a la volee par
+  // `pretsCDCParDefaut`, en montant AUTOMATIQUE : rien n'est fige au depart.
+  prets: [],
   exploitation: {
     frais_gestion_pct_loyers: 0.07,
     taux_vacance_impayes: 0.02,
@@ -452,11 +443,44 @@ function libelleProduit(code) {
  * tranche y porte ses marges de loyer, ses prets, ses subventions et ses fonds
  * propres.
  */
+/**
+ * R-FIN-3 — Chaque tranche presente au programme porte un pret CDC foncier et un
+ * pret CDC construction, crees des son apparition et en montant AUTOMATIQUE.
+ *
+ * On ne les supprime PAS quand la tranche disparait : l'utilisateur peut avoir
+ * retire un lot par erreur, et retrouver ses caracteristiques de pret en
+ * revenant en arriere vaut mieux que les ressaisir. Le moteur ignore un pret
+ * dont la tranche n'existe plus.
+ */
+function pretsCDCParDefaut(codes) {
+  for (const code of codes) {
+    for (const [nature, libelle] of [
+      ['foncier', 'Prêt CDC foncier'],
+      ['construction', 'Prêt CDC construction'],
+    ]) {
+      const existe = etat.prets.some((p) => p.produit === code && p.nature === nature);
+      if (existe) continue;
+      etat.prets.push({
+        code: `CDC_${nature.toUpperCase()}_${code}`,
+        libelle: `${libelle} ${code}`,
+        nature,
+        produit: code,
+        // Montant laisse au calcul : il s'ajuste au besoin de la tranche.
+        montant_auto: true,
+        montant_eur: null,
+        // Taux, duree et revisabilite viennent du produit (R-AMT-1) tant qu'ils
+        // ne sont pas saisis : on ne les fige pas ici.
+      });
+    }
+  }
+}
+
 function rendreStructureTranches() {
   const codes = tranchesActives();
   for (const code of codes) {
     etat.loyers_par_produit[code] ??= { marge_majoration: 0, loyer_sortie_force: null };
   }
+  pretsCDCParDefaut(codes);
 
   $('#onglets-tranches').innerHTML = codes
     .map(
@@ -585,12 +609,19 @@ function gabaritPret(p, i) {
     ...(p.differe_ans ? [jeton('différé', `${p.differe_ans} ans · type ${p.differe_type ?? 2}`)] : []),
   ].join('');
 
+  // Montant AUTOMATIQUE : la valeur affichee vient du moteur et se reajuste a
+  // chaque changement de subvention ou de fonds propres. Taper dedans fige le
+  // montant et fait apparaitre le bouton de retour au calcul.
+  const auto = p.montant_auto !== false;
   return `
-    <div class="ligne ligne--pret" style="--cat:${catProduit(p.produit)}">
+    <div class="ligne ligne--pret ${auto ? 'pret--auto' : ''}" data-pret="${i}" style="--cat:${catProduit(p.produit)}">
       <div class="pret__entete">
         <input type="text" class="pret__libelle" data-champ="prets.${i}.libelle" value="${att(p.libelle)}" />
         <input type="number" step="1" min="0" class="pret__montant" data-champ="prets.${i}.montant_eur"
-          data-type="nombre" value="${valNum(p.montant_eur)}" />
+          data-type="nombre" data-montant-pret="${i}" value="${valNum(p.montant_eur)}"
+          title="${auto ? 'Calculé pour équilibrer la tranche. Saisir un montant le fige.' : 'Montant figé'}" />
+        <button type="button" class="bouton--auto" data-remettre-auto="${i}"
+          title="Revenir au montant calculé">↺ auto</button>
         <select class="pret__nature" data-champ="prets.${i}.nature">
           ${['construction', 'foncier', 'autre'].map((n) => `<option value="${n}" ${n === p.nature ? 'selected' : ''}>${n}</option>`).join('')}
         </select>
@@ -1044,6 +1075,21 @@ function rendreValeurs(r) {
     .join('');
 
   // --- Ecrans de tranche : bandeau et detail du loyer ---
+  // Montants de pret CALCULES : ils sont reinjectes dans leur champ de saisie a
+  // chaque recalcul, pour que l'ecran montre l'equilibre obtenu. Le champ garde
+  // le focus s'il l'a : on n'ecrit jamais par-dessus une frappe en cours.
+  for (const input of document.querySelectorAll('[data-montant-pret]')) {
+    const el = /** @type {HTMLInputElement} */ (input);
+    const i = Number(el.dataset.montantPret);
+    if (etat.prets[i]?.montant_auto === false || el === document.activeElement) continue;
+    // Un pret calcule a 0 EUR n'est pas amorti, donc absent des amortissements.
+    // Il vaut bien zero, et le champ doit le dire : une case vide se lirait
+    // comme « pas encore calcule ».
+    const a = (r.amortissements ?? []).find((x) => x.code === etat.prets[i]?.code);
+    const v = String(Math.round(a?.montant_eur ?? 0));
+    if (el.value !== v) el.value = v;
+  }
+
   for (const code of r.surfaces.tranches) {
     const t = recap[code] ?? {};
     const l = r.loyers.find((x) => x.code_produit === code);
@@ -1735,9 +1781,14 @@ function champsManquants() {
   if (etat.mode_prets === 'saisis') {
     etat.prets.forEach((p, i) => {
       const nom = p.libelle || `prêt ${i + 1}`;
-      if (nul(p.taux)) m.push(`taux du ${nom}`);
-      if (nul(p.duree_ans)) m.push(`durée du ${nom}`);
-      if (nul(p.montant_eur)) m.push(`montant du ${nom}`);
+      // Un pret CDC rattache a une tranche tire son taux et sa duree du produit
+      // (R-AMT-1), et son montant du besoin d'equilibre : exiger leur saisie
+      // reclamerait ce que le moteur sait deja. Seul un pret « autre », ou un
+      // pret sans tranche, doit etre entierement decrit.
+      const resolu = Boolean(p.produit) && p.nature !== 'autre';
+      if (nul(p.taux) && !resolu) m.push(`taux du ${nom}`);
+      if (nul(p.duree_ans) && !resolu) m.push(`durée du ${nom}`);
+      if (nul(p.montant_eur) && p.montant_auto !== true) m.push(`montant du ${nom}`);
     });
   }
   return m;
@@ -1883,6 +1934,15 @@ document.addEventListener('input', (ev) => {
 
   ecrireChemin(etat, chemin, valeur);
 
+  // Saisir un montant de pret le FIGE : il sort du calcul d'equilibre. La ligne
+  // perd sa classe et le bouton de retour au calcul apparait, sans reconstruire
+  // la structure — sinon le premier caractere frappe couterait le focus.
+  const iPret = el.dataset.montantPret;
+  if (iPret !== undefined && etat.prets[Number(iPret)]?.montant_auto !== false) {
+    etat.prets[Number(iPret)].montant_auto = false;
+    el.closest('.ligne--pret')?.classList.remove('pret--auto');
+  }
+
   // Un changement de produit ou de chapitre reordonne la restitution : on
   // reconstruit. Sinon on ne met a jour que les valeurs, ce qui preserve le focus.
   if (el.dataset.structure) rafraichirTout();
@@ -1911,6 +1971,15 @@ document.addEventListener('click', (ev) => {
   const onglet = el.closest('[data-ecran]');
   if (onglet) {
     afficherEcran(/** @type {HTMLElement} */ (onglet).dataset.ecran);
+    return;
+  }
+
+  const remettreAuto = el.closest('[data-remettre-auto]');
+  if (remettreAuto) {
+    const i = Number(/** @type {HTMLElement} */ (remettreAuto).dataset.remettreAuto);
+    etat.prets[i].montant_auto = true;
+    etat.prets[i].montant_eur = null;
+    rafraichirTout();
     return;
   }
 

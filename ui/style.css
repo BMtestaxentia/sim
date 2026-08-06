@@ -239,7 +239,17 @@ input:disabled, select:disabled {
   background: transparent; color: var(--text-tertiary);
   border-color: transparent; cursor: not-allowed;
 }
-input[type='number'] { text-align: right; font-variant-numeric: tabular-nums; }
+/* Les fleches de reglage d'un champ numerique n'ont pas de sens sur des
+   montants : on ne monte pas un prix de revient d'un euro a la fois, et elles
+   volent de la place a droite du nombre, la ou l'oeil le lit. */
+input[type='number'] {
+  text-align: right; font-variant-numeric: tabular-nums;
+  appearance: textfield; -moz-appearance: textfield;
+}
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none; appearance: none; margin: 0;
+}
 ::placeholder { color: var(--text-tertiary); opacity: 0.7; }
 
 /* Champ CALCULE : grise et non focusable. Le seul defaut de la maquette LEON
@@ -640,6 +650,23 @@ input[type='number'] { text-align: right; font-variant-numeric: tabular-nums; }
   font-variant-numeric: tabular-nums;
 }
 .pret__nature { flex: 0 0 128px; font-size: 12px; }
+/* Montant de pret calcule : il se lit comme un resultat, pas comme une saisie,
+   mais il reste modifiable — c'est ainsi qu'on le fige. */
+.pret--auto .pret__montant {
+  background: transparent; border-style: dashed;
+  border-color: var(--border-color-strong); color: var(--text-secondary);
+}
+.pret--auto .pret__montant:focus { background: var(--bg-primary); border-style: solid; }
+.bouton--auto {
+  appearance: none; cursor: pointer; font-family: inherit; flex: none;
+  font-size: 10.5px; font-weight: 600; padding: 3px 8px;
+  border: 1px solid var(--info-accent); border-radius: var(--radius-pill);
+  background: var(--info-bg); color: var(--info-text); white-space: nowrap;
+}
+.bouton--auto:hover { background: var(--info-accent); color: #fff; }
+/* Rien a remettre en automatique tant qu'on y est deja. */
+.pret--auto .bouton--auto { display: none; }
+
 .bouton--deplier {
   appearance: none; border: none; background: transparent; cursor: pointer;
   width: 26px; height: 26px; flex: none; border-radius: var(--radius-sm);

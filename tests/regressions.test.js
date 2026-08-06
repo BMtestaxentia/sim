@@ -617,3 +617,102 @@ describe('Q-27 — la vacance en transparence est signalee, pas subie en silence
     expect(r.alertes.some((a) => /transparence/.test(a))).toBe(false);
   });
 });
+
+describe('R-FIN-3 — prets CDC par tranche, ajustes au besoin de financement', () => {
+  const op = (surcharges = {}) => ({
+    identite: { zone_123: 2, zone_ABC: 'B1' },
+    dates: { annee_mise_en_location: 2028, duree_simulation_ans: 20 },
+    lots: [
+      { code_produit: 'PLUS', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 40 },
+      { code_produit: 'PLAI', nb_logements: 4, shab_m2: 240, surfaces_annexes_m2: 24 },
+    ],
+    postes_bilan: [
+      { chapitre: 'charge_fonciere', libelle: 'Terrain', montant_ht_eur: 400000, taux_tva: 0.055 },
+      { chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1200000, taux_tva: 0.1 },
+    ],
+    subventions: [{ libelle: 'État', montant_eur: 80000, affectation: 'PLAI' }],
+    fonds_propres_par_produit: { PLUS: 50000, PLAI: 20000 },
+    ...surcharges,
+  });
+  const calc = (s) => calculer(op(s), REFERENTIELS);
+  const pret = (r, produit, nature) =>
+    r.amortissements.find((a) => a.produit === produit && a.nature === nature);
+
+  it('dote chaque tranche d un pret foncier et d un pret construction, sans rien saisir', () => {
+    const r = calc();
+    expect(r.amortissements).toHaveLength(4);
+    for (const c of ['PLUS', 'PLAI']) {
+      expect(pret(r, c, 'foncier'), `${c} foncier`).toBeDefined();
+      expect(pret(r, c, 'construction'), `${c} construction`).toBeDefined();
+      expect(pret(r, c, 'foncier').montant_calcule).toBe(true);
+    }
+  });
+
+  it('equilibre le plan par construction', () => {
+    expect(calc().financement.equilibre.ecart_eur).toBe(0);
+  });
+
+  it('recalcule les prets d une tranche quand SES fonds propres bougent, et elle seule', () => {
+    const avant = calc();
+    const apres = calc({ fonds_propres_par_produit: { PLUS: 200000, PLAI: 20000 } });
+    // 150 000 EUR de fonds propres en plus : autant de pret en moins sur PLUS.
+    const dPLUS =
+      pret(avant, 'PLUS', 'foncier').montant_eur + pret(avant, 'PLUS', 'construction').montant_eur -
+      (pret(apres, 'PLUS', 'foncier').montant_eur + pret(apres, 'PLUS', 'construction').montant_eur);
+    expect(dPLUS).toBe(150000);
+    // La tranche PLAI n'a pas bouge d'un euro.
+    expect(pret(apres, 'PLAI', 'construction').montant_eur).toBe(pret(avant, 'PLAI', 'construction').montant_eur);
+    expect(apres.financement.equilibre.ecart_eur).toBe(0);
+  });
+
+  it('recalcule aussi quand une subvention de tranche bouge', () => {
+    const avant = calc();
+    const apres = calc({ subventions: [{ libelle: 'État', montant_eur: 130000, affectation: 'PLAI' }] });
+    const dPLAI =
+      pret(avant, 'PLAI', 'foncier').montant_eur + pret(avant, 'PLAI', 'construction').montant_eur -
+      (pret(apres, 'PLAI', 'foncier').montant_eur + pret(apres, 'PLAI', 'construction').montant_eur);
+    expect(dPLAI).toBe(50000);
+  });
+
+  it('ventile une subvention NON affectee, au lieu de la perdre', () => {
+    // Une subvention sans tranche profite a l'operation entiere. L'oublier
+    // ferait emprunter un montant deja finance.
+    const sans = calc({ subventions: [] });
+    const avec = calc({ subventions: [{ libelle: 'Agglo', montant_eur: 100000 }] });
+    const total = (r) => r.amortissements.reduce((s, a) => s + a.montant_eur, 0);
+    expect(total(sans) - total(avec)).toBe(100000);
+    expect(avec.financement.equilibre.ecart_eur).toBe(0);
+  });
+
+  it('un montant saisi FIGE le pret et sort du calcul automatique', () => {
+    const r = calc({
+      prets: [
+        { code: 'F_PLUS', libelle: 'CDC foncier PLUS', nature: 'foncier', produit: 'PLUS', montant_auto: true },
+        { code: 'B_PLUS', libelle: 'CDC construction PLUS', nature: 'construction', produit: 'PLUS', montant_eur: 500000 },
+        { code: 'F_PLAI', libelle: 'CDC foncier PLAI', nature: 'foncier', produit: 'PLAI', montant_auto: true },
+        { code: 'B_PLAI', libelle: 'CDC construction PLAI', nature: 'construction', produit: 'PLAI', montant_auto: true },
+      ],
+    });
+    const force = r.amortissements.find((a) => a.code === 'B_PLUS');
+    expect(force.montant_eur).toBe(500000);
+    expect(force.montant_calcule).toBe(false);
+    // Les autres restent calcules.
+    expect(r.amortissements.find((a) => a.code === 'F_PLAI').montant_calcule).toBe(true);
+  });
+
+  it('plafonne le pret foncier a la charge fonciere financable de la tranche', () => {
+    const r = calc();
+    for (const c of ['PLUS', 'PLAI']) {
+      const foncier = pret(r, c, 'foncier').montant_eur;
+      const chargeFonciere = r.bilan.chapitres.charge_fonciere.par_tranche[c].ttc_lasm_eur;
+      expect(foncier, `${c}`).toBeLessThanOrEqual(chargeFonciere);
+    }
+  });
+
+  it('n invente pas de pret quand la tranche est deja financee', () => {
+    // Fonds propres superieurs au prix de revient : le besoin est nul, pas negatif.
+    const r = calc({ fonds_propres_par_produit: { PLUS: 5000000, PLAI: 5000000 } });
+    expect(r.amortissements.every((a) => a.montant_eur === 0 || a.nature === 'autre')).toBe(true);
+    expect(r.alertes.some((a) => /Surfinancement/i.test(a))).toBe(true);
+  });
+});

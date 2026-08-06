@@ -275,31 +275,82 @@ export function calculer(entrees, referentiels) {
    * @type {Array<Object>}
    */
   let pretsACalculer;
-  if (pretsCDCSaisis.length > 0) {
-    pretsACalculer = pretsSaisis;
-  } else {
+  {
     const surcharges = entrees.caracteristiques_prets_defaut ?? {};
-    // UN JEU DE PRETS PAR TRANCHE. Un PLUS et un PLAI dans la meme operation
-    // n'empruntent pas au meme taux (LA + 0,6 % contre LA - 0,2 %) ni sur la
-    // meme duree : agreger les deux tranches sous un pret unique donnerait un
-    // taux qui n'existe pour personne. L'enveloppe theorique globale est donc
-    // repartie entre les tranches au prorata de surface utile, chacune resolvant
-    // ensuite ses propres caracteristiques (R-AMT-1).
     const codesFinances = codesPresents.length ? codesPresents : [];
-    const repartir = (total) => {
-      const parts = codesFinances.map((c) => (quotesParts[c] ?? 0) * total);
-      // Somme des parts arrondies = total arrondi, sinon le plan de financement
-      // ne boucle plus a l'euro pres.
-      return arrondirEnConservantLaSomme(parts);
-    };
-    const fonciers = repartir(cdcTheoriques.pret_foncier_eur);
-    const batiments = repartir(cdcTheoriques.pret_batiment_eur);
+
+    // R-FIN-3 — Chaque tranche porte par defaut un pret CDC foncier et un pret
+    // CDC construction dont le MONTANT S'AJUSTE a son besoin de financement.
+    // Rien a saisir tant que l'equilibre convient : modifier les subventions ou
+    // les fonds propres d'une tranche suffit a faire bouger ses prets.
+    //
+    // Un pret dont le montant est saisi FIGE ce montant et sort du calcul
+    // automatique : il vient alors en deduction du besoin, comme une ressource
+    // deja acquise. C'est la seule facon d'avoir les deux a l'ecran sans qu'ils
+    // se contredisent.
+    const auto = (p) => p.montant_auto === true || p.montant_eur === null || p.montant_eur === undefined;
+
+    let prets = [...pretsSaisis];
+    if (!prets.some((p) => p.nature === 'foncier' || p.nature === 'construction')) {
+      const suffixe = codesFinances.length > 1;
+      prets = prets.concat(
+        codesFinances.flatMap((c) => [
+          { code: `CDC_FONCIER_${c}`, libelle: `Prêt CDC foncier${suffixe ? ` ${c}` : ''}`, nature: 'foncier', produit: c, montant_auto: true },
+          { code: `CDC_BATIMENT_${c}`, libelle: `Prêt CDC construction${suffixe ? ` ${c}` : ''}`, nature: 'construction', produit: c, montant_auto: true },
+        ]),
+      );
+    }
+
+    // Besoin de financement de chaque tranche : ce que son prix de revient ne
+    // couvre pas encore. Faute de ventilation (operation sans programme), on
+    // retombe sur le solde global.
+    // Une subvention NON AFFECTEE profite a toute l'operation : elle se ventile
+    // au prorata de surface utile, comme le prix de revient. La rattacher a
+    // aucune tranche la ferait disparaitre du besoin, et les prets couvriraient
+    // un montant deja finance.
+    /** @type {Record<string, number>} */
+    const subAffectees = {};
+    let subNonAffectees = ssf?.subvention_eur ?? 0;
+    for (const s of entrees.subventions ?? []) {
+      const m = Number(s.montant_eur) || 0;
+      const c = s.affectation;
+      if (c && codesFinances.includes(c)) subAffectees[c] = (subAffectees[c] ?? 0) + m;
+      else subNonAffectees += m;
+    }
+
+    /** @type {Record<string, number>} */
+    const besoin = {};
+    for (const c of codesFinances) {
+      const pr = bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0;
+      const sub = (subAffectees[c] ?? 0) + (quotesParts[c] ?? 0) * subNonAffectees;
+      const fp = fpParProduit ? (Number(fpParProduit[c]) || 0) : (quotesParts[c] ?? 0) * fondsPropres;
+      const fixes = prets
+        .filter((p) => !auto(p) && (p.produit ?? trancheUnique) === c)
+        .reduce((s, p) => s + (Number(p.montant_eur) || 0), 0);
+      besoin[c] = Math.max(0, pr - sub - fp - fixes);
+    }
+
+    // Repartition foncier / construction : le foncier est plafonne a la part
+    // FINANCABLE de la charge fonciere de la tranche (R-FIN-2), le reste va a la
+    // construction. Sans ce plafond, un terrain cher absorberait tout le pret
+    // long et fausserait la duree moyenne de la dette.
+    /** @type {Record<string, number>} */
+    const plafondFoncier = {};
+    for (const c of codesFinances) {
+      plafondFoncier[c] = foncierFinancable({
+        charge_fonciere_eur: bilan.chapitres.charge_fonciere?.par_tranche?.[c]?.ttc_lasm_eur ?? 0,
+        financements_gratuits_eur: subventions.gratuites_eur * (quotesParts[c] ?? 0),
+        prix_revient_operation_eur: bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0,
+      });
+    }
 
     pretsACalculer = [];
-    codesFinances.forEach((code, i) => {
-      let parNature = {};
+    /** Caracteristiques par defaut d'une tranche, resolues une seule fois. */
+    const defautsTranche = {};
+    const defautsDe = (code) => {
+      if (defautsTranche[code]) return defautsTranche[code];
       try {
-        parNature = Object.fromEntries(
+        defautsTranche[code] = Object.fromEntries(
           pretsDefautResolus(code, {
             zone_ABC: identite.zone_ABC,
             livret_a_reference: surcharges.livret_a_origine ?? laOrigine,
@@ -308,25 +359,49 @@ export function calculer(entrees, referentiels) {
         );
       } catch (e) {
         alertes.push(
-          `Prets CDC theoriques de la tranche ${code} non calculables : ` +
-            `${/** @type {Error} */ (e).message}. Saisir ces prets manuellement.`,
+          `Prets CDC par defaut de la tranche ${code} non calculables : ` +
+            `${/** @type {Error} */ (e).message}. Saisir leur taux et leur duree.`,
         );
+        defautsTranche[code] = {};
       }
-      const libelleTranche = codesFinances.length > 1 ? ` ${code}` : '';
-      for (const p of [
-        { code: `CDC_FONCIER_${code}`, libelle: `Prêt CDC foncier${libelleTranche}`, montant_eur: fonciers[i], nature: 'foncier' },
-        { code: `CDC_BATIMENT_${code}`, libelle: `Prêt CDC construction${libelleTranche}`, montant_eur: batiments[i], nature: 'construction' },
-      ]) {
-        pretsACalculer.push({
-          ...p,
-          produit: code,
-          ...(parNature[p.nature] ?? {}),
-          livret_a_origine: laOrigine,
-          livret_a_par_annee: laParAnnee,
-          ...surcharges,
-        });
+      return defautsTranche[code];
+    };
+
+    for (const p of prets) {
+      const code = p.produit ?? trancheUnique;
+      let montant = p.montant_eur;
+      if (auto(p) && code) {
+        // Le foncier se sert le premier, dans la limite de son plafond ; la
+        // construction prend ce qui reste. L'ordre importe, pas la position du
+        // pret dans la liste.
+        if (p.nature === 'foncier') {
+          montant = Math.min(besoin[code] ?? 0, plafondFoncier[code] ?? 0);
+        } else if (p.nature === 'construction') {
+          const foncierAuto = prets.some((x) => auto(x) && x.nature === 'foncier' && (x.produit ?? trancheUnique) === code)
+            ? Math.min(besoin[code] ?? 0, plafondFoncier[code] ?? 0)
+            : 0;
+          montant = Math.max(0, (besoin[code] ?? 0) - foncierAuto);
+        } else {
+          montant = 0;
+        }
+        montant = arrondiEuro(montant);
       }
-    });
+      // Les valeurs du pret ne sont reprises que si elles sont RENSEIGNEES :
+      // etaler `p` tel quel ecraserait un taux par defaut avec un `undefined`,
+      // et le pret deviendrait inamortissable sans qu'on comprenne pourquoi.
+      const renseignees = Object.fromEntries(
+        Object.entries(p).filter(([, v]) => v !== undefined && v !== null),
+      );
+      pretsACalculer.push({
+        ...(p.nature ? (defautsDe(code)?.[p.nature] ?? {}) : {}),
+        ...renseignees,
+        montant_eur: montant,
+        produit: code,
+        montant_calcule: auto(p),
+        livret_a_origine: p.livret_a_origine ?? laOrigine,
+        livret_a_par_annee: p.livret_a_par_annee ?? laParAnnee,
+      });
+    }
 
     // Un pret theorique dont les caracteristiques n'ont pas pu etre resolues ne
     // doit pas faire echouer toute la simulation : on le signale et on l'ecarte.
@@ -348,6 +423,9 @@ export function calculer(entrees, referentiels) {
       montant_eur: p.montant_eur,
       nature: p.nature ?? 'autre',
       produit: p.produit ?? trancheUnique,
+      // Vrai si le montant a ete calcule pour equilibrer la tranche, faux s'il
+      // a ete saisi. L'ecran s'en sert pour proposer le retour au calcul.
+      montant_calcule: p.montant_calcule === true,
       taux_saisi: p.taux,
       annee_premiere_echeance:
         p.annee_premiere_echeance ??

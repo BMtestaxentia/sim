@@ -706,28 +706,6 @@ input[type='number'] { text-align: right; font-variant-numeric: tabular-nums; }
       </div>
     </header>
 
-    <!--
-      Ouvert par double-clic (file://), CE FICHIER NE PEUT PAS FONCTIONNER :
-      `app.js` est un module ES qui lit les referentiels par `fetch`, et le
-      navigateur refuse les deux sur file://. La page s'affiche pourtant
-      normalement — seuls les gestionnaires d'evenements manquent, donc les
-      onglets ne repondent plus. Sans ce garde-fou, la panne est muette et
-      passe pour un bug de l'interface.
-    -->
-    <div id="hors-service" class="erreur" hidden>
-      <strong>Cette page ne peut pas démarrer depuis un double-clic.</strong>
-      Elle charge ses référentiels par le réseau, ce que le navigateur interdit sur
-      <code>file://</code> : l'affichage est complet mais rien ne réagit.
-      Ouvrir <code>ui/simulation-autonome.html</code>, qui embarque tout et fonctionne hors ligne,
-      ou servir ce dossier en HTTP pour développer.
-    </div>
-    <script>
-      // Script CLASSIQUE volontairement : un module ne s'executerait pas non plus.
-      setTimeout(function () {
-        if (!window.__moteurDemarre) document.getElementById('hors-service').hidden = false;
-      }, 1200);
-    </script>
-
     <div id="erreur" class="erreur" hidden></div>
 
     <!-- ================= ÉCRAN 1 — OPÉRATION ================= -->
@@ -5804,10 +5782,6 @@ document.addEventListener('click', (ev) => {
 appliquerTheme(themeInitial());
 rendreChampsStatiques();
 rafraichirTout();
-
-// Signale a la page que les gestionnaires sont poses. Sans ce drapeau, une
-// ouverture en file:// laisse une interface complete mais inerte, sans rien dire.
-window.__moteurDemarre = true;
 
 })();
 </script>

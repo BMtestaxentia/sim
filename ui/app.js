@@ -1599,7 +1599,3 @@ document.addEventListener('click', (ev) => {
 appliquerTheme(themeInitial());
 rendreChampsStatiques();
 rafraichirTout();
-
-// Signale a la page que les gestionnaires sont poses. Sans ce drapeau, une
-// ouverture en file:// laisse une interface complete mais inerte, sans rien dire.
-window.__moteurDemarre = true;

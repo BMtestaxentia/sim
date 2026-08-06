@@ -1,423 +1,647 @@
 /*
- * Charte SFO : navy, Manrope, sobriete.
- * Pas de degrade, pas d'ombre marquee, beaucoup de blanc, traits fins.
- *
- * Convention visuelle structurante : tout ce qui est CALCULE par le moteur porte
- * la classe `--calcule` (fond neutre, pas de bordure, non focusable). C'est le
- * seul defaut de la maquette Excel, qui ne distingue pas la saisie du calcul.
- */
+  Charte SFO / ExNihilo appliquee au moteur de simulation.
+
+  Les noms de variables sont RIGOUREUSEMENT ceux de `exnihilo/styles.css` : le
+  jour ou ce moteur s'embarque dans la maquette SFO, les deux feuilles parlent
+  deja la meme langue et il n'y a rien a traduire. Ne pas renommer un token
+  pour des raisons de gout local.
+
+  Theme sombre par defaut (c'est celui de l'application), theme clair disponible
+  via `data-theme="clair"` sur <html> pour l'impression et la videoprojection.
+
+  Vocabulaire de composants repris de la vue Financements d'ExNihilo :
+    .bloc          carte de contenu
+    .pilule        etat (contrat signe, lettre d'offre...)
+    .jeton         metadonnee compacte (TAUX / DUREE / PREFI)
+    .cycle         frise de cycle de vie
+    [data-cat]     identite couleur d'une tranche, tenue d'un ecran a l'autre
+*/
 
 :root {
-  --navy-900: #0b1a33;
-  --navy-800: #12274a;
-  --navy-700: #1b3a6b;
-  --navy-500: #2e5aa8;
-  --navy-300: #7c9bd0;
-  --navy-100: #dde5f2;
+  --bg-primary: #1c1f24;
+  --bg-secondary: #14171b;
+  --bg-tertiary: #0f1216;
+  --text-primary: #e8e6e1;
+  --text-secondary: #aeacaa;
+  --text-tertiary: #707070;
+  --border-color: rgba(255, 255, 255, 0.07);
+  --border-color-strong: rgba(255, 255, 255, 0.18);
 
-  --encre: #16202e;
-  --encre-doux: #5a6b85;
-  --encre-calcule: #3d4c63;
-  --trait: #dfe5ee;
-  --fond: #f6f8fb;
-  --fond-calcule: #eef2f8;
-  --surface: #ffffff;
+  --info-bg: #18324f; --info-text: #a8cdef; --info-accent: #3b82c4;
+  --warning-bg: #3a2a14; --warning-text: #e8c082; --warning-accent: #d99843;
+  --success-bg: #143729; --success-text: #88d6b8; --success-accent: #3ec896;
+  --coral-bg: #3d1f15; --coral-text: #f0a283; --coral-accent: #e87a52;
+  --neutral-bg: #2a2925; --neutral-text: #bcbcb8; --neutral-accent: #999893;
+  --danger-bg: #3a1c1c; --danger-text: #ec9292; --danger-accent: #de6357;
+  --purple-bg: #2d1d44; --purple-text: #d4adee; --purple-accent: #b063ed;
 
-  --vert: #1e7a5a;
-  --vert-clair: #e6f3ee;
-  --rouge: #b3261e;
-  --rouge-clair: #fbeae9;
-  --ambre: #8a6100;
-  --ambre-clair: #fdf3dd;
+  /* Palette CATEGORIELLE (identites : tranches, chapitres, prets). Decalee des
+     accents d'etat ET sure pour le daltonisme (base Okabe-Ito). */
+  --cat-1: #3f97d9; --cat-2: #f2b23e; --cat-3: #8fd4ff;
+  --cat-4: #e59fc6; --cat-5: #b592e0; --cat-6: #94a3b8;
 
-  --rayon: 6px;
-  --police: 'Manrope', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --radius-xs: 4px; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --radius-pill: 999px;
+  --police: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  --police-nombre: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+[data-theme='clair'] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --bg-tertiary: #f1f3f5;
+  --text-primary: #1a1d20;
+  --text-secondary: #5f5e5a;
+  --text-tertiary: #9b9994;
+  --border-color: rgba(0, 0, 0, 0.08);
+  --border-color-strong: rgba(0, 0, 0, 0.18);
+
+  --info-bg: #e6f1fb; --info-text: #0c447c; --info-accent: #185fa5;
+  --warning-bg: #faeeda; --warning-text: #854f0b; --warning-accent: #ba7517;
+  --success-bg: #e1f5ee; --success-text: #0f6e56; --success-accent: #1d9e75;
+  --coral-bg: #faece7; --coral-text: #993c1d; --coral-accent: #d85a30;
+  --neutral-bg: #f1efe8; --neutral-text: #444441; --neutral-accent: #888780;
+  --danger-bg: #fceaea; --danger-text: #a32d2d; --danger-accent: #c4423a;
+  --purple-bg: #f3e8ff; --purple-text: #6b21a8; --purple-accent: #9333ea;
+
+  --cat-1: #0072b2; --cat-2: #e69f00; --cat-3: #56b4e9;
+  --cat-4: #cc79a7; --cat-5: #9467bd; --cat-6: #64748b;
 }
 
 * { box-sizing: border-box; }
 
-body {
-  margin: 0;
+html, body {
+  margin: 0; padding: 0;
   font-family: var(--police);
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--encre);
-  background: var(--fond);
-  -webkit-font-smoothing: antialiased;
+  background: var(--bg-tertiary); color: var(--text-primary);
+  font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
-h1 { font-size: 16px; }
+/* ============================================================ EN-TETE */
 
-/* ---------- Entete et onglets ---------- */
 .entete {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap; /* sur fenetre etroite, l'entete passe a la ligne au lieu de deborder */
-  gap: 10px 24px;
-  padding: 10px 24px;
-  background: var(--navy-900);
-  color: #fff;
-  position: sticky;
-  top: 0;
-  z-index: 20;
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; gap: 18px;
+  padding: 0 20px; min-height: 58px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
 }
-.entete__marque { flex: none; }
-.entete h1 { color: #fff; }
-.entete__sous-titre { margin: 1px 0 0; font-size: 11px; color: var(--navy-300); }
-.entete__sep { opacity: 0.5; margin: 0 3px; }
-.entete__actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.entete__marque { flex: none; min-width: 0; }
+.entete__marque h1 {
+  margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.01em;
+  color: var(--text-primary); white-space: nowrap;
+}
+.entete__sous-titre {
+  margin: 1px 0 0; font-size: 11px; color: var(--text-tertiary); white-space: nowrap;
+}
+.entete__sep { margin: 0 4px; opacity: 0.5; }
+.entete__actions { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
 
-.onglets { display: flex; gap: 2px; flex-wrap: wrap; min-width: 0; }
+/* Densification progressive : sur un portable, la place va aux onglets. Le
+   sous-titre de marque part le premier, il ne porte aucune information d'usage. */
+@media (max-width: 1400px) {
+  .entete { padding: 0 12px; gap: 12px; }
+  .onglet { padding: 7px 9px; font-size: 12.5px; }
+}
+@media (max-width: 1150px) {
+  .entete__sous-titre { display: none; }
+  .entete__marque h1 { font-size: 14px; }
+  .onglet { padding: 7px 7px; font-size: 12px; }
+  .ecran { padding: 14px 12px 48px; }
+}
+
+/* ---------- Onglets ---------- */
+.onglets {
+  display: flex; align-items: center; gap: 2px; flex: 1; min-width: 0;
+  /* Defilement sans rail visible : la barre sous les onglets se lisait comme un
+     soulignement et brouillait l'onglet actif, qui en porte deja un. */
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+}
+.onglets::-webkit-scrollbar { display: none; }
+.onglets__tranches { display: flex; gap: 2px; flex: none; }
+
 .onglet {
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--navy-300);
-  background: transparent;
-  border: none;
+  appearance: none; border: none; background: transparent;
+  font-family: inherit; font-size: 13px; font-weight: 500;
+  color: var(--text-secondary); cursor: pointer;
+  padding: 7px 12px; border-radius: var(--radius-md);
   border-bottom: 2px solid transparent;
-  padding: 7px 14px;
-  cursor: pointer;
-  border-radius: 4px 4px 0 0;
+  white-space: nowrap; flex: none;
+  transition: background 0.12s ease, color 0.12s ease;
 }
-.onglet:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
-.onglet[aria-selected='true'] { color: #fff; border-bottom-color: var(--navy-300); }
+.onglet:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.onglet[aria-selected='true'] {
+  background: var(--info-bg); color: var(--info-text);
+  border-bottom-color: var(--info-accent); font-weight: 650;
+}
 
-.pastille {
-  font-size: 11px; font-weight: 600; padding: 3px 9px;
-  border-radius: 999px; letter-spacing: 0.03em; white-space: nowrap;
+/* Onglet de tranche : il porte la couleur de SA tranche, la meme partout
+   ailleurs dans l'application. Un code produit se reconnait a sa teinte avant
+   meme d'etre lu. */
+.onglet--tranche { display: inline-flex; align-items: center; gap: 6px; }
+.onglet--tranche::before {
+  content: ''; width: 7px; height: 7px; border-radius: 50%; flex: none;
+  background: var(--cat, var(--cat-6));
 }
-.pastille--ok { background: rgba(255, 255, 255, 0.12); color: var(--navy-300); }
-.pastille--calcul { background: rgba(179, 38, 30, 0.85); color: #fff; }
+.onglet--tranche[aria-selected='true'] {
+  background: color-mix(in srgb, var(--cat, var(--cat-6)) 18%, transparent);
+  color: var(--cat, var(--cat-6));
+  border-bottom-color: var(--cat, var(--cat-6));
+}
 
-/* ---------- Structure des ecrans ---------- */
-.ecran {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 18px 24px 56px;
-  max-width: 1680px;
-  margin: 0 auto;
-}
+/* ============================================================ ECRANS */
+
+.ecran { display: block; padding: 16px 20px 56px; max-width: 1720px; margin: 0 auto; }
 .ecran[hidden] { display: none; }
 
-.colonnes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
-.colonnes--balance { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
-@media (max-width: 1100px) { .colonnes, .colonnes--balance { grid-template-columns: 1fr; } }
+.colonnes { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; }
+.colonnes--balance { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+@media (max-width: 1100px) { .colonnes--balance { grid-template-columns: 1fr; } }
 
+/* ---------- Bloc (carte) ---------- */
 .bloc {
-  background: var(--surface);
-  border: 1px solid var(--trait);
-  border-radius: var(--rayon);
-  padding: 14px 16px 16px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 13px 15px 15px;
+  margin-bottom: 12px;
 }
-.bloc__titre {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  margin: 0 0 12px;
-  font-size: 12px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.07em; color: var(--navy-700);
-}
+.bloc:last-child { margin-bottom: 0; }
+.colonnes > .bloc { margin-bottom: 0; }
 
-/* Intertitre a l'interieur d'un bloc : plus discret que .bloc__titre, pour
-   separer deux tables sans laisser croire a deux sections independantes. */
+.bloc__titre {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 0 0 11px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-secondary);
+}
+.bloc__outils { display: flex; align-items: center; gap: 6px; flex: none; }
+
+/* Bloc portant l'identite d'une tranche : filet de couleur a gauche, comme les
+   cartes de tranche d'ExNihilo. */
+.bloc--tranche { border-left: 3px solid var(--cat, var(--cat-6)); }
+.bloc--tranche .bloc__titre { color: var(--cat, var(--cat-6)); }
+
 .sous-titre {
   margin: 18px 0 8px;
-  font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.06em; color: var(--encre-doux);
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-tertiary);
 }
 
-/* Colonne descriptive d'une table : presente sans concurrencer les chiffres. */
-.discret { color: var(--encre-doux); font-size: 11px; }
-/* Saisie suivie de son unite, sur une seule ligne : un champ de table occupe
-   toute la largeur de sa cellule, l'unite passerait sinon a la ligne. */
-.cellule-valeur { display: flex; align-items: center; gap: 5px; }
-.cellule-valeur > input { flex: 1; min-width: 0; }
-.unite { flex: none; font-size: 11px; color: var(--encre-doux); }
+.aide {
+  margin: 10px 0 0; font-size: 11.5px; color: var(--text-tertiary); line-height: 1.5;
+}
 
-/* ---------- Champs ---------- */
-.champs { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+/* ============================================================ CHAMPS */
+
+.champs { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 10px; }
 .champs--serres { grid-template-columns: repeat(auto-fit, minmax(160px, 220px)); margin-top: 10px; }
-.champ { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.champ { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .champ--large { grid-column: 1 / -1; }
-.champ > span { font-size: 11px; font-weight: 500; color: var(--encre-doux); }
-/* Case a cocher et son libelle sur une seule ligne : le libelle EST la question,
-   il ne se pose pas au-dessus comme celui d'un champ de saisie. Doit suivre
-   `.champ`, de meme specificite, pour en renverser la direction. */
+.champ > span {
+  font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--text-tertiary);
+}
+.champ--bouton { justify-content: flex-end; }
+
+/* Case a cocher et son libelle sur une seule ligne : le libelle EST la
+   question, il ne se pose pas au-dessus comme celui d'un champ de saisie.
+   Doit suivre `.champ`, de meme specificite, pour en renverser la direction. */
 .champ--interrupteur {
   flex-direction: row; align-items: center; gap: 8px;
   margin-bottom: 12px; cursor: pointer;
 }
 .champ--interrupteur > input { flex: none; width: auto; }
-.champ--interrupteur > span { font-size: 12px; font-weight: 500; color: var(--encre); }
-
-input, select {
-  font: inherit; font-size: 13px; color: var(--encre);
-  padding: 6px 9px;
-  border: 1px solid var(--trait); border-radius: 4px;
-  background: var(--surface); width: 100%; min-width: 0;
+.champ--interrupteur > span {
+  font-size: 12.5px; font-weight: 500; text-transform: none;
+  letter-spacing: 0; color: var(--text-primary);
 }
-input:focus, select:focus {
-  outline: none; border-color: var(--navy-500);
-  box-shadow: 0 0 0 3px rgba(46, 90, 168, 0.12);
+
+input, select, textarea {
+  font-family: inherit; font-size: 13px; color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px; min-width: 0; width: 100%;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+input:hover, select:hover { border-color: var(--border-color-strong); }
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--info-accent);
+  background: var(--bg-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--info-accent) 22%, transparent);
+}
+input[type='checkbox'] {
+  width: 15px; height: 15px; padding: 0; accent-color: var(--info-accent); cursor: pointer;
+}
+input:disabled, select:disabled {
+  background: transparent; color: var(--text-tertiary);
+  border-color: transparent; cursor: not-allowed;
 }
 input[type='number'] { text-align: right; font-variant-numeric: tabular-nums; }
-input[type='checkbox'] { width: auto; }
-input::placeholder { color: #a8b3c4; font-style: italic; }
+::placeholder { color: var(--text-tertiary); opacity: 0.7; }
 
-/* Champ calcule par le moteur : ni bordure, ni focus, ni curseur de saisie. */
-.champ--calcule,
-input.champ--calcule {
-  background: var(--fond-calcule);
-  border-color: transparent;
-  color: var(--encre-calcule);
-  font-weight: 600;
-  cursor: default;
+/* Champ CALCULE : grise et non focusable. Le seul defaut de la maquette LEON
+   REWORK etait de ne pas distinguer le saisi du calcule ; ici la difference
+   se voit sans avoir a cliquer. */
+.champ--calcule > input, .calc {
+  background: transparent; border-color: transparent;
+  color: var(--text-secondary); font-variant-numeric: tabular-nums;
 }
-.champ--calcule:focus { box-shadow: none; border-color: transparent; }
+.calc { font-variant-numeric: tabular-nums; color: var(--text-secondary); }
 
-.champ--requis-vide input,
-input.champ--requis-vide { border-color: var(--rouge); background: var(--rouge-clair); }
+/* Saisie suivie de son unite, sur une seule ligne : un champ de table occupe
+   toute la largeur de sa cellule, l'unite passerait sinon a la ligne. */
+.cellule-valeur { display: flex; align-items: center; gap: 5px; }
+.cellule-valeur > input { flex: 1; min-width: 0; }
+.unite { flex: none; font-size: 11px; color: var(--text-tertiary); }
+.discret { color: var(--text-tertiary); font-size: 11px; }
 
-.aide { margin: 11px 0 0; font-size: 11px; color: var(--encre-doux); line-height: 1.45; }
+/* ============================================================ BOUTONS */
 
-/* ---------- Boutons ---------- */
 .bouton {
-  font: inherit; font-size: 12px; font-weight: 600;
-  padding: 5px 11px; border-radius: 4px;
-  border: 1px solid var(--trait); background: var(--surface);
-  color: var(--navy-700); cursor: pointer;
+  appearance: none; font-family: inherit; cursor: pointer;
+  font-size: 12.5px; font-weight: 600;
+  padding: 6px 13px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color-strong);
+  background: var(--bg-secondary); color: var(--text-primary);
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
-.bouton:hover { border-color: var(--navy-300); background: var(--navy-100); }
-.bouton--discret { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.28); }
-.bouton--discret:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.5); }
-.bouton--ajout { font-size: 11px; padding: 3px 9px; }
+.bouton:hover { background: var(--bg-tertiary); border-color: var(--info-accent); }
+.bouton--principal {
+  background: var(--info-accent); border-color: var(--info-accent); color: #fff;
+}
+.bouton--principal:hover { filter: brightness(1.12); }
+.bouton--discret {
+  background: transparent; border-color: var(--border-color);
+  color: var(--text-secondary); font-weight: 500;
+}
+.bouton--discret:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.bouton--ajout {
+  background: var(--info-bg); border-color: transparent; color: var(--info-text);
+  border-radius: var(--radius-pill); padding: 4px 12px; font-size: 11.5px;
+}
+.bouton--ajout:hover { background: var(--info-accent); color: #fff; }
+.bouton--icone {
+  width: 30px; height: 30px; padding: 0; flex: none;
+  display: grid; place-items: center; font-size: 14px; line-height: 1;
+  background: transparent; border-color: var(--border-color); color: var(--text-secondary);
+}
+.bouton--icone:hover { background: var(--bg-secondary); color: var(--text-primary); }
 .bouton--supprimer {
-  border: none; background: transparent; color: var(--encre-doux);
-  cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 4px;
+  appearance: none; border: none; background: transparent; cursor: pointer;
+  width: 26px; height: 26px; border-radius: var(--radius-sm);
+  display: grid; place-items: center;
+  color: var(--text-tertiary); font-size: 15px; line-height: 1; padding: 0;
 }
-.bouton--supprimer:hover { color: var(--rouge); background: var(--rouge-clair); }
+.bouton--supprimer:hover { background: var(--danger-bg); color: var(--danger-text); }
 
-.bascule { display: inline-flex; border: 1px solid var(--trait); border-radius: 4px; overflow: hidden; }
+/* Bascule segmentee (Jalons / Annee par annee, Tranches / Total). */
+.bascule {
+  display: inline-flex; padding: 2px; gap: 2px;
+  background: var(--bg-tertiary); border: 1px solid var(--border-color);
+  border-radius: var(--radius-pill);
+}
 .bascule__option {
-  font: inherit; font-size: 11px; font-weight: 600;
-  padding: 4px 10px; border: none; background: var(--surface);
-  color: var(--encre-doux); cursor: pointer;
+  appearance: none; border: none; background: transparent; cursor: pointer;
+  font-family: inherit; font-size: 11.5px; font-weight: 600;
+  color: var(--text-secondary); padding: 3px 12px; border-radius: var(--radius-pill);
+  white-space: nowrap; transition: background 0.12s ease, color 0.12s ease;
 }
-.bascule__option:hover { background: var(--navy-100); }
-.bascule__option[aria-pressed='true'] { background: var(--navy-700); color: #fff; }
+.bascule__option:hover { color: var(--text-primary); }
+.bascule__option[aria-pressed='true'] { background: var(--info-bg); color: var(--info-text); }
 
-/* ---------- Tableaux ---------- */
-.table-defilante { overflow-x: auto; }
-.tableau { width: 100%; border-collapse: collapse; font-size: 13px; }
-.tableau th, .tableau td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--trait); }
+/* ============================================================ PILULES ET JETONS */
+
+/* Etat : vert acquis, bleu en cours, ambre a surveiller, rouge bloquant. */
+.pilule {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 700; white-space: nowrap;
+  padding: 2px 9px; border-radius: var(--radius-pill);
+  background: var(--neutral-bg); color: var(--neutral-text);
+}
+.pilule--ok, .pastille--ok { background: var(--success-bg); color: var(--success-text); }
+.pilule--info { background: var(--info-bg); color: var(--info-text); }
+.pilule--attention { background: var(--warning-bg); color: var(--warning-text); }
+.pilule--alerte { background: var(--danger-bg); color: var(--danger-text); }
+.pastille { display: inline-flex; align-items: center; font-size: 11px; font-weight: 700;
+  padding: 2px 9px; border-radius: var(--radius-pill);
+  background: var(--neutral-bg); color: var(--neutral-text); }
+
+/* Metadonnee compacte : etiquette en petites capitales, valeur en clair.
+   C'est la brique « TAUX TLA · DUREE 50 ans · PREFI 24 mois » d'ExNihilo. */
+.jetons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.jeton {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  font-size: 11px; padding: 3px 9px;
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm); white-space: nowrap;
+}
+.jeton__cle {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-tertiary);
+}
+.jeton__valeur { font-weight: 650; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+/* ============================================================ CYCLE DE VIE */
+
+/* Frise d'un pret : preparation, preficancement, differe, amortissement, solde.
+   Meme grammaire que la frise de financement d'ExNihilo (.fin-cyc). */
+.cycle { display: flex; align-items: flex-start; gap: 0; min-width: 190px; }
+.cycle__etape {
+  display: flex; flex-direction: column; align-items: center;
+  flex: 1; position: relative; min-width: 0;
+}
+.cycle__point {
+  width: 10px; height: 10px; border-radius: 50%; z-index: 1;
+  background: var(--bg-secondary); border: 2px solid var(--border-color);
+}
+.cycle__etape--faite .cycle__point { background: var(--success-accent); border-color: var(--success-accent); }
+.cycle__etape--courante .cycle__point {
+  background: var(--bg-primary); border-color: var(--info-accent);
+  box-shadow: 0 0 0 3px var(--info-bg);
+}
+.cycle__lien {
+  position: absolute; top: 5px; left: -50%; width: 100%; height: 2px;
+  background: var(--border-color); z-index: 0;
+}
+.cycle__etape--faite .cycle__lien { background: var(--success-accent); }
+.cycle__etape:first-child .cycle__lien { display: none; }
+.cycle__libelle {
+  font-size: 8.5px; line-height: 1.15; margin-top: 4px;
+  color: var(--text-tertiary); white-space: nowrap;
+}
+.cycle__etape--courante .cycle__libelle { color: var(--info-accent); font-weight: 700; }
+.cycle__valeur {
+  font-size: 9.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ============================================================ TABLEAUX */
+
+.table-defilante { overflow-x: auto; margin: 0 -3px; padding: 0 3px; }
+.table-defilante::-webkit-scrollbar { height: 7px; }
+.table-defilante::-webkit-scrollbar-thumb {
+  background: var(--border-color-strong); border-radius: var(--radius-pill);
+}
+
+.tableau { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .tableau th {
-  font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.05em; color: var(--encre-doux); white-space: nowrap;
+  text-align: left; padding: 4px 9px 6px; white-space: nowrap;
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-color);
 }
-.tableau th.calc { color: var(--navy-500); }
-.tableau .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tableau tbody tr:hover { background: var(--fond); }
-.tableau .vide { color: var(--encre-doux); font-style: italic; }
-
-.tableau--saisie td { padding: 4px 5px; }
-.tableau--saisie input, .tableau--saisie select { padding: 4px 6px; font-size: 12px; }
-.tableau--saisie td.calc {
-  background: var(--fond-calcule); color: var(--encre-calcule);
-  font-weight: 600; text-align: right; font-variant-numeric: tabular-nums;
+.tableau td {
+  padding: 5px 9px; border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary); vertical-align: middle;
 }
-
+.tableau tbody tr:last-child td { border-bottom: none; }
+.tableau tbody tr:hover td { background: var(--bg-secondary); }
+.tableau .num, .num { text-align: right; font-variant-numeric: tabular-nums; }
 .tableau tfoot td {
-  border-top: 2px solid var(--navy-100); border-bottom: none;
-  font-weight: 700; font-variant-numeric: tabular-nums;
-  background: var(--surface);
+  border-top: 1px solid var(--border-color-strong); border-bottom: none;
+  font-weight: 700; padding-top: 7px; color: var(--text-primary);
 }
-.tableau tfoot .libelle { text-transform: uppercase; font-size: 10px; letter-spacing: 0.06em; color: var(--navy-700); }
 
-/* ---------- Nomenclature de prix de revient ---------- */
-.bloc__outils { font-weight: 400; text-transform: none; letter-spacing: 0; }
-.interrupteur { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--encre-doux); cursor: pointer; }
-.interrupteur input { width: auto; }
+/* Table de SAISIE : les champs occupent la cellule, on resserre le rembourrage
+   pour que la grille reste lisible sur un portable. */
+.tableau--saisie td { padding: 3px 5px; }
+.tableau--saisie th { padding: 4px 5px 6px; }
+.tableau--saisie input, .tableau--saisie select { padding: 4px 6px; font-size: 12.5px; }
 
-.tableau--nomenclature { table-layout: fixed; min-width: 620px; }
-.tableau--nomenclature td { padding: 2px 5px; }
-.tableau--nomenclature .num-poste { color: var(--encre-doux); font-size: 11px; }
-.tableau--nomenclature .libelle-poste { color: var(--encre); }
+.num-poste { color: var(--text-tertiary); font-variant-numeric: tabular-nums; width: 1%; }
+.libelle-poste { color: var(--text-secondary); }
+.vide { color: var(--text-tertiary); font-style: italic; text-align: center; padding: 14px 9px; }
 
-/* Largeurs fixes : sans elles le selecteur de TVA se retrouve tronque. */
-.tableau--nomenclature th:nth-child(1), .tableau--nomenclature td:nth-child(1) { width: 38px; }
-.tableau--nomenclature th:nth-child(2), .tableau--nomenclature td:nth-child(2) { width: auto; }
-.tableau--nomenclature th:nth-child(3), .tableau--nomenclature td:nth-child(3) { width: 130px; }
-.tableau--nomenclature th:nth-child(4), .tableau--nomenclature td:nth-child(4) { width: 84px; }
-.tableau--nomenclature th:nth-child(5), .tableau--nomenclature td:nth-child(5) { width: 100px; }
-.tableau--nomenclature th:nth-child(6), .tableau--nomenclature td:nth-child(6) { width: 120px; }
-.tableau--nomenclature select { padding-right: 2px; }
-
-/* Une ligne non renseignee reste lisible mais s'efface : l'oeil va aux lignes remplies. */
-.tableau--nomenclature .poste--vide .libelle-poste,
-.tableau--nomenclature .poste--vide .num-poste { color: #9aa6b8; }
-.tableau--nomenclature .poste--vide input { background: #fcfdfe; }
-.tableau--nomenclature .poste--vide td.calc { color: #b6c0ce; background: transparent; }
-
-.chapitre-entete td {
-  background: var(--navy-900); color: #fff;
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-  padding: 5px 8px; border-bottom: none;
+/* Nomenclature du prix de revient : les chapitres structurent la lecture. */
+.tableau--nomenclature .chapitre-entete td {
+  background: var(--bg-secondary);
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-secondary);
+  padding: 7px 9px; border-bottom: 1px solid var(--border-color);
 }
-.chapitre-total td {
-  background: var(--navy-100); font-weight: 700;
-  font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--trait);
+.tableau--nomenclature .chapitre-total td {
+  font-weight: 650; color: var(--text-primary); background: var(--bg-secondary);
 }
-.chapitre-total .libelle { text-transform: none; letter-spacing: 0; color: var(--navy-800); }
 
-/* ---------- Bandeau de controle ---------- */
+/* ============================================================ INDICATEURS */
+
+/* Separateurs portes par les CELLULES et non par un fond de grille : une grille
+   qui ne remplit pas sa derniere rangee laissait apparaitre un bloc gris a la
+   place des indicateurs manquants. */
+.indicateurs {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  background: var(--bg-primary); border-radius: var(--radius-sm); overflow: hidden;
+}
+.indicateur {
+  display: flex; flex-direction: column; gap: 2px; padding: 10px 12px;
+  background: var(--bg-primary);
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+.indicateur__libelle {
+  font-size: 9.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-tertiary);
+}
+.indicateur__valeur {
+  font-size: 17px; font-weight: 700; color: var(--text-primary);
+  font-variant-numeric: tabular-nums; line-height: 1.2;
+}
+.indicateur__detail { font-size: 10.5px; color: var(--text-tertiary); }
+
+/* ============================================================ BANDEAUX */
+
 .bandeau {
-  display: flex; align-items: center; gap: 12px;
-  padding: 11px 16px; border-radius: var(--rayon);
-  border: 1px solid var(--trait); border-left-width: 3px;
-  background: var(--surface); font-size: 13px;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 9px 13px; border-radius: var(--radius-md);
+  border: 1px solid transparent; border-left-width: 3px;
+  background: var(--neutral-bg); margin-bottom: 12px;
 }
-.bandeau--ok { border-left-color: var(--vert); background: var(--vert-clair); color: var(--vert); }
-.bandeau--alerte { border-left-color: var(--ambre); background: var(--ambre-clair); color: var(--ambre); }
-.bandeau--erreur { border-left-color: var(--rouge); background: var(--rouge-clair); color: var(--rouge); }
-.bandeau--info { border-left-color: var(--navy-500); background: var(--navy-100); color: var(--navy-800); }
-.bandeau__principal { font-weight: 700; }
-.bandeau__detail { color: inherit; opacity: 0.8; }
+.bandeau__principal { font-size: 13px; font-weight: 700; }
+.bandeau__detail { font-size: 11.5px; color: var(--text-secondary); }
+.bandeau--ok { background: var(--success-bg); border-left-color: var(--success-accent); }
+.bandeau--ok .bandeau__principal { color: var(--success-text); }
+.bandeau--info { background: var(--info-bg); border-left-color: var(--info-accent); }
+.bandeau--info .bandeau__principal { color: var(--info-text); }
+.bandeau--alerte { background: var(--warning-bg); border-left-color: var(--warning-accent); }
+.bandeau--alerte .bandeau__principal { color: var(--warning-text); }
+.bandeau--erreur { background: var(--danger-bg); border-left-color: var(--danger-accent); }
+.bandeau--erreur .bandeau__principal { color: var(--danger-text); }
 
-/* ---------- Balance ---------- */
-.balance { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: end; }
-.balance__colonne { display: flex; flex-direction: column; gap: 5px; }
+.erreur {
+  margin: 12px 20px 0; padding: 10px 14px;
+  background: var(--danger-bg); color: var(--danger-text);
+  border-left: 3px solid var(--danger-accent); border-radius: var(--radius-md);
+  font-size: 12.5px; font-weight: 600;
+}
+
+.alertes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.alertes li {
+  display: flex; gap: 8px; font-size: 12px; color: var(--text-secondary);
+  padding: 7px 11px; background: var(--warning-bg); color: var(--warning-text);
+  border-radius: var(--radius-sm); line-height: 1.45;
+}
+
+/* ============================================================ CONTROLES */
+
+.controles { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.controles li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 0; border-top: 1px dashed var(--border-color); font-size: 12.5px;
+}
+.controles li:first-child { border-top: none; }
+.controle__etat {
+  flex: none; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; padding: 2px 9px; border-radius: var(--radius-pill);
+  min-width: 62px; text-align: center;
+  background: var(--success-bg); color: var(--success-text);
+}
+.controle__etat--echec { background: var(--danger-bg); color: var(--danger-text); }
+.controle__etat--avertissement { background: var(--warning-bg); color: var(--warning-text); }
+.controle__texte { flex: 1; color: var(--text-secondary); }
+
+/* ============================================================ BALANCE */
+
+.balance { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.balance__colonne { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
 .balance__libelle {
   font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.07em; color: var(--encre-doux);
+  letter-spacing: 0.05em; color: var(--text-tertiary);
 }
-.balance__total { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
-
+.balance__total {
+  font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
 .barre {
-  display: flex; flex-direction: column-reverse;
-  height: 200px; border-radius: 4px; overflow: hidden;
-  background: var(--fond); border: 1px solid var(--trait);
+  display: flex; height: 26px; border-radius: var(--radius-sm); overflow: hidden;
+  background: var(--bg-secondary);
 }
 .segment {
   display: flex; align-items: center; justify-content: center;
-  min-height: 0; color: #fff; font-size: 11px; font-weight: 600;
-  font-variant-numeric: tabular-nums; overflow: hidden; white-space: nowrap;
-  transition: flex-grow 0.18s ease;
+  font-size: 9.5px; font-weight: 700; color: #fff; overflow: hidden;
+  white-space: nowrap; min-width: 0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
-.segment span { padding: 0 6px; }
 
-.legende { display: flex; flex-wrap: wrap; gap: 5px 16px; margin-top: 12px; }
-.legende__item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.legende { display: flex; flex-wrap: wrap; gap: 5px 16px; margin-top: 11px; }
+.legende__item { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--text-secondary); }
 .legende__puce { width: 9px; height: 9px; border-radius: 2px; flex: none; }
-.legende__montant { color: var(--encre-doux); font-variant-numeric: tabular-nums; }
+.legende__montant { font-variant-numeric: tabular-nums; font-weight: 650; color: var(--text-primary); }
 
-/* ---------- Indicateurs ---------- */
-.indicateurs { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
-.indicateur { border-left: 2px solid var(--navy-100); padding-left: 10px; }
-.indicateur__libelle { font-size: 11px; color: var(--encre-doux); }
-.indicateur__valeur { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-.indicateur__detail { font-size: 11px; color: var(--encre-doux); }
+/* ============================================================ GRAPHE */
 
-/* ---------- Controles ---------- */
-.controles { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
-.controle { display: flex; align-items: baseline; gap: 9px; font-size: 13px; }
-.controle__etat {
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
-  padding: 2px 7px; border-radius: 3px; flex: none; min-width: 62px; text-align: center;
+.legende-graphe { display: inline-flex; align-items: center; gap: 12px; font-size: 10.5px; color: var(--text-tertiary); font-weight: 500; text-transform: none; letter-spacing: 0; }
+.puce--positif, .puce--negatif, .puce--cumul {
+  display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px;
 }
-.controle--ok .controle__etat { background: var(--vert-clair); color: var(--vert); }
-.controle--alerte .controle__etat { background: var(--ambre-clair); color: var(--ambre); }
-.controle--erreur .controle__etat { background: var(--rouge-clair); color: var(--rouge); }
-.controle__texte { color: var(--encre); }
-.controle--ok .controle__texte { color: var(--encre-doux); }
+.puce--positif { background: var(--success-accent); }
+.puce--negatif { background: var(--danger-accent); }
+.puce--cumul { background: var(--info-accent); border-radius: 50%; }
 
-/* ---------- Listes de prets ---------- */
-.liste { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.graphe__barre--positif { fill: var(--success-accent); }
+.graphe__barre--negatif { fill: var(--danger-accent); }
+.graphe__cumul { fill: none; stroke: var(--info-accent); stroke-width: 2; }
+.graphe__zero { stroke: var(--border-color-strong); stroke-width: 1; }
+.graphe__repere { stroke: var(--warning-accent); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.7; }
+.graphe__texte { fill: var(--text-tertiary); font-size: 9.5px; }
+.graphe__texte--repere { fill: var(--warning-text); font-size: 9px; font-weight: 700; }
+
+/* ============================================================ DIVERS */
+
+.generateur {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;
+  align-items: end; padding: 11px 13px;
+  background: var(--bg-secondary); border: 1px dashed var(--border-color-strong);
+  border-radius: var(--radius-md);
+}
+
+.liste { display: flex; flex-direction: column; gap: 8px; }
 .ligne {
-  display: grid; gap: 6px; align-items: end;
-  padding: 9px 10px; border: 1px solid var(--trait);
-  border-radius: 4px; background: var(--fond);
+  border: 1px solid var(--border-color); border-radius: var(--radius-md);
+  padding: 10px 12px; background: var(--bg-secondary);
 }
-.ligne--pret { grid-template-columns: repeat(3, minmax(0, 1fr)) 26px; }
-.ligne__pied { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.ligne .champ > span { font-size: 10px; }
-.ligne input, .ligne select { padding: 5px 7px; font-size: 12px; background: var(--surface); }
+/* Une ligne de pret porte la couleur de la tranche qu'elle finance. */
+.ligne--pret { border-left: 3px solid var(--cat, var(--cat-6)); padding: 9px 11px; }
 
-.encadre {
-  border: 1px dashed var(--navy-300); border-radius: 4px;
-  padding: 12px 14px; background: var(--fond); font-size: 13px;
+/* En-tete toujours visible : libelle, montant, nature, actions. Le montant est
+   la grandeur qu'on cherche en parcourant la liste, il est donc gros, a droite
+   et en chiffres tabulaires. */
+.pret__entete { display: flex; align-items: center; gap: 8px; }
+.pret__libelle { flex: 1 1 auto; min-width: 90px; font-weight: 650; font-size: 13px; }
+.pret__montant {
+  flex: 0 0 128px; font-weight: 700; font-size: 14px;
+  font-variant-numeric: tabular-nums;
 }
-.encadre[hidden] { display: none; }
-
-/* ---------- Erreur globale ---------- */
-.erreur {
-  margin: 14px 24px 0;
-  background: var(--rouge-clair); border: 1px solid #f0c4c1;
-  border-left: 3px solid var(--rouge); color: var(--rouge);
-  padding: 10px 14px; border-radius: var(--rayon); font-size: 13px;
+.pret__nature { flex: 0 0 128px; font-size: 12px; }
+.bouton--deplier {
+  appearance: none; border: none; background: transparent; cursor: pointer;
+  width: 26px; height: 26px; flex: none; border-radius: var(--radius-sm);
+  display: grid; place-items: center; padding: 0;
+  color: var(--text-secondary); font-size: 15px; line-height: 1;
 }
-.erreur[hidden] { display: none; }
+.bouton--deplier:hover { background: var(--bg-tertiary); color: var(--info-accent); }
+.bouton--deplier[aria-expanded='true'] { color: var(--info-accent); }
+.pret__detail {
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px dashed var(--border-color);
+}
+@media (max-width: 720px) {
+  .pret__entete { flex-wrap: wrap; }
+  .pret__montant, .pret__nature { flex: 1 1 120px; }
+}
+.ligne__pied {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 9px;
+  margin-top: 9px; padding-top: 9px; border-top: 1px dashed var(--border-color);
+  font-size: 11.5px; color: var(--text-tertiary);
+}
 
-/* ---------- Graphe d'exploitation (SVG ecrit a la main, aucune dependance) ---------- */
-.legende-graphe { display: flex; gap: 14px; font-weight: 400; text-transform: none; letter-spacing: 0; }
-.puce--positif { background: var(--navy-500); }
-.puce--negatif { background: var(--rouge); }
-.puce--cumul { background: var(--vert); }
-
-#graphe-exploitation svg { display: block; width: 100%; height: auto; }
-.graphe__grille { stroke: var(--trait); stroke-width: 1; }
-.graphe__zero { stroke: var(--encre-doux); stroke-width: 1; }
-.graphe__barre--positif { fill: var(--navy-500); }
-.graphe__barre--negatif { fill: var(--rouge); }
-.graphe__cumul { fill: none; stroke: var(--vert); stroke-width: 2; }
-.graphe__repere { stroke: var(--ambre); stroke-width: 1; stroke-dasharray: 3 3; }
-.graphe__texte { font-family: var(--police); font-size: 10px; fill: var(--encre-doux); }
-.graphe__texte--repere { fill: var(--ambre); font-weight: 600; }
-
-.tableau .ligne--moyenne td { background: var(--fond); font-style: italic; color: var(--encre-doux); }
-.tableau .ligne--rupture td { border-top: 1px solid var(--ambre); }
-.montant--negatif { color: var(--rouge); }
 .evenement {
-  font-size: 10px; font-weight: 600; color: var(--ambre);
-  background: var(--ambre-clair); padding: 1px 6px; border-radius: 3px; margin-left: 6px;
+  display: inline-block; margin-left: 7px;
+  font-size: 9.5px; font-weight: 700; padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--warning-bg); color: var(--warning-text);
 }
+.ligne--rupture td { background: color-mix(in srgb, var(--warning-accent) 8%, transparent); }
+.ligne--moyenne td { color: var(--text-tertiary); font-style: italic; }
 
-/* ---------- Ecran parametres ---------- */
-.para-groupe { margin-bottom: 14px; }
-.para-groupe h3 {
-  margin: 0 0 8px; font-size: 12px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.07em; color: var(--navy-700);
-}
-.para-source { font-size: 11px; color: var(--encre-doux); margin: -4px 0 8px; font-style: italic; }
+.para-groupe { margin-bottom: 16px; }
+.para-groupe:last-child { margin-bottom: 0; }
+.para-source { font-size: 10.5px; color: var(--text-tertiary); margin: 0 0 7px; line-height: 1.45; }
 
-/* ---------- Dialogue JSON ---------- */
+.interrupteur { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-secondary); font-weight: 500; text-transform: none; letter-spacing: 0; cursor: pointer; }
+.interrupteur input { width: auto; }
+
+.montant--negatif { color: var(--danger-text); }
+
+/* ---------- Boite de dialogue JSON ---------- */
 .dialogue {
-  border: 1px solid var(--trait); border-radius: var(--rayon); padding: 0;
-  width: min(900px, 92vw); max-height: 84vh; overflow: hidden;
-  flex-direction: column;
+  border: 1px solid var(--border-color); border-radius: var(--radius-lg);
+  background: var(--bg-primary); color: var(--text-primary);
+  padding: 0; width: min(940px, 92vw); max-height: 84vh;
 }
-.dialogue::backdrop { background: rgba(11, 26, 51, 0.42); }
-.dialogue[open] { display: flex; }
+.dialogue::backdrop { background: rgba(0, 0, 0, 0.62); }
 .dialogue__entete {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 11px 16px; background: var(--navy-900); color: #fff; flex: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 13px 16px; border-bottom: 1px solid var(--border-color);
 }
-.dialogue__entete h2 { color: #fff; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+.dialogue__entete h2 { margin: 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
 .dialogue pre {
-  margin: 0; padding: 16px; overflow: auto; font-size: 11.5px; line-height: 1.5;
-  font-family: 'Cascadia Mono', Consolas, monospace; background: var(--surface);
+  margin: 0; padding: 14px 16px; overflow: auto; max-height: 68vh;
+  font-family: var(--police-nombre); font-size: 11.5px; line-height: 1.55;
+  color: var(--text-secondary);
 }
 
-/* ---------- Onglets de tranche, generes depuis le programme ---------- */
-.onglets__tranches { display: contents; }
-.onglet--tranche { color: #c3d1e8; }
-.onglet--tranche::before { content: '▸ '; opacity: 0.55; }
+/* ---------- Barres de defilement ---------- */
+* { scrollbar-width: thin; scrollbar-color: var(--border-color-strong) transparent; }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-color-strong); border-radius: var(--radius-pill); }
 
-/* ---------- Generateur de lots ---------- */
-.generateur { align-items: end; }
-.champ--bouton { justify-content: flex-end; }
-.bouton--principal {
-  background: var(--navy-700); color: #fff; border-color: var(--navy-700);
-  padding: 7px 14px;
+@media print {
+  .entete, .bloc__outils, .bouton { display: none !important; }
+  .ecran[hidden] { display: block !important; }
+  .bloc { break-inside: avoid; }
 }
-.bouton--principal:hover { background: var(--navy-800); border-color: var(--navy-800); }

@@ -295,3 +295,84 @@ describe('saisie lot par lot — la SU ne derive pas', () => {
     expect(r.indicateurs.fonds_propres_eur).toBe(50000);
   });
 });
+
+describe('Pas de produit principal : chaque financement a ses propres regles', () => {
+  /** Operation mixte PLUS + PLAI, sans aucun pret saisi : mode CDC theorique. */
+  const mixte = (entrees = {}) =>
+    calculer(
+      {
+        identite: { zone_123: 2, zone_ABC: 'B1' },
+        dates: { annee_mise_en_location: 2028, duree_simulation_ans: 20 },
+        lots: [
+          { code_produit: 'PLUS', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 40 },
+          { code_produit: 'PLAI', nb_logements: 4, shab_m2: 240, surfaces_annexes_m2: 24 },
+        ],
+        postes_bilan: [
+          { chapitre: 'charge_fonciere', libelle: 'Terrain', montant_ht_eur: 300000, taux_tva: 0.2 },
+          { chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1200000, taux_tva: 0.2 },
+        ],
+        subventions: [{ libelle: 'Subvention', montant_eur: 80000 }],
+        fonds_propres_eur: 120000,
+        ...entrees,
+      },
+      { baremes, trajectoires: fichierTrajectoires },
+    );
+
+  it('donne a CHAQUE tranche son jeu de prets CDC, foncier et construction', () => {
+    const a = mixte().amortissements;
+    expect(a).toHaveLength(4);
+    for (const code of ['PLUS', 'PLAI']) {
+      const natures = a.filter((x) => x.produit === code).map((x) => x.nature).sort();
+      expect(natures, code).toEqual(['construction', 'foncier']);
+    }
+  });
+
+  it('applique a chaque tranche SON taux : un PLUS et un PLAI n empruntent pas pareil', () => {
+    const a = mixte().amortissements;
+    const taux = (code) => a.find((x) => x.produit === code && x.nature === 'foncier').taux_saisi;
+    // PLUS = LA + 0,6 % ; PLAI = LA - 0,2 %. L'ecart de 0,8 point est la regle
+    // du produit, il ne doit jamais etre lisse par un « produit principal ».
+    expect(taux('PLUS') - taux('PLAI')).toBeCloseTo(0.008, 10);
+  });
+
+  it('repartit l enveloppe theorique sans en perdre ni en creer un euro', () => {
+    const r = mixte();
+    const t = r.financement.prets_cdc_theoriques;
+    const somme = r.amortissements.reduce((s, x) => s + x.montant_eur, 0);
+    expect(somme).toBeCloseTo(t.pret_foncier_eur + t.pret_batiment_eur, 2);
+    // Et chaque nature separement, sinon la repartition compenserait une erreur
+    // de foncier par une erreur de construction.
+    const parNature = (n) =>
+      r.amortissements.filter((x) => x.nature === n).reduce((s, x) => s + x.montant_eur, 0);
+    expect(parNature('foncier')).toBeCloseTo(t.pret_foncier_eur, 2);
+    expect(parNature('construction')).toBeCloseTo(t.pret_batiment_eur, 2);
+  });
+
+  it('repartit au prorata de surface utile, comme le prix de revient', () => {
+    const r = mixte();
+    const t = r.financement.prets_cdc_theoriques;
+    const foncierPLUS = r.amortissements.find((x) => x.produit === 'PLUS' && x.nature === 'foncier');
+    const qp = r.surfaces.quotes_parts.PLUS;
+    expect(foncierPLUS.montant_eur / t.pret_foncier_eur).toBeCloseTo(qp, 3);
+  });
+
+  it('porte le taux de TVA de chaque tranche, pas un taux unique', () => {
+    const r = mixte();
+    // Les deux tranches lisent leur propre cle au bareme : la structure doit
+    // exister meme quand les deux valeurs coincident.
+    expect(Object.keys(r.bilan.taux_lasm_par_tranche).sort()).toEqual(['PLAI', 'PLUS']);
+  });
+
+  it('signale identite.produit comme inerte plutot que de l appliquer en silence', () => {
+    const sans = mixte();
+    const avec = mixte({ identite: { zone_123: 2, zone_ABC: 'B1', produit: 'PLS' } });
+    // Le resultat ne bouge pas d'un euro...
+    expect(avec.indicateurs.prix_revient_ttc_eur).toBe(sans.indicateurs.prix_revient_ttc_eur);
+    expect(avec.amortissements.map((a) => a.montant_eur)).toEqual(
+      sans.amortissements.map((a) => a.montant_eur),
+    );
+    // ...mais la saisie devenue sans effet est dite, pas avalee.
+    expect(avec.alertes.some((m) => /produit principal/.test(m))).toBe(true);
+    expect(sans.alertes.some((m) => /produit principal/.test(m))).toBe(false);
+  });
+});

@@ -51,9 +51,32 @@
 
       <div class="entete__actions">
         <span id="etat-calcul" class="pastille pastille--ok">à jour</span>
+        <button type="button" id="btn-theme" class="bouton bouton--icone" aria-label="Changer de thème">☀</button>
         <button type="button" id="btn-json" class="bouton bouton--discret">JSON</button>
       </div>
     </header>
+
+    <!--
+      Ouvert par double-clic (file://), CE FICHIER NE PEUT PAS FONCTIONNER :
+      `app.js` est un module ES qui lit les referentiels par `fetch`, et le
+      navigateur refuse les deux sur file://. La page s'affiche pourtant
+      normalement — seuls les gestionnaires d'evenements manquent, donc les
+      onglets ne repondent plus. Sans ce garde-fou, la panne est muette et
+      passe pour un bug de l'interface.
+    -->
+    <div id="hors-service" class="erreur" hidden>
+      <strong>Cette page ne peut pas démarrer depuis un double-clic.</strong>
+      Elle charge ses référentiels par le réseau, ce que le navigateur interdit sur
+      <code>file://</code> : l'affichage est complet mais rien ne réagit.
+      Ouvrir <code>ui/simulation-autonome.html</code>, qui embarque tout et fonctionne hors ligne,
+      ou servir ce dossier en HTTP pour développer.
+    </div>
+    <script>
+      // Script CLASSIQUE volontairement : un module ne s'executerait pas non plus.
+      setTimeout(function () {
+        if (!window.__moteurDemarre) document.getElementById('hors-service').hidden = false;
+      }, 1200);
+    </script>
 
     <div id="erreur" class="erreur" hidden></div>
 
@@ -78,10 +101,6 @@
             <label class="champ">
               <span>Département</span>
               <input type="text" data-champ="identite.departement" placeholder="Dordogne (24)" />
-            </label>
-            <label class="champ">
-              <span>Produit principal</span>
-              <select data-champ="identite.produit" id="select-produit"></select>
             </label>
             <label class="champ">
               <span>Type d'opération</span>
@@ -112,9 +131,10 @@
             </label>
           </div>
           <p class="aide">
-            Le produit principal détermine le taux de livraison à soi-même et le jeu de prêts CDC
-            par défaut. Le zonage applicable dépend du produit : 1/2/3 pour PLUS et PLAI, A/B/C
-            pour PLS.
+            ⚙ Il n'y a pas de produit principal. Chaque financement du programme forme une
+            tranche qui porte ses propres règles : son taux de TVA, son zonage (1/2/3 pour
+            PLUS et PLAI, A/B/C pour PLS) et son jeu de prêts CDC par défaut. Les deux zonages
+            sont saisis ici, chaque tranche lit celui qui la concerne.
           </p>
         </section>
 

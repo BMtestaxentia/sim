@@ -40,7 +40,7 @@ import {
   indicateursExploitation,
   jalonsExploitation,
 } from './exploitation.js';
-import { arrondiEuro, arrondiSurface } from './arrondis.js';
+import { arrondiEuro, arrondiSurface, arrondirEnConservantLaSomme } from './arrondis.js';
 
 /** Version du moteur, reportee dans les resultats pour la tracabilite. */
 export const VERSION_MOTEUR = '0.4.0';
@@ -176,12 +176,27 @@ export function calculer(entrees, referentiels) {
   // Le bilan reste calcule globalement (chapitres, detail par poste) ET ventile
   // par tranche au prorata de surface utile, chaque tranche portant son propre
   // taux de livraison a soi-meme.
-  const produitPrincipal = identite.produit ?? lots[0]?.code_produit;
+  //
+  // IL N'Y A PAS DE PRODUIT PRINCIPAL. Chaque financement coexiste dans la meme
+  // simulation avec ses regles propres : son taux de livraison a soi-meme, son
+  // zonage (1/2/3 ou A/B/C, propriete du produit) et son jeu de prets CDC par
+  // defaut. Le seul repli est l'operation MONO-tranche, ou l'unique produit
+  // present tient lieu de reference pour ce que la saisie n'a pas affecte.
+  const trancheUnique = codesPresents.length === 1 ? codesPresents[0] : null;
+  if (identite.produit) {
+    alertes.push(
+      `identite.produit (${identite.produit}) est ignore : il n'y a pas de produit ` +
+        'principal. Chaque tranche porte son taux de TVA, son zonage et ses prets CDC.',
+    );
+  }
   const postesBilan = entrees.postes_bilan ?? [];
   const modulation = entrees.modulation_ttc_eur ?? 0;
 
+  // Version globale : un seul taux de LASM, donc juste seulement en mono-tranche.
+  // Elle sert de socle (chapitres, detail par poste) et la ventilation par
+  // tranche la remplace des qu'il y a un programme.
   const bilan = prixDeRevient(
-    { code_produit: produitPrincipal, postes: postesBilan, modulation_ttc_eur: modulation },
+    { code_produit: trancheUnique ?? codesPresents[0], postes: postesBilan, modulation_ttc_eur: modulation },
     baremes,
   );
 
@@ -270,30 +285,54 @@ export function calculer(entrees, referentiels) {
     pretsACalculer = pretsSaisis;
   } else {
     const surcharges = entrees.caracteristiques_prets_defaut ?? {};
-    let defauts = [];
-    try {
-      defauts = pretsDefautResolus(produitPrincipal, {
-        zone_ABC: identite.zone_ABC,
-        livret_a_reference: surcharges.livret_a_origine ?? laOrigine,
-        progressivite: surcharges.progressivite ?? 0,
-      });
-    } catch (e) {
-      alertes.push(
-        `Prets CDC theoriques non calculables : ${/** @type {Error} */ (e).message}. ` +
-          'Saisir les prets manuellement.',
-      );
-    }
-    const parNature = Object.fromEntries(defauts.map((d) => [d.nature, d]));
-    pretsACalculer = [
-      { code: 'CDC_FONCIER', libelle: 'Pret CDC foncier', montant_eur: cdcTheoriques.pret_foncier_eur, nature: 'foncier' },
-      { code: 'CDC_BATIMENT', libelle: 'Pret CDC construction', montant_eur: cdcTheoriques.pret_batiment_eur, nature: 'construction' },
-    ].map((p) => ({
-      ...p,
-      ...(parNature[p.nature] ?? {}),
-      livret_a_origine: laOrigine,
-      livret_a_par_annee: laParAnnee,
-      ...surcharges,
-    }));
+    // UN JEU DE PRETS PAR TRANCHE. Un PLUS et un PLAI dans la meme operation
+    // n'empruntent pas au meme taux (LA + 0,6 % contre LA - 0,2 %) ni sur la
+    // meme duree : agreger les deux tranches sous un pret unique donnerait un
+    // taux qui n'existe pour personne. L'enveloppe theorique globale est donc
+    // repartie entre les tranches au prorata de surface utile, chacune resolvant
+    // ensuite ses propres caracteristiques (R-AMT-1).
+    const codesFinances = codesPresents.length ? codesPresents : [];
+    const repartir = (total) => {
+      const parts = codesFinances.map((c) => (quotesParts[c] ?? 0) * total);
+      // Somme des parts arrondies = total arrondi, sinon le plan de financement
+      // ne boucle plus a l'euro pres.
+      return arrondirEnConservantLaSomme(parts);
+    };
+    const fonciers = repartir(cdcTheoriques.pret_foncier_eur);
+    const batiments = repartir(cdcTheoriques.pret_batiment_eur);
+
+    pretsACalculer = [];
+    codesFinances.forEach((code, i) => {
+      let parNature = {};
+      try {
+        parNature = Object.fromEntries(
+          pretsDefautResolus(code, {
+            zone_ABC: identite.zone_ABC,
+            livret_a_reference: surcharges.livret_a_origine ?? laOrigine,
+            progressivite: surcharges.progressivite ?? 0,
+          }).map((d) => [d.nature, d]),
+        );
+      } catch (e) {
+        alertes.push(
+          `Prets CDC theoriques de la tranche ${code} non calculables : ` +
+            `${/** @type {Error} */ (e).message}. Saisir ces prets manuellement.`,
+        );
+      }
+      const libelleTranche = codesFinances.length > 1 ? ` ${code}` : '';
+      for (const p of [
+        { code: `CDC_FONCIER_${code}`, libelle: `Prêt CDC foncier${libelleTranche}`, montant_eur: fonciers[i], nature: 'foncier' },
+        { code: `CDC_BATIMENT_${code}`, libelle: `Prêt CDC construction${libelleTranche}`, montant_eur: batiments[i], nature: 'construction' },
+      ]) {
+        pretsACalculer.push({
+          ...p,
+          produit: code,
+          ...(parNature[p.nature] ?? {}),
+          livret_a_origine: laOrigine,
+          livret_a_par_annee: laParAnnee,
+          ...surcharges,
+        });
+      }
+    });
 
     // Un pret theorique dont les caracteristiques n'ont pas pu etre resolues ne
     // doit pas faire echouer toute la simulation : on le signale et on l'ecarte.
@@ -301,7 +340,7 @@ export function calculer(entrees, referentiels) {
     for (const p of incalculables) {
       alertes.push(
         `${p.libelle} de ${arrondiEuro(p.montant_eur)} EUR non amorti : duree et taux inconnus ` +
-          `pour le produit ${produitPrincipal}. Saisir ce pret manuellement.`,
+          `pour le produit ${p.produit}. Saisir ce pret manuellement.`,
       );
     }
     pretsACalculer = pretsACalculer.filter((p) => p.duree_ans > 0);
@@ -314,7 +353,7 @@ export function calculer(entrees, referentiels) {
       libelle: p.libelle ?? p.code,
       montant_eur: p.montant_eur,
       nature: p.nature ?? 'autre',
-      produit: p.produit ?? produitPrincipal,
+      produit: p.produit ?? trancheUnique,
       taux_saisi: p.taux,
       annee_premiere_echeance:
         p.annee_premiere_echeance ??
@@ -548,7 +587,7 @@ export function calculer(entrees, referentiels) {
             subventions_eur: subventions.par_produit[c] ?? 0,
             prix_revient_ttc_eur: bilan.par_tranche?.[c]?.total_ttc_module_eur ?? null,
             prets: amortissements
-              .filter((a) => (a.produit ?? produitPrincipal) === c)
+              .filter((a) => (a.produit ?? trancheUnique) === c)
               .map((a) => ({ code: a.code, libelle: a.libelle, montant_eur: a.montant_eur })),
           },
         ]),

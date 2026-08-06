@@ -199,19 +199,40 @@ const eur = (v) => (nul(v) ? '—' : fEuro.format(v));
 const pct = (v, d = 2) => (nul(v) ? '—' : `${(v * 100).toFixed(d)} %`);
 const nb = (v) => (nul(v) ? '—' : fNombre.format(v));
 
-/** Palette : les chapitres en navy, les prets en teintes franchement distinctes. */
-const COULEURS = {
-  charge_fonciere: '#12274a',
-  batiment: '#2e5aa8',
-  honoraires: '#5f86c9',
-  frais_divers: '#9db4dc',
-  modulation: '#c3d1e8',
-  subventions: '#1e7a5a',
-  fonds_propres: '#8a6100',
-  pret_construction: '#6b3fa0',
-  pret_foncier: '#a05fb4',
-  pret_autre: '#c79ad6',
+/**
+ * Palette des barres emplois/ressources. Elle passe par les tokens de la charte
+ * (`--cat-N`, accents d'etat) et non par des hexadecimaux : une couleur ecrite
+ * en dur ici resterait celle du theme sombre quand on bascule en clair.
+ * Lue au calcul et non a la declaration, pour suivre le theme courant.
+ */
+const TOKENS_COULEUR = {
+  charge_fonciere: '--cat-1',
+  batiment: '--cat-3',
+  honoraires: '--cat-5',
+  frais_divers: '--cat-4',
+  modulation: '--cat-6',
+  subventions: '--success-accent',
+  fonds_propres: '--warning-accent',
+  pret_construction: '--info-accent',
+  pret_foncier: '--cat-5',
+  pret_autre: '--cat-4',
 };
+const couleur = (cle) =>
+  getComputedStyle(document.documentElement).getPropertyValue(TOKENS_COULEUR[cle] ?? '--cat-6').trim() ||
+  '#94a3b8';
+/** Proxy de compatibilite : `COULEURS.batiment` reste ecrit tel quel dans les vues. */
+const COULEURS = new Proxy({}, { get: (_, cle) => couleur(String(cle)) });
+
+/**
+ * Identite couleur d'une TRANCHE, stable d'un ecran a l'autre : l'onglet, le
+ * bloc, la ligne de pret et la legende d'un meme produit portent la meme teinte.
+ * L'ordre canonique des produits fixe l'index, donc la couleur ne bouge pas
+ * quand on ajoute une tranche.
+ */
+const CAT_PAR_PRODUIT = Object.fromEntries(
+  produitsOrdonnes().map((p, i) => [p.code, `var(--cat-${(i % 6) + 1})`]),
+);
+const catProduit = (code) => CAT_PAR_PRODUIT[code] ?? 'var(--cat-6)';
 
 /**
  * Libelles de chapitre DERIVES de la nomenclature, jamais recopies : une table
@@ -257,12 +278,6 @@ const valNum = (v) => (nul(v) ? '' : v);
 const enPourcent = (v) => (nul(v) ? null : Number((v * 100).toPrecision(12)));
 
 // ---------------------------------------------------------------- rendu de structure
-
-function rendreSelectProduit() {
-  $('#select-produit').innerHTML = produitsOrdonnes()
-    .map((p) => `<option value="${p.code}" ${p.v1 ? '' : 'disabled'}>${p.libelle}${p.v1 ? '' : ' (hors V1)'}</option>`)
-    .join('');
-}
 
 function rendreChampsStatiques() {
   for (const el of document.querySelectorAll('[data-champ]')) {
@@ -311,7 +326,8 @@ function rendreStructureTranches() {
   $('#onglets-tranches').innerHTML = codes
     .map(
       (c) =>
-        `<button type="button" class="onglet onglet--tranche" role="tab" data-ecran="tranche-${c}" aria-selected="false">${att(libelleProduit(c))}</button>`,
+        `<button type="button" class="onglet onglet--tranche" role="tab" data-ecran="tranche-${c}"
+          aria-selected="false" style="--cat:${catProduit(c)}">${att(libelleProduit(c))}</button>`,
     )
     .join('');
 
@@ -321,11 +337,11 @@ function rendreStructureTranches() {
       const prets = etat.prets.map((p, i) => ({ p, i })).filter(({ p }) => (p.produit ?? code) === code);
       const subs = etat.subventions.map((s, i) => ({ s, i })).filter(({ s }) => s.affectation === code);
       return `
-      <main class="ecran" id="ecran-tranche-${code}" role="tabpanel" hidden>
+      <main class="ecran" id="ecran-tranche-${code}" role="tabpanel" hidden style="--cat:${catProduit(code)}">
         <div class="bandeau bandeau--info" data-recap-tranche="${code}"></div>
 
         <div class="colonnes">
-          <section class="bloc">
+          <section class="bloc bloc--tranche">
             <h2 class="bloc__titre">Loyer de la tranche ${att(libelleProduit(code))}</h2>
             <div class="champs">
               <label class="champ">
@@ -407,43 +423,77 @@ function rendreStructureTranches() {
     .join('');
 }
 
-/** Bloc de saisie d'un pret, partage par tous les ecrans de tranche. */
+/**
+ * Prets deplies. Etat purement visuel : il vit ici et non dans `etat`, qui est
+ * clone tel quel pour alimenter le moteur et l'export JSON.
+ * @type {Set<number>}
+ */
+const pretsDeplies = new Set();
+
+/** Jeton de metadonnee : etiquette en petites capitales, valeur en clair. */
+const jeton = (cle, valeur) =>
+  `<span class="jeton"><span class="jeton__cle">${att(cle)}</span><span class="jeton__valeur">${att(valeur)}</span></span>`;
+
+/**
+ * Bloc d'un pret, sur le modele des lignes de financement d'ExNihilo : une
+ * ligne compacte toujours lisible (libelle, montant, nature, jetons de
+ * synthese) et le detail de saisie replie par defaut.
+ *
+ * Sept champs deplies en permanence pour six prets faisaient quarante-deux
+ * cases a l'ecran : on ne voyait plus le plan de financement, seulement des
+ * formulaires.
+ */
 function gabaritPret(p, i) {
+  const ouvert = pretsDeplies.has(i);
+  const jetons = [
+    jeton('taux', nul(p.taux) ? '—' : pct(p.taux, 2)),
+    jeton('durée', nul(p.duree_ans) ? '—' : `${p.duree_ans} ans`),
+    jeton('1re éch.', valNum(p.annee_premiere_echeance) || '—'),
+    jeton('révis.', p.revisabilite ?? '—'),
+    ...(p.progressivite ? [jeton('progr.', pct(p.progressivite, 2))] : []),
+    ...(p.differe_ans ? [jeton('différé', `${p.differe_ans} ans · type ${p.differe_type ?? 2}`)] : []),
+  ].join('');
+
   return `
-    <div class="ligne ligne--pret">
-      <label class="champ"><span>Libellé</span>
-        <input type="text" data-champ="prets.${i}.libelle" value="${att(p.libelle)}" /></label>
-      <label class="champ"><span>Montant (€)</span>
-        <input type="number" step="1" min="0" data-champ="prets.${i}.montant_eur" data-type="nombre" value="${valNum(p.montant_eur)}" /></label>
-      <label class="champ"><span>Nature</span>
-        <select data-champ="prets.${i}.nature">
+    <div class="ligne ligne--pret" style="--cat:${catProduit(p.produit)}">
+      <div class="pret__entete">
+        <input type="text" class="pret__libelle" data-champ="prets.${i}.libelle" value="${att(p.libelle)}" />
+        <input type="number" step="1" min="0" class="pret__montant" data-champ="prets.${i}.montant_eur"
+          data-type="nombre" value="${valNum(p.montant_eur)}" />
+        <select class="pret__nature" data-champ="prets.${i}.nature">
           ${['construction', 'foncier', 'autre'].map((n) => `<option value="${n}" ${n === p.nature ? 'selected' : ''}>${n}</option>`).join('')}
-        </select></label>
-      <button type="button" class="bouton--supprimer" data-supprimer="prets" data-index="${i}" title="Supprimer">×</button>
-      <div class="ligne__pied">
-        <label class="champ"><span>Taux saisi (%)</span>
-          <input type="number" step="0.01" data-champ="prets.${i}.taux" data-type="pourcentage" value="${valNum(enPourcent(p.taux))}" /></label>
-        <label class="champ"><span>Durée (ans)</span>
-          <input type="number" step="1" min="1" data-champ="prets.${i}.duree_ans" data-type="nombre" value="${valNum(p.duree_ans)}" /></label>
-        <label class="champ"><span>1re échéance (année)</span>
-          <input type="number" step="1" data-champ="prets.${i}.annee_premiere_echeance" data-type="nombre" value="${valNum(p.annee_premiere_echeance)}" /></label>
+        </select>
+        <button type="button" class="bouton--deplier" data-deplier-pret="${i}"
+          aria-expanded="${ouvert}" title="${ouvert ? 'Replier' : 'Déplier'}">${ouvert ? '▴' : '▾'}</button>
+        <button type="button" class="bouton--supprimer" data-supprimer="prets" data-index="${i}" title="Supprimer">×</button>
       </div>
-      <div class="ligne__pied">
-        <label class="champ"><span>Révisabilité</span>
-          <select data-champ="prets.${i}.revisabilite">
-            ${OPTIONS_REVISABILITE.map((v) => `<option value="${v}" ${v === p.revisabilite ? 'selected' : ''}>${v}</option>`).join('')}
-          </select></label>
-        <label class="champ"><span>Progressivité (%)</span>
-          <input type="number" step="0.1" data-champ="prets.${i}.progressivite" data-type="pourcentage" value="${valNum(enPourcent(p.progressivite))}" /></label>
-        <label class="champ"><span>Différé (ans)</span>
-          <input type="number" step="1" min="0" data-champ="prets.${i}.differe_ans" data-type="nombre" value="${valNum(p.differe_ans)}" /></label>
-      </div>
-      <div class="ligne__pied">
-        <label class="champ"><span>Type de différé</span>
-          <select data-champ="prets.${i}.differe_type" data-type="nombre">
-            ${OPTIONS_DIFFERE.map((o) => `<option value="${o.v}" ${o.v === p.differe_type ? 'selected' : ''}>${o.l}</option>`).join('')}
-          </select></label>
-      </div>
+      <div class="jetons">${jetons}</div>
+      ${
+        ouvert
+          ? `<div class="pret__detail">
+        <div class="champs champs--serres">
+          <label class="champ"><span>Taux saisi (%)</span>
+            <input type="number" step="0.01" data-champ="prets.${i}.taux" data-type="pourcentage" value="${valNum(enPourcent(p.taux))}" /></label>
+          <label class="champ"><span>Durée (ans)</span>
+            <input type="number" step="1" min="1" data-champ="prets.${i}.duree_ans" data-type="nombre" value="${valNum(p.duree_ans)}" /></label>
+          <label class="champ"><span>1re échéance (année)</span>
+            <input type="number" step="1" data-champ="prets.${i}.annee_premiere_echeance" data-type="nombre" value="${valNum(p.annee_premiere_echeance)}" /></label>
+          <label class="champ"><span>Révisabilité</span>
+            <select data-champ="prets.${i}.revisabilite">
+              ${OPTIONS_REVISABILITE.map((v) => `<option value="${v}" ${v === p.revisabilite ? 'selected' : ''}>${v}</option>`).join('')}
+            </select></label>
+          <label class="champ"><span>Progressivité (%)</span>
+            <input type="number" step="0.1" data-champ="prets.${i}.progressivite" data-type="pourcentage" value="${valNum(enPourcent(p.progressivite))}" /></label>
+          <label class="champ"><span>Différé (ans)</span>
+            <input type="number" step="1" min="0" data-champ="prets.${i}.differe_ans" data-type="nombre" value="${valNum(p.differe_ans)}" /></label>
+          <label class="champ"><span>Type de différé</span>
+            <select data-champ="prets.${i}.differe_type" data-type="nombre">
+              ${OPTIONS_DIFFERE.map((o) => `<option value="${o.v}" ${o.v === p.differe_type ? 'selected' : ''}>${o.l}</option>`).join('')}
+            </select></label>
+        </div>
+      </div>`
+          : ''
+      }
     </div>`;
 }
 
@@ -1316,9 +1366,67 @@ function recalculer() {
 }
 
 /** Reconstruit la structure de saisie puis recalcule (ajout, suppression, changement de produit). */
+/**
+ * Reconstruit la structure de saisie puis recalcule.
+ *
+ * Les ecrans de TRANCHE sont regeneres a chaque passage, donc leur attribut
+ * `hidden` repart a sa valeur par defaut : sans memoriser l'ecran actif, tout
+ * rafraichissement structurel depuis un ecran de tranche (deplier un pret,
+ * cocher une charge) renverrait l'utilisateur sur l'ecran Operation.
+ */
 function rafraichirTout() {
+  const actif = document.querySelector('[data-ecran][aria-selected="true"]');
+  const cible = /** @type {HTMLElement|null} */ (actif)?.dataset.ecran;
   rendreStructure();
+  if (cible) afficherEcran(cible);
   recalculer();
+}
+
+/** Bascule l'affichage vers un ecran, onglets et panneaux d'un seul tenant. */
+function afficherEcran(cible) {
+  const existe = document.getElementById(`ecran-${cible}`);
+  // La tranche affichee peut avoir disparu entre-temps (dernier lot supprime) :
+  // on retombe alors sur le programme plutot que sur une page blanche.
+  const vise = existe ? cible : 'programme';
+  for (const o of document.querySelectorAll('[data-ecran]')) {
+    o.setAttribute('aria-selected', String(/** @type {HTMLElement} */ (o).dataset.ecran === vise));
+  }
+  for (const e of document.querySelectorAll('.ecran')) {
+    /** @type {HTMLElement} */ (e).hidden = e.id !== `ecran-${vise}`;
+  }
+  if (vise === 'parametres') rendreParametres();
+}
+
+/**
+ * Theme clair ou sombre. Le sombre est celui de l'application ; le clair sert a
+ * l'impression et a la videoprojection, ou un fond noir passe mal.
+ * Persiste dans localStorage quand il est disponible — la version autonome
+ * ouverte en file:// y a droit aussi.
+ */
+const CLE_THEME = 'moteur-sim.theme';
+function appliquerTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const b = document.getElementById('btn-theme');
+  if (b) {
+    b.textContent = theme === 'clair' ? '☾' : '☀';
+    b.setAttribute('aria-label', theme === 'clair' ? 'Passer en thème sombre' : 'Passer en thème clair');
+    b.title = b.getAttribute('aria-label') ?? '';
+  }
+  try {
+    localStorage.setItem(CLE_THEME, theme);
+  } catch {
+    // Stockage indisponible (navigation privee, restrictions file://) : le
+    // theme reste actif pour la session, seule la memoire est perdue.
+  }
+}
+function themeInitial() {
+  try {
+    const t = localStorage.getItem(CLE_THEME);
+    if (t === 'clair' || t === 'sombre') return t;
+  } catch {
+    /* voir appliquerTheme */
+  }
+  return matchMedia('(prefers-color-scheme: light)').matches ? 'clair' : 'sombre';
 }
 
 // ---------------------------------------------------------------- evenements
@@ -1351,12 +1459,6 @@ document.addEventListener('input', (ev) => {
 
   ecrireChemin(etat, chemin, valeur);
 
-  if (chemin === 'identite.produit' && etat.lots.length === 1) {
-    etat.lots[0].code_produit = valeur;
-    rafraichirTout();
-    return;
-  }
-
   // Un changement de produit ou de chapitre reordonne la restitution : on
   // reconstruit. Sinon on ne met a jour que les valeurs, ce qui preserve le focus.
   if (el.dataset.structure) rafraichirTout();
@@ -1371,16 +1473,27 @@ document.addEventListener('change', (ev) => {
 document.addEventListener('click', (ev) => {
   const el = /** @type {HTMLElement} */ (ev.target);
 
+  if (el.closest('#btn-theme')) {
+    appliquerTheme(document.documentElement.dataset.theme === 'clair' ? 'sombre' : 'clair');
+    // Les barres emplois/ressources portent leurs couleurs en attribut `style`,
+    // resolues au moment du rendu : sans recalcul elles garderaient la palette
+    // du theme precedent.
+    if (dernierResultat) recalculer();
+    return;
+  }
+
   const onglet = el.closest('[data-ecran]');
   if (onglet) {
-    const cible = /** @type {HTMLElement} */ (onglet).dataset.ecran;
-    for (const o of document.querySelectorAll('[data-ecran]')) {
-      o.setAttribute('aria-selected', String(/** @type {HTMLElement} */ (o).dataset.ecran === cible));
-    }
-    for (const e of document.querySelectorAll('.ecran')) {
-      /** @type {HTMLElement} */ (e).hidden = e.id !== `ecran-${cible}`;
-    }
-    if (cible === 'parametres') rendreParametres();
+    afficherEcran(/** @type {HTMLElement} */ (onglet).dataset.ecran);
+    return;
+  }
+
+  const deplier = el.closest('[data-deplier-pret]');
+  if (deplier) {
+    const i = Number(/** @type {HTMLElement} */ (deplier).dataset.depliePret ?? /** @type {HTMLElement} */ (deplier).dataset.deplierPret);
+    if (pretsDeplies.has(i)) pretsDeplies.delete(i);
+    else pretsDeplies.add(i);
+    rafraichirTout();
     return;
   }
 
@@ -1451,7 +1564,7 @@ document.addEventListener('click', (ev) => {
   if (aAjouter === 'lots') {
     const dernier = etat.lots.at(-1);
     etat.lots.push({
-      code_produit: dernier?.code_produit ?? etat.identite.produit,
+      code_produit: dernier?.code_produit ?? 'PLUS',
       nb_logements: 1,
       typologie: dernier?.typologie ?? '',
       batiment: dernier?.batiment ?? '',
@@ -1483,6 +1596,10 @@ document.addEventListener('click', (ev) => {
 
 // ---------------------------------------------------------------- demarrage
 
-rendreSelectProduit();
+appliquerTheme(themeInitial());
 rendreChampsStatiques();
 rafraichirTout();
+
+// Signale a la page que les gestionnaires sont poses. Sans ce drapeau, une
+// ouverture en file:// laisse une interface complete mais inerte, sans rien dire.
+window.__moteurDemarre = true;

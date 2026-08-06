@@ -36,12 +36,48 @@ import { produit } from './produits.js';
  * @returns {{ht_eur: number, tva_eur: number, ttc_eur: number}}
  */
 export function ventilerPoste(poste) {
-  const tva = poste.montant_ht_eur * poste.taux_tva;
+  const ht = montantHTPoste(poste);
+  const tva = ht * (poste.taux_tva ?? 0);
   return {
-    ht_eur: poste.montant_ht_eur,
+    ht_eur: ht,
     tva_eur: tva,
-    ttc_eur: poste.montant_ht_eur + tva,
+    ttc_eur: ht + tva,
   };
+}
+
+/**
+ * R-TVA-3 — Montant HT d'un poste, quel que soit son mode de saisie.
+ *
+ * Un poste se saisit de DEUX facons, au choix, ligne par ligne :
+ *  - un montant GLOBAL (`montant_ht_eur`), que le moteur ventile au prorata de
+ *    surface utile ;
+ *  - un montant PAR TRANCHE (`montants_ht_par_produit`), quand la depense n'est
+ *    pas proportionnelle aux surfaces — un ascenseur qui ne dessert qu'un
+ *    batiment, une subvention de travaux propre a une tranche.
+ *
+ * Des que la saisie par tranche existe, elle FAIT FOI et le total en decoule.
+ * L'inverse ferait cohabiter deux verites pour la meme grandeur.
+ *
+ * @param {{montant_ht_eur?: number, montants_ht_par_produit?: Record<string, number>}} poste
+ * @returns {number}
+ */
+export function montantHTPoste(poste) {
+  const parTranche = poste.montants_ht_par_produit;
+  if (!parTranche) return poste.montant_ht_eur ?? 0;
+  return Object.values(parTranche).reduce((s, v) => s + (v ?? 0), 0);
+}
+
+/**
+ * R-TVA-2 — Taux de TVA applicable a un poste POUR UNE TRANCHE donnee.
+ * Le taux se surcharge tranche par tranche : une meme ligne de travaux peut
+ * relever de 5,5 % en PLAI et de 10 % en PLUS. A defaut, le taux de la ligne.
+ * @param {{taux_tva?: number, taux_tva_par_produit?: Record<string, number>}} poste
+ * @param {string} code
+ * @returns {number}
+ */
+export function tauxTVAPoste(poste, code) {
+  const t = poste.taux_tva_par_produit?.[code];
+  return t !== undefined && t !== null ? t : (poste.taux_tva ?? 0);
 }
 
 /**
@@ -92,7 +128,7 @@ export function prixDeRevient({ code_produit, postes, modulation_ttc_eur = 0 }, 
   for (const poste of postes) {
     const v = ventilerPoste(poste);
     // R-TVA-2 : un poste hors champ LASM conserve sa TVA de saisie.
-    const ttcFinal = poste.hors_lasm ? v.ttc_eur : poste.montant_ht_eur * (1 + taux_lasm);
+    const ttcFinal = poste.hors_lasm ? v.ttc_eur : v.ht_eur * (1 + taux_lasm);
     const c = (chapitres[poste.chapitre] ??= { ht_eur: 0, tva_eur: 0, ttc_eur: 0, ttc_lasm_eur: 0 });
     c.ht_eur += v.ht_eur;
     c.tva_eur += v.tva_eur;
@@ -193,14 +229,22 @@ export function prixDeRevientVentile(
   const detail = postes.map((poste) => {
     const v = ventilerPoste(poste);
     const ch = (chapitresExacts[poste.chapitre] ??= { ht: 0, tva: 0, ttc: 0, ttcLasm: 0 });
+    // Une ligne saisie tranche par tranche impose sa repartition ; les autres
+    // suivent la cle de l'operation (prorata de surface utile).
+    const explicite = poste.montants_ht_par_produit;
     const parTranche = {};
     for (const code of codes) {
-      const ht = poste.montant_ht_eur * parts[code];
-      const tva = ht * poste.taux_tva;
+      const ht = explicite ? (explicite[code] ?? 0) : v.ht_eur * parts[code];
+      const taux = tauxTVAPoste(poste, code);
+      const tva = ht * taux;
       // R-TVA-2 : un poste hors champ LASM conserve la TVA de saisie.
       const ttcLasm = poste.hors_lasm ? ht + tva : ht * (1 + tauxLasmParTranche[code]);
       parTranche[code] = {
-        part: parts[code],
+        // Part REELLEMENT appliquee, et non la cle de l'operation : sur une
+        // ligne ventilee a la main, afficher le prorata SU mentirait.
+        part: v.ht_eur > 0 ? ht / v.ht_eur : parts[code],
+        explicite: Boolean(explicite),
+        taux_tva: taux,
         ht_eur: ht,
         tva_eur: tva,
         ttc_eur: ht + tva,
@@ -215,12 +259,22 @@ export function prixDeRevientVentile(
       ch.ttc += ht + tva;
       ch.ttcLasm += ttcLasm;
     }
+    // Totaux de LIGNE recomposes depuis les tranches, et non recalcules au taux
+    // global : des que les taux different d'une tranche a l'autre, le produit
+    // total x taux_global ne vaut plus la somme des TVA reellement dues.
+    const sommeTranches = (cle) =>
+      Object.values(parTranche).reduce((s, t) => s + t[cle], 0);
+
     return {
       id: poste.id,
       chapitre: poste.chapitre,
       libelle: poste.libelle,
       taux_tva: poste.taux_tva,
+      ventile_a_la_main: Boolean(explicite),
       ht_eur: arrondiEuro(v.ht_eur),
+      tva_eur: arrondiEuro(sommeTranches('tva_eur')),
+      ttc_eur: arrondiEuro(sommeTranches('ttc_eur')),
+      ttc_lasm_eur: arrondiEuro(sommeTranches('ttc_lasm_eur')),
       par_tranche: parTranche,
     };
   });

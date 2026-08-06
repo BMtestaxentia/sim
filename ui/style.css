@@ -426,6 +426,27 @@ input[type='number'] { text-align: right; font-variant-numeric: tabular-nums; }
 .tableau--nomenclature .chapitre-total td {
   font-weight: 650; color: var(--text-primary); background: var(--bg-secondary);
 }
+/* Ligne non renseignee : presente pour etre remplie, mais elle ne doit pas
+   peser autant qu'une ligne portant un montant. */
+.poste--vide .libelle-poste, .poste--vide .num-poste { color: var(--text-tertiary); }
+
+/* Colonnes de tranche : un filet a la teinte du produit, pour retrouver d'un
+   coup d'oeil a quelle tranche appartient une colonne dans une table large. */
+.col-tranche { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--cat, var(--cat-6)) 55%, transparent); }
+.tableau th.col-tranche { color: var(--cat, var(--cat-6)); }
+.col-action { width: 1%; padding-left: 0 !important; padding-right: 2px !important; }
+
+/* Bouton de ventilation d'une ligne de prix de revient. */
+.bouton--ventiler {
+  appearance: none; border: 1px solid transparent; cursor: pointer;
+  width: 24px; height: 24px; padding: 0; border-radius: var(--radius-sm);
+  display: grid; place-items: center; font-size: 13px; line-height: 1;
+  background: var(--bg-tertiary); color: var(--text-tertiary);
+}
+.bouton--ventiler:hover { background: var(--info-bg); color: var(--info-text); border-color: var(--info-accent); }
+.bouton--ventiler[aria-pressed='true'] { background: var(--info-bg); color: var(--info-text); }
+/* Ligne ventilee : son total n'est plus saisi mais calcule, on le dit. */
+.poste--ventile [data-calc='total'] { font-weight: 650; color: var(--text-primary); }
 
 /* ============================================================ INDICATEURS */
 

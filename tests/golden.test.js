@@ -123,7 +123,7 @@ describe('golden — MULHOUSE 3308 LIBRE (annexe LEON, chaine complete)', () => 
   const T = attendus.totaux_plan_financement;
 
   const entreesLibre = {
-      identite: { nom: 'MULHOUSE LIBRE', produit: 'LIBRE', zone_123: 2, zone_ABC: 'B1', type_operation: 'VEFA' },
+      identite: { nom: 'MULHOUSE LIBRE', zone_123: 2, zone_ABC: 'B1', type_operation: 'VEFA' },
       dates: { annee_mise_en_location: 2026, duree_simulation_ans: 18 },
       lots: [{ code_produit: 'LIBRE', nb_logements: 11, shab_m2: 545.8, surfaces_annexes_m2: 0 }],
       // Postes repris de l'annexe, avec leur chapitre. `hors_lasm` parce que
@@ -285,7 +285,7 @@ describe('golden — MULHOUSE 3307 LLI (bilan et plan de financement)', () => {
 
   const resultat = calculer(
     {
-      identite: { nom: 'MULHOUSE LLI', produit: 'LOC', zone_123: 2, zone_ABC: 'B1', type_operation: 'VEFA' },
+      identite: { nom: 'MULHOUSE LLI', zone_123: 2, zone_ABC: 'B1', type_operation: 'VEFA' },
       dates: { annee_mise_en_location: 2026, duree_simulation_ans: 18 },
       // Le loyer LLI n'est pas testable : son bareme est absent du referentiel
       // (defaut V5 connu). On passe par le produit LIBRE, dont seul le prix de

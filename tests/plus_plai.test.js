@@ -32,7 +32,7 @@ const REFERENTIELS = { baremes, trajectoires };
 /** Operation type : 30 logements PLUS et 10 PLAI, VEFA zone 2 / B1. */
 function operation(surcharges = {}) {
   return {
-    identite: { nom: 'Test PLUS-PLAI', produit: 'PLUS', zone_123: 2, zone_ABC: 'B1', type_operation: 'VEFA' },
+    identite: { nom: 'Test PLUS-PLAI', zone_123: 2, zone_ABC: 'B1', type_operation: 'VEFA' },
     dates: { annee_mise_en_location: 2028, duree_simulation_ans: 40 },
     lots: [
       { code_produit: 'PLUS', nb_logements: 30, shab_m2: 1800, surfaces_annexes_m2: 200 },
@@ -157,7 +157,7 @@ describe('PLUS 33 % — majoration multiplicative (arbitrage I-6)', () => {
   it('applique x1,33 au loyer de base, et non +0,33', () => {
     const r = calculer(
       operation({
-        identite: { nom: 'Test PLUS33', produit: 'PLUS33', zone_123: 2, zone_ABC: 'B1', type_operation: 'VEFA' },
+        identite: { nom: 'Test PLUS33', zone_123: 2, zone_ABC: 'B1', type_operation: 'VEFA' },
         lots: [{ code_produit: 'PLUS33', nb_logements: 30, shab_m2: 1800, surfaces_annexes_m2: 200 }],
       }),
       REFERENTIELS,
@@ -172,7 +172,7 @@ describe('PLUS / PLAI — robustesse de la saisie', () => {
   it('une operation mono-PLAI ne casse rien', () => {
     const r = calculer(
       operation({
-        identite: { nom: 'PLAI seul', produit: 'PLAI', zone_123: 1, zone_ABC: 'A', type_operation: 'Neuf' },
+        identite: { nom: 'PLAI seul', zone_123: 1, zone_ABC: 'A', type_operation: 'Neuf' },
         lots: [{ code_produit: 'PLAI', nb_logements: 12, shab_m2: 700, surfaces_annexes_m2: 0 }],
       }),
       REFERENTIELS,
@@ -212,7 +212,7 @@ describe('PLUS / PLAI — robustesse de la saisie', () => {
     expect(() =>
       calculer(
         operation({
-          identite: { nom: 'Zone absente', produit: 'PLUS', zone_ABC: 'B1', type_operation: 'VEFA' },
+          identite: { nom: 'Zone absente', zone_ABC: 'B1', type_operation: 'VEFA' },
         }),
         REFERENTIELS,
       ),

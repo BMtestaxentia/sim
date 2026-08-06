@@ -47,7 +47,7 @@ export const VERSION_MOTEUR = '0.4.0';
 
 /**
  * @typedef {Object} Entrees
- * @property {Object} identite            nom, produit, zones, type d'operation
+ * @property {Object} identite            nom, zones, type d'operation (PAS de produit)
  * @property {Object} dates               annee de mise en location, duree de simulation
  * @property {Array<Object>} lots         programme physique par produit
  * @property {Array<Object>} [postes_bilan]
@@ -183,12 +183,6 @@ export function calculer(entrees, referentiels) {
   // defaut. Le seul repli est l'operation MONO-tranche, ou l'unique produit
   // present tient lieu de reference pour ce que la saisie n'a pas affecte.
   const trancheUnique = codesPresents.length === 1 ? codesPresents[0] : null;
-  if (identite.produit) {
-    alertes.push(
-      `identite.produit (${identite.produit}) est ignore : il n'y a pas de produit ` +
-        'principal. Chaque tranche porte son taux de TVA, son zonage et ses prets CDC.',
-    );
-  }
   const postesBilan = entrees.postes_bilan ?? [];
   const modulation = entrees.modulation_ttc_eur ?? 0;
 

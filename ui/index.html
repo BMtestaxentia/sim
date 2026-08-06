@@ -329,24 +329,22 @@
         <h2 class="bloc__titre">
           Prix de revient
           <span class="bloc__outils">
+            <button type="button" class="bouton bouton--ajout" id="btn-ventiler-tout" hidden></button>
+            <label class="interrupteur">
+              <input type="checkbox" id="afficher-tva" checked />
+              <span>TVA</span>
+            </label>
             <label class="interrupteur">
               <input type="checkbox" id="masquer-vides" />
               <span>Masquer les lignes non renseignées</span>
             </label>
           </span>
         </h2>
+        <!-- L'en-tete est GENERE : le nombre de colonnes depend des tranches
+             presentes au programme et de l'affichage de la TVA. -->
         <div class="table-defilante">
           <table class="tableau tableau--saisie tableau--nomenclature" id="table-postes">
-            <thead>
-              <tr>
-                <th class="num">N°</th>
-                <th>Poste</th>
-                <th class="num">Montant HT (€)</th>
-                <th class="num">TVA</th>
-                <th class="num calc">TVA (€)</th>
-                <th class="num calc">TTC saisie (€)</th>
-              </tr>
-            </thead>
+            <thead></thead>
             <tbody></tbody>
             <tfoot></tfoot>
           </table>

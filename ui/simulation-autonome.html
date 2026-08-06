@@ -440,6 +440,27 @@ input[type='number'] { text-align: right; font-variant-numeric: tabular-nums; }
 .tableau--nomenclature .chapitre-total td {
   font-weight: 650; color: var(--text-primary); background: var(--bg-secondary);
 }
+/* Ligne non renseignee : presente pour etre remplie, mais elle ne doit pas
+   peser autant qu'une ligne portant un montant. */
+.poste--vide .libelle-poste, .poste--vide .num-poste { color: var(--text-tertiary); }
+
+/* Colonnes de tranche : un filet a la teinte du produit, pour retrouver d'un
+   coup d'oeil a quelle tranche appartient une colonne dans une table large. */
+.col-tranche { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--cat, var(--cat-6)) 55%, transparent); }
+.tableau th.col-tranche { color: var(--cat, var(--cat-6)); }
+.col-action { width: 1%; padding-left: 0 !important; padding-right: 2px !important; }
+
+/* Bouton de ventilation d'une ligne de prix de revient. */
+.bouton--ventiler {
+  appearance: none; border: 1px solid transparent; cursor: pointer;
+  width: 24px; height: 24px; padding: 0; border-radius: var(--radius-sm);
+  display: grid; place-items: center; font-size: 13px; line-height: 1;
+  background: var(--bg-tertiary); color: var(--text-tertiary);
+}
+.bouton--ventiler:hover { background: var(--info-bg); color: var(--info-text); border-color: var(--info-accent); }
+.bouton--ventiler[aria-pressed='true'] { background: var(--info-bg); color: var(--info-text); }
+/* Ligne ventilee : son total n'est plus saisi mais calcule, on le dit. */
+.poste--ventile [data-calc='total'] { font-weight: 650; color: var(--text-primary); }
 
 /* ============================================================ INDICATEURS */
 
@@ -979,24 +1000,22 @@ input[type='number'] { text-align: right; font-variant-numeric: tabular-nums; }
         <h2 class="bloc__titre">
           Prix de revient
           <span class="bloc__outils">
+            <button type="button" class="bouton bouton--ajout" id="btn-ventiler-tout" hidden></button>
+            <label class="interrupteur">
+              <input type="checkbox" id="afficher-tva" checked />
+              <span>TVA</span>
+            </label>
             <label class="interrupteur">
               <input type="checkbox" id="masquer-vides" />
               <span>Masquer les lignes non renseignées</span>
             </label>
           </span>
         </h2>
+        <!-- L'en-tete est GENERE : le nombre de colonnes depend des tranches
+             presentes au programme et de l'affichage de la TVA. -->
         <div class="table-defilante">
           <table class="tableau tableau--saisie tableau--nomenclature" id="table-postes">
-            <thead>
-              <tr>
-                <th class="num">N°</th>
-                <th>Poste</th>
-                <th class="num">Montant HT (€)</th>
-                <th class="num">TVA</th>
-                <th class="num calc">TVA (€)</th>
-                <th class="num calc">TTC saisie (€)</th>
-              </tr>
-            </thead>
+            <thead></thead>
             <tbody></tbody>
             <tfoot></tfoot>
           </table>
@@ -2422,12 +2441,48 @@ function controlesLoyer(loyer, code_produit) {
  * @returns {{ht_eur: number, tva_eur: number, ttc_eur: number}}
  */
 function ventilerPoste(poste) {
-  const tva = poste.montant_ht_eur * poste.taux_tva;
+  const ht = montantHTPoste(poste);
+  const tva = ht * (poste.taux_tva ?? 0);
   return {
-    ht_eur: poste.montant_ht_eur,
+    ht_eur: ht,
     tva_eur: tva,
-    ttc_eur: poste.montant_ht_eur + tva,
+    ttc_eur: ht + tva,
   };
+}
+
+/**
+ * R-TVA-3 — Montant HT d'un poste, quel que soit son mode de saisie.
+ *
+ * Un poste se saisit de DEUX facons, au choix, ligne par ligne :
+ *  - un montant GLOBAL (`montant_ht_eur`), que le moteur ventile au prorata de
+ *    surface utile ;
+ *  - un montant PAR TRANCHE (`montants_ht_par_produit`), quand la depense n'est
+ *    pas proportionnelle aux surfaces — un ascenseur qui ne dessert qu'un
+ *    batiment, une subvention de travaux propre a une tranche.
+ *
+ * Des que la saisie par tranche existe, elle FAIT FOI et le total en decoule.
+ * L'inverse ferait cohabiter deux verites pour la meme grandeur.
+ *
+ * @param {{montant_ht_eur?: number, montants_ht_par_produit?: Record<string, number>}} poste
+ * @returns {number}
+ */
+function montantHTPoste(poste) {
+  const parTranche = poste.montants_ht_par_produit;
+  if (!parTranche) return poste.montant_ht_eur ?? 0;
+  return Object.values(parTranche).reduce((s, v) => s + (v ?? 0), 0);
+}
+
+/**
+ * R-TVA-2 — Taux de TVA applicable a un poste POUR UNE TRANCHE donnee.
+ * Le taux se surcharge tranche par tranche : une meme ligne de travaux peut
+ * relever de 5,5 % en PLAI et de 10 % en PLUS. A defaut, le taux de la ligne.
+ * @param {{taux_tva?: number, taux_tva_par_produit?: Record<string, number>}} poste
+ * @param {string} code
+ * @returns {number}
+ */
+function tauxTVAPoste(poste, code) {
+  const t = poste.taux_tva_par_produit?.[code];
+  return t !== undefined && t !== null ? t : (poste.taux_tva ?? 0);
 }
 
 /**
@@ -2478,7 +2533,7 @@ function prixDeRevient({ code_produit, postes, modulation_ttc_eur = 0 }, referen
   for (const poste of postes) {
     const v = ventilerPoste(poste);
     // R-TVA-2 : un poste hors champ LASM conserve sa TVA de saisie.
-    const ttcFinal = poste.hors_lasm ? v.ttc_eur : poste.montant_ht_eur * (1 + taux_lasm);
+    const ttcFinal = poste.hors_lasm ? v.ttc_eur : v.ht_eur * (1 + taux_lasm);
     const c = (chapitres[poste.chapitre] ??= { ht_eur: 0, tva_eur: 0, ttc_eur: 0, ttc_lasm_eur: 0 });
     c.ht_eur += v.ht_eur;
     c.tva_eur += v.tva_eur;
@@ -2579,14 +2634,22 @@ function prixDeRevientVentile(
   const detail = postes.map((poste) => {
     const v = ventilerPoste(poste);
     const ch = (chapitresExacts[poste.chapitre] ??= { ht: 0, tva: 0, ttc: 0, ttcLasm: 0 });
+    // Une ligne saisie tranche par tranche impose sa repartition ; les autres
+    // suivent la cle de l'operation (prorata de surface utile).
+    const explicite = poste.montants_ht_par_produit;
     const parTranche = {};
     for (const code of codes) {
-      const ht = poste.montant_ht_eur * parts[code];
-      const tva = ht * poste.taux_tva;
+      const ht = explicite ? (explicite[code] ?? 0) : v.ht_eur * parts[code];
+      const taux = tauxTVAPoste(poste, code);
+      const tva = ht * taux;
       // R-TVA-2 : un poste hors champ LASM conserve la TVA de saisie.
       const ttcLasm = poste.hors_lasm ? ht + tva : ht * (1 + tauxLasmParTranche[code]);
       parTranche[code] = {
-        part: parts[code],
+        // Part REELLEMENT appliquee, et non la cle de l'operation : sur une
+        // ligne ventilee a la main, afficher le prorata SU mentirait.
+        part: v.ht_eur > 0 ? ht / v.ht_eur : parts[code],
+        explicite: Boolean(explicite),
+        taux_tva: taux,
         ht_eur: ht,
         tva_eur: tva,
         ttc_eur: ht + tva,
@@ -2601,12 +2664,22 @@ function prixDeRevientVentile(
       ch.ttc += ht + tva;
       ch.ttcLasm += ttcLasm;
     }
+    // Totaux de LIGNE recomposes depuis les tranches, et non recalcules au taux
+    // global : des que les taux different d'une tranche a l'autre, le produit
+    // total x taux_global ne vaut plus la somme des TVA reellement dues.
+    const sommeTranches = (cle) =>
+      Object.values(parTranche).reduce((s, t) => s + t[cle], 0);
+
     return {
       id: poste.id,
       chapitre: poste.chapitre,
       libelle: poste.libelle,
       taux_tva: poste.taux_tva,
+      ventile_a_la_main: Boolean(explicite),
       ht_eur: arrondiEuro(v.ht_eur),
+      tva_eur: arrondiEuro(sommeTranches('tva_eur')),
+      ttc_eur: arrondiEuro(sommeTranches('ttc_eur')),
+      ttc_lasm_eur: arrondiEuro(sommeTranches('ttc_lasm_eur')),
       par_tranche: parTranche,
     };
   });
@@ -3621,7 +3694,7 @@ const VERSION_MOTEUR = '0.4.0';
 
 /**
  * @typedef {Object} Entrees
- * @property {Object} identite            nom, produit, zones, type d'operation
+ * @property {Object} identite            nom, zones, type d'operation (PAS de produit)
  * @property {Object} dates               annee de mise en location, duree de simulation
  * @property {Array<Object>} lots         programme physique par produit
  * @property {Array<Object>} [postes_bilan]
@@ -3757,12 +3830,6 @@ function calculer(entrees, referentiels) {
   // defaut. Le seul repli est l'operation MONO-tranche, ou l'unique produit
   // present tient lieu de reference pour ce que la saisie n'a pas affecte.
   const trancheUnique = codesPresents.length === 1 ? codesPresents[0] : null;
-  if (identite.produit) {
-    alertes.push(
-      `identite.produit (${identite.produit}) est ignore : il n'y a pas de produit ` +
-        'principal. Chaque tranche porte son taux de TVA, son zonage et ses prets CDC.',
-    );
-  }
   const postesBilan = entrees.postes_bilan ?? [];
   const modulation = entrees.modulation_ttc_eur ?? 0;
 
@@ -4210,6 +4277,7 @@ function calculer(entrees, referentiels) {
  */
 
 
+
 const $ = (sel) => /** @type {HTMLElement} */ (document.querySelector(sel));
 
 const referentiels = {"baremes":{"date_valeur":"2025-01-01","source":"LEON 2025-042d, onglet ParaGEN, profil AXENTIA HER 2026 (PMT 2025), extrait le 2026-08-04","note":"Baremes reglementaires versionnes. Toutes les valeurs sont lues dans la matrice, aucune n'est inventee. Les cellules sources sont citees pour audit.","loyers_max_zone_123":{"unite":"EUR/m2 SU/mois","source":"ParaGEN!D22:G24 (plage LMZone_Neuf)","zones":["zone_1","zone_2","zone_3","zone_1bis"],"PLUS":[7.32,6.42,5.95,7.77],"PLAI":[6.5,5.71,5.28,6.93],"LIBRE":[15,11,8,18]},"loyers_max_zone_ABC":{"unite":"EUR/m2 SU/mois","source":"ParaGEN!D56:H59","zones":["A","A_bis","B1","B2","C"],"PLS":[11.68,15.16,10.07,9.64,8.94],"PLI":[14.49,19.51,11.68,10.15,10.15],"PSLA_plafond_loyer":[11.75,15.3,10.13,9.73,9],"PSLA_plafond_prix_vente_ht":[4675,6170,3744,3269,2857]},"valeurs_de_base":{"unite":"EUR/m2","usage":"Assiette subvention (VB), MQECO ; selectionne par zone_123 x neuf/acquisition x collectif/individuel","source":"ParaGEN!D36:G41","zones":["zone_1","zone_2","zone_3","zone_1bis"],"neuf":{"collectif":[1767,1473,1473,1767],"individuel":[1767,1619,1619,1767]},"acquisition":{"collectif":[1767,1382,1382,1767],"individuel":[1767,1473,1473,1767]}},"taxe_amenagement":{"unite":"EUR/m2 (valeur forfaitaire)","source":"ParaGEN!B31:B32 ; selection IdF si zone A ou A bis (calculs!B1254)","hors_idf":930,"idf":1054,"abattement_logement_social":0.5,"abattement_source":"50 % reglementaire, applique via ParaGLOB!H54 dans l'assiette (calculs!B1255)"},"versement_sous_densite":{"plafond_valeur_terrain":0.25,"part_valeur_terrain":0.5,"source":"R-FISC-3 ; MIN(valeur_terrain/2 * (1 - SDP/(seuil*surface)), 25 % * valeur_terrain)"},"quotites_foncier_vefa":{"usage":"Ventilation d'un prix global en foncier/batiment. Ligne 'terrain' = quote-part terrain pour le pret foncier ; ligne 'ssf_pge' = quote-part pour l'assiette SSF et la valeur comptable terrain.","source":"ParaGEN!C61:H69 (plage qpFonc_VEFA), mode de calcul du pret foncier : ParaGEN!A64 = 'global'","zones":["A","A_bis","B1","B2","C"],"terrain_vefa":[0.35,0.45,0.3,0.25,0.2],"terrain_acq_amelioration":[0.35,0.45,0.3,0.25,0.2],"valeur_comptable_terrain_vefa":[0.25,0.25,0.13,0.13,0.11],"ssf_pge_acq_amelioration":[0.6,0.6,0.6,0.6,0.6]},"tva":{"source":"calculs!B1223:B1228, ParaGLOB!J44/J46, ParaGEN!A77:H78","taux_reduit_simulation":0.1,"taux_normal":0.2,"lasm_par_produit":{"note":"PLUS/PLAI utilise le taux reduit de la simulation (ParaGLOB!J44 = 10 % actuellement) et non la valeur 5,5 % du tableau historique ParaGEN!A78. Les autres produits lisent ParaGEN!78.","PLUS_PLAI":0.1,"PLUS_CD":0.055,"PLS":0.1,"LLI_PLI":0.1,"LIBRE":0.2,"ACCESSION":0.2,"REHAB":0.1,"FOYER_PLUS":0.055}},"constantes_reglementaires":{"coefficient_surface_annexes":{"valeur":0.5,"usage":"Surface utile = SHAB + 0,5 x surfaces annexes (R-SURF-1)","source":"calculs!D384 (terme 0.5*ParaCD!$F$28), regle reglementaire"},"coefficient_structure":{"source":"calculs!D91:D116","metropole_habitat":{"base":0.77,"facteur_nl":20,"formule":"CS = 0.77 * (1 + 20 * NL / SU)"},"foyers":{"facteur_nl":38},"dom":{"base":0.685,"facteur_nl":31,"formule":"CS = 0.685 * (31 * NL + SF) / SF"}},"majoration_plus_33":0.33,"majoration_loyers_depassement_plafonds":{"valeur":0.33,"source":"COMMUN!B22"},"marge_locale_plafond_defaut":{"valeur":0.12,"source":"ParaPLUS!AD30 (saisi par simulation)"},"majoration_lcr":{"regle":"ratio < seuil_bas -> 0 ; ratio > seuil_haut -> majoration_au_dessus ; sinon ratio/100","seuil_bas":10,"seuil_haut":20,"majoration_au_dessus":0.02,"source":"calculs!B152:B153"},"ssf":{"seuil_participation_collectivites":0.4,"part_max_depassement":0.5,"plafond_si_sous_seuil":"min(taux_depassement_plafonne * reference, part_max_depassement * depassement)","taux_subvention":{"neuf":2,"neuf_dom":3,"acq_amelioration":0.4},"taux_depassement_plafonne":{"neuf":1,"acq_amelioration":0.2},"source":"calculs!D275:G276"},"prets_cdc_defauts":{"source":"SimPLUS!AL10:AP21","taux":{"PLUS":"LA + 0.006","PLAI":"LA - 0.002"},"duree_construction_ans":40,"duree_foncier_ans":{"zones_B2_C":50,"autres_zones":60},"revisabilite":"DOUBLE","progressivite_axentia":-0.005,"premiere_echeance":"annee(mise_en_location) + 1 an (+0 si demembrement)"},"controle_ratio_prets_cdc_min":{"valeur":0.5,"source":"calculs!B1234:B1235"},"tfpb":{"montant_par_logement_eur":345,"duree_exoneration_defaut_ans":25,"source":"SimPLUS!A37/G37 ; duree parametrable par simulation (irregularite I-7 du dictionnaire)"},"arrondi_prets":"milliers superieurs si option active (SimPLUS!AR26)","arrondi_cs_loyers":{"flag_global":"ParaGEN!B26 (NON chez AXENTIA)","cs_decimales":4,"loyers_decimales":2}},"charges_exploitation":{"note":"Postes de charge du compte d'exploitation autres que les annuites, les frais de gestion, la TFPB et le gros entretien, qui ont leur propre entree. Reponse a la question Q-16. Chaque poste est une DONNEE : son assiette, sa valeur et sa trajectoire d'indexation se lisent ici, aucun n'est cable dans le code (lecon I-2). AUCUN n'est actif par defaut : c'est la saisie qui les active, sans quoi les fixtures existantes changeraient de resultat en silence.","assiettes_admises":{"logement":"valeur en EUR par logement et par an","produits_locatifs_bruts":"taux applique aux loyers (ou a la redevance en foyer) avant vacance et impayes","produits_locatifs_nets":"taux applique aux produits locatifs apres vacance et impayes","shab":"valeur en EUR par m2 de surface habitable et par an","prix_revient_ttc":"taux applique au prix de revient TTC module","forfait":"montant annuel en EUR, independant du programme"},"postes":[{"code":"teom","libelle":"Taxe d'enlèvement des ordures ménagères","assiette":"logement","valeur":117,"index":"tfpb","source":"Maquette LEON REWORK, ADMIN. Dans LEON la TEOM etait fondue dans la TFPB sous la forme `345+117*0` (irregularite I-2) : la maquette les separe, le moteur aussi."},{"code":"assurance_pno","libelle":"Assurance propriétaire non occupant","assiette":"logement","valeur":75,"index":"gestion","source":"Maquette LEON REWORK, ADMIN."},{"code":"cgls","libelle":"Cotisation CGLLS","assiette":"produits_locatifs_bruts","valeur":0.0034,"index":null,"source":"Maquette LEON REWORK, ADMIN. Taux NET, deja diminue des reductions legales. Le referentiel cotisations_her_pmt2026.json porte le taux BRUT de 2,416 % et ses reductions : les deux ne se cumulent pas, voir Q-29."},{"code":"ancols","libelle":"Cotisation ANCOLS","assiette":"produits_locatifs_bruts","valeur":0.00045,"index":null,"source":"cotisations_her_pmt2026.json, taux 2026 reconduit. L'assiette exacte reste a confirmer (la note HER dit « a confirmer (produits locatifs) »)."}]}},"trajectoires":{"profil":"AXENTIA HER 2026 (PMT 2025)","source":"LEON 2025-042d, ParaGEN!GS22:HE72, extrait le 2026-08-04","taux_livret_a_courant":0.017,"marge_anticipee_livret_a":0,"note":"Taux d'evolution annuels par poste et trajectoire Livret A du scenario. Colonnes GT20/GU20/GW20/GZ20 (flags OUI/NON) indiquent si la trajectoire calendaire est active par poste ; sinon LEON applique un taux constant.","trajectoires":[{"annee":2023,"gros_entretien":0.053,"gestion":0.035,"vacance_impayes":null,"loyers_irl":0.035,"frais_financiers":0.029,"produits_financiers":0.029,"tfpb":0.078,"livret_a":0.029,"rel":0,"crl":0},{"annee":2024,"gros_entretien":0.028,"gestion":0.035,"vacance_impayes":null,"loyers_irl":0.035,"frais_financiers":0.03,"produits_financiers":0.03,"tfpb":0.053,"livret_a":0.03,"rel":0,"crl":0},{"annee":2025,"gros_entretien":0.027,"gestion":0.0326,"vacance_impayes":null,"loyers_irl":0.0326,"frais_financiers":0.0275,"produits_financiers":0.0275,"tfpb":0.055,"livret_a":0.0275,"rel":0,"crl":0},{"annee":2026,"gros_entretien":0.025,"gestion":0.023,"vacance_impayes":null,"loyers_irl":0.023,"frais_financiers":0.0225,"produits_financiers":0.0225,"tfpb":0.05,"livret_a":0.0225,"rel":0,"crl":0},{"annee":2027,"gros_entretien":0.024,"gestion":0.022,"vacance_impayes":null,"loyers_irl":0.022,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2028,"gros_entretien":0.023,"gestion":0.021,"vacance_impayes":null,"loyers_irl":0.021,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2029,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2030,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2031,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2032,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2033,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2034,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2035,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2036,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2037,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2038,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2039,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2040,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2041,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2042,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2043,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2044,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2045,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2046,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2047,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2048,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2049,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2050,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2051,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2052,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2053,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2054,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2055,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2056,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2057,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2058,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2059,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2060,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2061,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2062,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2063,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2064,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2065,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2066,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2067,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2068,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2069,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2070,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2071,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2072,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0},{"annee":2073,"gros_entretien":0.023,"gestion":0.02,"vacance_impayes":null,"loyers_irl":0.02,"frais_financiers":0.02,"produits_financiers":0.02,"tfpb":0.05,"livret_a":0.02,"rel":0,"crl":0}]},"nomenclature_pdr":{"libelle":"Nomenclature du prix de revient","source":"Maquette LEON REWORK, onglet PDR (B8:C67). 5 chapitres, 46 postes.","extrait_le":"2026-08-05","note":"La numerotation comporte des trous (17 a 19 et 28 absents) : elle est reservee par chapitre et n'est pas une simple sequence. Elle est conservee telle quelle pour que la saisie reste comparable a la maquette. L'identifiant `id` est STABLE et independant du numero : c'est lui qui doit servir de cle, jamais le numero ni le rang d'affichage.","chapitres":[{"code":"charge_fonciere","numero":"I","libelle":"Charge foncière","postes":[{"id":"cf_acquisition","numero":1,"libelle":"Acquisition / Terrain"},{"id":"cf_sondages","numero":2,"libelle":"Sondages / Études de sols"},{"id":"cf_demolition","numero":3,"libelle":"Démolition"},{"id":"cf_vrd","numero":4,"libelle":"Travaux VRD"},{"id":"cf_vrd_actualisation","numero":5,"libelle":"Actualisation VRD"},{"id":"cf_vrd_revision","numero":6,"libelle":"Révision VRD"},{"id":"cf_branchements","numero":7,"libelle":"Branchements"},{"id":"cf_taxe_assainissement","numero":8,"libelle":"Taxe assainissement"},{"id":"cf_notaire","numero":9,"libelle":"Frais de notaire"},{"id":"cf_commission_achat","numero":10,"libelle":"Commission achat"},{"id":"cf_taxes_amenagement","numero":11,"libelle":"Taxes aménagement & VSD"},{"id":"cf_fondations_speciales","numero":12,"libelle":"Fondations spéciales"},{"id":"cf_desamiantage","numero":13,"libelle":"Désamiantage"},{"id":"cf_divers_1","numero":14,"libelle":"Divers foncier 1"},{"id":"cf_divers_2","numero":15,"libelle":"Divers foncier 2"},{"id":"cf_divers_3","numero":16,"libelle":"Divers foncier 3"}]},{"code":"batiment","numero":"II","libelle":"Bâtiment","postes":[{"id":"bat_travaux","numero":20,"libelle":"Travaux de construction"},{"id":"bat_actualisation","numero":21,"libelle":"Actual. bâtiment"},{"id":"bat_revision","numero":22,"libelle":"Révision bâtiment"},{"id":"bat_aleas","numero":23,"libelle":"Aléas"},{"id":"bat_divers_1","numero":24,"libelle":"Divers bât. 1"},{"id":"bat_divers_2","numero":25,"libelle":"Divers bât. 2"},{"id":"bat_divers_3","numero":26,"libelle":"Divers bât. 3"},{"id":"bat_divers_4","numero":27,"libelle":"Divers bât. 4"}]},{"code":"honoraires","numero":"III","libelle":"Honoraires","postes":[{"id":"hon_vrd","numero":29,"libelle":"Honoraires VRD"},{"id":"hon_architecte","numero":30,"libelle":"Architecte"},{"id":"hon_bureau_etudes","numero":31,"libelle":"Bureau d'études"},{"id":"hon_amo","numero":32,"libelle":"AMO"},{"id":"hon_geometre","numero":33,"libelle":"Géomètre"},{"id":"hon_opc","numero":34,"libelle":"OPC / Pilotage"},{"id":"hon_controleur","numero":35,"libelle":"Contrôleur technique"},{"id":"hon_assurances","numero":36,"libelle":"Assurances (DO/TRC)"},{"id":"hon_sps","numero":37,"libelle":"SPS / Coord. sécurité"},{"id":"hon_labellisation","numero":38,"libelle":"Labellisation / Certif."},{"id":"hon_conduite_operation","numero":39,"libelle":"Conduite d'opération"},{"id":"hon_dir_investissement","numero":40,"libelle":"Dir. d'investissement"},{"id":"hon_etudes","numero":41,"libelle":"Études"},{"id":"hon_faisabilite","numero":42,"libelle":"Étude de faisabilité"},{"id":"hon_interets_immobilisables","numero":43,"libelle":"Intérêts immobilisables"},{"id":"hon_divers_1","numero":44,"libelle":"Divers hon. 1"},{"id":"hon_divers_2","numero":45,"libelle":"Divers hon. 2"}]},{"code":"frais_divers","numero":"IV","libelle":"Frais divers","postes":[{"id":"fd_actualisation_hon","numero":46,"libelle":"Actual./Rév. hon."},{"id":"fd_divers_1","numero":47,"libelle":"Divers frais 1"},{"id":"fd_divers_2","numero":48,"libelle":"Divers frais 2"}]},{"code":"frais_financiers","numero":"V","libelle":"Frais financiers","postes":[{"id":"ff_interets_prefi","numero":49,"libelle":"Intérêts préfin."},{"id":"ff_divers","numero":50,"libelle":"Frais fin. divers"}]}]}};
@@ -4438,7 +4506,13 @@ const TAUX_TVA = [0.055, 0.1, 0.2, 0];
 function ecrireChemin(cible, chemin, valeur) {
   const cles = chemin.split('.');
   let ref = cible;
-  for (const cle of cles.slice(0, -1)) ref = ref[cle];
+  for (const cle of cles.slice(0, -1)) {
+    // Cree les niveaux manquants : `postes_bilan.3.montants_ht_par_produit.PLS`
+    // doit pouvoir s'ecrire meme si le dictionnaire de tranches n'existe pas
+    // encore. Sans cela la frappe leve au lieu d'ecrire.
+    if (ref[cle] === undefined || ref[cle] === null) ref[cle] = {};
+    ref = ref[cle];
+  }
   ref[cles.at(-1)] = valeur;
 }
 
@@ -4452,6 +4526,59 @@ function att(v) {
 }
 
 const valNum = (v) => (nul(v) ? '' : v);
+
+/**
+ * La TVA occupe une colonne par tranche : on doit pouvoir la replier.
+ *
+ * L'etat vit ICI et non dans la case a cocher : l'attribut `checked` du HTML ne
+ * decide que de la valeur initiale, et le navigateur restaure parfois l'etat
+ * d'un rechargement par-dessus. La colonne disparaissait alors sans raison.
+ */
+let tvaVisible = true;
+const afficherTVA = () => tvaVisible;
+
+/** Une ligne de prix de revient est-elle saisie tranche par tranche ? */
+const estVentile = (p) => Boolean(p.montants_ht_par_produit);
+
+/**
+ * Total HT d'une ligne, miroir exact de `montantHTPoste` cote moteur. Une ligne
+ * ventilee dont toutes les tranches sont vides reste VIDE et ne vaut pas zero :
+ * la nuance decide de son affichage en « non renseignee ».
+ */
+function totalPoste(p) {
+  if (!p.montants_ht_par_produit) return p.montant_ht_eur;
+  const valeurs = Object.values(p.montants_ht_par_produit);
+  return valeurs.every(nul) ? null : valeurs.reduce((s, v) => s + (v ?? 0), 0);
+}
+
+/**
+ * Ventile une ligne sur les tranches au prorata de surface utile, ou la
+ * regroupe en un total unique.
+ *
+ * La repartition passe par `arrondirEnConservantLaSomme` : sans elle, trois
+ * tranches sur un montant impair perdraient des centimes et le total ventile
+ * cesserait d'egaler le total saisi.
+ */
+function basculerVentilation(p, ventiler, quotesParts) {
+  const codes = tranchesActives();
+  if (!ventiler) {
+    // Regroupement : le total constate devient le montant global, et les
+    // montants par tranche disparaissent pour qu'il n'en reste qu'une version.
+    const total = totalPoste(p);
+    p.montant_ht_eur = total;
+    delete p.montants_ht_par_produit;
+    delete p.taux_tva_par_produit;
+    return;
+  }
+  const total = totalPoste(p) ?? 0;
+  const parts = arrondirEnConservantLaSomme(
+    codes.map((c) => (quotesParts[c] ?? 1 / codes.length) * total),
+  );
+  p.montants_ht_par_produit = Object.fromEntries(codes.map((c, i) => [c, parts[i]]));
+  // Le taux de la ligne devient le taux de depart de chaque tranche : la
+  // ventilation ne doit rien changer au calcul tant qu'on ne le modifie pas.
+  p.taux_tva_par_produit = Object.fromEntries(codes.map((c) => [c, p.taux_tva ?? 0]));
+}
 
 /**
  * Fraction vers pourcentage POUR LA SAISIE, sans trainee flottante : 0,0034 x 100
@@ -4763,46 +4890,152 @@ function rendreStructure() {
       TYPOLOGIES.map((t) => `<option value="${t}" ${t === 'T2' ? 'selected' : ''}>${t}</option>`).join('');
   }
 
-  // --- Prix de revient : nomenclature complete, groupee par chapitre ---
+  rendreTablePrixRevient();
+}
+
+/**
+ * R-TVA-3 — Table du prix de revient : un total qui se ventile, et une colonne
+ * par tranche.
+ *
+ * Deux modes de saisie coexistent LIGNE PAR LIGNE :
+ *  - total global, que le moteur ventile au prorata de surface utile ;
+ *  - montants par tranche, quand la depense n'y est pas proportionnelle
+ *    (un ascenseur qui ne dessert qu'un batiment). Le total en decoule alors.
+ *
+ * Les colonnes par tranche n'apparaissent qu'a partir de DEUX tranches : sur une
+ * operation mono-produit elles ne feraient que recopier le total.
+ */
+function rendreTablePrixRevient() {
+  const table = $('#table-postes');
+  const codes = tranchesActives();
+  const parTranche = codes.length > 1;
+  const tva = afficherTVA();
   const masquerVides = /** @type {HTMLInputElement} */ (document.getElementById('masquer-vides'))?.checked;
-  const lignesPdr = [];
+  // La case suit l'etat, jamais l'inverse.
+  const caseTVA = /** @type {HTMLInputElement} */ (document.getElementById('afficher-tva'));
+  if (caseTVA) caseTVA.checked = tvaVisible;
+
+  // --- En-tete, dependant des tranches presentes et de l'affichage de la TVA ---
+  const colonnesTranches = codes
+    .map(
+      (c) =>
+        `<th class="num col-tranche" style="--cat:${catProduit(c)}">${att(libelleProduit(c))} HT</th>` +
+        (tva ? `<th class="num col-tranche" style="--cat:${catProduit(c)}">TVA</th>` : ''),
+    )
+    .join('');
+  table.querySelector('thead').innerHTML = `<tr>
+      <th class="num">N°</th>
+      <th>Poste</th>
+      <th class="num">Total HT (€)</th>
+      <th></th>
+      ${tva ? '<th class="num">TVA</th>' : ''}
+      ${parTranche ? colonnesTranches : ''}
+      <th class="num calc">TVA (€)</th>
+      <th class="num calc">TTC saisie (€)</th>
+    </tr>`;
+  const nbCols =
+    4 + (tva ? 1 : 0) + (parTranche ? codes.length * (tva ? 2 : 1) : 0) + 2;
+
+  // Le bouton « ventiler tout » n'a de sens qu'a partir de deux tranches, et son
+  // libelle dit ce qu'il va faire, pas l'etat courant.
+  const btnTout = /** @type {HTMLButtonElement} */ (document.getElementById('btn-ventiler-tout'));
+  if (btnTout) {
+    const remplies = etat.postes_bilan.filter((p) => !nul(totalPoste(p)));
+    const toutVentile = remplies.length > 0 && remplies.every(estVentile);
+    btnTout.hidden = !parTranche;
+    btnTout.textContent = toutVentile ? '↤ Tout regrouper' : '⇥ Ventiler tout';
+    btnTout.dataset.action = toutVentile ? 'regrouper' : 'ventiler';
+  }
+
+  // --- Corps, groupe par chapitre ---
+  const lignes = [];
   for (const ch of referentiels.nomenclature_pdr.chapitres) {
     const indices = etat.postes_bilan
       .map((p, i) => ({ p, i }))
       .filter(({ p }) => p.chapitre === ch.code);
-    const visibles = masquerVides ? indices.filter(({ p }) => !nul(p.montant_ht_eur)) : indices;
+    const visibles = masquerVides ? indices.filter(({ p }) => !nul(totalPoste(p))) : indices;
     // Un chapitre entierement vide disparait quand on masque : inutile de laisser
     // un en-tete et un sous-total a zero.
     if (!visibles.length) continue;
 
-    lignesPdr.push(
-      `<tr class="chapitre-entete"><td colspan="6">${ch.numero} — ${att(ch.libelle)}</td></tr>`,
+    lignes.push(
+      `<tr class="chapitre-entete"><td colspan="${nbCols}">${ch.numero} — ${att(ch.libelle)}</td></tr>`,
     );
+
     for (const { p, i } of visibles) {
-      const vide = nul(p.montant_ht_eur);
-      lignesPdr.push(`<tr data-poste="${i}" class="${vide ? 'poste--vide' : ''}">
+      const ventile = estVentile(p);
+      const vide = nul(totalPoste(p));
+
+      // Total : saisissable tant que la ligne n'est pas ventilee, calcule ensuite.
+      // Deux verites pour la meme grandeur, ce serait une de trop.
+      const celluleTotal = ventile
+        ? `<td class="num calc" data-calc="total" title="Somme des tranches">—</td>`
+        : `<td><input type="number" step="1" data-champ="postes_bilan.${i}.montant_ht_eur"
+             data-type="nombre" value="${valNum(p.montant_ht_eur)}" /></td>`;
+
+      const selectTVA = (chemin, valeur) =>
+        `<select data-champ="${chemin}" data-type="nombre">
+          ${TAUX_TVA.map((v) => `<option value="${v}" ${v === valeur ? 'selected' : ''}>${(v * 100).toFixed(1)} %</option>`).join('')}
+        </select>`;
+
+      const cellulesTranches = parTranche
+        ? codes
+            .map((c) => {
+              const style = `style="--cat:${catProduit(c)}"`;
+              if (!ventile) {
+                // Ligne non ventilee : on montre ce que la cle SU donnerait,
+                // en lecture seule. C'est un apercu, pas une saisie.
+                return (
+                  `<td class="num calc col-tranche" ${style} data-apercu="${c}"></td>` +
+                  (tva ? `<td class="num calc col-tranche" ${style}></td>` : '')
+                );
+              }
+              return (
+                `<td class="col-tranche" ${style}><input type="number" step="1"
+                   data-champ="postes_bilan.${i}.montants_ht_par_produit.${c}" data-type="nombre"
+                   value="${valNum(p.montants_ht_par_produit?.[c])}" /></td>` +
+                (tva
+                  ? `<td class="col-tranche" ${style}>${selectTVA(
+                      `postes_bilan.${i}.taux_tva_par_produit.${c}`,
+                      p.taux_tva_par_produit?.[c] ?? p.taux_tva,
+                    )}</td>`
+                  : '')
+              );
+            })
+            .join('')
+        : '';
+
+      lignes.push(`<tr data-poste="${i}" class="${vide ? 'poste--vide' : ''} ${ventile ? 'poste--ventile' : ''}">
         <td class="num num-poste">${p.numero}</td>
         <td class="libelle-poste">${att(p.libelle)}</td>
-        <td><input type="number" step="1" data-champ="postes_bilan.${i}.montant_ht_eur" data-type="nombre" value="${valNum(p.montant_ht_eur)}" /></td>
-        <td><select data-champ="postes_bilan.${i}.taux_tva" data-type="nombre">
-          ${TAUX_TVA.map((v) => `<option value="${v}" ${v === p.taux_tva ? 'selected' : ''}>${(v * 100).toFixed(1)} %</option>`).join('')}
-        </select></td>
+        ${celluleTotal}
+        <td class="col-action">${
+          parTranche
+            ? `<button type="button" class="bouton--ventiler" data-ventiler="${i}"
+                 aria-pressed="${ventile}"
+                 title="${ventile ? 'Regrouper en un total unique' : 'Ventiler ce montant sur les tranches'}">${ventile ? '↤' : '⇥'}</button>`
+            : ''
+        }</td>
+        ${tva ? `<td>${ventile ? '' : selectTVA(`postes_bilan.${i}.taux_tva`, p.taux_tva)}</td>` : ''}
+        ${cellulesTranches}
         <td class="calc" data-calc="tva"></td>
         <td class="calc" data-calc="ttc"></td>
       </tr>`);
     }
-    lignesPdr.push(
+
+    lignes.push(
       `<tr class="chapitre-total" data-chapitre-total="${ch.code}">
         <td></td><td class="libelle">Sous-total ${att(ch.libelle.toLowerCase())}</td>
-        <td class="num" data-total="ht"></td><td></td>
+        <td class="num" data-total="ht"></td>
+        <td colspan="${nbCols - 5}"></td>
         <td class="num" data-total="tva"></td><td class="num" data-total="ttc"></td>
       </tr>`,
     );
   }
-  $('#table-postes').querySelector('tbody').innerHTML =
-    lignesPdr.join('') ||
-    '<tr><td colspan="6" class="vide">Aucun poste renseigné. Décocher « Masquer les lignes non renseignées » pour saisir.</td></tr>';
 
+  table.querySelector('tbody').innerHTML =
+    lignes.join('') ||
+    `<tr><td colspan="${nbCols}" class="vide">Aucun poste renseigné. Décocher « Masquer les lignes non renseignées » pour saisir.</td></tr>`;
 }
 
 
@@ -4908,18 +5141,37 @@ function rendreValeurs(r) {
   // rang, puisque les postes vides ne lui sont pas transmis. ---
   const b = r.bilan;
   const detailParId = Object.fromEntries((b.postes ?? []).filter((d) => d.id).map((d) => [d.id, d]));
+  // Le detail GLOBAL porte TVA et TTC ; seul le detail VENTILE porte la
+  // repartition par tranche. Les deux sont necessaires, il faut donc les deux
+  // index : lire `par_tranche` sur le detail global renvoyait toujours vide.
+  const ventileParId = Object.fromEntries(
+    (b.ventilation?.postes ?? []).filter((d) => d.id).map((d) => [d.id, d]),
+  );
   for (const tr of document.querySelectorAll('#table-postes tbody tr[data-poste]')) {
     const i = Number(/** @type {HTMLElement} */ (tr).dataset.poste);
-    const d = detailParId[etat.postes_bilan[i]?.id];
+    const idPoste = etat.postes_bilan[i]?.id;
+    const d = detailParId[idPoste];
+    const v = ventileParId[idPoste];
     const set = (cle, v) => {
       const td = tr.querySelector(`[data-calc="${cle}"]`);
       if (td) td.textContent = v;
     };
-    set('tva', d ? eur(d.tva_eur) : '');
-    set('ttc', d ? eur(d.ttc_eur) : '');
+    // La ventilation fait foi des qu'elle existe : elle seule additionne les
+    // TVA reellement dues tranche par tranche. Le detail global n'applique
+    // qu'un taux unique, et divergerait du total affiche en pied de table.
+    set('tva', v ? eur(v.tva_eur) : d ? eur(d.tva_eur) : '');
+    set('ttc', v ? eur(v.ttc_eur) : d ? eur(d.ttc_eur) : '');
+    // Total d'une ligne ventilee : il vient du moteur et se met a jour a chaque
+    // frappe dans une cellule de tranche, sans rendu de structure.
+    set('total', v ? eur(v.ht_eur) : d ? eur(d.ht_eur) : '');
+    // Apercu de ce que la cle SU donnerait sur une ligne encore globale.
+    for (const td of tr.querySelectorAll('[data-apercu]')) {
+      const t = v?.par_tranche?.[/** @type {HTMLElement} */ (td).dataset.apercu];
+      td.textContent = t ? eur(t.ht_eur) : '';
+    }
     // Une ligne cesse d'etre grisee des qu'elle porte un montant, sans attendre
     // un rendu de structure : sinon elle reste visuellement « non renseignee ».
-    tr.classList.toggle('poste--vide', nul(etat.postes_bilan[i]?.montant_ht_eur));
+    tr.classList.toggle('poste--vide', nul(totalPoste(etat.postes_bilan[i] ?? {})));
   }
 
   // Sous-totaux de chapitre, tires des chapitres du moteur.
@@ -4934,22 +5186,43 @@ function rendreValeurs(r) {
     set('tva', c ? eur(c.tva_eur) : eur(0));
     set('ttc', c ? eur(c.ttc_eur) : eur(0));
   }
-  const renseignes = etat.postes_bilan.filter((p) => !nul(p.montant_ht_eur)).length;
+  const renseignes = etat.postes_bilan.filter((p) => !nul(totalPoste(p))).length;
+  const ventiles = etat.postes_bilan.filter((p) => estVentile(p) && !nul(totalPoste(p))).length;
+  // Le pied suit la largeur variable de l'en-tete : les colonnes de tranche
+  // apparaissent et disparaissent avec le programme.
+  const nbCols = $('#table-postes').querySelectorAll('thead th').length || 6;
+  const codesTr = tranchesActives();
+  const tvaVisible = afficherTVA();
+  const totauxTranches =
+    codesTr.length > 1
+      ? codesTr
+          .map(
+            (c) =>
+              `<td class="num col-tranche" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_ht_eur)}</td>` +
+              (tvaVisible ? `<td class="num col-tranche" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_tva_eur)}</td>` : ''),
+          )
+          .join('')
+      : '';
+
   $('#table-postes').querySelector('tfoot').innerHTML = `<tr>
       <td></td><td class="libelle">Prix de revient total</td>
       <td class="num">${eur(b.total_ht_eur)}</td><td></td>
+      ${tvaVisible ? '<td></td>' : ''}
+      ${totauxTranches}
       <td class="num">${eur(b.total_tva_eur)}</td>
       <td class="num">${eur(b.total_ttc_eur)}</td>
     </tr>
     <tr>
       <td></td><td class="libelle">Base finançable (TTC / LASM)</td>
-      <td colspan="3"></td>
+      <td colspan="${nbCols - 3}"></td>
       <td class="num">${eur(b.total_ttc_module_eur)}</td>
     </tr>
     <tr>
-      <td></td><td colspan="5" style="font-weight:400;color:var(--encre-doux);border-top:none">
+      <td></td><td colspan="${nbCols - 1}" style="font-weight:400;color:var(--text-tertiary);border-top:none">
         ${renseignes} poste${renseignes > 1 ? 's' : ''} renseigné${renseignes > 1 ? 's' : ''}
-        sur ${etat.postes_bilan.length} de la nomenclature
+        sur ${etat.postes_bilan.length} de la nomenclature${
+          ventiles ? ` · ${ventiles} ventilé${ventiles > 1 ? 's' : ''} à la main` : ''
+        }
       </td>
     </tr>`;
   $('#aide-lasm').textContent =
@@ -5650,7 +5923,9 @@ document.addEventListener('input', (ev) => {
 
 document.addEventListener('change', (ev) => {
   // L'interrupteur de masquage change la STRUCTURE de la table, pas l'etat.
-  if (/** @type {HTMLElement} */ (ev.target).id === 'masquer-vides') rafraichirTout();
+  const id = /** @type {HTMLElement} */ (ev.target).id;
+  if (id === 'afficher-tva') tvaVisible = /** @type {HTMLInputElement} */ (ev.target).checked;
+  if (id === 'masquer-vides' || id === 'afficher-tva') rafraichirTout();
 });
 
 document.addEventListener('click', (ev) => {
@@ -5668,6 +5943,28 @@ document.addEventListener('click', (ev) => {
   const onglet = el.closest('[data-ecran]');
   if (onglet) {
     afficherEcran(/** @type {HTMLElement} */ (onglet).dataset.ecran);
+    return;
+  }
+
+  const ventiler = el.closest('[data-ventiler]');
+  if (ventiler) {
+    const i = Number(/** @type {HTMLElement} */ (ventiler).dataset.ventiler);
+    const p = etat.postes_bilan[i];
+    basculerVentilation(p, !estVentile(p), dernierResultat?.surfaces?.quotes_parts ?? {});
+    rafraichirTout();
+    return;
+  }
+
+  if (el.closest('#btn-ventiler-tout')) {
+    const vers = /** @type {HTMLElement} */ (el.closest('#btn-ventiler-tout')).dataset.action === 'ventiler';
+    const qp = dernierResultat?.surfaces?.quotes_parts ?? {};
+    // Seules les lignes RENSEIGNEES sont touchees : ventiler les quarante-six
+    // postes de la nomenclature remplirait la table de zeros.
+    for (const p of etat.postes_bilan) {
+      if (nul(totalPoste(p))) continue;
+      if (estVentile(p) !== vers) basculerVentilation(p, vers, qp);
+    }
+    rafraichirTout();
     return;
   }
 

@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { calculer } from '../src/moteur.js';
+import { prixDeRevientVentile } from '../src/bilan.js';
 import { coefficientStructure } from '../src/loyers.js';
 import { adapterTrajectoires, normaliserTrajectoires } from '../src/trajectoires.js';
 import { calendrierOperation, decalerMois } from '../src/calendrier.js';
@@ -22,7 +23,7 @@ const fichierTrajectoires = JSON.parse(
 const REFERENTIELS = { baremes, trajectoires: fichierTrajectoires };
 
 const BASE = {
-  identite: { produit: 'PLS', zone_123: 2, zone_ABC: 'B1' },
+  identite: { zone_123: 2, zone_ABC: 'B1' },
   dates: { annee_mise_en_location: 2028, duree_simulation_ans: 10 },
   lots: [{ code_produit: 'PLS', nb_logements: 29, shab_m2: 1180, surfaces_annexes_m2: 0 }],
   postes_bilan: [{ chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1100000, taux_tva: 0.1 }],
@@ -112,7 +113,7 @@ describe('V3 — le coefficient de structure porte sur la tranche, pas sur la li
     const r = calculer(
       {
         ...BASE,
-        identite: { produit: 'PLUS', zone_123: 2, zone_ABC: 'B1' },
+        identite: { zone_123: 2, zone_ABC: 'B1' },
         lots: [
           { code_produit: 'PLS', nb_logements: 5, shab_m2: 200 },
           { code_produit: 'PLAI', nb_logements: 5, shab_m2: 200 },
@@ -175,7 +176,7 @@ describe('V5 — barèmes de loyer des produits', () => {
 
   it('LOC/LLI est declare mais son bareme est absent du referentiel (hors V1, connu)', () => {
     expect(() =>
-      calculer({ ...BASE, identite: { produit: 'LOC', zone_123: 2, zone_ABC: 'B1' },
+      calculer({ ...BASE, identite: { zone_123: 2, zone_ABC: 'B1' },
         lots: [{ code_produit: 'LOC', nb_logements: 5, shab_m2: 300 }], prets: [PRET_CDC] }, REFERENTIELS),
     ).toThrow(/bareme de loyer absent/i);
   });
@@ -363,16 +364,149 @@ describe('Pas de produit principal : chaque financement a ses propres regles', (
     expect(Object.keys(r.bilan.taux_lasm_par_tranche).sort()).toEqual(['PLAI', 'PLUS']);
   });
 
-  it('signale identite.produit comme inerte plutot que de l appliquer en silence', () => {
+  it('ne lit AUCUN produit sur l identite, meme si un ancien appel en passe un', () => {
+    // La notion a disparu du moteur. Ce test garde la porte fermee : un
+    // `identite.produit` residuel, venu d'une fixture ou d'un appel plus ancien,
+    // ne doit rien piloter, ni la TVA, ni les prets, ni les loyers.
     const sans = mixte();
     const avec = mixte({ identite: { zone_123: 2, zone_ABC: 'B1', produit: 'PLS' } });
-    // Le resultat ne bouge pas d'un euro...
     expect(avec.indicateurs.prix_revient_ttc_eur).toBe(sans.indicateurs.prix_revient_ttc_eur);
-    expect(avec.amortissements.map((a) => a.montant_eur)).toEqual(
-      sans.amortissements.map((a) => a.montant_eur),
+    expect(avec.bilan.taux_lasm_par_tranche).toEqual(sans.bilan.taux_lasm_par_tranche);
+    expect(avec.amortissements.map((a) => `${a.produit}:${a.montant_eur}:${a.taux_saisi}`)).toEqual(
+      sans.amortissements.map((a) => `${a.produit}:${a.montant_eur}:${a.taux_saisi}`),
     );
-    // ...mais la saisie devenue sans effet est dite, pas avalee.
-    expect(avec.alertes.some((m) => /produit principal/.test(m))).toBe(true);
-    expect(sans.alertes.some((m) => /produit principal/.test(m))).toBe(false);
+    expect(avec.alertes).toEqual(sans.alertes);
+  });
+});
+
+describe('R-TVA-3 — prix de revient saisi par tranche', () => {
+  const SU = { PLAI: 300, PLS: 700 };
+
+  it('ventile au prorata SU en l absence de saisie par tranche', () => {
+    const v = prixDeRevientVentile(
+      { postes: [{ chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1000, taux_tva: 0.1 }], su_par_produit: SU },
+      baremes,
+    );
+    expect(v.postes[0].par_tranche.PLAI.ht_eur).toBeCloseTo(300, 6);
+    expect(v.postes[0].par_tranche.PLS.ht_eur).toBeCloseTo(700, 6);
+    expect(v.postes[0].ventile_a_la_main).toBe(false);
+  });
+
+  it('respecte une repartition saisie a la main, meme contraire aux surfaces', () => {
+    const v = prixDeRevientVentile(
+      {
+        postes: [
+          {
+            chapitre: 'batiment', libelle: 'Ascenseur bâtiment A', taux_tva: 0.1,
+            // Depense qui ne concerne QUE le PLAI : le prorata SU la repartirait
+            // a tort sur les deux tranches.
+            montants_ht_par_produit: { PLAI: 40000, PLS: 0 },
+          },
+        ],
+        su_par_produit: SU,
+      },
+      baremes,
+    );
+    const p = v.postes[0];
+    expect(p.ventile_a_la_main).toBe(true);
+    expect(p.ht_eur).toBe(40000);
+    expect(p.par_tranche.PLAI.ht_eur).toBe(40000);
+    expect(p.par_tranche.PLS.ht_eur).toBe(0);
+    // La part affichee est celle REELLEMENT appliquee, pas la cle de l'operation.
+    expect(p.par_tranche.PLAI.part).toBe(1);
+    expect(p.par_tranche.PLS.part).toBe(0);
+  });
+
+  it('applique un taux de TVA propre a chaque tranche', () => {
+    const v = prixDeRevientVentile(
+      {
+        postes: [
+          {
+            chapitre: 'batiment', libelle: 'Travaux', taux_tva: 0.1,
+            montants_ht_par_produit: { PLAI: 1000, PLS: 1000 },
+            taux_tva_par_produit: { PLAI: 0.055 },
+          },
+        ],
+        su_par_produit: SU,
+      },
+      baremes,
+    );
+    expect(v.postes[0].par_tranche.PLAI.tva_eur).toBeCloseTo(55, 6);
+    // Tranche sans surcharge : le taux de la ligne s'applique.
+    expect(v.postes[0].par_tranche.PLS.tva_eur).toBeCloseTo(100, 6);
+    expect(v.total_tva_eur).toBe(155);
+  });
+
+  it('recompose la TVA de la LIGNE depuis ses tranches, pas au taux global', () => {
+    // Defaut constate a l'ecran : la colonne « TVA (EUR) » d'une ligne ventilee
+    // affichait total x taux_global, soit 2000 x 10 % = 200, quand la somme
+    // reellement due valait 155. La ligne contredisait le pied de table.
+    const v = prixDeRevientVentile(
+      {
+        postes: [
+          {
+            id: 'travaux', chapitre: 'batiment', libelle: 'Travaux', taux_tva: 0.1,
+            montants_ht_par_produit: { PLAI: 1000, PLS: 1000 },
+            taux_tva_par_produit: { PLAI: 0.055 },
+          },
+        ],
+        su_par_produit: SU,
+      },
+      baremes,
+    );
+    expect(v.postes[0].tva_eur).toBe(155);
+    expect(v.postes[0].tva_eur).toBe(v.total_tva_eur);
+    expect(v.postes[0].ttc_eur).toBe(2155);
+  });
+
+  it('melange les deux modes de saisie dans une meme operation', () => {
+    const v = prixDeRevientVentile(
+      {
+        postes: [
+          { chapitre: 'charge_fonciere', libelle: 'Terrain', montant_ht_eur: 1000, taux_tva: 0 },
+          { chapitre: 'batiment', libelle: 'Ascenseur', taux_tva: 0, montants_ht_par_produit: { PLAI: 0, PLS: 500 } },
+        ],
+        su_par_produit: SU,
+      },
+      baremes,
+    );
+    expect(v.par_tranche.PLAI.total_ht_eur).toBe(300);
+    expect(v.par_tranche.PLS.total_ht_eur).toBe(1200);
+    expect(v.total_ht_eur).toBe(1500);
+  });
+
+  it('fait FOI sur le total : un montant global concurrent est ignore', () => {
+    // Deux verites pour la meme grandeur, c'est une de trop. La saisie par
+    // tranche etant la plus fine, c'est elle qui gagne.
+    const v = prixDeRevientVentile(
+      {
+        postes: [
+          {
+            chapitre: 'batiment', libelle: 'Travaux', taux_tva: 0,
+            montant_ht_eur: 999999,
+            montants_ht_par_produit: { PLAI: 100, PLS: 200 },
+          },
+        ],
+        su_par_produit: SU,
+      },
+      baremes,
+    );
+    expect(v.postes[0].ht_eur).toBe(300);
+    expect(v.total_ht_eur).toBe(300);
+  });
+
+  it('conserve la somme malgre les arrondis par tranche', () => {
+    const v = prixDeRevientVentile(
+      {
+        postes: [{ chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1000.01, taux_tva: 0.1 }],
+        // Trois tranches egales sur un montant non divisible par trois : le
+        // reliquat de centimes doit atterrir quelque part, pas disparaitre.
+        su_par_produit: { PLAI: 1, PLUS: 1, PLS: 1 },
+      },
+      baremes,
+    );
+    const somme = ['PLAI', 'PLUS', 'PLS'].reduce((s, c) => s + v.par_tranche[c].total_ht_eur, 0);
+    expect(somme).toBe(v.total_ht_eur);
+    expect(v.total_ht_eur).toBe(1000);
   });
 });

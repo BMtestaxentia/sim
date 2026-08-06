@@ -20,6 +20,7 @@
  */
 import { calculer } from '../src/moteur.js';
 import { produitsOrdonnes } from '../src/produits.js';
+import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
 
 const $ = (sel) => /** @type {HTMLElement} */ (document.querySelector(sel));
 
@@ -255,7 +256,13 @@ const TAUX_TVA = [0.055, 0.1, 0.2, 0];
 function ecrireChemin(cible, chemin, valeur) {
   const cles = chemin.split('.');
   let ref = cible;
-  for (const cle of cles.slice(0, -1)) ref = ref[cle];
+  for (const cle of cles.slice(0, -1)) {
+    // Cree les niveaux manquants : `postes_bilan.3.montants_ht_par_produit.PLS`
+    // doit pouvoir s'ecrire meme si le dictionnaire de tranches n'existe pas
+    // encore. Sans cela la frappe leve au lieu d'ecrire.
+    if (ref[cle] === undefined || ref[cle] === null) ref[cle] = {};
+    ref = ref[cle];
+  }
   ref[cles.at(-1)] = valeur;
 }
 
@@ -269,6 +276,59 @@ function att(v) {
 }
 
 const valNum = (v) => (nul(v) ? '' : v);
+
+/**
+ * La TVA occupe une colonne par tranche : on doit pouvoir la replier.
+ *
+ * L'etat vit ICI et non dans la case a cocher : l'attribut `checked` du HTML ne
+ * decide que de la valeur initiale, et le navigateur restaure parfois l'etat
+ * d'un rechargement par-dessus. La colonne disparaissait alors sans raison.
+ */
+let tvaVisible = true;
+const afficherTVA = () => tvaVisible;
+
+/** Une ligne de prix de revient est-elle saisie tranche par tranche ? */
+const estVentile = (p) => Boolean(p.montants_ht_par_produit);
+
+/**
+ * Total HT d'une ligne, miroir exact de `montantHTPoste` cote moteur. Une ligne
+ * ventilee dont toutes les tranches sont vides reste VIDE et ne vaut pas zero :
+ * la nuance decide de son affichage en « non renseignee ».
+ */
+function totalPoste(p) {
+  if (!p.montants_ht_par_produit) return p.montant_ht_eur;
+  const valeurs = Object.values(p.montants_ht_par_produit);
+  return valeurs.every(nul) ? null : valeurs.reduce((s, v) => s + (v ?? 0), 0);
+}
+
+/**
+ * Ventile une ligne sur les tranches au prorata de surface utile, ou la
+ * regroupe en un total unique.
+ *
+ * La repartition passe par `arrondirEnConservantLaSomme` : sans elle, trois
+ * tranches sur un montant impair perdraient des centimes et le total ventile
+ * cesserait d'egaler le total saisi.
+ */
+function basculerVentilation(p, ventiler, quotesParts) {
+  const codes = tranchesActives();
+  if (!ventiler) {
+    // Regroupement : le total constate devient le montant global, et les
+    // montants par tranche disparaissent pour qu'il n'en reste qu'une version.
+    const total = totalPoste(p);
+    p.montant_ht_eur = total;
+    delete p.montants_ht_par_produit;
+    delete p.taux_tva_par_produit;
+    return;
+  }
+  const total = totalPoste(p) ?? 0;
+  const parts = arrondirEnConservantLaSomme(
+    codes.map((c) => (quotesParts[c] ?? 1 / codes.length) * total),
+  );
+  p.montants_ht_par_produit = Object.fromEntries(codes.map((c, i) => [c, parts[i]]));
+  // Le taux de la ligne devient le taux de depart de chaque tranche : la
+  // ventilation ne doit rien changer au calcul tant qu'on ne le modifie pas.
+  p.taux_tva_par_produit = Object.fromEntries(codes.map((c) => [c, p.taux_tva ?? 0]));
+}
 
 /**
  * Fraction vers pourcentage POUR LA SAISIE, sans trainee flottante : 0,0034 x 100
@@ -580,46 +640,152 @@ function rendreStructure() {
       TYPOLOGIES.map((t) => `<option value="${t}" ${t === 'T2' ? 'selected' : ''}>${t}</option>`).join('');
   }
 
-  // --- Prix de revient : nomenclature complete, groupee par chapitre ---
+  rendreTablePrixRevient();
+}
+
+/**
+ * R-TVA-3 — Table du prix de revient : un total qui se ventile, et une colonne
+ * par tranche.
+ *
+ * Deux modes de saisie coexistent LIGNE PAR LIGNE :
+ *  - total global, que le moteur ventile au prorata de surface utile ;
+ *  - montants par tranche, quand la depense n'y est pas proportionnelle
+ *    (un ascenseur qui ne dessert qu'un batiment). Le total en decoule alors.
+ *
+ * Les colonnes par tranche n'apparaissent qu'a partir de DEUX tranches : sur une
+ * operation mono-produit elles ne feraient que recopier le total.
+ */
+function rendreTablePrixRevient() {
+  const table = $('#table-postes');
+  const codes = tranchesActives();
+  const parTranche = codes.length > 1;
+  const tva = afficherTVA();
   const masquerVides = /** @type {HTMLInputElement} */ (document.getElementById('masquer-vides'))?.checked;
-  const lignesPdr = [];
+  // La case suit l'etat, jamais l'inverse.
+  const caseTVA = /** @type {HTMLInputElement} */ (document.getElementById('afficher-tva'));
+  if (caseTVA) caseTVA.checked = tvaVisible;
+
+  // --- En-tete, dependant des tranches presentes et de l'affichage de la TVA ---
+  const colonnesTranches = codes
+    .map(
+      (c) =>
+        `<th class="num col-tranche" style="--cat:${catProduit(c)}">${att(libelleProduit(c))} HT</th>` +
+        (tva ? `<th class="num col-tranche" style="--cat:${catProduit(c)}">TVA</th>` : ''),
+    )
+    .join('');
+  table.querySelector('thead').innerHTML = `<tr>
+      <th class="num">N°</th>
+      <th>Poste</th>
+      <th class="num">Total HT (€)</th>
+      <th></th>
+      ${tva ? '<th class="num">TVA</th>' : ''}
+      ${parTranche ? colonnesTranches : ''}
+      <th class="num calc">TVA (€)</th>
+      <th class="num calc">TTC saisie (€)</th>
+    </tr>`;
+  const nbCols =
+    4 + (tva ? 1 : 0) + (parTranche ? codes.length * (tva ? 2 : 1) : 0) + 2;
+
+  // Le bouton « ventiler tout » n'a de sens qu'a partir de deux tranches, et son
+  // libelle dit ce qu'il va faire, pas l'etat courant.
+  const btnTout = /** @type {HTMLButtonElement} */ (document.getElementById('btn-ventiler-tout'));
+  if (btnTout) {
+    const remplies = etat.postes_bilan.filter((p) => !nul(totalPoste(p)));
+    const toutVentile = remplies.length > 0 && remplies.every(estVentile);
+    btnTout.hidden = !parTranche;
+    btnTout.textContent = toutVentile ? '↤ Tout regrouper' : '⇥ Ventiler tout';
+    btnTout.dataset.action = toutVentile ? 'regrouper' : 'ventiler';
+  }
+
+  // --- Corps, groupe par chapitre ---
+  const lignes = [];
   for (const ch of referentiels.nomenclature_pdr.chapitres) {
     const indices = etat.postes_bilan
       .map((p, i) => ({ p, i }))
       .filter(({ p }) => p.chapitre === ch.code);
-    const visibles = masquerVides ? indices.filter(({ p }) => !nul(p.montant_ht_eur)) : indices;
+    const visibles = masquerVides ? indices.filter(({ p }) => !nul(totalPoste(p))) : indices;
     // Un chapitre entierement vide disparait quand on masque : inutile de laisser
     // un en-tete et un sous-total a zero.
     if (!visibles.length) continue;
 
-    lignesPdr.push(
-      `<tr class="chapitre-entete"><td colspan="6">${ch.numero} — ${att(ch.libelle)}</td></tr>`,
+    lignes.push(
+      `<tr class="chapitre-entete"><td colspan="${nbCols}">${ch.numero} — ${att(ch.libelle)}</td></tr>`,
     );
+
     for (const { p, i } of visibles) {
-      const vide = nul(p.montant_ht_eur);
-      lignesPdr.push(`<tr data-poste="${i}" class="${vide ? 'poste--vide' : ''}">
+      const ventile = estVentile(p);
+      const vide = nul(totalPoste(p));
+
+      // Total : saisissable tant que la ligne n'est pas ventilee, calcule ensuite.
+      // Deux verites pour la meme grandeur, ce serait une de trop.
+      const celluleTotal = ventile
+        ? `<td class="num calc" data-calc="total" title="Somme des tranches">—</td>`
+        : `<td><input type="number" step="1" data-champ="postes_bilan.${i}.montant_ht_eur"
+             data-type="nombre" value="${valNum(p.montant_ht_eur)}" /></td>`;
+
+      const selectTVA = (chemin, valeur) =>
+        `<select data-champ="${chemin}" data-type="nombre">
+          ${TAUX_TVA.map((v) => `<option value="${v}" ${v === valeur ? 'selected' : ''}>${(v * 100).toFixed(1)} %</option>`).join('')}
+        </select>`;
+
+      const cellulesTranches = parTranche
+        ? codes
+            .map((c) => {
+              const style = `style="--cat:${catProduit(c)}"`;
+              if (!ventile) {
+                // Ligne non ventilee : on montre ce que la cle SU donnerait,
+                // en lecture seule. C'est un apercu, pas une saisie.
+                return (
+                  `<td class="num calc col-tranche" ${style} data-apercu="${c}"></td>` +
+                  (tva ? `<td class="num calc col-tranche" ${style}></td>` : '')
+                );
+              }
+              return (
+                `<td class="col-tranche" ${style}><input type="number" step="1"
+                   data-champ="postes_bilan.${i}.montants_ht_par_produit.${c}" data-type="nombre"
+                   value="${valNum(p.montants_ht_par_produit?.[c])}" /></td>` +
+                (tva
+                  ? `<td class="col-tranche" ${style}>${selectTVA(
+                      `postes_bilan.${i}.taux_tva_par_produit.${c}`,
+                      p.taux_tva_par_produit?.[c] ?? p.taux_tva,
+                    )}</td>`
+                  : '')
+              );
+            })
+            .join('')
+        : '';
+
+      lignes.push(`<tr data-poste="${i}" class="${vide ? 'poste--vide' : ''} ${ventile ? 'poste--ventile' : ''}">
         <td class="num num-poste">${p.numero}</td>
         <td class="libelle-poste">${att(p.libelle)}</td>
-        <td><input type="number" step="1" data-champ="postes_bilan.${i}.montant_ht_eur" data-type="nombre" value="${valNum(p.montant_ht_eur)}" /></td>
-        <td><select data-champ="postes_bilan.${i}.taux_tva" data-type="nombre">
-          ${TAUX_TVA.map((v) => `<option value="${v}" ${v === p.taux_tva ? 'selected' : ''}>${(v * 100).toFixed(1)} %</option>`).join('')}
-        </select></td>
+        ${celluleTotal}
+        <td class="col-action">${
+          parTranche
+            ? `<button type="button" class="bouton--ventiler" data-ventiler="${i}"
+                 aria-pressed="${ventile}"
+                 title="${ventile ? 'Regrouper en un total unique' : 'Ventiler ce montant sur les tranches'}">${ventile ? '↤' : '⇥'}</button>`
+            : ''
+        }</td>
+        ${tva ? `<td>${ventile ? '' : selectTVA(`postes_bilan.${i}.taux_tva`, p.taux_tva)}</td>` : ''}
+        ${cellulesTranches}
         <td class="calc" data-calc="tva"></td>
         <td class="calc" data-calc="ttc"></td>
       </tr>`);
     }
-    lignesPdr.push(
+
+    lignes.push(
       `<tr class="chapitre-total" data-chapitre-total="${ch.code}">
         <td></td><td class="libelle">Sous-total ${att(ch.libelle.toLowerCase())}</td>
-        <td class="num" data-total="ht"></td><td></td>
+        <td class="num" data-total="ht"></td>
+        <td colspan="${nbCols - 5}"></td>
         <td class="num" data-total="tva"></td><td class="num" data-total="ttc"></td>
       </tr>`,
     );
   }
-  $('#table-postes').querySelector('tbody').innerHTML =
-    lignesPdr.join('') ||
-    '<tr><td colspan="6" class="vide">Aucun poste renseigné. Décocher « Masquer les lignes non renseignées » pour saisir.</td></tr>';
 
+  table.querySelector('tbody').innerHTML =
+    lignes.join('') ||
+    `<tr><td colspan="${nbCols}" class="vide">Aucun poste renseigné. Décocher « Masquer les lignes non renseignées » pour saisir.</td></tr>`;
 }
 
 
@@ -725,18 +891,37 @@ function rendreValeurs(r) {
   // rang, puisque les postes vides ne lui sont pas transmis. ---
   const b = r.bilan;
   const detailParId = Object.fromEntries((b.postes ?? []).filter((d) => d.id).map((d) => [d.id, d]));
+  // Le detail GLOBAL porte TVA et TTC ; seul le detail VENTILE porte la
+  // repartition par tranche. Les deux sont necessaires, il faut donc les deux
+  // index : lire `par_tranche` sur le detail global renvoyait toujours vide.
+  const ventileParId = Object.fromEntries(
+    (b.ventilation?.postes ?? []).filter((d) => d.id).map((d) => [d.id, d]),
+  );
   for (const tr of document.querySelectorAll('#table-postes tbody tr[data-poste]')) {
     const i = Number(/** @type {HTMLElement} */ (tr).dataset.poste);
-    const d = detailParId[etat.postes_bilan[i]?.id];
+    const idPoste = etat.postes_bilan[i]?.id;
+    const d = detailParId[idPoste];
+    const v = ventileParId[idPoste];
     const set = (cle, v) => {
       const td = tr.querySelector(`[data-calc="${cle}"]`);
       if (td) td.textContent = v;
     };
-    set('tva', d ? eur(d.tva_eur) : '');
-    set('ttc', d ? eur(d.ttc_eur) : '');
+    // La ventilation fait foi des qu'elle existe : elle seule additionne les
+    // TVA reellement dues tranche par tranche. Le detail global n'applique
+    // qu'un taux unique, et divergerait du total affiche en pied de table.
+    set('tva', v ? eur(v.tva_eur) : d ? eur(d.tva_eur) : '');
+    set('ttc', v ? eur(v.ttc_eur) : d ? eur(d.ttc_eur) : '');
+    // Total d'une ligne ventilee : il vient du moteur et se met a jour a chaque
+    // frappe dans une cellule de tranche, sans rendu de structure.
+    set('total', v ? eur(v.ht_eur) : d ? eur(d.ht_eur) : '');
+    // Apercu de ce que la cle SU donnerait sur une ligne encore globale.
+    for (const td of tr.querySelectorAll('[data-apercu]')) {
+      const t = v?.par_tranche?.[/** @type {HTMLElement} */ (td).dataset.apercu];
+      td.textContent = t ? eur(t.ht_eur) : '';
+    }
     // Une ligne cesse d'etre grisee des qu'elle porte un montant, sans attendre
     // un rendu de structure : sinon elle reste visuellement « non renseignee ».
-    tr.classList.toggle('poste--vide', nul(etat.postes_bilan[i]?.montant_ht_eur));
+    tr.classList.toggle('poste--vide', nul(totalPoste(etat.postes_bilan[i] ?? {})));
   }
 
   // Sous-totaux de chapitre, tires des chapitres du moteur.
@@ -751,22 +936,43 @@ function rendreValeurs(r) {
     set('tva', c ? eur(c.tva_eur) : eur(0));
     set('ttc', c ? eur(c.ttc_eur) : eur(0));
   }
-  const renseignes = etat.postes_bilan.filter((p) => !nul(p.montant_ht_eur)).length;
+  const renseignes = etat.postes_bilan.filter((p) => !nul(totalPoste(p))).length;
+  const ventiles = etat.postes_bilan.filter((p) => estVentile(p) && !nul(totalPoste(p))).length;
+  // Le pied suit la largeur variable de l'en-tete : les colonnes de tranche
+  // apparaissent et disparaissent avec le programme.
+  const nbCols = $('#table-postes').querySelectorAll('thead th').length || 6;
+  const codesTr = tranchesActives();
+  const tvaVisible = afficherTVA();
+  const totauxTranches =
+    codesTr.length > 1
+      ? codesTr
+          .map(
+            (c) =>
+              `<td class="num col-tranche" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_ht_eur)}</td>` +
+              (tvaVisible ? `<td class="num col-tranche" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_tva_eur)}</td>` : ''),
+          )
+          .join('')
+      : '';
+
   $('#table-postes').querySelector('tfoot').innerHTML = `<tr>
       <td></td><td class="libelle">Prix de revient total</td>
       <td class="num">${eur(b.total_ht_eur)}</td><td></td>
+      ${tvaVisible ? '<td></td>' : ''}
+      ${totauxTranches}
       <td class="num">${eur(b.total_tva_eur)}</td>
       <td class="num">${eur(b.total_ttc_eur)}</td>
     </tr>
     <tr>
       <td></td><td class="libelle">Base finançable (TTC / LASM)</td>
-      <td colspan="3"></td>
+      <td colspan="${nbCols - 3}"></td>
       <td class="num">${eur(b.total_ttc_module_eur)}</td>
     </tr>
     <tr>
-      <td></td><td colspan="5" style="font-weight:400;color:var(--encre-doux);border-top:none">
+      <td></td><td colspan="${nbCols - 1}" style="font-weight:400;color:var(--text-tertiary);border-top:none">
         ${renseignes} poste${renseignes > 1 ? 's' : ''} renseigné${renseignes > 1 ? 's' : ''}
-        sur ${etat.postes_bilan.length} de la nomenclature
+        sur ${etat.postes_bilan.length} de la nomenclature${
+          ventiles ? ` · ${ventiles} ventilé${ventiles > 1 ? 's' : ''} à la main` : ''
+        }
       </td>
     </tr>`;
   $('#aide-lasm').textContent =
@@ -1467,7 +1673,9 @@ document.addEventListener('input', (ev) => {
 
 document.addEventListener('change', (ev) => {
   // L'interrupteur de masquage change la STRUCTURE de la table, pas l'etat.
-  if (/** @type {HTMLElement} */ (ev.target).id === 'masquer-vides') rafraichirTout();
+  const id = /** @type {HTMLElement} */ (ev.target).id;
+  if (id === 'afficher-tva') tvaVisible = /** @type {HTMLInputElement} */ (ev.target).checked;
+  if (id === 'masquer-vides' || id === 'afficher-tva') rafraichirTout();
 });
 
 document.addEventListener('click', (ev) => {
@@ -1485,6 +1693,28 @@ document.addEventListener('click', (ev) => {
   const onglet = el.closest('[data-ecran]');
   if (onglet) {
     afficherEcran(/** @type {HTMLElement} */ (onglet).dataset.ecran);
+    return;
+  }
+
+  const ventiler = el.closest('[data-ventiler]');
+  if (ventiler) {
+    const i = Number(/** @type {HTMLElement} */ (ventiler).dataset.ventiler);
+    const p = etat.postes_bilan[i];
+    basculerVentilation(p, !estVentile(p), dernierResultat?.surfaces?.quotes_parts ?? {});
+    rafraichirTout();
+    return;
+  }
+
+  if (el.closest('#btn-ventiler-tout')) {
+    const vers = /** @type {HTMLElement} */ (el.closest('#btn-ventiler-tout')).dataset.action === 'ventiler';
+    const qp = dernierResultat?.surfaces?.quotes_parts ?? {};
+    // Seules les lignes RENSEIGNEES sont touchees : ventiler les quarante-six
+    // postes de la nomenclature remplirait la table de zeros.
+    for (const p of etat.postes_bilan) {
+      if (nul(totalPoste(p))) continue;
+      if (estVentile(p) !== vers) basculerVentilation(p, vers, qp);
+    }
+    rafraichirTout();
     return;
   }
 

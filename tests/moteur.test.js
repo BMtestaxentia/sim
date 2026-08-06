@@ -17,7 +17,7 @@ const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_20
 
 /** Operation de reference : 6 logements PLS en VEFA, calquee sur BERGERAC. */
 const ENTREES = {
-  identite: { nom: 'Operation de test', produit: 'PLS', zone_123: 2, zone_ABC: 'B1', type_operation: 'Vefa' },
+  identite: { nom: 'Operation de test', zone_123: 2, zone_ABC: 'B1', type_operation: 'Vefa' },
   dates: { annee_mise_en_location: 2028, duree_simulation_ans: 40 },
   lots: [{ code_produit: 'PLS', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 40 }],
   postes_bilan: [

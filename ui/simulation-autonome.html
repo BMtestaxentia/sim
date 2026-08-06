@@ -3694,7 +3694,9 @@ const etat = {
     date_debut_travaux: '2026-01-01',
     duree_chantier_mois: 24,
     date_livraison: null,
-    duree_simulation_ans: 40,
+    // 50 ans : l'horizon standard du compte d'exploitation (CLAUDE.md §4),
+    // qui couvre aussi la duree des prets fonciers de l'operation de depart.
+    duree_simulation_ans: 50,
   },
   lots: [
     { code_produit: 'PLS', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 40, marge_locale_eur_m2: 0 },
@@ -4329,8 +4331,8 @@ function viderRestitution(message) {
 
 // ---------------------------------------------------------------- ecran exploitation
 
-/** Vue courante du compte : jalons (defaut) ou annee par annee. */
-let vueExploitation = 'jalons';
+/** Vue courante du compte : annee par annee (defaut) ou jalons condenses. */
+let vueExploitation = 'annuel';
 
 /**
  * Graphe du resultat annuel et du cumul, en SVG ecrit a la main.

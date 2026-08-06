@@ -638,18 +638,28 @@ input[type='number']::-webkit-inner-spin-button {
   padding: 10px 12px; background: var(--bg-secondary);
 }
 /* Une ligne de pret porte la couleur de la tranche qu'elle finance. */
-.ligne--pret { border-left: 3px solid var(--cat, var(--cat-6)); padding: 9px 11px; }
+/* La ligne entiere ouvre le detail : le curseur l'annonce, sauf sur ce qui se
+   manipule et sur le detail deja ouvert. */
+.ligne--pret { border-left: 3px solid var(--cat, var(--cat-6)); padding: 9px 11px; cursor: pointer; }
+.ligne--pret:hover { border-color: var(--border-color-strong); }
+.ligne--pret input, .ligne--pret select, .ligne--pret button, .ligne--pret .pret__detail {
+  cursor: auto;
+}
+.ligne--pret button { cursor: pointer; }
 
 /* En-tete toujours visible : libelle, montant, nature, actions. Le montant est
    la grandeur qu'on cherche en parcourant la liste, il est donc gros, a droite
    et en chiffres tabulaires. */
+/* Le libelle ne s'etire PAS sur toute la ligne : montant et nature restent a sa
+   suite, la ou l'oeil les cherche. Les actions, elles, filent a droite. */
 .pret__entete { display: flex; align-items: center; gap: 8px; }
-.pret__libelle { flex: 1 1 auto; min-width: 90px; font-weight: 650; font-size: 13px; }
+.pret__libelle { flex: 0 1 270px; min-width: 110px; font-weight: 650; font-size: 13px; }
 .pret__montant {
-  flex: 0 0 128px; font-weight: 700; font-size: 14px;
+  flex: 0 0 130px; font-weight: 700; font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
-.pret__nature { flex: 0 0 128px; font-size: 12px; }
+.pret__nature { flex: 0 0 130px; font-size: 12px; }
+.pret__actions { display: flex; align-items: center; gap: 2px; margin-left: auto; flex: none; }
 /* Montant de pret calcule : il se lit comme un resultat, pas comme une saisie,
    mais il reste modifiable — c'est ainsi qu'on le fige. */
 .pret--auto .pret__montant {
@@ -669,12 +679,21 @@ input[type='number']::-webkit-inner-spin-button {
 
 .bouton--deplier {
   appearance: none; border: none; background: transparent; cursor: pointer;
-  width: 26px; height: 26px; flex: none; border-radius: var(--radius-sm);
+  width: 32px; height: 30px; flex: none; border-radius: var(--radius-sm);
   display: grid; place-items: center; padding: 0;
-  color: var(--text-secondary); font-size: 15px; line-height: 1;
+  color: var(--text-secondary); font-size: 20px; line-height: 1;
 }
 .bouton--deplier:hover { background: var(--bg-tertiary); color: var(--info-accent); }
 .bouton--deplier[aria-expanded='true'] { color: var(--info-accent); }
+
+/* Pret STRUCTURANT d'une tranche : il porte l'equilibre, il ne se supprime pas.
+   Le filet plein et le libelle en capitales le distinguent d'un pret ajoute
+   a la main, sans en faire une couleur de plus. */
+.pret--principal { border-left-width: 4px; background: var(--bg-tertiary); }
+.pret--principal .pret__libelle {
+  font-size: 11.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
 .pret__detail {
   margin-top: 10px; padding-top: 10px;
   border-top: 1px dashed var(--border-color);

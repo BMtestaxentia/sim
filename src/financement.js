@@ -44,6 +44,51 @@ export function soldeAFinancer({
  * @param {number} [p.quote_part_su]  defaut 1 (operation mono-produit)
  * @returns {number}
  */
+/**
+ * R-FIN-3 bis — Redressement en serie des besoins de financement negatifs.
+ *
+ * Une tranche peut etre SURFINANCEE : sa subvention flechee et ses fonds propres
+ * depassent son prix de revient. Son besoin est alors negatif, et cet excedent
+ * finance les AUTRES tranches — il ne s'evapore pas. Le plafonner a zero ferait
+ * emprunter aux autres un montant deja couvert, et le plan sortirait
+ * surfinance de cet excedent.
+ *
+ * Transcrit de la calculette CDC « production LS » (onglet Construction,
+ * colonnes AI a AO, libelle « Prets construction redresses ») : l'excedent est
+ * reparti sur les tranches encore positives au prorata de leur surface utile, et
+ * l'operation est repetee, car une repartition peut rendre negative une tranche
+ * qui ne l'etait pas. La calculette itere trois fois ; on itere jusqu'a
+ * stabilite, avec la meme borne de securite.
+ *
+ * @param {Record<string, number>} besoins   besoin par tranche, signe conserve
+ * @param {Record<string, number>} quotesParts clef de repartition (surface utile)
+ * @returns {{besoins: Record<string, number>, excedent_eur: number, tours: number}}
+ */
+export function redresserBesoins(besoins, quotesParts) {
+  const codes = Object.keys(besoins);
+  const resultat = { ...besoins };
+  let excedentTotal = 0;
+  let tours = 0;
+
+  for (; tours < 3; tours++) {
+    const negatifs = codes.filter((c) => resultat[c] < 0);
+    if (!negatifs.length) break;
+
+    const excedent = negatifs.reduce((s, c) => s + resultat[c], 0); // valeur negative
+    excedentTotal += -excedent;
+    for (const c of negatifs) resultat[c] = 0;
+
+    const positifs = codes.filter((c) => resultat[c] > 0);
+    const cle = positifs.reduce((s, c) => s + (quotesParts[c] ?? 0), 0);
+    // Plus aucune tranche a servir : l'excedent reste acquis a l'operation et
+    // ressortira en surfinancement, ce qui est la verite du plan.
+    if (!positifs.length || cle <= 0) break;
+    for (const c of positifs) resultat[c] += excedent * ((quotesParts[c] ?? 0) / cle);
+  }
+
+  return { besoins: resultat, excedent_eur: arrondiEuro(excedentTotal), tours };
+}
+
 export function foncierFinancable({
   charge_fonciere_eur,
   financements_gratuits_eur = 0,

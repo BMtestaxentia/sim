@@ -465,6 +465,9 @@ function pretsCDCParDefaut(codes) {
         libelle: `${libelle} ${code}`,
         nature,
         produit: code,
+        // Pret STRUCTURANT de la tranche : il ne se supprime pas, c'est lui qui
+        // porte l'equilibre. Mettre son montant a zero suffit a le neutraliser.
+        principal: true,
         // Montant laisse au calcul : il s'ajuste au besoin de la tranche.
         montant_auto: true,
         montant_eur: null,
@@ -544,7 +547,8 @@ function rendreStructureTranches() {
                     <td><input type="text" data-champ="subventions.${i}.libelle" value="${att(s.libelle)}" /></td>
                     <td><input type="number" step="1" data-champ="subventions.${i}.montant_eur" data-type="nombre" value="${valNum(s.montant_eur)}" /></td>
                     <td class="num"><input type="checkbox" data-champ="subventions.${i}.gratuite" data-type="booleen" ${s.gratuite ? 'checked' : ''} /></td>
-                    <td><button type="button" class="bouton--supprimer" data-supprimer="subventions" data-index="${i}" title="Supprimer">×</button></td>
+                    <td><button type="button" class="bouton--supprimer" data-supprimer="subventions" data-index="${i}"
+                      data-nom="${att(s.libelle)}" title="Supprimer">×</button></td>
                   </tr>`,
                           )
                           .join('')
@@ -585,9 +589,14 @@ function rendreStructureTranches() {
  */
 const pretsDeplies = new Set();
 
-/** Jeton de metadonnee : etiquette en petites capitales, valeur en clair. */
-const jeton = (cle, valeur) =>
-  `<span class="jeton"><span class="jeton__cle">${att(cle)}</span><span class="jeton__valeur">${att(valeur)}</span></span>`;
+/**
+ * Jeton de metadonnee : etiquette en petites capitales, valeur en clair.
+ * `champ` marque la valeur pour qu'un rendu ulterieur la remplisse depuis le
+ * resultat du moteur, sans reconstruire la ligne.
+ */
+const jeton = (cle, valeur, champ) =>
+  `<span class="jeton"><span class="jeton__cle">${att(cle)}</span>` +
+  `<span class="jeton__valeur"${champ ? ` data-jeton="${champ}"` : ''}>${att(valeur)}</span></span>`;
 
 /**
  * Bloc d'un pret, sur le modele des lignes de financement d'ExNihilo : une
@@ -600,11 +609,14 @@ const jeton = (cle, valeur) =>
  */
 function gabaritPret(p, i) {
   const ouvert = pretsDeplies.has(i);
+  // Les jetons sont remplis par `remplirCalculs` depuis le resultat : taux,
+  // duree et revisabilite d'un pret CDC viennent du PRODUIT tant qu'ils ne sont
+  // pas saisis, et les lire dans l'etat n'afficherait que des tirets.
   const jetons = [
-    jeton('taux', nul(p.taux) ? '—' : pct(p.taux, 2)),
-    jeton('durée', nul(p.duree_ans) ? '—' : `${p.duree_ans} ans`),
-    jeton('1re éch.', valNum(p.annee_premiere_echeance) || '—'),
-    jeton('révis.', p.revisabilite ?? '—'),
+    jeton('taux', '—', 'taux'),
+    jeton('durée', '—', 'duree'),
+    jeton('1re éch.', '—', 'echeance'),
+    jeton('révis.', '—', 'revisabilite'),
     ...(p.progressivite ? [jeton('progr.', pct(p.progressivite, 2))] : []),
     ...(p.differe_ans ? [jeton('différé', `${p.differe_ans} ans · type ${p.differe_type ?? 2}`)] : []),
   ].join('');
@@ -614,20 +626,29 @@ function gabaritPret(p, i) {
   // montant et fait apparaitre le bouton de retour au calcul.
   const auto = p.montant_auto !== false;
   return `
-    <div class="ligne ligne--pret ${auto ? 'pret--auto' : ''}" data-pret="${i}" style="--cat:${catProduit(p.produit)}">
+    <div class="ligne ligne--pret ${auto ? 'pret--auto' : ''} ${p.principal ? 'pret--principal' : ''}"
+      data-pret="${i}" style="--cat:${catProduit(p.produit)}">
       <div class="pret__entete">
         <input type="text" class="pret__libelle" data-champ="prets.${i}.libelle" value="${att(p.libelle)}" />
         <input type="number" step="1" min="0" class="pret__montant" data-champ="prets.${i}.montant_eur"
           data-type="nombre" data-montant-pret="${i}" value="${valNum(p.montant_eur)}"
           title="${auto ? 'Calculé pour équilibrer la tranche. Saisir un montant le fige.' : 'Montant figé'}" />
-        <button type="button" class="bouton--auto" data-remettre-auto="${i}"
-          title="Revenir au montant calculé">↺ auto</button>
-        <select class="pret__nature" data-champ="prets.${i}.nature">
+        <select class="pret__nature" data-champ="prets.${i}.nature" ${p.principal ? 'disabled' : ''}
+          title="${p.principal ? 'La nature d’un prêt structurant ne se change pas' : ''}">
           ${['construction', 'foncier', 'autre'].map((n) => `<option value="${n}" ${n === p.nature ? 'selected' : ''}>${n}</option>`).join('')}
         </select>
-        <button type="button" class="bouton--deplier" data-deplier-pret="${i}"
-          aria-expanded="${ouvert}" title="${ouvert ? 'Replier' : 'Déplier'}">${ouvert ? '▴' : '▾'}</button>
-        <button type="button" class="bouton--supprimer" data-supprimer="prets" data-index="${i}" title="Supprimer">×</button>
+        <button type="button" class="bouton--auto" data-remettre-auto="${i}"
+          title="Revenir au montant calculé">↺ auto</button>
+        <span class="pret__actions">
+          <button type="button" class="bouton--deplier" data-deplier-pret="${i}"
+            aria-expanded="${ouvert}" title="${ouvert ? 'Replier' : 'Déplier'}">${ouvert ? '▴' : '▾'}</button>
+          ${
+            p.principal
+              ? ''
+              : `<button type="button" class="bouton--supprimer" data-supprimer="prets" data-index="${i}"
+                  data-nom="${att(p.libelle)}" title="Supprimer">×</button>`
+          }
+        </span>
       </div>
       <div class="jetons">${jetons}</div>
       ${
@@ -1085,9 +1106,28 @@ function rendreValeurs(r) {
     // Un pret calcule a 0 EUR n'est pas amorti, donc absent des amortissements.
     // Il vaut bien zero, et le champ doit le dire : une case vide se lirait
     // comme « pas encore calcule ».
-    const a = (r.amortissements ?? []).find((x) => x.code === etat.prets[i]?.code);
+    const a = (r.financement?.prets_resolus ?? []).find((x) => x.code === etat.prets[i]?.code);
     const v = String(Math.round(a?.montant_eur ?? 0));
     if (el.value !== v) el.value = v;
+  }
+
+  // Jetons de synthese d'un pret : taux, duree et revisabilite viennent du
+  // PRODUIT tant qu'ils ne sont pas saisis. C'est donc le resultat qui les porte.
+  // On lit `prets_resolus` et non `amortissements` : un pret dont le montant est
+  // nul n'est pas amorti, mais son taux et sa duree sont determines. Les lire
+  // dans les amortissements n'afficherait que des tirets.
+  for (const ligne of document.querySelectorAll('.ligne--pret[data-pret]')) {
+    const p = etat.prets[Number(/** @type {HTMLElement} */ (ligne).dataset.pret)];
+    const a = (r.financement?.prets_resolus ?? []).find((x) => x.code === p?.code);
+    const amorti = (r.amortissements ?? []).find((x) => x.code === p?.code);
+    const poser = (champ, v) => {
+      const el = ligne.querySelector(`[data-jeton="${champ}"]`);
+      if (el) el.textContent = v ?? '—';
+    };
+    poser('taux', nul(a?.taux) ? '—' : pct(a.taux, 2));
+    poser('duree', nul(a?.duree_ans) ? '—' : `${a.duree_ans} ans`);
+    poser('echeance', amorti?.annee_premiere_echeance ?? p?.annee_premiere_echeance ?? '—');
+    poser('revisabilite', a?.revisabilite ?? p?.revisabilite ?? '—');
   }
 
   for (const code of r.surfaces.tranches) {
@@ -2012,9 +2052,23 @@ document.addEventListener('click', (ev) => {
     return;
   }
 
+  // Toute la ligne de pret est une zone de depliage, sauf ce qui se manipule :
+  // viser un chevron de 30 pixels pour lire un detail est une contrainte
+  // inutile. Les champs, listes et boutons gardent leur comportement propre.
+  // `.pret__detail` est exclu : une fois le pret ouvert, cliquer dans le blanc
+  // entre deux champs le refermerait.
+  const ligne = el.closest('.ligne--pret[data-pret]');
+  if (ligne && !el.closest('input, select, textarea, button, label, a, .pret__detail')) {
+    const i = Number(/** @type {HTMLElement} */ (ligne).dataset.pret);
+    if (pretsDeplies.has(i)) pretsDeplies.delete(i);
+    else pretsDeplies.add(i);
+    rafraichirTout();
+    return;
+  }
+
   const deplier = el.closest('[data-deplier-pret]');
   if (deplier) {
-    const i = Number(/** @type {HTMLElement} */ (deplier).dataset.depliePret ?? /** @type {HTMLElement} */ (deplier).dataset.deplierPret);
+    const i = Number(/** @type {HTMLElement} */ (deplier).dataset.deplierPret);
     if (pretsDeplies.has(i)) pretsDeplies.delete(i);
     else pretsDeplies.add(i);
     rafraichirTout();
@@ -2102,7 +2156,17 @@ document.addEventListener('click', (ev) => {
 
   const aSupprimer = el.dataset?.supprimer;
   if (aSupprimer) {
-    etat[aSupprimer].splice(Number(el.dataset.index), 1);
+    const i = Number(el.dataset.index);
+    const cible = etat[aSupprimer][i];
+    // Confirmation courte : une suppression de pret ou de subvention efface une
+    // saisie qui ne se retrouve pas, et le bouton « x » est a deux pixels des
+    // champs voisins. Les lots, eux, se regenerent d'un clic.
+    if (aSupprimer !== 'lots') {
+      const nom = el.dataset.nom || cible?.libelle || `élément ${i + 1}`;
+      const quoi = aSupprimer === 'prets' ? 'le prêt' : 'la subvention';
+      if (!confirm(`Supprimer ${quoi} « ${nom} » ?`)) return;
+    }
+    etat[aSupprimer].splice(i, 1);
     rafraichirTout();
     return;
   }

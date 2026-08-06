@@ -652,18 +652,28 @@ input[type='number']::-webkit-inner-spin-button {
   padding: 10px 12px; background: var(--bg-secondary);
 }
 /* Une ligne de pret porte la couleur de la tranche qu'elle finance. */
-.ligne--pret { border-left: 3px solid var(--cat, var(--cat-6)); padding: 9px 11px; }
+/* La ligne entiere ouvre le detail : le curseur l'annonce, sauf sur ce qui se
+   manipule et sur le detail deja ouvert. */
+.ligne--pret { border-left: 3px solid var(--cat, var(--cat-6)); padding: 9px 11px; cursor: pointer; }
+.ligne--pret:hover { border-color: var(--border-color-strong); }
+.ligne--pret input, .ligne--pret select, .ligne--pret button, .ligne--pret .pret__detail {
+  cursor: auto;
+}
+.ligne--pret button { cursor: pointer; }
 
 /* En-tete toujours visible : libelle, montant, nature, actions. Le montant est
    la grandeur qu'on cherche en parcourant la liste, il est donc gros, a droite
    et en chiffres tabulaires. */
+/* Le libelle ne s'etire PAS sur toute la ligne : montant et nature restent a sa
+   suite, la ou l'oeil les cherche. Les actions, elles, filent a droite. */
 .pret__entete { display: flex; align-items: center; gap: 8px; }
-.pret__libelle { flex: 1 1 auto; min-width: 90px; font-weight: 650; font-size: 13px; }
+.pret__libelle { flex: 0 1 270px; min-width: 110px; font-weight: 650; font-size: 13px; }
 .pret__montant {
-  flex: 0 0 128px; font-weight: 700; font-size: 14px;
+  flex: 0 0 130px; font-weight: 700; font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
-.pret__nature { flex: 0 0 128px; font-size: 12px; }
+.pret__nature { flex: 0 0 130px; font-size: 12px; }
+.pret__actions { display: flex; align-items: center; gap: 2px; margin-left: auto; flex: none; }
 /* Montant de pret calcule : il se lit comme un resultat, pas comme une saisie,
    mais il reste modifiable — c'est ainsi qu'on le fige. */
 .pret--auto .pret__montant {
@@ -683,12 +693,21 @@ input[type='number']::-webkit-inner-spin-button {
 
 .bouton--deplier {
   appearance: none; border: none; background: transparent; cursor: pointer;
-  width: 26px; height: 26px; flex: none; border-radius: var(--radius-sm);
+  width: 32px; height: 30px; flex: none; border-radius: var(--radius-sm);
   display: grid; place-items: center; padding: 0;
-  color: var(--text-secondary); font-size: 15px; line-height: 1;
+  color: var(--text-secondary); font-size: 20px; line-height: 1;
 }
 .bouton--deplier:hover { background: var(--bg-tertiary); color: var(--info-accent); }
 .bouton--deplier[aria-expanded='true'] { color: var(--info-accent); }
+
+/* Pret STRUCTURANT d'une tranche : il porte l'equilibre, il ne se supprime pas.
+   Le filet plein et le libelle en capitales le distinguent d'un pret ajoute
+   a la main, sans en faire une couleur de plus. */
+.pret--principal { border-left-width: 4px; background: var(--bg-tertiary); }
+.pret--principal .pret__libelle {
+  font-size: 11.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
 .pret__detail {
   margin-top: 10px; padding-top: 10px;
   border-top: 1px dashed var(--border-color);
@@ -3092,6 +3111,51 @@ function soldeAFinancer({
  * @param {number} [p.quote_part_su]  defaut 1 (operation mono-produit)
  * @returns {number}
  */
+/**
+ * R-FIN-3 bis — Redressement en serie des besoins de financement negatifs.
+ *
+ * Une tranche peut etre SURFINANCEE : sa subvention flechee et ses fonds propres
+ * depassent son prix de revient. Son besoin est alors negatif, et cet excedent
+ * finance les AUTRES tranches — il ne s'evapore pas. Le plafonner a zero ferait
+ * emprunter aux autres un montant deja couvert, et le plan sortirait
+ * surfinance de cet excedent.
+ *
+ * Transcrit de la calculette CDC « production LS » (onglet Construction,
+ * colonnes AI a AO, libelle « Prets construction redresses ») : l'excedent est
+ * reparti sur les tranches encore positives au prorata de leur surface utile, et
+ * l'operation est repetee, car une repartition peut rendre negative une tranche
+ * qui ne l'etait pas. La calculette itere trois fois ; on itere jusqu'a
+ * stabilite, avec la meme borne de securite.
+ *
+ * @param {Record<string, number>} besoins   besoin par tranche, signe conserve
+ * @param {Record<string, number>} quotesParts clef de repartition (surface utile)
+ * @returns {{besoins: Record<string, number>, excedent_eur: number, tours: number}}
+ */
+function redresserBesoins(besoins, quotesParts) {
+  const codes = Object.keys(besoins);
+  const resultat = { ...besoins };
+  let excedentTotal = 0;
+  let tours = 0;
+
+  for (; tours < 3; tours++) {
+    const negatifs = codes.filter((c) => resultat[c] < 0);
+    if (!negatifs.length) break;
+
+    const excedent = negatifs.reduce((s, c) => s + resultat[c], 0); // valeur negative
+    excedentTotal += -excedent;
+    for (const c of negatifs) resultat[c] = 0;
+
+    const positifs = codes.filter((c) => resultat[c] > 0);
+    const cle = positifs.reduce((s, c) => s + (quotesParts[c] ?? 0), 0);
+    // Plus aucune tranche a servir : l'excedent reste acquis a l'operation et
+    // ressortira en surfinancement, ce qui est la verite du plan.
+    if (!positifs.length || cle <= 0) break;
+    for (const c of positifs) resultat[c] += excedent * ((quotesParts[c] ?? 0) / cle);
+  }
+
+  return { besoins: resultat, excedent_eur: arrondiEuro(excedentTotal), tours };
+}
+
 function foncierFinancable({
   charge_fonciere_eur,
   financements_gratuits_eur = 0,
@@ -4125,7 +4189,7 @@ function calculer(entrees, referentiels) {
     }
 
     /** @type {Record<string, number>} */
-    const besoin = {};
+    const besoinBrut = {};
     for (const c of codesFinances) {
       const pr = bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0;
       const sub = (subAffectees[c] ?? 0) + (quotesParts[c] ?? 0) * subNonAffectees;
@@ -4133,7 +4197,19 @@ function calculer(entrees, referentiels) {
       const fixes = prets
         .filter((p) => !auto(p) && (p.produit ?? trancheUnique) === c)
         .reduce((s, p) => s + (Number(p.montant_eur) || 0), 0);
-      besoin[c] = Math.max(0, pr - sub - fp - fixes);
+      // Le signe est CONSERVE : un besoin negatif signale une tranche
+      // surfinancee, dont l'excedent va financer les autres.
+      besoinBrut[c] = pr - sub - fp - fixes;
+    }
+    const redresse = redresserBesoins(besoinBrut, quotesParts);
+    const besoin = redresse.besoins;
+    if (redresse.excedent_eur > 0) {
+      const surfinancees = codesFinances.filter((c) => besoinBrut[c] < 0);
+      alertes.push(
+        `Tranche${surfinancees.length > 1 ? 's' : ''} ${surfinancees.join(', ')} surfinancee${surfinancees.length > 1 ? 's' : ''} ` +
+          `de ${redresse.excedent_eur} EUR : cet excedent reduit d'autant les prets des autres tranches ` +
+          '(redressement en serie, calculette CDC).',
+      );
     }
 
     // Repartition foncier / construction : le foncier est plafonne a la part
@@ -4252,6 +4328,23 @@ function calculer(entrees, referentiels) {
         livret_a_par_annee: p.livret_a_par_annee ?? laParAnnee,
       }),
     }));
+
+  // Prets RESOLUS : la liste complete, y compris ceux dont le montant est nul et
+  // qui ne sont donc pas amortis. Leur taux et leur duree existent pourtant, et
+  // une restitution qui ne lirait que `amortissements` afficherait des tirets a
+  // la place de caracteristiques parfaitement determinees.
+  const pretsResolus = pretsACalculer.map((p) => ({
+    code: p.code ?? p.libelle ?? 'pret',
+    libelle: p.libelle ?? p.code,
+    nature: p.nature ?? 'autre',
+    produit: p.produit ?? trancheUnique,
+    montant_eur: p.montant_eur,
+    montant_calcule: p.montant_calcule === true,
+    taux: p.taux ?? null,
+    duree_ans: p.duree_ans ?? null,
+    revisabilite: p.revisabilite ?? null,
+    progressivite: p.progressivite ?? 0,
+  }));
 
   // Tous les prets amortis, quelle que soit leur nature. `amortissements` porte
   // deja les prets « autre » : les rajouter les compterait deux fois (defaut V1).
@@ -4500,6 +4593,7 @@ function calculer(entrees, referentiels) {
     financement: {
       solde_a_financer_eur: solde,
       prets_cdc_theoriques: cdcTheoriques,
+      prets_resolus: pretsResolus,
       prefinancement: prefi,
       total_prets_eur: totalPrets,
       total_prets_cdc_eur: totalPretsCDC,
@@ -4973,6 +5067,9 @@ function pretsCDCParDefaut(codes) {
         libelle: `${libelle} ${code}`,
         nature,
         produit: code,
+        // Pret STRUCTURANT de la tranche : il ne se supprime pas, c'est lui qui
+        // porte l'equilibre. Mettre son montant a zero suffit a le neutraliser.
+        principal: true,
         // Montant laisse au calcul : il s'ajuste au besoin de la tranche.
         montant_auto: true,
         montant_eur: null,
@@ -5052,7 +5149,8 @@ function rendreStructureTranches() {
                     <td><input type="text" data-champ="subventions.${i}.libelle" value="${att(s.libelle)}" /></td>
                     <td><input type="number" step="1" data-champ="subventions.${i}.montant_eur" data-type="nombre" value="${valNum(s.montant_eur)}" /></td>
                     <td class="num"><input type="checkbox" data-champ="subventions.${i}.gratuite" data-type="booleen" ${s.gratuite ? 'checked' : ''} /></td>
-                    <td><button type="button" class="bouton--supprimer" data-supprimer="subventions" data-index="${i}" title="Supprimer">×</button></td>
+                    <td><button type="button" class="bouton--supprimer" data-supprimer="subventions" data-index="${i}"
+                      data-nom="${att(s.libelle)}" title="Supprimer">×</button></td>
                   </tr>`,
                           )
                           .join('')
@@ -5093,9 +5191,14 @@ function rendreStructureTranches() {
  */
 const pretsDeplies = new Set();
 
-/** Jeton de metadonnee : etiquette en petites capitales, valeur en clair. */
-const jeton = (cle, valeur) =>
-  `<span class="jeton"><span class="jeton__cle">${att(cle)}</span><span class="jeton__valeur">${att(valeur)}</span></span>`;
+/**
+ * Jeton de metadonnee : etiquette en petites capitales, valeur en clair.
+ * `champ` marque la valeur pour qu'un rendu ulterieur la remplisse depuis le
+ * resultat du moteur, sans reconstruire la ligne.
+ */
+const jeton = (cle, valeur, champ) =>
+  `<span class="jeton"><span class="jeton__cle">${att(cle)}</span>` +
+  `<span class="jeton__valeur"${champ ? ` data-jeton="${champ}"` : ''}>${att(valeur)}</span></span>`;
 
 /**
  * Bloc d'un pret, sur le modele des lignes de financement d'ExNihilo : une
@@ -5108,11 +5211,14 @@ const jeton = (cle, valeur) =>
  */
 function gabaritPret(p, i) {
   const ouvert = pretsDeplies.has(i);
+  // Les jetons sont remplis par `remplirCalculs` depuis le resultat : taux,
+  // duree et revisabilite d'un pret CDC viennent du PRODUIT tant qu'ils ne sont
+  // pas saisis, et les lire dans l'etat n'afficherait que des tirets.
   const jetons = [
-    jeton('taux', nul(p.taux) ? '—' : pct(p.taux, 2)),
-    jeton('durée', nul(p.duree_ans) ? '—' : `${p.duree_ans} ans`),
-    jeton('1re éch.', valNum(p.annee_premiere_echeance) || '—'),
-    jeton('révis.', p.revisabilite ?? '—'),
+    jeton('taux', '—', 'taux'),
+    jeton('durée', '—', 'duree'),
+    jeton('1re éch.', '—', 'echeance'),
+    jeton('révis.', '—', 'revisabilite'),
     ...(p.progressivite ? [jeton('progr.', pct(p.progressivite, 2))] : []),
     ...(p.differe_ans ? [jeton('différé', `${p.differe_ans} ans · type ${p.differe_type ?? 2}`)] : []),
   ].join('');
@@ -5122,20 +5228,29 @@ function gabaritPret(p, i) {
   // montant et fait apparaitre le bouton de retour au calcul.
   const auto = p.montant_auto !== false;
   return `
-    <div class="ligne ligne--pret ${auto ? 'pret--auto' : ''}" data-pret="${i}" style="--cat:${catProduit(p.produit)}">
+    <div class="ligne ligne--pret ${auto ? 'pret--auto' : ''} ${p.principal ? 'pret--principal' : ''}"
+      data-pret="${i}" style="--cat:${catProduit(p.produit)}">
       <div class="pret__entete">
         <input type="text" class="pret__libelle" data-champ="prets.${i}.libelle" value="${att(p.libelle)}" />
         <input type="number" step="1" min="0" class="pret__montant" data-champ="prets.${i}.montant_eur"
           data-type="nombre" data-montant-pret="${i}" value="${valNum(p.montant_eur)}"
           title="${auto ? 'Calculé pour équilibrer la tranche. Saisir un montant le fige.' : 'Montant figé'}" />
-        <button type="button" class="bouton--auto" data-remettre-auto="${i}"
-          title="Revenir au montant calculé">↺ auto</button>
-        <select class="pret__nature" data-champ="prets.${i}.nature">
+        <select class="pret__nature" data-champ="prets.${i}.nature" ${p.principal ? 'disabled' : ''}
+          title="${p.principal ? 'La nature d’un prêt structurant ne se change pas' : ''}">
           ${['construction', 'foncier', 'autre'].map((n) => `<option value="${n}" ${n === p.nature ? 'selected' : ''}>${n}</option>`).join('')}
         </select>
-        <button type="button" class="bouton--deplier" data-deplier-pret="${i}"
-          aria-expanded="${ouvert}" title="${ouvert ? 'Replier' : 'Déplier'}">${ouvert ? '▴' : '▾'}</button>
-        <button type="button" class="bouton--supprimer" data-supprimer="prets" data-index="${i}" title="Supprimer">×</button>
+        <button type="button" class="bouton--auto" data-remettre-auto="${i}"
+          title="Revenir au montant calculé">↺ auto</button>
+        <span class="pret__actions">
+          <button type="button" class="bouton--deplier" data-deplier-pret="${i}"
+            aria-expanded="${ouvert}" title="${ouvert ? 'Replier' : 'Déplier'}">${ouvert ? '▴' : '▾'}</button>
+          ${
+            p.principal
+              ? ''
+              : `<button type="button" class="bouton--supprimer" data-supprimer="prets" data-index="${i}"
+                  data-nom="${att(p.libelle)}" title="Supprimer">×</button>`
+          }
+        </span>
       </div>
       <div class="jetons">${jetons}</div>
       ${
@@ -5593,9 +5708,28 @@ function rendreValeurs(r) {
     // Un pret calcule a 0 EUR n'est pas amorti, donc absent des amortissements.
     // Il vaut bien zero, et le champ doit le dire : une case vide se lirait
     // comme « pas encore calcule ».
-    const a = (r.amortissements ?? []).find((x) => x.code === etat.prets[i]?.code);
+    const a = (r.financement?.prets_resolus ?? []).find((x) => x.code === etat.prets[i]?.code);
     const v = String(Math.round(a?.montant_eur ?? 0));
     if (el.value !== v) el.value = v;
+  }
+
+  // Jetons de synthese d'un pret : taux, duree et revisabilite viennent du
+  // PRODUIT tant qu'ils ne sont pas saisis. C'est donc le resultat qui les porte.
+  // On lit `prets_resolus` et non `amortissements` : un pret dont le montant est
+  // nul n'est pas amorti, mais son taux et sa duree sont determines. Les lire
+  // dans les amortissements n'afficherait que des tirets.
+  for (const ligne of document.querySelectorAll('.ligne--pret[data-pret]')) {
+    const p = etat.prets[Number(/** @type {HTMLElement} */ (ligne).dataset.pret)];
+    const a = (r.financement?.prets_resolus ?? []).find((x) => x.code === p?.code);
+    const amorti = (r.amortissements ?? []).find((x) => x.code === p?.code);
+    const poser = (champ, v) => {
+      const el = ligne.querySelector(`[data-jeton="${champ}"]`);
+      if (el) el.textContent = v ?? '—';
+    };
+    poser('taux', nul(a?.taux) ? '—' : pct(a.taux, 2));
+    poser('duree', nul(a?.duree_ans) ? '—' : `${a.duree_ans} ans`);
+    poser('echeance', amorti?.annee_premiere_echeance ?? p?.annee_premiere_echeance ?? '—');
+    poser('revisabilite', a?.revisabilite ?? p?.revisabilite ?? '—');
   }
 
   for (const code of r.surfaces.tranches) {
@@ -6520,9 +6654,23 @@ document.addEventListener('click', (ev) => {
     return;
   }
 
+  // Toute la ligne de pret est une zone de depliage, sauf ce qui se manipule :
+  // viser un chevron de 30 pixels pour lire un detail est une contrainte
+  // inutile. Les champs, listes et boutons gardent leur comportement propre.
+  // `.pret__detail` est exclu : une fois le pret ouvert, cliquer dans le blanc
+  // entre deux champs le refermerait.
+  const ligne = el.closest('.ligne--pret[data-pret]');
+  if (ligne && !el.closest('input, select, textarea, button, label, a, .pret__detail')) {
+    const i = Number(/** @type {HTMLElement} */ (ligne).dataset.pret);
+    if (pretsDeplies.has(i)) pretsDeplies.delete(i);
+    else pretsDeplies.add(i);
+    rafraichirTout();
+    return;
+  }
+
   const deplier = el.closest('[data-deplier-pret]');
   if (deplier) {
-    const i = Number(/** @type {HTMLElement} */ (deplier).dataset.depliePret ?? /** @type {HTMLElement} */ (deplier).dataset.deplierPret);
+    const i = Number(/** @type {HTMLElement} */ (deplier).dataset.deplierPret);
     if (pretsDeplies.has(i)) pretsDeplies.delete(i);
     else pretsDeplies.add(i);
     rafraichirTout();
@@ -6610,7 +6758,17 @@ document.addEventListener('click', (ev) => {
 
   const aSupprimer = el.dataset?.supprimer;
   if (aSupprimer) {
-    etat[aSupprimer].splice(Number(el.dataset.index), 1);
+    const i = Number(el.dataset.index);
+    const cible = etat[aSupprimer][i];
+    // Confirmation courte : une suppression de pret ou de subvention efface une
+    // saisie qui ne se retrouve pas, et le bouton « x » est a deux pixels des
+    // champs voisins. Les lots, eux, se regenerent d'un clic.
+    if (aSupprimer !== 'lots') {
+      const nom = el.dataset.nom || cible?.libelle || `élément ${i + 1}`;
+      const quoi = aSupprimer === 'prets' ? 'le prêt' : 'la subvention';
+      if (!confirm(`Supprimer ${quoi} « ${nom} » ?`)) return;
+    }
+    etat[aSupprimer].splice(i, 1);
     rafraichirTout();
     return;
   }

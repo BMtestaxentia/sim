@@ -29,6 +29,7 @@ import {
   soldeAFinancer,
   foncierFinancable,
   pretsCDCTheoriques,
+  redresserBesoins,
   controleEquilibre,
 } from './financement.js';
 import { tableauAmortissement, anneePremiereEcheance, prefinancement } from './amortissement.js';
@@ -319,7 +320,7 @@ export function calculer(entrees, referentiels) {
     }
 
     /** @type {Record<string, number>} */
-    const besoin = {};
+    const besoinBrut = {};
     for (const c of codesFinances) {
       const pr = bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0;
       const sub = (subAffectees[c] ?? 0) + (quotesParts[c] ?? 0) * subNonAffectees;
@@ -327,7 +328,19 @@ export function calculer(entrees, referentiels) {
       const fixes = prets
         .filter((p) => !auto(p) && (p.produit ?? trancheUnique) === c)
         .reduce((s, p) => s + (Number(p.montant_eur) || 0), 0);
-      besoin[c] = Math.max(0, pr - sub - fp - fixes);
+      // Le signe est CONSERVE : un besoin negatif signale une tranche
+      // surfinancee, dont l'excedent va financer les autres.
+      besoinBrut[c] = pr - sub - fp - fixes;
+    }
+    const redresse = redresserBesoins(besoinBrut, quotesParts);
+    const besoin = redresse.besoins;
+    if (redresse.excedent_eur > 0) {
+      const surfinancees = codesFinances.filter((c) => besoinBrut[c] < 0);
+      alertes.push(
+        `Tranche${surfinancees.length > 1 ? 's' : ''} ${surfinancees.join(', ')} surfinancee${surfinancees.length > 1 ? 's' : ''} ` +
+          `de ${redresse.excedent_eur} EUR : cet excedent reduit d'autant les prets des autres tranches ` +
+          '(redressement en serie, calculette CDC).',
+      );
     }
 
     // Repartition foncier / construction : le foncier est plafonne a la part
@@ -446,6 +459,23 @@ export function calculer(entrees, referentiels) {
         livret_a_par_annee: p.livret_a_par_annee ?? laParAnnee,
       }),
     }));
+
+  // Prets RESOLUS : la liste complete, y compris ceux dont le montant est nul et
+  // qui ne sont donc pas amortis. Leur taux et leur duree existent pourtant, et
+  // une restitution qui ne lirait que `amortissements` afficherait des tirets a
+  // la place de caracteristiques parfaitement determinees.
+  const pretsResolus = pretsACalculer.map((p) => ({
+    code: p.code ?? p.libelle ?? 'pret',
+    libelle: p.libelle ?? p.code,
+    nature: p.nature ?? 'autre',
+    produit: p.produit ?? trancheUnique,
+    montant_eur: p.montant_eur,
+    montant_calcule: p.montant_calcule === true,
+    taux: p.taux ?? null,
+    duree_ans: p.duree_ans ?? null,
+    revisabilite: p.revisabilite ?? null,
+    progressivite: p.progressivite ?? 0,
+  }));
 
   // Tous les prets amortis, quelle que soit leur nature. `amortissements` porte
   // deja les prets « autre » : les rajouter les compterait deux fois (defaut V1).
@@ -694,6 +724,7 @@ export function calculer(entrees, referentiels) {
     financement: {
       solde_a_financer_eur: solde,
       prets_cdc_theoriques: cdcTheoriques,
+      prets_resolus: pretsResolus,
       prefinancement: prefi,
       total_prets_eur: totalPrets,
       total_prets_cdc_eur: totalPretsCDC,

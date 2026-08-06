@@ -74,7 +74,7 @@
             </label>
             <label class="champ">
               <span>Commune</span>
-              <input type="text" data-champ="identite.commune" />
+              <select data-champ="identite.commune" id="select-commune"></select>
             </label>
             <label class="champ">
               <span>Département</span>
@@ -99,12 +99,15 @@
             </label>
             <label class="champ">
               <span>Zone A/B/C</span>
+              <!-- La VALEUR suit l'ecriture de l'arrete (« Abis ») pour que la
+                   deduction depuis la commune trouve son option ; le libelle
+                   reste lisible. Le moteur accepte les deux graphies. -->
               <select data-champ="identite.zone_ABC">
-                <option>A</option>
-                <option>A bis</option>
-                <option>B1</option>
-                <option>B2</option>
-                <option>C</option>
+                <option value="A">A</option>
+                <option value="Abis">A bis</option>
+                <option value="B1">B1</option>
+                <option value="B2">B2</option>
+                <option value="C">C</option>
               </select>
             </label>
           </div>

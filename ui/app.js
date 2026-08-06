@@ -29,7 +29,7 @@ const referentiels = {
   baremes: await (await fetch('../referentiels/baremes_2025.json')).json(),
   trajectoires: await (await fetch('../referentiels/trajectoires_axentia_2026.json')).json(),
   nomenclature_pdr: await (await fetch('../referentiels/nomenclature_pdr.json')).json(),
-  zonage_communes: await (await fetch('../referentiels/zonage_communes.json')).json(),
+  zonage_abc: await (await fetch('../referentiels/zonage_abc_communes.json')).json(),
   departements: await (await fetch('../referentiels/departements.json')).json(),
 };
 // __REFERENTIELS_FIN__
@@ -302,20 +302,40 @@ const afficherTVA = () => tvaVisible;
  * @param {string} departement peut valoir « Dordogne (24) » : seuls les chiffres comptent
  * @returns {{zone_123: number, zone_ABC: string, nom: string, source: string}|null}
  */
-function zonageDeLaCommune(commune, departement) {
-  if (!commune || !departement) return null;
+function codeDepartement(departement) {
+  if (!departement) return null;
   // Le departement est stocke sous la forme « Nom (code) ». Le code se lit
   // ENTRE PARENTHESES et non par les premiers chiffres rencontres : la Corse
   // s'ecrit 2A et 2B, et « Corse-du-Sud (2A) » donnerait sinon « 2 ».
-  const dep = String(departement).match(/\(([0-9AB]{2,3})\)/)?.[1] ?? String(departement).match(/^[0-9AB]{2,3}$/)?.[0];
-  if (!dep) return null;
-  const nom = String(commune)
+  return (
+    String(departement).match(/\(([0-9AB]{2,3})\)/)?.[1] ??
+    String(departement).match(/^[0-9AB]{2,3}$/)?.[0] ??
+    null
+  );
+}
+
+/** Communes d'un departement, triees, telles que les nomme l'arrete. */
+function communesDuDepartement(departement) {
+  const dep = codeDepartement(departement);
+  return dep ? (referentiels.zonage_abc.par_departement[dep] ?? []) : [];
+}
+
+/** Forme comparable d'un nom de commune : accents, casse et ponctuation neutralises. */
+const normaliserNom = (s) =>
+  String(s ?? '')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
-  return referentiels.zonage_communes.communes[`${dep}-${nom}`] ?? null;
+    .replace(/[^A-Z0-9]+/g, '');
+
+function zonageDeLaCommune(commune, departement) {
+  if (!commune) return null;
+  const cible = normaliserNom(commune);
+  // La comparaison passe par la forme normalisee : la commune est normalement
+  // choisie dans la liste, donc exacte, mais une simulation importee peut
+  // porter « ORLEANS » ou « Orleans » sans accent.
+  const trouvee = communesDuDepartement(departement).find((c) => normaliserNom(c[1]) === cible);
+  return trouvee ? { code_insee: trouvee[0], nom: trouvee[1], zone_ABC: trouvee[2] } : null;
 }
 
 /** Une ligne de prix de revient est-elle saisie tranche par tranche ? */
@@ -643,34 +663,49 @@ function rendreStructureCharges() {
 function rendreZonage() {
   const aide = document.getElementById('aide-zonage');
   if (!aide) return;
+
+  // La liste des communes suit le departement choisi : on choisit dans l'arrete
+  // plutot que de saisir un nom, ce qui supprime la faute de frappe et rend la
+  // correspondance exacte.
+  const select = /** @type {HTMLSelectElement} */ (document.getElementById('select-commune'));
+  const communes = communesDuDepartement(etat.identite.departement);
+  if (select && select.dataset.departement !== String(etat.identite.departement ?? '')) {
+    select.dataset.departement = String(etat.identite.departement ?? '');
+    select.innerHTML =
+      '<option value=""></option>' +
+      communes.map((c) => `<option value="${att(c[1])}">${att(c[1])}</option>`).join('');
+    // Une commune qui n'appartient pas au departement choisi n'a plus de sens.
+    if (etat.identite.commune && !communes.some((c) => c[1] === etat.identite.commune)) {
+      etat.identite.commune = null;
+    }
+    select.value = etat.identite.commune ?? '';
+  }
+
   const z = zonageDeLaCommune(etat.identite.commune, etat.identite.departement);
+  const ref = referentiels.zonage_abc;
 
   if (z) {
-    // On ne touche QUE les deux selects de zone. Repasser par
-    // `rendreChampsStatiques` reecrirait la valeur du champ commune pendant
-    // qu'on le saisit, au risque de deplacer le curseur a chaque frappe.
-    const poser = (chemin, valeur) => {
-      if (etat.identite[chemin] === valeur) return;
-      etat.identite[chemin] = valeur;
-      const el = /** @type {HTMLSelectElement} */ (document.querySelector(`[data-champ="identite.${chemin}"]`));
-      if (el) el.value = String(valeur);
-    };
-    poser('zone_123', z.zone_123);
-    poser('zone_ABC', z.zone_ABC);
+    // On ne touche QUE le select de zone ABC. Repasser par
+    // `rendreChampsStatiques` reecrirait tous les champs, curseur compris.
+    if (etat.identite.zone_ABC !== z.zone_ABC) {
+      etat.identite.zone_ABC = z.zone_ABC;
+      const el = /** @type {HTMLSelectElement} */ (document.querySelector('[data-champ="identite.zone_ABC"]'));
+      if (el) el.value = z.zone_ABC;
+    }
     aide.textContent =
-      `⚙ Zonage déduit de ${z.nom} (${z.departement}) : zone ${z.zone_123} et zone ${z.zone_ABC}. ` +
-      `Source : ${z.source}. Corriger les listes si l'arrêté a changé.`;
+      `⚙ ${z.nom} (INSEE ${z.code_insee}) est en zone ${z.zone_ABC}, d'après l'arrêté en vigueur ` +
+      `depuis le ${ref.en_vigueur_depuis} (${ref.source}). ` +
+      'La zone 1/2/3, qui commande les loyers PLUS et PLAI, relève d’un autre arrêté sans table ' +
+      'nationale ouverte : elle reste à saisir.';
     return;
   }
 
-  const connues = Object.keys(referentiels.zonage_communes.communes).length;
-  aide.textContent = etat.identite.commune
-    ? `⚙ ${etat.identite.commune} n'est pas au référentiel de zonage (${connues} communes attestées) : ` +
-      'les deux zones restent à saisir. Le zonage commande le loyer plafond, il n’est pas deviné ' +
-      'depuis le département — deux communes voisines peuvent relever de zones différentes.'
-    : '⚙ Renseigner commune et département pour que le zonage se déduise, quand la commune est ' +
-      'au référentiel. Chaque tranche lit ensuite celui qui la concerne : 1/2/3 pour PLUS et PLAI, ' +
-      'A/B/C pour PLS.';
+  aide.textContent = etat.identite.departement
+    ? `⚙ Choisir la commune pour que la zone A/B/C se déduise (${communes.length} communes dans ce ` +
+      `département, arrêté du ${ref.en_vigueur_depuis}). La zone 1/2/3 reste à saisir.`
+    : `⚙ Choisir le département, puis la commune : la zone A/B/C se déduit de l’arrêté ` +
+      `(${ref.nb_communes.toLocaleString('fr-FR')} communes). Elle commande les loyers plafonds du ` +
+      'PLS et du PLI. La zone 1/2/3, celle du PLUS et du PLAI, reste à saisir.';
 }
 
 /**

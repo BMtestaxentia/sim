@@ -105,7 +105,7 @@ const referentiels = {
   baremes: JSON.parse(lire('referentiels', 'baremes_2025.json')),
   trajectoires: JSON.parse(lire('referentiels', 'trajectoires_axentia_2026.json')),
   nomenclature_pdr: JSON.parse(lire('referentiels', 'nomenclature_pdr.json')),
-  zonage_communes: JSON.parse(lire('referentiels', 'zonage_communes.json')),
+  zonage_abc: JSON.parse(lire('referentiels', 'zonage_abc_communes.json')),
   departements: JSON.parse(lire('referentiels', 'departements.json')),
 };
 

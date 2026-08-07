@@ -1314,13 +1314,28 @@ function rendreValeurs(r) {
     const remplirJauge = (quoi, segments) => {
       const el = document.querySelector(`[data-jauge="${quoi}"][data-tranche="${code}"]`);
       if (!el) return;
-      el.innerHTML = segments
+      const part = (s) => ((s.montant / echelle) * 100).toFixed(3);
+      // Deux couches superposees : la barre, rognee pour garder ses coins
+      // arrondis, et les etiquettes, qui doivent au contraire deborder. Une
+      // seule couche ne peut pas faire les deux.
+      const barre = segments
         .map(
           (s) =>
-            `<span style="flex:0 0 ${((s.montant / echelle) * 100).toFixed(3)}%;background:${s.couleur}"` +
+            `<span style="flex:0 0 ${part(s)}%;background:${s.couleur}"` +
             ` title="${att(s.libelle)} : ${eur(s.montant)}"></span>`,
         )
         .join('');
+      // Sous 7 % de la hauteur, le segment fait moins de cinquante pixels :
+      // l'etiquette y serait tronquee a deux lettres. L'infobulle la porte.
+      const etiquettes = segments
+        .map(
+          (s) =>
+            `<span style="flex:0 0 ${part(s)}%">${
+              Number(part(s)) >= 7 ? `<i>${att(s.libelle)} — ${eur(s.montant)}</i>` : ''
+            }</span>`,
+        )
+        .join('');
+      el.innerHTML = `<span class="jauge__barre">${barre}</span><span class="jauge__etiquettes">${etiquettes}</span>`;
     };
     remplirJauge('emplois', emploisTr);
     remplirJauge('ressources', ressourcesTr);

@@ -162,16 +162,49 @@ html, body {
 .ecran--tranche[hidden] { display: none; }
 .ecran__corps { flex: 1; min-width: 0; }
 .jauge {
-  flex: 0 0 9px; align-self: stretch;
-  display: flex; flex-direction: column;
-  border-radius: var(--radius-pill); overflow: hidden;
-  background: var(--bg-secondary);
+  flex: 0 0 74px; align-self: flex-start;
   /* Elle accompagne le defilement plutot que de s'etirer sur mille pixels :
      l'equilibre reste lisible ou que l'on soit dans la saisie. */
   position: sticky; top: 74px; height: calc(100vh - 110px);
 }
-.jauge > span { display: block; width: 100%; min-height: 2px; }
-@media (max-width: 900px) { .jauge { display: none; } }
+/* La BARRE est rognee pour garder ses coins arrondis ; les ETIQUETTES doivent
+   au contraire deborder vers l'exterieur. D'ou deux couches superposees, aux
+   memes proportions, plutot qu'un seul empilement. */
+.jauge__barre, .jauge__etiquettes {
+  position: absolute; top: 0; bottom: 0;
+  display: flex; flex-direction: column;
+}
+.jauge__barre {
+  width: 9px; border-radius: var(--radius-pill); overflow: hidden;
+  background: var(--bg-secondary);
+}
+.jauge__barre > span { display: block; width: 100%; min-height: 2px; }
+.jauge__etiquettes > span { display: flex; overflow: hidden; }
+
+/* Emplois a gauche du contenu : barre collee a l'interieur, etiquettes dehors. */
+.jauge[data-jauge='emplois'] .jauge__barre { right: 0; }
+.jauge[data-jauge='emplois'] .jauge__etiquettes { left: 0; right: 15px; justify-content: flex-start; }
+.jauge[data-jauge='emplois'] .jauge__etiquettes > span { justify-content: flex-end; }
+/* Ressources a droite : tout est en miroir. */
+.jauge[data-jauge='ressources'] .jauge__barre { left: 0; }
+.jauge[data-jauge='ressources'] .jauge__etiquettes { left: 15px; right: 0; }
+
+/* Texte PARALLELE a la barre. `vertical-rl` le fait courir de haut en bas, dans
+   le sens de lecture des segments. */
+.jauge__etiquettes i {
+  /* `display: block` est INDISPENSABLE : `writing-mode` n'a aucun effet sur une
+     boite inline, et l'etiquette restait invisible sans lever d'erreur. */
+  display: block;
+  writing-mode: vertical-rl; font-style: normal;
+  font-size: 9.5px; letter-spacing: 0.02em;
+  color: var(--text-tertiary); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-height: 100%;
+  font-variant-numeric: tabular-nums;
+}
+/* Les etiquettes coutent 74 px de chaque bord : sous 950 px elles prendraient
+   plus de place qu'elles n'en valent, seules les barres restent. */
+@media (max-width: 950px) { .jauge { flex-basis: 14px; } .jauge__etiquettes { display: none; } }
+@media (max-width: 760px) { .jauge { display: none; } }
 
 .colonnes { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; }
 .colonnes--balance { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }

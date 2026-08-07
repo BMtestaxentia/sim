@@ -424,6 +424,12 @@ input[type='number']::-webkit-inner-spin-button {
 
 .num-poste { color: var(--text-tertiary); font-variant-numeric: tabular-nums; width: 1%; }
 .libelle-poste { color: var(--text-secondary); }
+/* La colonne des libelles absorbe toute la largeur restante d'une table large :
+   alignes a gauche, les postes se retrouvaient a dix centimetres de leur
+   montant. On les colle a la colonne des totaux, que l'oeil suit ensuite d'un
+   seul trait vertical. */
+.tableau--nomenclature .libelle-poste,
+.tableau--nomenclature .chapitre-total .libelle { text-align: right; }
 .vide { color: var(--text-tertiary); font-style: italic; text-align: center; padding: 14px 9px; }
 
 /* Nomenclature du prix de revient : les chapitres structurent la lecture. */

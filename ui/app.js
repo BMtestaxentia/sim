@@ -669,14 +669,24 @@ function gabaritPret(p, i) {
         ouvert
           ? `<div class="pret__detail">
         <div class="champs champs--serres">
+          <!-- Champ VIDE = valeur heritee du produit (R-AMT-1). Le placeholder
+               dit laquelle, et il est rempli depuis le resultat du moteur. Sans
+               cela le jeton affichait « 50 ans » au-dessus d'un champ vide. -->
           <label class="champ"><span>Taux saisi (%)</span>
-            <input type="number" step="0.01" data-champ="prets.${i}.taux" data-type="pourcentage" value="${valNum(enPourcent(p.taux))}" /></label>
+            <input type="number" step="0.01" data-champ="prets.${i}.taux" data-type="pourcentage"
+              data-defaut="taux" value="${valNum(enPourcent(p.taux))}" /></label>
           <label class="champ"><span>Durée (ans)</span>
-            <input type="number" step="1" min="1" data-champ="prets.${i}.duree_ans" data-type="nombre" value="${valNum(p.duree_ans)}" /></label>
+            <input type="number" step="1" min="1" data-champ="prets.${i}.duree_ans" data-type="nombre"
+              data-defaut="duree" value="${valNum(p.duree_ans)}" /></label>
           <label class="champ"><span>1re échéance (année)</span>
-            <input type="number" step="1" data-champ="prets.${i}.annee_premiere_echeance" data-type="nombre" value="${valNum(p.annee_premiere_echeance)}" /></label>
+            <input type="number" step="1" data-champ="prets.${i}.annee_premiere_echeance" data-type="nombre"
+              data-defaut="echeance" value="${valNum(p.annee_premiere_echeance)}" /></label>
           <label class="champ"><span>Révisabilité</span>
+            <!-- Un select n'a pas de placeholder : l'option vide porte donc la
+                 valeur heritee, sans quoi il afficherait DOUBLE, sa premiere
+                 option, pendant que le moteur applique autre chose. -->
             <select data-champ="prets.${i}.revisabilite">
+              <option value="" data-defaut="revisabilite" ${nul(p.revisabilite) ? 'selected' : ''}>— du produit —</option>
               ${OPTIONS_REVISABILITE.map((v) => `<option value="${v}" ${v === p.revisabilite ? 'selected' : ''}>${v}</option>`).join('')}
             </select></label>
           <label class="champ"><span>Progressivité (%)</span>
@@ -1142,6 +1152,19 @@ function rendreValeurs(r) {
     poser('duree', nul(a?.duree_ans) ? '—' : `${a.duree_ans} ans`);
     poser('echeance', amorti?.annee_premiere_echeance ?? p?.annee_premiere_echeance ?? '—');
     poser('revisabilite', a?.revisabilite ?? p?.revisabilite ?? '—');
+
+    // Le detail replie n'existe pas dans le DOM : ces champs ne sont a remplir
+    // que quand il est ouvert.
+    const defaut = (champ, v) => {
+      const el = ligne.querySelector(`[data-defaut="${champ}"]`);
+      if (!el) return;
+      if (el.tagName === 'OPTION') el.textContent = v ? `— du produit : ${v} —` : '— du produit —';
+      else /** @type {HTMLInputElement} */ (el).placeholder = v ?? '';
+    };
+    defaut('taux', nul(a?.taux) ? '' : String(enPourcent(a.taux)));
+    defaut('duree', nul(a?.duree_ans) ? '' : String(a.duree_ans));
+    defaut('echeance', amorti?.annee_premiere_echeance ? String(amorti.annee_premiere_echeance) : '');
+    defaut('revisabilite', a?.revisabilite ?? '');
   }
 
   for (const code of r.surfaces.tranches) {

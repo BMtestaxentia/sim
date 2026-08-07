@@ -512,7 +512,12 @@ function rendreStructureTranches() {
       const prets = etat.prets.map((p, i) => ({ p, i })).filter(({ p }) => (p.produit ?? code) === code);
       const subs = etat.subventions.map((s, i) => ({ s, i })).filter(({ s }) => s.affectation === code);
       return `
-      <main class="ecran" id="ecran-tranche-${code}" role="tabpanel" hidden style="--cat:${catProduit(code)}">
+      <main class="ecran ecran--tranche" id="ecran-tranche-${code}" role="tabpanel" hidden style="--cat:${catProduit(code)}">
+        <!-- Jauges verticales : l'equilibre de la tranche encadre sa saisie.
+             A gauche ce qu'elle coute, a droite ce qui la finance, a la meme
+             echelle. Un desequilibre se voit sans quitter l'ecran. -->
+        <div class="jauge" data-jauge="emplois" data-tranche="${code}" title="Emplois"></div>
+        <div class="ecran__corps">
         <div class="indicateurs" data-recap-tranche="${code}"></div>
 
         <div class="colonnes">
@@ -643,6 +648,8 @@ function rendreStructureTranches() {
             }
           </div>
         </section>
+        </div>
+        <div class="jauge" data-jauge="ressources" data-tranche="${code}" title="Ressources"></div>
       </main>`;
     })
     .join('');
@@ -1278,6 +1285,45 @@ function rendreValeurs(r) {
         ? `${fp.duree_reconstitution_ans} ans`
         : (r.indicateurs?.annee_reconstitution_fonds_propres ?? 'non atteinte');
     }
+
+    // Jauges verticales : les emplois de la tranche a gauche, ses ressources a
+    // droite, A LA MEME ECHELLE. Mises a l'echelle de leur propre total, deux
+    // barres de hauteur egale masqueraient justement le desequilibre qu'elles
+    // sont censees montrer.
+    const emploisTr = Object.entries(r.bilan.chapitres ?? {})
+      .map(([nom, ch]) => ({
+        libelle: CHAPITRES[nom] ?? nom,
+        montant: ch.par_tranche?.[code]?.ttc_lasm_eur ?? 0,
+        couleur: couleur(nom),
+      }))
+      .filter((s) => s.montant > 0);
+    const ressourcesTr = [
+      { libelle: 'Subventions', montant: t.subventions_eur ?? 0, couleur: couleur('subventions') },
+      { libelle: 'Fonds propres', montant: t.fonds_propres_eur ?? 0, couleur: couleur('fonds_propres') },
+      ...(r.amortissements ?? [])
+        .filter((a) => a.produit === code)
+        .map((a) => ({
+          libelle: a.libelle,
+          montant: a.montant_eur,
+          couleur: couleur(`pret_${a.nature}`),
+        })),
+    ].filter((s) => s.montant > 0);
+
+    const somme = (l) => l.reduce((s, x) => s + x.montant, 0);
+    const echelle = Math.max(somme(emploisTr), somme(ressourcesTr), 1);
+    const remplirJauge = (quoi, segments) => {
+      const el = document.querySelector(`[data-jauge="${quoi}"][data-tranche="${code}"]`);
+      if (!el) return;
+      el.innerHTML = segments
+        .map(
+          (s) =>
+            `<span style="flex:0 0 ${((s.montant / echelle) * 100).toFixed(3)}%;background:${s.couleur}"` +
+            ` title="${att(s.libelle)} : ${eur(s.montant)}"></span>`,
+        )
+        .join('');
+    };
+    remplirJauge('emplois', emploisTr);
+    remplirJauge('ressources', ressourcesTr);
 
     // Le regime se dit en toutes lettres : quatre combinaisons, et celle qui
     // sert des interets sans jamais rendre le capital merite d'etre nommee.

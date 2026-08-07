@@ -155,6 +155,24 @@ html, body {
 .ecran { display: block; padding: 16px 20px 56px; max-width: 1720px; margin: 0 auto; }
 .ecran[hidden] { display: none; }
 
+/* Ecran de tranche encadre par ses deux jauges : ce qu'elle coute a gauche, ce
+   qui la finance a droite, a la meme echelle. C'est la barre d'equilibre du
+   plan de financement, tournee d'un quart de tour et posee sur les bords. */
+.ecran--tranche { display: flex; align-items: stretch; gap: 14px; }
+.ecran--tranche[hidden] { display: none; }
+.ecran__corps { flex: 1; min-width: 0; }
+.jauge {
+  flex: 0 0 9px; align-self: stretch;
+  display: flex; flex-direction: column;
+  border-radius: var(--radius-pill); overflow: hidden;
+  background: var(--bg-secondary);
+  /* Elle accompagne le defilement plutot que de s'etirer sur mille pixels :
+     l'equilibre reste lisible ou que l'on soit dans la saisie. */
+  position: sticky; top: 74px; height: calc(100vh - 110px);
+}
+.jauge > span { display: block; width: 100%; min-height: 2px; }
+@media (max-width: 900px) { .jauge { display: none; } }
+
 .colonnes { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; }
 .colonnes--balance { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
 @media (max-width: 1100px) { .colonnes--balance { grid-template-columns: 1fr; } }

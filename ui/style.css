@@ -582,6 +582,11 @@ input[type='number']::-webkit-inner-spin-button {
 }
 .indicateur__detail { font-size: 10.5px; color: var(--text-tertiary); }
 
+/* Recapitulatif de tranche : ses six tuiles tiennent sur UNE rangee des 900 px,
+   sans quoi « Prix de revient » et « Ressources » cesseraient d'etre aux deux
+   bouts - c'est justement leur position qui fait sens, en echo aux deux jauges. */
+.indicateurs--tranche { grid-template-columns: repeat(auto-fit, minmax(136px, 1fr)); }
+
 /* ============================================================ BANDEAUX */
 
 .bandeau {

@@ -596,6 +596,11 @@ input[type='number']::-webkit-inner-spin-button {
 }
 .indicateur__detail { font-size: 10.5px; color: var(--text-tertiary); }
 
+/* Recapitulatif de tranche : ses six tuiles tiennent sur UNE rangee des 900 px,
+   sans quoi « Prix de revient » et « Ressources » cesseraient d'etre aux deux
+   bouts - c'est justement leur position qui fait sens, en echo aux deux jauges. */
+.indicateurs--tranche { grid-template-columns: repeat(auto-fit, minmax(136px, 1fr)); }
+
 /* ============================================================ BANDEAUX */
 
 .bandeau {
@@ -5400,7 +5405,7 @@ function rendreStructureTranches() {
              echelle. Un desequilibre se voit sans quitter l'ecran. -->
         <div class="jauge" data-jauge="emplois" data-tranche="${code}" title="Emplois"></div>
         <div class="ecran__corps">
-        <div class="indicateurs" data-recap-tranche="${code}"></div>
+        <div class="indicateurs indicateurs--tranche" data-recap-tranche="${code}"></div>
 
         <div class="colonnes">
           <section class="bloc bloc--tranche">
@@ -6123,17 +6128,20 @@ function rendreValeurs(r) {
       const tuile = (l, v, d) =>
         `<div class="indicateur"><div class="indicateur__libelle">${l}</div>` +
         `<div class="indicateur__valeur">${v}</div><div class="indicateur__detail">${d}</div></div>`;
+      // L'ordre suit celui des jauges qui encadrent l'ecran : le prix de revient
+      // a gauche comme la jauge des emplois, les ressources a droite comme la
+      // sienne. Ce qui coute et ce qui finance restent du meme cote partout.
       bandeau.innerHTML = [
+        tuile('Prix de revient', eur(t.prix_revient_ttc_eur), 'TTC / LASM de la tranche'),
         tuile('Programme', `${nb(t.nb_logements)} lgts`, `${nb(t.su_m2)} m² SU · ${pct(t.quote_part_su, 1)} de l’opération`),
         tuile('Loyer de sortie', l ? `${nb(l.loyer_pratique_eur_m2)} €` : '-', 'par m² SU et par mois'),
         tuile('Loyer annuel', l ? eur(l.loyer_annuel_eur) : '-', `coefficient de structure ${l ? nb(l.cs) : '-'}`),
-        tuile('Prix de revient', eur(t.prix_revient_ttc_eur), 'TTC / LASM de la tranche'),
-        tuile('Ressources', eur(ressources), `${eur(totalPrets)} de prêts · ${eur(t.subventions_eur)} de subventions`),
         tuile(
           reste > 0 ? 'Reste à financer' : 'Financement',
           reste > 0 ? eur(reste) : 'couvert',
           reste > 0 ? 'ressources inférieures au prix de revient' : `${eur(t.fonds_propres_eur)} de fonds propres`,
         ),
+        tuile('Ressources', eur(ressources), `${eur(totalPrets)} de prêts · ${eur(t.subventions_eur)} de subventions`),
       ].join('');
     }
     // Chaine de calcul du loyer en jetons, dans l'ordre ou elle se lit :

@@ -497,18 +497,33 @@ export function calculer(entrees, referentiels) {
       const scission = scinderPLS({ montant_pls_eur: totalPLS, prix_revient_eur: prPLS });
 
       if (scission.cpls_eur > 0) {
-        // L'exces est retire du pret construction, celui qui absorbe le solde.
-        const construction = pretsPLS.find((p) => p.nature === 'construction');
-        if (construction) construction.montant_eur = arrondiEuro(construction.montant_eur - scission.cpls_eur);
+        // L'exces se preleve sur la CONSTRUCTION d'abord, sur le foncier
+        // ensuite, et JAMAIS au-dela de ce que chaque pret porte : retirer
+        // aveuglement du pret construction rendait celui-ci negatif des que le
+        // foncier absorbait tout le besoin, ce qui arrive sur une operation a
+        // forte charge fonciere.
+        let reste = scission.cpls_eur;
+        const ordre = ['construction', 'foncier'];
+        for (const nature of ordre) {
+          if (reste <= 0) break;
+          const p = pretsPLS.find((x) => x.nature === nature && x.montant_eur > 0);
+          if (!p) continue;
+          const pris = Math.min(p.montant_eur, reste);
+          p.montant_eur = arrondiEuro(p.montant_eur - pris);
+          reste = arrondiEuro(reste - pris);
+        }
+        // Le CPLS reprend les caracteristiques du pret construction PLS : c'est
+        // de lui qu'il prend la place dans le plan.
+        const modele = pretsPLS.find((p) => p.nature === 'construction') ?? pretsPLS[0] ?? {};
         pretsACalculer.push({
-          ...(construction ?? {}),
+          ...modele,
           code: 'CPLS',
           libelle: 'CPLS (complément au PLS)',
           nature: 'construction',
           produit: 'PLS',
           montant_eur: scission.cpls_eur,
           montant_calcule: true,
-          cpls: true,
+          derive: true,
         });
         alertes.push(
           `PLS plafonne a 55 % du prix de revient de sa tranche : ${scission.cpls_eur} EUR ` +
@@ -552,6 +567,8 @@ export function calculer(entrees, referentiels) {
       // Vrai si le montant a ete calcule pour equilibrer la tranche, faux s'il
       // a ete saisi. L'ecran s'en sert pour proposer le retour au calcul.
       montant_calcule: p.montant_calcule === true,
+      // Pret DERIVE d'une regle et non saisi : l'ecran le montre en lecture seule.
+      derive: p.derive === true,
       taux_saisi: p.taux,
       annee_premiere_echeance:
         p.annee_premiere_echeance ??
@@ -584,6 +601,7 @@ export function calculer(entrees, referentiels) {
     produit: p.produit ?? trancheUnique,
     montant_eur: p.montant_eur,
     montant_calcule: p.montant_calcule === true,
+    derive: p.derive === true,
     taux: p.taux ?? null,
     duree_ans: p.duree_ans ?? null,
     revisabilite: p.revisabilite ?? null,

@@ -773,6 +773,18 @@ input[type='number']::-webkit-inner-spin-button {
 /* Pret STRUCTURANT d'une tranche : il porte l'equilibre, il ne se supprime pas.
    Le filet plein et le libelle en capitales le distinguent d'un pret ajoute
    a la main, sans en faire une couleur de plus. */
+/* Pret DERIVE d'une regle : ni saisi ni supprimable, il decoule du calcul.
+   Le trait interrompu le distingue d'une ligne qu'on peut modifier. */
+.pret--derive {
+  border-left-style: dashed; cursor: default;
+  background: color-mix(in srgb, var(--info-accent) 6%, transparent);
+}
+.pret--derive .pret__montant {
+  font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums;
+  text-align: right; flex: 0 0 130px;
+}
+.pret--derive .pret__libelle { flex: 0 1 270px; font-weight: 650; font-size: 13px; }
+
 .pret--principal { border-left-width: 4px; background: var(--bg-tertiary); }
 .pret--principal .pret__libelle {
   font-size: 11.5px; font-weight: 700;
@@ -4624,18 +4636,33 @@ function calculer(entrees, referentiels) {
       const scission = scinderPLS({ montant_pls_eur: totalPLS, prix_revient_eur: prPLS });
 
       if (scission.cpls_eur > 0) {
-        // L'exces est retire du pret construction, celui qui absorbe le solde.
-        const construction = pretsPLS.find((p) => p.nature === 'construction');
-        if (construction) construction.montant_eur = arrondiEuro(construction.montant_eur - scission.cpls_eur);
+        // L'exces se preleve sur la CONSTRUCTION d'abord, sur le foncier
+        // ensuite, et JAMAIS au-dela de ce que chaque pret porte : retirer
+        // aveuglement du pret construction rendait celui-ci negatif des que le
+        // foncier absorbait tout le besoin, ce qui arrive sur une operation a
+        // forte charge fonciere.
+        let reste = scission.cpls_eur;
+        const ordre = ['construction', 'foncier'];
+        for (const nature of ordre) {
+          if (reste <= 0) break;
+          const p = pretsPLS.find((x) => x.nature === nature && x.montant_eur > 0);
+          if (!p) continue;
+          const pris = Math.min(p.montant_eur, reste);
+          p.montant_eur = arrondiEuro(p.montant_eur - pris);
+          reste = arrondiEuro(reste - pris);
+        }
+        // Le CPLS reprend les caracteristiques du pret construction PLS : c'est
+        // de lui qu'il prend la place dans le plan.
+        const modele = pretsPLS.find((p) => p.nature === 'construction') ?? pretsPLS[0] ?? {};
         pretsACalculer.push({
-          ...(construction ?? {}),
+          ...modele,
           code: 'CPLS',
           libelle: 'CPLS (complément au PLS)',
           nature: 'construction',
           produit: 'PLS',
           montant_eur: scission.cpls_eur,
           montant_calcule: true,
-          cpls: true,
+          derive: true,
         });
         alertes.push(
           `PLS plafonne a 55 % du prix de revient de sa tranche : ${scission.cpls_eur} EUR ` +
@@ -4679,6 +4706,8 @@ function calculer(entrees, referentiels) {
       // Vrai si le montant a ete calcule pour equilibrer la tranche, faux s'il
       // a ete saisi. L'ecran s'en sert pour proposer le retour au calcul.
       montant_calcule: p.montant_calcule === true,
+      // Pret DERIVE d'une regle et non saisi : l'ecran le montre en lecture seule.
+      derive: p.derive === true,
       taux_saisi: p.taux,
       annee_premiere_echeance:
         p.annee_premiere_echeance ??
@@ -4711,6 +4740,7 @@ function calculer(entrees, referentiels) {
     produit: p.produit ?? trancheUnique,
     montant_eur: p.montant_eur,
     montant_calcule: p.montant_calcule === true,
+    derive: p.derive === true,
     taux: p.taux ?? null,
     duree_ans: p.duree_ans ?? null,
     revisabilite: p.revisabilite ?? null,
@@ -5715,6 +5745,9 @@ function rendreStructureTranches() {
                 ? prets.map(({ p, i }) => gabaritPret(p, i)).join('')
                 : '<p class="aide">Aucun prêt saisi sur cette tranche.</p>'
             }
+            <!-- Prets DERIVES d'une regle : le CPLS n'est pas saisi, il nait du
+                 plafonnement du PLS a 55 %. Il se lit, il ne se modifie pas. -->
+            <div class="liste" data-prets-derives="${code}"></div>
           </div>
         </section>
         </div>
@@ -6356,6 +6389,32 @@ function rendreValeurs(r) {
       recon.textContent = fp?.reconstitues
         ? `${fp.duree_reconstitution_ans} ans`
         : (r.indicateurs?.annee_reconstitution_fonds_propres ?? 'non atteinte');
+    }
+
+    // Prets DERIVES d'une regle et non saisis : le CPLS nait du plafonnement du
+    // PLS a 55 % du prix de revient. Il figure dans la liste, en lecture seule,
+    // sinon son montant apparaitrait dans les totaux sans ligne pour l'expliquer.
+    const derives = document.querySelector(`[data-prets-derives="${code}"]`);
+    if (derives) {
+      const lignes = (r.financement?.prets_resolus ?? []).filter(
+        (p) => p.derive && p.produit === code && p.montant_eur > 0,
+      );
+      derives.innerHTML = lignes
+        .map(
+          (p) => `<div class="ligne ligne--pret pret--derive" style="--cat:${catProduit(code)}">
+            <div class="pret__entete">
+              <span class="pret__libelle">${att(p.libelle)}</span>
+              <span class="pret__montant">${eur(p.montant_eur)}</span>
+              <span class="pret__nature discret">${att(p.nature)}</span>
+            </div>
+            <div class="jetons">
+              ${jeton('taux', nul(p.taux) ? '-' : pct(p.taux, 2))}
+              ${jeton('durée', nul(p.duree_ans) ? '-' : `${p.duree_ans} ans`)}
+              ${jeton('origine', 'plafond PLS 55 %')}
+            </div>
+          </div>`,
+        )
+        .join('');
     }
 
     // Jauges verticales : les emplois de la tranche a gauche, ses ressources a

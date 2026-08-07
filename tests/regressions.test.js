@@ -1006,3 +1006,47 @@ describe('R-FISC-1 - duree d exoneration de TFPB par produit (Q-14 close)', () =
     expect(r.indicateurs.annee_debut_tfpb).toBe(2043);
   });
 });
+
+describe('R-FIN-8 - la scission PLS ne cree jamais de pret negatif', () => {
+  // Defaut constate a l'ecran : sur une operation a forte charge fonciere, le
+  // foncier absorbait tout le besoin et la construction restait a zero.
+  // Retirer l'exces du seul pret construction le rendait NEGATIF (-263 026 EUR).
+  // Le test precedent ne regardait que le total, qui lui restait juste.
+  const forteChargeFonciere = {
+    identite: { zone_123: 2, zone_ABC: 'B1' },
+    dates: { annee_mise_en_location: 2028, duree_simulation_ans: 20 },
+    lots: [{ code_produit: 'PLS', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 40 }],
+    postes_bilan: [
+      { chapitre: 'charge_fonciere', libelle: 'Terrain', montant_ht_eur: 650000, taux_tva: 0.055 },
+      { chapitre: 'honoraires', libelle: 'Honoraires', montant_ht_eur: 18000, taux_tva: 0.2 },
+    ],
+    subventions: [{ libelle: 'Ville', montant_eur: 20000, affectation: 'PLS' }],
+    fonds_propres_par_produit: { PLS: 50000 },
+  };
+
+  const r = calculer(forteChargeFonciere, REFERENTIELS);
+
+  it('AUCUN pret n a un montant negatif', () => {
+    for (const a of r.financement.prets_resolus) {
+      expect(a.montant_eur, `${a.libelle} : ${a.montant_eur}`).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('preleve l exces sur la construction puis sur le foncier, sans le creuser', () => {
+    const cpls = r.financement.prets_resolus.find((p) => p.code === 'CPLS');
+    expect(cpls).toBeDefined();
+    expect(cpls.derive).toBe(true);
+    // La construction etait a zero : c'est donc le foncier qui a cede la place.
+    const foncier = r.financement.prets_resolus.find((p) => p.nature === 'foncier' && p.produit === 'PLS');
+    expect(foncier.montant_eur).toBeGreaterThan(0);
+  });
+
+  it('le plan reste equilibre et le PLS sous son plafond', () => {
+    expect(r.financement.equilibre.ecart_eur).toBe(0);
+    const pr = r.bilan.par_tranche.PLS.total_ttc_module_eur;
+    const pls = r.financement.prets_resolus
+      .filter((p) => p.produit === 'PLS' && p.code !== 'CPLS' && p.nature !== 'autre')
+      .reduce((s, p) => s + p.montant_eur, 0);
+    expect(pls).toBeLessThanOrEqual(Math.round(pr * 0.55) + 1);
+  });
+});

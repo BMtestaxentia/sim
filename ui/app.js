@@ -700,6 +700,9 @@ function rendreStructureTranches() {
                 ? prets.map(({ p, i }) => gabaritPret(p, i)).join('')
                 : '<p class="aide">Aucun prêt saisi sur cette tranche.</p>'
             }
+            <!-- Prets DERIVES d'une regle : le CPLS n'est pas saisi, il nait du
+                 plafonnement du PLS a 55 %. Il se lit, il ne se modifie pas. -->
+            <div class="liste" data-prets-derives="${code}"></div>
           </div>
         </section>
         </div>
@@ -1341,6 +1344,32 @@ function rendreValeurs(r) {
       recon.textContent = fp?.reconstitues
         ? `${fp.duree_reconstitution_ans} ans`
         : (r.indicateurs?.annee_reconstitution_fonds_propres ?? 'non atteinte');
+    }
+
+    // Prets DERIVES d'une regle et non saisis : le CPLS nait du plafonnement du
+    // PLS a 55 % du prix de revient. Il figure dans la liste, en lecture seule,
+    // sinon son montant apparaitrait dans les totaux sans ligne pour l'expliquer.
+    const derives = document.querySelector(`[data-prets-derives="${code}"]`);
+    if (derives) {
+      const lignes = (r.financement?.prets_resolus ?? []).filter(
+        (p) => p.derive && p.produit === code && p.montant_eur > 0,
+      );
+      derives.innerHTML = lignes
+        .map(
+          (p) => `<div class="ligne ligne--pret pret--derive" style="--cat:${catProduit(code)}">
+            <div class="pret__entete">
+              <span class="pret__libelle">${att(p.libelle)}</span>
+              <span class="pret__montant">${eur(p.montant_eur)}</span>
+              <span class="pret__nature discret">${att(p.nature)}</span>
+            </div>
+            <div class="jetons">
+              ${jeton('taux', nul(p.taux) ? '-' : pct(p.taux, 2))}
+              ${jeton('durée', nul(p.duree_ans) ? '-' : `${p.duree_ans} ans`)}
+              ${jeton('origine', 'plafond PLS 55 %')}
+            </div>
+          </div>`,
+        )
+        .join('');
     }
 
     // Jauges verticales : les emplois de la tranche a gauche, ses ressources a

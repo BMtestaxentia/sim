@@ -759,6 +759,18 @@ input[type='number']::-webkit-inner-spin-button {
 /* Pret STRUCTURANT d'une tranche : il porte l'equilibre, il ne se supprime pas.
    Le filet plein et le libelle en capitales le distinguent d'un pret ajoute
    a la main, sans en faire une couleur de plus. */
+/* Pret DERIVE d'une regle : ni saisi ni supprimable, il decoule du calcul.
+   Le trait interrompu le distingue d'une ligne qu'on peut modifier. */
+.pret--derive {
+  border-left-style: dashed; cursor: default;
+  background: color-mix(in srgb, var(--info-accent) 6%, transparent);
+}
+.pret--derive .pret__montant {
+  font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums;
+  text-align: right; flex: 0 0 130px;
+}
+.pret--derive .pret__libelle { flex: 0 1 270px; font-weight: 650; font-size: 13px; }
+
 .pret--principal { border-left-width: 4px; background: var(--bg-tertiary); }
 .pret--principal .pret__libelle {
   font-size: 11.5px; font-weight: 700;

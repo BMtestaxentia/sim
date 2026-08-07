@@ -80,11 +80,16 @@ describe('moteur - orchestration bout-en-bout', () => {
   });
 
   it('produit un tableau d amortissement par pret mobilise', () => {
-    expect(r.amortissements).toHaveLength(1);
-    expect(r.amortissements[0].tableau).toHaveLength(40);
-    // Revisabilite SIMPLE : le taux suit le LA (3,51 % + 2 % - 2,4 % = 3,11 %)
-    expect(r.amortissements[0].tableau[0].taux).toBeCloseTo(0.0311, 10);
-    expect(r.amortissements[0].tableau.at(-1)?.crd_eur).toBeCloseTo(0, 4);
+    // Le pret saisi depasse 55 % du prix de revient de sa tranche : R-FIN-8 en
+    // detache un CPLS, d'ou deux lignes amorties et non une.
+    expect(r.amortissements).toHaveLength(2);
+    for (const a of r.amortissements) {
+      expect(a.tableau).toHaveLength(40);
+      // Revisabilite SIMPLE : le taux suit le LA (3,51 % + 2 % - 2,4 % = 3,11 %)
+      expect(a.tableau[0].taux).toBeCloseTo(0.0311, 10);
+      expect(a.tableau.at(-1)?.crd_eur).toBeCloseTo(0, 4);
+    }
+    expect(r.amortissements.some((a) => a.code === 'CPLS')).toBe(true);
   });
 
   it('deroule le compte d exploitation sur l horizon demande', () => {

@@ -40,9 +40,11 @@ describe('R-TVA - prix de revient et livraison a soi-meme', () => {
     expect(ventilerPoste(POSTES[0])).toEqual({ ht_eur: 1000000, tva_eur: 55000, ttc_eur: 1055000 });
   });
 
-  it('R-TVA-2 : PLUS/PLAI utilise le taux reduit de la simulation (10 %), pas 5,5 %', () => {
+  it('R-TVA-2 : le PLAI releve de 5,5 %, le PLUS et le PLS de 10 %', () => {
+    // Arbitrage de Bastien du 06/08/2026 (Q-13) : LEON appliquait 10 % au PLAI
+    // comme au PLUS, la maquette LEON REWORK les distingue et fait foi.
+    expect(tauxLASM('PLAI', baremes)).toBe(0.055);
     expect(tauxLASM('PLUS', baremes)).toBe(0.1);
-    expect(tauxLASM('PLAI', baremes)).toBe(0.1);
     expect(tauxLASM('PLS', baremes)).toBe(0.1);
     expect(tauxLASM('LIBRE', baremes)).toBe(0.2);
   });
@@ -335,12 +337,12 @@ describe('R-TVA-2/3 - ventilation du prix de revient par tranche', () => {
       { postes: POSTES_V, su_par_produit: { PLAI: 600, LIBRE: 400 } },
       baremes,
     );
-    expect(v.par_tranche.PLAI.taux_lasm).toBe(0.1);
+    expect(v.par_tranche.PLAI.taux_lasm).toBe(0.055);
     expect(v.par_tranche.LIBRE.taux_lasm).toBe(0.2);
-    expect(v.par_tranche.PLAI.total_ttc_lasm_eur).toBe(726000); // 660 000 x 1,10
+    expect(v.par_tranche.PLAI.total_ttc_lasm_eur).toBe(696300); // 660 000 x 1,055
     expect(v.par_tranche.LIBRE.total_ttc_lasm_eur).toBe(528000); // 440 000 x 1,20
     // Un taux unique aurait donne 1 210 000 : l'ecart est materiel.
-    expect(v.total_ttc_lasm_eur).toBe(1254000);
+    expect(v.total_ttc_lasm_eur).toBe(1224300);
   });
 
   it('la somme des tranches vaut EXACTEMENT le total, malgre les arrondis', () => {
@@ -372,7 +374,7 @@ describe('R-TVA-2/3 - ventilation du prix de revient par tranche', () => {
       { postes: POSTES_V, su_par_produit: { PLAI: 600, LIBRE: 400 }, modulation_ttc_eur: 10000 },
       baremes,
     );
-    expect(v.par_tranche.PLAI.total_ttc_module_eur).toBe(726000 + 6000);
+    expect(v.par_tranche.PLAI.total_ttc_module_eur).toBe(696300 + 6000);
     expect(v.par_tranche.LIBRE.total_ttc_module_eur).toBe(528000 + 4000);
   });
 

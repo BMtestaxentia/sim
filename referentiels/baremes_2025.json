@@ -61,7 +61,9 @@
     "taux_reduit_simulation": 0.10,
     "taux_normal": 0.20,
     "lasm_par_produit": {
-      "note": "PLUS/PLAI utilise le taux reduit de la simulation (ParaGLOB!J44 = 10 % actuellement) et non la valeur 5,5 % du tableau historique ParaGEN!A78. Les autres produits lisent ParaGEN!78.",
+      "note": "Le PLAI releve de 5,5 %, le PLUS du taux reduit de 10 %. Arbitrage de Bastien du 06/08/2026 (Q-13 close) : LEON appliquait 10 % aux deux (ParaGLOB!J44), la maquette LEON REWORK (ADMIN!C48) distingue, et c'est elle qui fait foi. Les cles par produit priment sur `cle_lasm` (voir tauxLASM).",
+      "PLAI": 0.055,
+      "PLUS": 0.10,
       "PLUS_PLAI": 0.10,
       "PLUS_CD": 0.055,
       "PLS": 0.10,
@@ -116,7 +118,16 @@
     "tfpb": {
       "montant_par_logement_eur": 345,
       "duree_exoneration_defaut_ans": 25,
-      "source": "SimPLUS!A37/G37 ; duree parametrable par simulation (irregularite I-7 du dictionnaire)"
+      "source": "SimPLUS!A37/G37 ; duree parametrable par simulation (irregularite I-7 du dictionnaire)",
+      "exoneration_par_produit": {
+        "note": "La duree d'exoneration est une propriete du PRODUIT et non de l'operation (Q-14 close). Elle est portee par `produits.js`, ces valeurs n'etant rappelees ici que pour leur source. Une duree saisie sur la simulation continue de primer.",
+        "logement_social_ans": 25,
+        "source_logement_social": "CGI art. 1384 A : 15 ans de droit commun, portee a 25 ans pour les logements neufs a usage locatif finances a plus de 50 % en PLUS, PLAI ou PLS (loi 2005-32 du 18/01/2005 art. 92, fenetre d'eligibilite prorogee par les lois de finances successives). Une prolongation de 5 ans porte a 30 ans sous quatre criteres environnementaux sur cinq (art. 1384 A I bis) : NON modelisee.",
+        "logement_intermediaire_ans": 20,
+        "source_logement_intermediaire": "CGI art. 1384-0 A : 20 ans a compter de l'achevement, pour les logements neufs ayant beneficie du taux reduit de TVA de l'art. 279-0 bis A et loues sous condition de ressources.",
+        "libre_ans": 0,
+        "ecart_maquette": "La maquette LEON REWORK donne 0 an au PLI. Le CGI en donne 20, sous conditions de TVA reduite et de location intermediaire. Le referentiel retient 20 ; mettre 0 sur la simulation si l'operation ne remplit pas les conditions de l'art. 279-0 bis A."
+      }
     },
     "arrondi_prets": "milliers superieurs si option active (SimPLUS!AR26)",
     "arrondi_cs_loyers": { "flag_global": "ParaGEN!B26 (NON chez AXENTIA)", "cs_decimales": 4, "loyers_decimales": 2 }

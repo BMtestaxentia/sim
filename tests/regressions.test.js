@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { calculer } from '../src/moteur.js';
 import { prixDeRevientVentile } from '../src/bilan.js';
+import { scinderPLS, plafondPretsLLI } from '../src/financement.js';
 import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
 import { coefficientStructure } from '../src/loyers.js';
 import { adapterTrajectoires, normaliserTrajectoires } from '../src/trajectoires.js';
@@ -175,11 +176,29 @@ describe('V5 - barèmes de loyer des produits', () => {
     }
   });
 
-  it('LOC/LLI est declare mais son bareme est absent du referentiel (hors V1, connu)', () => {
-    expect(() =>
-      calculer({ ...BASE, identite: { zone_123: 2, zone_ABC: 'B1' },
-        lots: [{ code_produit: 'LOC', nb_logements: 5, shab_m2: 300 }], prets: [PRET_CDC] }, REFERENTIELS),
-    ).toThrow(/bareme de loyer absent/i);
+  it('LOC/LLI lit desormais le bareme PLI, il ne leve plus', () => {
+    // Le produit pointait vers une cle « LLI » qui n'existe pas au bareme : le
+    // barreme du logement intermediaire s'y appelle PLI. Defaut V5 corrige.
+    const r = calculer(
+      {
+        ...BASE, identite: { zone_123: 2, zone_ABC: 'B1' },
+        lots: [{ code_produit: 'LOC', nb_logements: 5, shab_m2: 300 }], prets: [PRET_CDC],
+      },
+      REFERENTIELS,
+    );
+    expect(r.loyers[0].code_produit).toBe('LOC');
+    expect(r.loyers[0].loyer_base_eur_m2).toBeGreaterThan(0);
+    // Le LLI ne passe pas par le coefficient de structure : loyer de marche.
+    expect(r.loyers[0].cs).toBe(1);
+  });
+
+  it('R-AMT-1 : le LLI a ses prets par defaut, releves sur l annexe MULHOUSE', () => {
+    // LA + 1,40 %, 35 ans en travaux et 40 en foncier.
+    const p = pretsDefautResolus('LOC', { zone_ABC: 'B1', livret_a_reference: 0.017 });
+    expect(p).toHaveLength(2);
+    expect(p.find((x) => x.nature === 'construction')?.duree_ans).toBe(35);
+    expect(p.find((x) => x.nature === 'foncier')?.duree_ans).toBe(40);
+    expect(p[0].taux).toBeCloseTo(0.031, 10);
   });
 });
 
@@ -863,5 +882,127 @@ describe('R-FIN-7 - remuneration et reconstitution des fonds propres', () => {
 
   it('la remuneration des fonds propres sort des postes non modelises', () => {
     expect(calc({}).exploitation.postes_absents.some((p) => /fonds propres/i.test(p))).toBe(false);
+  });
+});
+
+describe('R-FIN-8 - scission PLS / CPLS (calculette CDC)', () => {
+  it('laisse le PLS intact dans la fourchette 51-55 %', () => {
+    const s = scinderPLS({ montant_pls_eur: 530000, prix_revient_eur: 1000000 });
+    expect(s.pls_eur).toBe(530000);
+    expect(s.cpls_eur).toBe(0);
+    expect(s.sous_plancher).toBe(false);
+  });
+
+  it('bascule en CPLS ce qui depasse 55 %', () => {
+    const s = scinderPLS({ montant_pls_eur: 800000, prix_revient_eur: 1000000 });
+    expect(s.pls_eur).toBe(550000);
+    expect(s.cpls_eur).toBe(250000);
+    expect(s.pls_eur + s.cpls_eur).toBe(800000); // rien ne se perd
+    expect(s.part_pls).toBeCloseTo(0.55, 10);
+  });
+
+  it('signale un PLS sous le plancher de 51 % sans y toucher', () => {
+    // Un PLS trop faible releve du montage, pas du calcul : on le dit, on ne le
+    // gonfle pas.
+    const s = scinderPLS({ montant_pls_eur: 400000, prix_revient_eur: 1000000 });
+    expect(s.pls_eur).toBe(400000);
+    expect(s.cpls_eur).toBe(0);
+    expect(s.sous_plancher).toBe(true);
+  });
+
+  it('cree une ligne CPLS dans le plan et alerte', () => {
+    const r = calculer(
+      {
+        identite: { zone_123: 2, zone_ABC: 'B1' },
+        dates: { annee_mise_en_location: 2028, duree_simulation_ans: 20 },
+        lots: [{ code_produit: 'PLS', nb_logements: 10, shab_m2: 700 }],
+        postes_bilan: [{ chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1000000, taux_tva: 0.1 }],
+        fonds_propres_par_produit: { PLS: 10000 },
+      },
+      REFERENTIELS,
+    );
+    const cpls = r.amortissements.find((a) => a.code === 'CPLS');
+    expect(cpls).toBeDefined();
+    const pls = r.amortissements.filter((a) => a.produit === 'PLS' && a.code !== 'CPLS');
+    const pr = r.bilan.par_tranche.PLS.total_ttc_module_eur;
+    // Le PLS restant ne depasse plus 55 % du prix de revient de sa tranche.
+    expect(pls.reduce((s, a) => s + a.montant_eur, 0)).toBeLessThanOrEqual(Math.round(pr * 0.55) + 1);
+    expect(r.alertes.some((a) => /CPLS/.test(a))).toBe(true);
+    // Et le plan reste equilibre : le CPLS n'est pas une ressource en plus.
+    expect(r.financement.equilibre.ecart_eur).toBe(0);
+  });
+});
+
+describe('R-FIN-9 - plafond de financement du LLI a 90 %', () => {
+  it('ne signale rien sous le plafond', () => {
+    const c = plafondPretsLLI({ total_prets_eur: 850000, prix_revient_eur: 1000000 });
+    expect(c.depassement_eur).toBe(0);
+    expect(c.plafond_eur).toBe(900000);
+  });
+
+  it('chiffre le depassement au-dela de 90 %', () => {
+    const c = plafondPretsLLI({ total_prets_eur: 950000, prix_revient_eur: 1000000 });
+    expect(c.depassement_eur).toBe(50000);
+    expect(c.part).toBeCloseTo(0.95, 10);
+  });
+
+  it('alerte sur une operation LLI sans fonds propres suffisants', () => {
+    const r = calculer(
+      {
+        identite: { zone_123: 2, zone_ABC: 'B1' },
+        dates: { annee_mise_en_location: 2028, duree_simulation_ans: 20 },
+        lots: [{ code_produit: 'LOC', nb_logements: 10, shab_m2: 700 }],
+        postes_bilan: [{ chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1000000, taux_tva: 0.1 }],
+        fonds_propres_par_produit: { LOC: 1000 },
+      },
+      REFERENTIELS,
+    );
+    expect(r.alertes.some((a) => /90 %/.test(a) && /LLI/.test(a))).toBe(true);
+  });
+});
+
+describe('R-FISC-1 - duree d exoneration de TFPB par produit (Q-14 close)', () => {
+  const op = (lots) => ({
+    identite: { zone_123: 2, zone_ABC: 'B1' },
+    dates: { annee_mise_en_location: 2028, duree_simulation_ans: 40 },
+    lots,
+    postes_bilan: [{ chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1000000, taux_tva: 0.1 }],
+    fonds_propres_par_produit: {},
+  });
+
+  it('25 ans en logement social, 20 en intermediaire, 0 en libre', () => {
+    const r = calculer(
+      op([
+        { code_produit: 'PLUS', nb_logements: 5, shab_m2: 350 },
+        { code_produit: 'LOC', nb_logements: 5, shab_m2: 350 },
+      ]),
+      REFERENTIELS,
+    );
+    expect(r.fiscalite.tfpb.par_tranche.PLUS.duree_exoneration_ans).toBe(25);
+    expect(r.fiscalite.tfpb.par_tranche.LOC.duree_exoneration_ans).toBe(20);
+  });
+
+  it('chaque tranche sort d exoneration a SA date', () => {
+    const r = calculer(
+      op([
+        { code_produit: 'PLUS', nb_logements: 5, shab_m2: 350 },
+        { code_produit: 'LOC', nb_logements: 5, shab_m2: 350 },
+      ]),
+      REFERENTIELS,
+    );
+    const tfpb = (annee) => r.exploitation.lignes.find((l) => l.annee === annee).tfpb_eur;
+    expect(tfpb(2047)).toBe(0); // 19e annee : les deux exonerees
+    expect(tfpb(2048)).toBeGreaterThan(0); // 20e : le LLI entre
+    const auLLI = tfpb(2048);
+    expect(tfpb(2053)).toBeGreaterThan(auLLI); // 25e : le PLUS s'ajoute
+  });
+
+  it('une duree posee sur la simulation prime sur celle du produit', () => {
+    const r = calculer(
+      { ...op([{ code_produit: 'PLUS', nb_logements: 5, shab_m2: 350 }]), options: { duree_exoneration_tfpb_ans: 15 } },
+      REFERENTIELS,
+    );
+    expect(r.fiscalite.tfpb.par_tranche.PLUS.duree_exoneration_ans).toBe(15);
+    expect(r.indicateurs.annee_debut_tfpb).toBe(2043);
   });
 });

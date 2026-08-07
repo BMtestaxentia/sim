@@ -33,6 +33,70 @@ export function soldeAFinancer({
 }
 
 /**
+ * R-FIN-8 - Scission PLS / CPLS.
+ *
+ * « Le pret PLS doit etre compris entre 51 et 55 % du prix de revient et le
+ * besoin de financement restant est finance en CPLS » (calculette CDC
+ * « production LS », guide d'utilisation). Au-dela du plafond, le complement
+ * n'est plus du PLS : c'est un CPLS, pret complementaire distribue par les
+ * memes reseaux mais sur ressource libre.
+ *
+ * Le PLANCHER de 51 %, lui, ne se corrige pas : un PLS trop faible signale que
+ * l'operation n'avait pas besoin d'un PLS, pas qu'il faut gonfler l'emprunt. Il
+ * est rendu pour que l'appelant le signale.
+ *
+ * @param {Object} p
+ * @param {number} p.montant_pls_eur   montant total appele en PLS
+ * @param {number} p.prix_revient_eur  prix de revient de la tranche PLS
+ * @param {number} [p.plafond]         part maximale en PLS, defaut 0,55
+ * @param {number} [p.plancher]        part minimale attendue, defaut 0,51
+ * @returns {{pls_eur: number, cpls_eur: number, part_pls: number|null, sous_plancher: boolean}}
+ */
+export function scinderPLS({ montant_pls_eur, prix_revient_eur, plafond = 0.55, plancher = 0.51 }) {
+  if (!(montant_pls_eur > 0) || !(prix_revient_eur > 0)) {
+    return {
+      pls_eur: arrondiEuro(Math.max(0, montant_pls_eur || 0)),
+      cpls_eur: 0,
+      part_pls: null,
+      sous_plancher: false,
+    };
+  }
+  const maxi = prix_revient_eur * plafond;
+  const pls = Math.min(montant_pls_eur, maxi);
+  const part = pls / prix_revient_eur;
+  return {
+    pls_eur: arrondiEuro(pls),
+    cpls_eur: arrondiEuro(Math.max(0, montant_pls_eur - maxi)),
+    part_pls: part,
+    // Le plancher se juge sur le PLS effectivement appele, pas sur le total.
+    sous_plancher: part < plancher,
+  };
+}
+
+/**
+ * R-FIN-9 - Plafond de financement du logement locatif intermediaire.
+ *
+ * « L'ensemble des prets de financement du LLI (PLI CDC et prets hors CDC) ne
+ * peut exceder 90 % du prix de revient du LLI » (calculette CDC, controle AT32).
+ * Le solde revient obligatoirement en fonds propres ou en subventions.
+ *
+ * @param {Object} p
+ * @param {number} p.total_prets_eur
+ * @param {number} p.prix_revient_eur
+ * @param {number} [p.plafond] defaut 0,90
+ * @returns {{plafond_eur: number, depassement_eur: number, part: number|null}}
+ */
+export function plafondPretsLLI({ total_prets_eur, prix_revient_eur, plafond = 0.9 }) {
+  if (!(prix_revient_eur > 0)) return { plafond_eur: 0, depassement_eur: 0, part: null };
+  const maxi = prix_revient_eur * plafond;
+  return {
+    plafond_eur: arrondiEuro(maxi),
+    depassement_eur: arrondiEuro(Math.max(0, total_prets_eur - maxi)),
+    part: total_prets_eur / prix_revient_eur,
+  };
+}
+
+/**
  * R-FIN-7 - Charge annuelle des fonds propres.
  *
  * REMUNERATION et RECONSTITUTION sont DEUX OPTIONS INDEPENDANTES, et les quatre

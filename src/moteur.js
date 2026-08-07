@@ -17,7 +17,7 @@
 import { surfaceUtile, quotesPartsSU, loyerProduit, loyerAnnexesSeparees, controlesLoyer } from './loyers.js';
 import { normaliserTrajectoires } from './trajectoires.js';
 import { calendrierOperation } from './calendrier.js';
-import { pretsDefautResolus, ORDRE_PRODUITS } from './produits.js';
+import { pretsDefautResolus, produit, ORDRE_PRODUITS } from './produits.js';
 import {
   prixDeRevient,
   prixDeRevientVentile,
@@ -29,6 +29,8 @@ import {
   soldeAFinancer,
   foncierFinancable,
   annuiteFondsPropres,
+  scinderPLS,
+  plafondPretsLLI,
   pretsCDCTheoriques,
   redresserBesoins,
   controleEquilibre,
@@ -484,6 +486,59 @@ export function calculer(entrees, referentiels) {
       );
     }
     pretsACalculer = pretsACalculer.filter((p) => p.duree_ans > 0);
+
+    // R-FIN-8 - Scission PLS / CPLS. Au-dela de 55 % du prix de revient de la
+    // tranche, le complement n'est plus du PLS : c'est un CPLS. On scinde le
+    // pret CONSTRUCTION, le foncier etant deja plafonne par son propre droit.
+    if (tranches.PLS) {
+      const prPLS = bilan.par_tranche?.PLS?.total_ttc_module_eur ?? 0;
+      const pretsPLS = pretsACalculer.filter((p) => p.produit === 'PLS' && p.nature !== 'autre');
+      const totalPLS = pretsPLS.reduce((s, p) => s + (p.montant_eur || 0), 0);
+      const scission = scinderPLS({ montant_pls_eur: totalPLS, prix_revient_eur: prPLS });
+
+      if (scission.cpls_eur > 0) {
+        // L'exces est retire du pret construction, celui qui absorbe le solde.
+        const construction = pretsPLS.find((p) => p.nature === 'construction');
+        if (construction) construction.montant_eur = arrondiEuro(construction.montant_eur - scission.cpls_eur);
+        pretsACalculer.push({
+          ...(construction ?? {}),
+          code: 'CPLS',
+          libelle: 'CPLS (complément au PLS)',
+          nature: 'construction',
+          produit: 'PLS',
+          montant_eur: scission.cpls_eur,
+          montant_calcule: true,
+          cpls: true,
+        });
+        alertes.push(
+          `PLS plafonne a 55 % du prix de revient de sa tranche : ${scission.cpls_eur} EUR ` +
+            'basculent en CPLS. Son taux et sa duree reprennent ceux du PLS tant qu ils ne sont ' +
+            'pas saisis - a confirmer, la calculette CDC ne donne pas de tarif au CPLS.',
+        );
+      } else if (scission.sous_plancher && totalPLS > 0) {
+        alertes.push(
+          `PLS a ${(scission.part_pls * 100).toFixed(1)} % du prix de revient de sa tranche, ` +
+            'sous le plancher de 51 % de la calculette CDC. Un PLS trop faible signale que ' +
+            "l'operation n'en avait pas besoin : le corriger releve du montage, pas du calcul.",
+        );
+      }
+    }
+
+    // R-FIN-9 - L'ensemble des prets LLI ne peut exceder 90 % du prix de revient.
+    if (tranches.LOC) {
+      const prLLI = bilan.par_tranche?.LOC?.total_ttc_module_eur ?? 0;
+      const totalLLI = pretsACalculer
+        .filter((p) => p.produit === 'LOC')
+        .reduce((s, p) => s + (p.montant_eur || 0), 0);
+      const cap = plafondPretsLLI({ total_prets_eur: totalLLI, prix_revient_eur: prLLI });
+      if (cap.depassement_eur > 0) {
+        alertes.push(
+          `Prets LLI a ${(cap.part * 100).toFixed(1)} % du prix de revient de la tranche, ` +
+            `au-dela du plafond de 90 % : ${cap.depassement_eur} EUR de trop. Ce solde doit ` +
+            'venir en fonds propres ou en subventions (calculette CDC, controle AT32).',
+        );
+      }
+    }
   }
 
   const amortissements = pretsACalculer
@@ -579,13 +634,45 @@ export function calculer(entrees, referentiels) {
 
 
   // --- 7. Fiscalite (R-FISC) ---
+  // R-FISC-1 : la duree d'exoneration est une propriete du PRODUIT (Q-14).
+  // 25 ans en logement social (CGI art. 1384 A), 20 ans en intermediaire
+  // (art. 1384-0 A), rien en libre. Une duree posee sur la simulation prime,
+  // pour les operations qui ne remplissent pas les conditions.
+  const tfpbParTranche = {};
+  const tfpbMontantParLogement =
+    entrees.exploitation?.tfpb_par_logement_eur ??
+    baremes.constantes_reglementaires.tfpb.montant_par_logement_eur;
+  /** @type {Array<{annee: number, montant_eur: number}>} */
+  const tfpbParAnnee = [];
+  const horizonTFPB = dates.duree_simulation_ans ?? 50;
+  for (const c of codesPresents) {
+    const duree =
+      options.duree_exoneration_tfpb_ans ??
+      produit(/** @type {any} */ (c)).duree_exoneration_tfpb_ans ??
+      baremes.constantes_reglementaires.tfpb.duree_exoneration_defaut_ans;
+    const debut = anneeMEL + duree;
+    tfpbParTranche[c] = { duree_exoneration_ans: duree, annee_debut_tfpb: debut };
+    const montant = tranches[c].nb_logements * tfpbMontantParLogement;
+    for (let k = 0; k < horizonTFPB; k++) {
+      const annee = anneeMEL + k;
+      if (annee >= debut) tfpbParAnnee.push({ annee, montant_eur: montant });
+    }
+  }
+
+  // Vue d'ensemble : la PREMIERE annee ou une taxe est due, quelle que soit la
+  // tranche. C'est celle qui marque la rupture sur la courbe de resultat.
   const tfpb = exonerationTFPB(
     {
       annee_mise_en_location: anneeMEL,
-      duree_exoneration_ans: options.duree_exoneration_tfpb_ans,
+      duree_exoneration_ans:
+        options.duree_exoneration_tfpb_ans ??
+        (codesPresents.length
+          ? Math.min(...codesPresents.map((c) => tfpbParTranche[c].duree_exoneration_ans))
+          : undefined),
     },
     baremes,
   );
+  tfpb.par_tranche = tfpbParTranche;
   const ta = entrees.taxe_amenagement
     ? taxeAmenagement(entrees.taxe_amenagement, baremes)
     : null;
@@ -618,6 +705,8 @@ export function calculer(entrees, referentiels) {
     annuite_fonds_propres_eur: exp.annuite_fonds_propres_eur ?? 0,
     duree_annuite_fonds_propres_ans: exp.duree_annuite_fonds_propres_ans ?? 0,
     annuites_fonds_propres: annuitesFP,
+    // R-FISC-1 : une serie, car la duree d exoneration varie selon le produit.
+    tfpb_par_annee: tfpbParAnnee,
     // Le nombre de places d'un foyer, c'est son nombre de lots : le programme
     // le porte deja, le redemander serait une saisie a tenir en double.
     nb_lits: exp.nb_lits ?? nbLogements,

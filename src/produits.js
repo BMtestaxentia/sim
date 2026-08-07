@@ -29,6 +29,7 @@
  * @property {string} [majoration_loyer] cle d'une majoration multiplicative du loyer de base
  * @property {string} cle_lasm           cle du taux LASM (ex. 'taux_reduit_simulation')
  * @property {boolean} coefficient_structure  le loyer passe-t-il par le CS (R-SURF-2) ?
+ * @property {number} duree_exoneration_tfpb_ans  R-FISC-1, propriete du PRODUIT (CGI)
  * @property {PretDefaut[]} prets_defaut
  * @property {boolean} v1                traite dans la V1 (PLUS/PLAI/PLS) ?
  */
@@ -42,6 +43,7 @@ export const PRODUITS = {
     zonage: '123',
     cle_lasm: 'taux_reduit_simulation',
     coefficient_structure: true,
+    duree_exoneration_tfpb_ans: 25,
     prets_defaut: [
       { nature: 'construction', taux_ref: 'LA+0.60', duree_ref: '40', revisabilite: 'DOUBLE' },
       { nature: 'foncier', taux_ref: 'LA+0.60', duree_ref: 'zone_abc:B2|C->50,sinon->60', revisabilite: 'DOUBLE' },
@@ -56,6 +58,7 @@ export const PRODUITS = {
     majoration_loyer: 'majoration_plus_33', // cle dans constantes_reglementaires
     cle_lasm: 'taux_reduit_simulation',
     coefficient_structure: true,
+    duree_exoneration_tfpb_ans: 25,
     prets_defaut: [], // finance avec les prets PLUS (affectation PLUS)
     v1: true,
   },
@@ -66,6 +69,7 @@ export const PRODUITS = {
     zonage: '123',
     cle_lasm: 'taux_reduit_simulation',
     coefficient_structure: true,
+    duree_exoneration_tfpb_ans: 25,
     prets_defaut: [
       { nature: 'construction', taux_ref: 'LA-0.20', duree_ref: '40', revisabilite: 'DOUBLE' },
       { nature: 'foncier', taux_ref: 'LA-0.20', duree_ref: 'zone_abc:B2|C->50,sinon->60', revisabilite: 'DOUBLE' },
@@ -79,6 +83,7 @@ export const PRODUITS = {
     zonage: 'ABC',
     cle_lasm: 'taux_reduit_simulation',
     coefficient_structure: true,
+    duree_exoneration_tfpb_ans: 25,
     prets_defaut: [
       // Taux constate sur l'operation BERGERAC : 3,51 % pour un LA de reference de
       // 2,40 % (ParaGEN!DD20), soit LA + 1,11 %. Confirme independamment par la
@@ -99,18 +104,25 @@ export const PRODUITS = {
     zonage: '123',
     cle_lasm: 'taux_normal',
     coefficient_structure: false, // loyer de marche, pas de CS
+    duree_exoneration_tfpb_ans: 0,
     prets_defaut: [],
     v1: false,
   },
   LOC: {
     code: 'LOC',
     libelle: 'LLI (LOC)',
-    cle_bareme_loyer: 'LLI',
+    cle_bareme_loyer: 'PLI',
     zonage: 'ABC',
     cle_lasm: 'taux_reduit_simulation',
     coefficient_structure: false,
-    prets_defaut: [],
-    v1: false,
+    duree_exoneration_tfpb_ans: 20,
+    prets_defaut: [
+      { nature: 'construction', taux_ref: 'LA+1.40', duree_ref: '35', revisabilite: 'DOUBLE' },
+      { nature: 'foncier', taux_ref: 'LA+1.40', duree_ref: '40', revisabilite: 'DOUBLE' },
+    ],
+    // Active a la demande de Bastien le 06/08/2026 : bareme de loyer, prets par
+    // defaut, duree d'exoneration et plafond de financement a 90 % sont en place.
+    v1: true,
   },
 };
 

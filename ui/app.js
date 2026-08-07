@@ -150,10 +150,28 @@ const etat = {
   // calcules par le moteur sur la TRANCHE entiere (R-SURF-2) : le decoupage en
   // lots est une commodite de saisie, il n'influe sur aucun calcul.
   lots: repartirEnLots({ code_produit: 'PLS', nombre: 6, shab_totale: 400, annexes_totales: 40, typologie: 'T2', batiment: 'A' }),
+  // Quatorze postes renseignes sur les quarante-six de la nomenclature, soit
+  // l'ordre de grandeur d'une operation reelle : assez pour que les chapitres,
+  // les sous-totaux et les jauges aient tous de la matiere, pas au point de
+  // laisser croire qu'il faut tout remplir.
   postes_bilan: nomenclatureEnPostes({
+    // I - Charge fonciere
     cf_acquisition: { montant_ht_eur: 642780, taux_tva: 0.055 },
+    cf_sondages: { montant_ht_eur: 6500, taux_tva: 0.2 },
+    cf_vrd: { montant_ht_eur: 48000, taux_tva: 0.1 },
+    cf_branchements: { montant_ht_eur: 14500, taux_tva: 0.1 },
+    cf_taxe_assainissement: { montant_ht_eur: 9200, taux_tva: 0 },
     cf_notaire: { montant_ht_eur: 12000, taux_tva: 0.055 },
+    cf_taxes_amenagement: { montant_ht_eur: 21400, taux_tva: 0 },
+    // II - Batiment
+    bat_travaux: { montant_ht_eur: 1180000, taux_tva: 0.1 },
+    bat_actualisation: { montant_ht_eur: 34000, taux_tva: 0.1 },
+    bat_aleas: { montant_ht_eur: 29500, taux_tva: 0.1 },
+    // III - Honoraires
     hon_architecte: { montant_ht_eur: 18000, taux_tva: 0.2 },
+    hon_bureau_etudes: { montant_ht_eur: 42000, taux_tva: 0.2 },
+    hon_controleur: { montant_ht_eur: 11800, taux_tva: 0.2 },
+    hon_assurances: { montant_ht_eur: 16300, taux_tva: 0.2 },
   }),
   // Parametres de loyer PAR TRANCHE : c'est leur niveau naturel, le CS et le
   // plafond ne se calculent qu'a ce niveau.

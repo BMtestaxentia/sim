@@ -713,6 +713,13 @@ input[type='number']::-webkit-inner-spin-button {
    seul mouvement au lieu d'alterner tables et cartes. */
 .ligne--ressource { border-left: 3px solid var(--cat, var(--cat-6)); padding: 9px 11px; }
 .ligne--fp { background: var(--bg-tertiary); border-left-width: 4px; }
+/* Les deux options des fonds propres et leur parametre, sur une seule ligne :
+   chaque interrupteur reste colle au champ qu'il commande. */
+.options-fp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin-top: 12px; }
+.options-fp .champ--interrupteur { margin-bottom: 0; }
+.champ--serre { flex-direction: row; align-items: center; gap: 6px; }
+.champ--serre > span { white-space: nowrap; }
+.champ--serre > input { width: 88px; }
 .ressource__libelle { flex: 0 1 270px; min-width: 110px; font-weight: 650; font-size: 13px; }
 /* Les fonds propres ne se renomment pas : leur libelle est un texte, pas un champ. */
 span.ressource__libelle {

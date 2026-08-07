@@ -490,6 +490,7 @@ function rendreStructureTranches() {
     // etre appliquees tant que la case ne l'est pas.
     etat.remuneration_fonds_propres[code] ??= {
       remuneres: false,
+      reconstitues: false,
       taux: defautFP.taux_remuneration_defaut ?? 0,
       duree_reconstitution_ans: defautFP.duree_reconstitution_defaut_ans ?? 30,
     };
@@ -551,46 +552,48 @@ function rendreStructureTranches() {
                   <span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-fp="${code}">—</span></span>
                   <span class="jeton"><span class="jeton__cle">reconstitution</span><span class="jeton__valeur" data-reconstitution-fp="${code}">—</span></span>
                   ${
-                    RFP.remuneres
-                      ? `<span class="jeton"><span class="jeton__cle">annuité</span><span class="jeton__valeur" data-annuite-fp="${code}">—</span></span>`
+                    RFP.remuneres || RFP.reconstitues
+                      ? `<span class="jeton"><span class="jeton__cle">charge annuelle</span><span class="jeton__valeur" data-annuite-fp="${code}">—</span></span>`
                       : ''
                   }
                 </div>
               </div>
             </div>
-            <label class="champ champ--interrupteur">
-              <input type="checkbox" data-champ="remuneration_fonds_propres.${code}.remuneres"
-                data-type="booleen" data-structure="1" ${RFP.remuneres ? 'checked' : ''} />
-              <span>Fonds propres rémunérés et reconstitués</span>
-            </label>
-            ${
-              RFP.remuneres
-                ? `<div class="champs champs--serres">
-              <label class="champ">
-                <span>Taux de rémunération (%)</span>
-                <input type="number" step="0.01" min="0" data-champ="remuneration_fonds_propres.${code}.taux"
-                  data-type="pourcentage" value="${valNum(enPourcent(RFP.taux))}" />
+            <!-- DEUX options independantes, et les quatre combinaisons se
+                 rencontrent : remuneres sans etre reconstitues (interets servis,
+                 capital laisse dans l'operation), reconstitues sans etre
+                 remuneres, les deux, ou ni l'un ni l'autre. -->
+            <div class="options-fp">
+              <label class="champ champ--interrupteur">
+                <input type="checkbox" data-champ="remuneration_fonds_propres.${code}.remuneres"
+                  data-type="booleen" data-structure="1" ${RFP.remuneres ? 'checked' : ''} />
+                <span>Rémunérés</span>
               </label>
-              <label class="champ">
-                <span>Durée de reconstitution (ans)</span>
-                <input type="number" step="1" min="1" data-champ="remuneration_fonds_propres.${code}.duree_reconstitution_ans"
-                  data-type="nombre" value="${valNum(RFP.duree_reconstitution_ans)}" />
-              </label>
-            </div>`
-                : ''
-            }
-            <p class="aide">
               ${
                 RFP.remuneres
-                  ? '⚙ Rémunérés, les fonds propres se comportent comme un prêt que l’opération se fait ' +
-                    'à elle-même : elle en verse une annuité constante qui couvre la rémunération et le ' +
-                    'remboursement du capital, puis s’arrête au terme. Cette annuité est une CHARGE du ' +
-                    'compte d’exploitation, elle ne change rien au plan de financement.'
-                  : '⚙ Non rémunérés, les fonds propres ne coûtent rien chaque année : ils se ' +
-                    'reconstituent sur l’autofinancement dégagé. L’année où le cumul les couvre est ' +
-                    'indiquée ci-dessus.'
+                  ? `<label class="champ champ--serre">
+                <span>Taux (%)</span>
+                <input type="number" step="0.01" min="0" data-champ="remuneration_fonds_propres.${code}.taux"
+                  data-type="pourcentage" value="${valNum(enPourcent(RFP.taux))}" />
+              </label>`
+                  : ''
               }
-            </p>
+              <label class="champ champ--interrupteur">
+                <input type="checkbox" data-champ="remuneration_fonds_propres.${code}.reconstitues"
+                  data-type="booleen" data-structure="1" ${RFP.reconstitues ? 'checked' : ''} />
+                <span>Reconstitués</span>
+              </label>
+              ${
+                RFP.reconstitues
+                  ? `<label class="champ champ--serre">
+                <span>Durée (ans)</span>
+                <input type="number" step="1" min="1" data-champ="remuneration_fonds_propres.${code}.duree_reconstitution_ans"
+                  data-type="nombre" value="${valNum(RFP.duree_reconstitution_ans)}" />
+              </label>`
+                  : ''
+              }
+            </div>
+            <p class="aide" data-aide-fp="${code}"></p>
           </section>
         </div>
 
@@ -1271,9 +1274,28 @@ function rendreValeurs(r) {
     if (annuite) annuite.textContent = fp?.annuite_eur ? `${eur(fp.annuite_eur)}/an` : '—';
     const recon = document.querySelector(`[data-reconstitution-fp="${code}"]`);
     if (recon) {
-      recon.textContent = fp?.remuneres
-        ? `${fp.duree_reconstitution_ans} ans à ${pct(fp.taux_remuneration, 2)}`
+      recon.textContent = fp?.reconstitues
+        ? `${fp.duree_reconstitution_ans} ans`
         : (r.indicateurs?.annee_reconstitution_fonds_propres ?? 'non atteinte');
+    }
+
+    // Le regime se dit en toutes lettres : quatre combinaisons, et celle qui
+    // sert des interets sans jamais rendre le capital merite d'etre nommee.
+    const aideFP = document.querySelector(`[data-aide-fp="${code}"]`);
+    if (aideFP) {
+      aideFP.textContent = fp?.remuneres
+        ? fp.reconstitues
+          ? `⚙ Rémunérés à ${pct(fp.taux_remuneration, 2)} et reconstitués sur ${fp.duree_reconstitution_ans} ans : ` +
+            'l’opération verse une annuité constante qui couvre l’intérêt et le remboursement, ' +
+            'puis s’arrête au terme.'
+          : `⚙ Rémunérés à ${pct(fp.taux_remuneration, 2)} sans reconstitution : l’opération sert l’intérêt ` +
+            'chaque année mais ne rend jamais le capital, qui reste investi. La charge ne s’arrête pas.'
+        : fp?.reconstitues
+          ? `⚙ Reconstitués sur ${fp.duree_reconstitution_ans} ans sans rémunération : l’opération rend le ` +
+            'capital par parts égales, sans le rémunérer.'
+          : '⚙ Ni rémunérés ni reconstitués : aucune charge annuelle. Ils se reconstituent sur ' +
+            'l’autofinancement dégagé, à l’année indiquée ci-dessus. La charge est une charge ' +
+            'd’exploitation, elle ne change jamais le plan de financement.';
     }
   }
 

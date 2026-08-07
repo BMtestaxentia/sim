@@ -123,8 +123,8 @@
   },
 
   "fonds_propres": {
-    "note": "R-FIN-7. Des fonds propres REMUNERES se comportent comme un pret que l'operation se fait a elle-meme : elle en verse une annuite constante qui couvre la remuneration et la reconstitution du capital sur la duree convenue. Des fonds propres NON remuneres ne produisent aucune annuite, ils se reconstituent sur l'autofinancement. Ces valeurs sont des HYPOTHESES d'organisme, pas des baremes reglementaires : elles se surchargent tranche par tranche.",
-    "source": "Annexe LEON MULHOUSE 3308 (plan_financement.fonds_propres) : taux de 2,5 % sur PLS, CD et LOC1, 1,5 % sur REH, 0 % sur LIBRE ; duree de reconstitution de 30 ans.",
+    "note": "R-FIN-7. REMUNERATION et RECONSTITUTION sont deux options INDEPENDANTES, et les quatre combinaisons se rencontrent : remuneres sans etre reconstitues (l'operation sert l'interet mais ne rend jamais le capital), reconstitues sans etre remuneres (le capital est rendu par parts egales), les deux (annuite d'amortissement classique, qui s'arrete au terme), ou ni l'un ni l'autre (reconstitution sur le seul autofinancement). Ces valeurs sont des HYPOTHESES d'organisme, pas des baremes reglementaires : elles se surchargent tranche par tranche.",
+    "source": "Annexe LEON MULHOUSE 3308, `plan_financement.fonds_propres`. Elle porte les QUATRE combinaisons dans une seule operation : PLS et LOC1 a 2,5 % sur 30 ans, CD a 2,5 % sans duree, LIB sans taux sur 30 ans, PLI sans taux sur 35 ans, REH a 1,5 % sur 25 ans, PLUS et PLAI ni l'un ni l'autre.",
     "taux_remuneration_defaut": 0.025,
     "duree_reconstitution_defaut_ans": 30
   },

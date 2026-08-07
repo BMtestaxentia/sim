@@ -772,80 +772,93 @@ describe('R-FIN-2 — assiette CDC du droit a pret foncier (Q-30, arbitrage 06/0
   });
 });
 
-describe('R-FIN-7 — fonds propres remuneres et reconstitues', () => {
-  const op = (remuneration) => ({
+describe('R-FIN-7 — remuneration et reconstitution des fonds propres', () => {
+  // Les QUATRE combinaisons existent : l'annexe MULHOUSE 3308 les porte toutes
+  // dans une seule operation (PLS remunere et reconstitue, CD remunere seul,
+  // LIB reconstitue seul, PLUS ni l'un ni l'autre).
+  const op = (regime) => ({
     identite: { zone_123: 2, zone_ABC: 'B1' },
     dates: { annee_mise_en_location: 2028, duree_simulation_ans: 40 },
     lots: [{ code_produit: 'PLS', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 40 }],
     postes_bilan: [{ chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1000000, taux_tva: 0.1 }],
     fonds_propres_par_produit: { PLS: 300000 },
-    remuneration_fonds_propres: remuneration,
+    remuneration_fonds_propres: { PLS: regime },
   });
-  const calc = (r) => calculer(op(r), REFERENTIELS);
+  const calc = (regime) => calculer(op(regime), REFERENTIELS);
+  const charge = (r, annee) => r.exploitation.lignes.find((l) => l.annee === annee).annuite_fonds_propres_eur;
 
-  it('sans remuneration, aucune annuite : les fonds propres se reconstituent sur l autofinancement', () => {
+  it('ni remuneres ni reconstitues : aucune charge', () => {
     const r = calc({});
-    expect(r.exploitation.annuite_fonds_propres_eur).toBe(0);
-    expect(r.exploitation.lignes[0].annuite_fonds_propres_eur).toBe(0);
+    expect(charge(r, 2028)).toBe(0);
     expect(r.exploitation.fonds_propres_par_tranche.PLS.remuneres).toBe(false);
-    // La reconstitution reste rapportee, elle ne depend pas de la remuneration.
-    expect(r.indicateurs.annee_reconstitution_fonds_propres).not.toBe(undefined);
+    expect(r.exploitation.fonds_propres_par_tranche.PLS.reconstitues).toBe(false);
   });
 
-  it('remuneres, ils produisent une annuite constante d amortissement', () => {
-    const r = calc({ PLS: { remuneres: true, taux: 0.025, duree_reconstitution_ans: 30 } });
-    // 300 000 x 2,5 % / (1 - 1,025^-30) = 14 331 EUR
+  it('REMUNERES SEULEMENT : interets servis, capital jamais rendu', () => {
+    // Cas du produit CD de l'annexe : un taux, pas de duree.
+    const r = calc({ remuneres: true, taux: 0.025 });
+    expect(charge(r, 2028)).toBe(7500); // 300 000 x 2,5 %
+    // La charge ne s'arrete jamais : le capital reste dans l'operation.
+    expect(charge(r, 2067)).toBe(7500);
+    const fp = r.exploitation.fonds_propres_par_tranche.PLS;
+    expect(fp.remuneres).toBe(true);
+    expect(fp.reconstitues).toBe(false);
+  });
+
+  it('RECONSTITUES SEULEMENT : capital rendu, sans remuneration', () => {
+    // Cas du produit LIB de l'annexe : une duree, pas de taux.
+    const r = calc({ reconstitues: true, duree_reconstitution_ans: 30 });
+    expect(charge(r, 2028)).toBe(10000); // 300 000 / 30
+    expect(charge(r, 2057)).toBe(10000); // 30e annee
+    expect(charge(r, 2058)).toBe(0); // capital rendu
+    const fp = r.exploitation.fonds_propres_par_tranche.PLS;
+    expect(fp.remuneres).toBe(false);
+    expect(fp.reconstitues).toBe(true);
+  });
+
+  it('LES DEUX : annuite d amortissement classique, qui s arrete au terme', () => {
+    const r = calc({ remuneres: true, taux: 0.025, reconstitues: true, duree_reconstitution_ans: 30 });
     const attendu = Math.round((300000 * 0.025) / (1 - 1.025 ** -30));
-    expect(r.exploitation.annuite_fonds_propres_eur).toBe(attendu);
-    expect(r.exploitation.lignes[0].annuite_fonds_propres_eur).toBe(attendu);
+    expect(charge(r, 2028)).toBe(attendu); // 14 333 EUR
+    expect(charge(r, 2057)).toBe(attendu);
+    expect(charge(r, 2058)).toBe(0);
+    // Elle est bien SUPERIEURE aux interets seuls et au capital seul.
+    expect(attendu).toBeGreaterThan(7500);
+    expect(attendu).toBeGreaterThan(10000);
   });
 
-  it('a taux nul, l annuite rend le capital sans le remunerer', () => {
-    const r = calc({ PLS: { remuneres: true, taux: 0, duree_reconstitution_ans: 30 } });
-    expect(r.exploitation.annuite_fonds_propres_eur).toBe(10000); // 300 000 / 30
-  });
-
-  it('l annuite S ARRETE au terme de la duree de reconstitution', () => {
-    const r = calc({ PLS: { remuneres: true, taux: 0.025, duree_reconstitution_ans: 30 } });
-    const par = (annee) => r.exploitation.lignes.find((l) => l.annee === annee);
-    expect(par(2057).annuite_fonds_propres_eur).toBeGreaterThan(0); // 30e annee
-    expect(par(2058).annuite_fonds_propres_eur).toBe(0); // 31e : capital rendu
-  });
-
-  it('l annuite pese sur le resultat, comme une charge', () => {
-    const sans = calc({});
-    const avec = calc({ PLS: { remuneres: true, taux: 0.025, duree_reconstitution_ans: 30 } });
-    const ecart = sans.exploitation.lignes[0].resultat_eur - avec.exploitation.lignes[0].resultat_eur;
-    expect(ecart).toBe(avec.exploitation.annuite_fonds_propres_eur);
-  });
-
-  it('ne change RIEN au plan de financement : c est une charge, pas une ressource', () => {
-    const sans = calc({});
-    const avec = calc({ PLS: { remuneres: true, taux: 0.025, duree_reconstitution_ans: 30 } });
-    expect(avec.financement.equilibre.ressources_eur).toBe(sans.financement.equilibre.ressources_eur);
-    expect(avec.amortissements.map((a) => a.montant_eur)).toEqual(
-      sans.amortissements.map((a) => a.montant_eur),
-    );
-  });
-
-  it('chaque tranche a son propre regime', () => {
+  it('deux tranches de regimes differents cohabitent, chacune avec SA duree', () => {
+    // C'est ce cas qui interdit un scalaire assorti d'une duree unique : l'une
+    // sert des interets a perpetuite, l'autre rembourse sur trente ans.
     const r = calculer(
       {
-        ...op({ PLAI: { remuneres: true, taux: 0.025, duree_reconstitution_ans: 30 } }),
+        ...op({}),
         lots: [
           { code_produit: 'PLS', nb_logements: 6, shab_m2: 400 },
           { code_produit: 'PLAI', nb_logements: 4, shab_m2: 240 },
         ],
-        fonds_propres_par_produit: { PLS: 100000, PLAI: 200000 },
+        fonds_propres_par_produit: { PLS: 300000, PLAI: 300000 },
+        remuneration_fonds_propres: {
+          PLS: { remuneres: true, taux: 0.025 },
+          PLAI: { reconstitues: true, duree_reconstitution_ans: 30 },
+        },
       },
       REFERENTIELS,
     );
-    const fp = r.exploitation.fonds_propres_par_tranche;
-    expect(fp.PLS.remuneres).toBe(false);
-    expect(fp.PLS.annuite_eur).toBe(0);
-    expect(fp.PLAI.remuneres).toBe(true);
-    expect(fp.PLAI.annuite_eur).toBeGreaterThan(0);
-    expect(r.exploitation.annuite_fonds_propres_eur).toBe(fp.PLAI.annuite_eur);
+    expect(charge(r, 2028)).toBe(7500 + 10000);
+    // Au-dela de trente ans, seul le PLS continue de peser.
+    expect(charge(r, 2058)).toBe(7500);
+  });
+
+  it('la charge pese sur le resultat sans toucher au plan de financement', () => {
+    const sans = calc({});
+    const avec = calc({ remuneres: true, taux: 0.025, reconstitues: true, duree_reconstitution_ans: 30 });
+    expect(sans.exploitation.lignes[0].resultat_eur - avec.exploitation.lignes[0].resultat_eur)
+      .toBe(charge(avec, 2028));
+    expect(avec.financement.equilibre.ressources_eur).toBe(sans.financement.equilibre.ressources_eur);
+    expect(avec.amortissements.map((a) => a.montant_eur)).toEqual(
+      sans.amortissements.map((a) => a.montant_eur),
+    );
   });
 
   it('la remuneration des fonds propres sort des postes non modelises', () => {

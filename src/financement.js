@@ -33,33 +33,41 @@ export function soldeAFinancer({
 }
 
 /**
- * R-FIN-7 — Annuite de fonds propres REMUNERES.
+ * R-FIN-7 — Charge annuelle des fonds propres.
  *
- * Des fonds propres remuneres se comportent comme un pret que l'operation se
- * fait a elle-meme : elle en verse chaque annee une annuite constante qui couvre
- * la remuneration ET la reconstitution du capital sur la duree convenue. C'est
- * la colonne « ANNUITES DE FP » de la table de transparence de la CDC, et le
- * couple (taux de remuneration, duree de reconstitution) du dictionnaire LEON.
+ * REMUNERATION et RECONSTITUTION sont DEUX OPTIONS INDEPENDANTES, et les quatre
+ * combinaisons existent. L'annexe MULHOUSE 3308 les porte toutes les quatre dans
+ * une seule operation (`plan_financement.fonds_propres`) :
  *
- *   annuite = montant x taux / (1 - (1 + taux)^-duree)
+ *   produit | taux  | duree | regime
+ *   --------|-------|-------|------------------------------------------------
+ *   PLS     | 2,5 % | 30    | remuneres ET reconstitues
+ *   CD      | 2,5 % | 0     | remuneres SEULEMENT : interets servis, capital
+ *           |       |       | laisse dans l'operation
+ *   LIB     | 0     | 30    | reconstitues SEULEMENT : capital rendu, sans
+ *           |       |       | remuneration
+ *   PLUS    | 0     | 0     | ni l'un ni l'autre : reconstitution sur le seul
+ *           |       |       | autofinancement
  *
- * A taux nul, la limite est montant / duree : l'operation rend le capital sans
- * le remunerer. Ecrire la formule generale ferait une division par zero la ou la
- * reponse est evidente.
- *
- * Des fonds propres NON remuneres ne produisent aucune annuite : ils se
- * reconstituent sur l'autofinancement, ce que rapporte deja
- * `anneeReconstitutionFondsPropres`.
+ * Les trois cas produisant une charge sont les trois formes d'une meme
+ * expression, `montant x taux / (1 - (1+taux)^-n)` :
+ *   - n infini (pas de reconstitution) : elle tend vers `montant x taux`,
+ *     l'interet seul ;
+ *   - taux nul (pas de remuneration)   : elle tend vers `montant / n`,
+ *     le capital seul.
+ * Les ecrire separement evite une division par zero et une limite a l'infini
+ * la ou les deux reponses sont evidentes.
  *
  * @param {Object} p
  * @param {number} p.montant_eur
- * @param {number} [p.taux]        taux de remuneration annuel, en fraction
- * @param {number} [p.duree_ans]   duree de reconstitution
- * @returns {number} annuite annuelle en euros
+ * @param {number} [p.taux]        taux de remuneration annuel ; 0 = non remuneres
+ * @param {number} [p.duree_ans]   duree de reconstitution ; 0 = non reconstitues
+ * @returns {number} charge annuelle en euros
  */
 export function annuiteFondsPropres({ montant_eur, taux = 0, duree_ans = 0 }) {
-  if (!(montant_eur > 0) || !(duree_ans > 0)) return 0;
-  if (!taux) return arrondiEuro(montant_eur / duree_ans);
+  if (!(montant_eur > 0)) return 0;
+  if (!(duree_ans > 0)) return taux > 0 ? arrondiEuro(montant_eur * taux) : 0;
+  if (!(taux > 0)) return arrondiEuro(montant_eur / duree_ans);
   return arrondiEuro((montant_eur * taux) / (1 - (1 + taux) ** -duree_ans));
 }
 

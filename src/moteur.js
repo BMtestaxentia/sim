@@ -240,21 +240,34 @@ export function calculer(entrees, referentiels) {
   /** @type {Record<string, any>} */
   const fondsPropresParTranche = {};
   let annuiteFPTotale = 0;
-  let dureeFPMax = 0;
+  /** Charge de fonds propres annee par annee : chaque tranche a SA duree. */
+  /** @type {Array<{annee: number, montant_eur: number}>} */
+  const annuitesFP = [];
+  const horizon = dates.duree_simulation_ans ?? 50;
   for (const c of codesPresents) {
     const montant = fpParProduit
       ? (Number(fpParProduit[c]) || 0)
       : (quotesParts[c] ?? 0) * (entrees.fonds_propres_eur ?? 0);
     const p = paramFP[c] ?? {};
-    const remuneres = p.remuneres === true;
-    const taux = remuneres ? (Number(p.taux) || 0) : 0;
-    const duree = remuneres ? (Number(p.duree_reconstitution_ans) || 0) : 0;
-    const annuite = remuneres ? annuiteFondsPropres({ montant_eur: montant, taux, duree_ans: duree }) : 0;
+    // Deux options INDEPENDANTES : un taux sans duree sert des interets sans
+    // rendre le capital, une duree sans taux rend le capital sans le remunerer.
+    const taux = p.remuneres === true ? (Number(p.taux) || 0) : 0;
+    const duree = p.reconstitues === true ? (Number(p.duree_reconstitution_ans) || 0) : 0;
+    const annuite = annuiteFondsPropres({ montant_eur: montant, taux, duree_ans: duree });
     annuiteFPTotale += annuite;
-    if (duree > dureeFPMax) dureeFPMax = duree;
+    // Reconstitues, la charge s'arrete au terme : le capital est rendu. Non
+    // reconstitues, elle court tant que l'operation existe, puisque le capital
+    // reste dedans. C'est pour ce cas mixte que la serie remplace un scalaire.
+    if (annuite > 0) {
+      const derniere = duree > 0 ? Math.min(duree, horizon) : horizon;
+      for (let k = 0; k < derniere; k++) {
+        annuitesFP.push({ annee: anneeMEL + k, montant_eur: annuite });
+      }
+    }
     fondsPropresParTranche[c] = {
       montant_eur: arrondiEuro(montant),
-      remuneres,
+      remuneres: taux > 0,
+      reconstitues: duree > 0,
       taux_remuneration: taux,
       duree_reconstitution_ans: duree,
       annuite_eur: annuite,
@@ -600,8 +613,11 @@ export function calculer(entrees, referentiels) {
     index_redevance: exp.index_redevance ?? 'loyers_irl',
     // Somme des annuites de fonds propres remuneres des tranches (R-FIN-7).
     // Une surcharge explicite reste possible pour un appel qui la connait deja.
-    annuite_fonds_propres_eur: exp.annuite_fonds_propres_eur ?? annuiteFPTotale,
-    duree_annuite_fonds_propres_ans: exp.duree_annuite_fonds_propres_ans ?? dureeFPMax,
+    // Le scalaire ne sert plus qu'aux appels qui le fournissent eux-memes ;
+    // les fonds propres des tranches passent par la SERIE, chacune avec sa duree.
+    annuite_fonds_propres_eur: exp.annuite_fonds_propres_eur ?? 0,
+    duree_annuite_fonds_propres_ans: exp.duree_annuite_fonds_propres_ans ?? 0,
+    annuites_fonds_propres: annuitesFP,
     // Le nombre de places d'un foyer, c'est son nombre de lots : le programme
     // le porte deja, le redemander serait une saisie a tenir en double.
     nb_lits: exp.nb_lits ?? nbLogements,

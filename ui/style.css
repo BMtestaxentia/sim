@@ -328,6 +328,11 @@ input[type='number']::-webkit-inner-spin-button {
   color: var(--text-secondary); font-variant-numeric: tabular-nums;
 }
 .calc { font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+/* Une cellule calculee ne porte que des montants : elle se cale a DROITE comme
+   toute colonne chiffree. Sans cela « 35 353 € » et « 678 133 € » flottaient a
+   gauche sous un intitule centre, et les milliers ne s'alignaient pas d'une
+   ligne a l'autre. */
+td.calc { text-align: right; }
 
 /* Saisie suivie de son unite, sur une seule ligne : un champ de table occupe
    toute la largeur de sa cellule, l'unite passerait sinon a la ligne. */
@@ -472,6 +477,11 @@ input[type='number']::-webkit-inner-spin-button {
   letter-spacing: 0.05em; color: var(--text-tertiary);
   border-bottom: 1px solid var(--border-color);
 }
+/* Le LIBELLE d'une colonne chiffree se centre, la VALEUR reste calee a droite :
+   un intitule en petites capitales n'a pas de raison de suivre l'alignement des
+   nombres, qui eux doivent s'empiler pour se comparer. Plus specifique que la
+   regle `.num` qui suit, sans quoi elle l'emporterait. */
+.tableau th.num { text-align: center; }
 .tableau td {
   padding: 5px 9px; border-bottom: 1px solid var(--border-color);
   color: var(--text-primary); vertical-align: middle;

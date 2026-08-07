@@ -576,3 +576,133 @@ describe('golden - ORLEANS 3463 PLUS/PLAI (revisabilite DOUBLE, trajectoire LA r
     });
   });
 });
+
+/**
+ * Q-11 - GOLDEN TEST DU COMPTE D'EXPLOITATION.
+ *
+ * Le compte de LEON pour Bergerac (SimPLS colonnes DM a EC, 81 annees) est verse
+ * dans `exploitation_leon.json`. Ce bloc confronte la MECANIQUE du moteur a cette
+ * sortie reelle : agregation des annuites, indexation des recettes et de la
+ * gestion, table de gros entretien, entree en TFPB, enchainement des soldes.
+ *
+ * Les valeurs d'ENTREE de LEON lui sont fournies telles quelles - loyer et
+ * gestion de l'annee 1, table de gros entretien, colonne « autres depenses ».
+ * Ce sont des donnees dans LEON aussi : une table saisie et 51 valeurs en dur
+ * (Q-19 et Q-20). Le test ne valide donc pas d'ou elles viennent, mais tout ce
+ * que le moteur en fait.
+ *
+ * La comparaison s'arrete en 2088, derniere annee couverte par la table de gros
+ * entretien. Au-dela, le moteur reconduit sa derniere valeur quand LEON continue
+ * de la faire croitre d'environ 2,3 % par an : divergence connue, dont la reponse
+ * propre est de fournir une table couvrant l'horizon.
+ */
+describe('golden - BERGERAC compte d exploitation (81 annees de LEON)', () => {
+  const leon = fixture('bergerac_lls6_pls', 'exploitation_leon.json');
+  const entrees = fixture('bergerac_lls6_pls', 'entrees.json');
+  const C = leon.compte;
+  const ref = entrees.referentiel_amortissement;
+  const DERNIERE_ANNEE_TABLE_GE = 2088;
+
+  const annuites = entrees.prets.flatMap((p) =>
+    tableauAmortissement({
+      montant_eur: p.montant_eur, taux: p.taux, duree_ans: p.duree_ans,
+      progressivite: p.progressivite ?? 0, annee_premiere_echeance: p.annee_premiere_echeance,
+      revisabilite: p.revisabilite, livret_a_origine: ref.livret_a_origine,
+      livret_a_par_annee: ref.livret_a_par_annee,
+      differe_ans: p.differe_ans, differe_type: p.differe_type,
+    }).map((l) => ({ annee: l.annee, annuite_eur: l.annuite_eur })),
+  );
+
+  const compte = compteExploitation({
+    annee_mise_en_location: 2028,
+    duree_ans: C.length,
+    // Loyer et gestion de l'annee 1, indexes a 2 % : c'est la trajectoire plate
+    // du classeur (ParaGEN!CT22:DD102).
+    loyers_logements_annuels_eur: C[0].total_recettes * 1000,
+    frais_gestion_annuels_eur: C[0].frais_gestion * 1000,
+    nb_logements: 1,
+    shab_m2: leon.shab_tranche_m2,
+    gros_entretien_par_annee: leon.table_gros_entretien_eur_par_m2,
+    annuites,
+    // Les prets NON CDC ont leur colonne propre chez LEON (Q-9).
+    annuites_fonds_propres: C.filter((c) => c.annuites_complementaires).map((c) => ({
+      annee: c.annee, montant_eur: c.annuites_complementaires * 1000,
+    })),
+    charges_diverses: [
+      { code: 'autres', libelle: 'Autres dépenses', assiette: 'forfait', valeur: 0,
+        montants_par_annee: Object.fromEntries(
+          C.filter((c) => c.autres_depenses != null).map((c) => [c.annee, c.autres_depenses]),
+        ) },
+    ],
+    tfpb_par_annee: C.filter((c) => c.impots_fonciers > 0).map((c) => ({
+      annee: c.annee, montant_eur: c.impots_fonciers * 1000,
+    })),
+    trajectoires: { loyers_irl: 0.02, gestion: 0.02, tfpb: 0 },
+  });
+
+  /** Ecart ABSOLU maximal d'un poste : la divergence est un arrondi, pas un ratio. */
+  const ecartMax = (duMoteur, deLeon) => {
+    let pire = 0;
+    let comparees = 0;
+    C.forEach((c, i) => {
+      if (c.annee > DERNIERE_ANNEE_TABLE_GE) return;
+      pire = Math.max(pire, Math.abs(duMoteur(compte.lignes[i]) - deLeon(c)));
+      comparees++;
+    });
+    return { pire, comparees };
+  };
+
+  // Le moteur arrondit chaque poste a l'euro, LEON garde sa precision en kEUR :
+  // un demi-euro d'ecart est le maximum atteignable sans erreur de calcul.
+  const ARRONDI = 0.5;
+
+  it('couvre les 61 annees ou la table de gros entretien existe', () => {
+    expect(ecartMax((l) => l.total_produits_eur, (c) => c.total_recettes * 1000).comparees).toBe(61);
+  });
+
+  it('reproduit les recettes, indexees a 2 %', () => {
+    expect(ecartMax((l) => l.total_produits_eur, (c) => c.total_recettes * 1000).pire)
+      .toBeLessThanOrEqual(ARRONDI);
+  });
+
+  it('reproduit les annuites de prets CDC agregees', () => {
+    expect(ecartMax((l) => l.annuites_eur, (c) => (c.annuites_construction + c.annuites_foncier) * 1000).pire)
+      .toBeLessThanOrEqual(ARRONDI);
+  });
+
+  it('reproduit les frais de gestion', () => {
+    expect(ecartMax((l) => l.frais_gestion_eur, (c) => c.frais_gestion * 1000).pire)
+      .toBeLessThanOrEqual(ARRONDI);
+  });
+
+  it('reproduit le gros entretien, table annuelle et montee en charge comprises', () => {
+    // Q-19 : le gros entretien n'est pas un taux indexe. Les quatre premieres
+    // annees montent de 8,05 a 17,23 EUR/m2, ce qu'aucune indexation ne donne.
+    expect(ecartMax((l) => l.gros_entretien_eur, (c) => c.gros_entretien * 1000).pire)
+      .toBeLessThanOrEqual(ARRONDI);
+    const t = leon.table_gros_entretien_eur_par_m2;
+    expect(t[3].eur_par_m2 / t[0].eur_par_m2).toBeGreaterThan(2);
+  });
+
+  it('reproduit l entree en taxe fonciere', () => {
+    expect(ecartMax((l) => l.tfpb_eur, (c) => c.impots_fonciers * 1000).pire)
+      .toBeLessThanOrEqual(ARRONDI);
+    // LEON exonere jusqu'en 2053 inclus et taxe a partir de 2054, soit 26 ans
+    // apres la mise en location et non 25 : ecart a eclaircir (Q-14 bis).
+    expect(C.find((c) => c.impots_fonciers > 0).annee).toBe(2054);
+  });
+
+  it('reproduit le total des charges et le solde annuel', () => {
+    expect(ecartMax((l) => l.total_charges_eur, (c) => c.total_depenses * 1000).pire)
+      .toBeLessThanOrEqual(ARRONDI);
+    expect(ecartMax((l) => l.resultat_eur, (c) => c.solde * 1000).pire)
+      .toBeLessThanOrEqual(ARRONDI);
+  });
+
+  it('tombe exactement sur l annee 1 de LEON', () => {
+    const l = compte.lignes[0];
+    expect(l.total_produits_eur).toBe(30036);
+    expect(l.total_charges_eur).toBe(39072);
+    expect(l.resultat_eur).toBe(-9036);
+  });
+});

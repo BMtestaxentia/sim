@@ -3772,6 +3772,7 @@ function compteExploitation(e) {
     duree_annuite_fonds_propres_ans = 0,
     annuites_fonds_propres = [],
     tfpb_par_annee = [],
+    gros_entretien_par_annee = [],
     nb_lits = 0,
     qp_subventions_annuelle_eur = 0,
     duree_qp_subventions_ans = 0,
@@ -3823,6 +3824,31 @@ function compteExploitation(e) {
   }
   const tfpbEnSerie = tfpb_par_annee.length > 0;
 
+  /**
+   * R-EXP, Q-19 - Gros entretien en TABLE ANNUELLE, en EUR par m2 de SHAB.
+   *
+   * LEON ne l'indexe pas depuis un taux : il le lit dans `SimPLS!HT16:HU76`, une
+   * table qui MONTE EN CHARGE sur les quatre premieres annees (8,05 puis 10,98
+   * puis 14,04 puis 17,23 EUR/m2) avant de croitre d'environ 2,3 % par an. Un
+   * taux constant indexe ne peut pas reproduire cette montee : la provision se
+   * constitue, elle ne suit pas l'inflation.
+   *
+   * La table prime sur le scalaire des qu'elle existe, et ne s'indexe pas : elle
+   * porte deja sa propre progression.
+   * @type {Record<number, number>}
+   */
+  const gePar_m2ParAnnee = {};
+  for (const g of gros_entretien_par_annee) gePar_m2ParAnnee[g.annee] = g.eur_par_m2;
+  const geEnTable = gros_entretien_par_annee.length > 0;
+  // Au-dela de la table, la DERNIERE valeur connue est reconduite, comme pour
+  // toute trajectoire du moteur. Attention : LEON, lui, continue de la faire
+  // croitre d'environ 2,3 % par an au-dela de sa propre table - divergence
+  // documentee, la reponse propre etant de fournir une table qui couvre
+  // l'horizon de simulation.
+  const derniereAnneeGE = geEnTable
+    ? Math.max(...gros_entretien_par_annee.map((g) => g.annee))
+    : 0;
+
   const lignes = [];
   let cumulAutofinancement = 0;
 
@@ -3864,7 +3890,9 @@ function compteExploitation(e) {
       : annee >= annee_debut_tfpb
         ? nb_logements * tfpb_par_logement_eur * idxTFPB
         : 0;
-    const grosEntretien = gros_entretien_eur_m2 * shab_m2 * idxGE;
+    const grosEntretien = geEnTable
+      ? (gePar_m2ParAnnee[Math.min(annee, derniereAnneeGE)] ?? 0) * shab_m2
+      : gros_entretien_eur_m2 * shab_m2 * idxGE;
     const rel = rel_annuel_eur * nb_logements * idxGestion;
     // « ANNUITES DE FP » de la table de transparence : la remuneration des
     // fonds propres est une charge refacturee au meme titre que les annuites
@@ -3893,9 +3921,16 @@ function compteExploitation(e) {
     let chargesFixes = 0;
     let tauxBruts = 0;
     let tauxNets = 0;
+    // Un poste peut porter un montant PROPRE A CHAQUE ANNEE plutot qu'une
+    // valeur indexee : c'est le cas de la colonne « AUTRES DEPENSES » de LEON,
+    // 51 valeurs saisies sans formule (Q-20). Le montant annuel prime alors sur
+    // tout le reste, assiette comprise, et ne s'indexe pas.
+    const montantAnnuel = (c) => c.montants_par_annee?.[annee];
     for (const c of charges_diverses) {
       if (!applicable(c)) continue;
-      if (c.assiette === 'produits_locatifs_bruts') tauxBruts += c.valeur;
+      const fixe = montantAnnuel(c);
+      if (fixe !== undefined) chargesFixes += fixe;
+      else if (c.assiette === 'produits_locatifs_bruts') tauxBruts += c.valeur;
       else if (c.assiette === 'produits_locatifs_nets') tauxNets += c.valeur;
       else if (assietteFixe[c.assiette] !== undefined) chargesFixes += c.valeur * assietteFixe[c.assiette] * idx(c.index);
       else throw new Error(`Assiette de charge inconnue : ${c.assiette} (poste ${c.code})`);
@@ -3970,7 +4005,7 @@ function compteExploitation(e) {
         produits_locatifs_bruts: loyersBruts,
         produits_locatifs_nets: loyersNets,
       }[c.assiette];
-      const montant = c.valeur * assiette * idx(c.index);
+      const montant = montantAnnuel(c) ?? c.valeur * assiette * idx(c.index);
       detailChargesDiverses.push({ code: c.code, libelle: c.libelle, montant_eur: arrondiEuro(montant) });
       chargesDiverses += montant;
     }

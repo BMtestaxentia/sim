@@ -201,6 +201,12 @@ html, body {
   overflow: hidden; text-overflow: ellipsis; max-height: 100%;
   font-variant-numeric: tabular-nums;
 }
+/* Pastille de rattachement : la colonne des etiquettes ne suit plus exactement
+   les proportions de la barre, la couleur retablit le lien. */
+.jauge__etiquettes b {
+  display: block; width: 5px; height: 5px; border-radius: 50%;
+  margin: 0 auto 4px; flex: none;
+}
 /* Les etiquettes coutent 74 px de chaque bord : sous 950 px elles prendraient
    plus de place qu'elles n'en valent, seules les barres restent. */
 @media (max-width: 950px) { .jauge { flex-basis: 14px; } .jauge__etiquettes { display: none; } }
@@ -718,7 +724,7 @@ input[type='number']::-webkit-inner-spin-button {
 .pret__nature { flex: 0 0 130px; font-size: 12px; }
 .pret__actions { display: flex; align-items: center; gap: 2px; margin-left: auto; flex: none; }
 /* Montant de pret calcule : il se lit comme un resultat, pas comme une saisie,
-   mais il reste modifiable — c'est ainsi qu'on le fige. */
+   mais il reste modifiable - c'est ainsi qu'on le fige. */
 .pret--auto .pret__montant {
   background: transparent; border-style: dashed;
   border-color: var(--border-color-strong); color: var(--text-secondary);
@@ -759,8 +765,8 @@ input[type='number']::-webkit-inner-spin-button {
   .pret__entete { flex-wrap: wrap; }
   .pret__montant, .pret__nature { flex: 1 1 120px; }
 }
-/* Ressources d'une tranche : meme grammaire que les prets — une ligne compacte
-   et son jeton de lecture — pour qu'un plan de financement se parcoure d'un
+/* Ressources d'une tranche : meme grammaire que les prets - une ligne compacte
+   et son jeton de lecture - pour qu'un plan de financement se parcoure d'un
    seul mouvement au lieu d'alterner tables et cartes. */
 .ligne--ressource { border-left: 3px solid var(--cat, var(--cat-6)); padding: 9px 11px; }
 .ligne--fp { background: var(--bg-tertiary); border-left-width: 4px; }

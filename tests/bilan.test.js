@@ -35,7 +35,7 @@ const POSTES = [
   { chapitre: 'honoraires', libelle: 'Honoraires', montant_ht_eur: 50000, taux_tva: 0.2 },
 ];
 
-describe('R-TVA — prix de revient et livraison a soi-meme', () => {
+describe('R-TVA - prix de revient et livraison a soi-meme', () => {
   it('R-TVA-1 : ventilation HT / TVA / TTC au taux de saisie', () => {
     expect(ventilerPoste(POSTES[0])).toEqual({ ht_eur: 1000000, tva_eur: 55000, ttc_eur: 1055000 });
   });
@@ -85,7 +85,7 @@ describe('R-TVA — prix de revient et livraison a soi-meme', () => {
   });
 });
 
-describe('R-SUB — subventions', () => {
+describe('R-SUB - subventions', () => {
   it('R-SUB-3 : separe gratuites et non gratuites, ventile par affectation', () => {
     const r = agregerSubventions(
       [
@@ -143,7 +143,7 @@ describe('R-SUB — subventions', () => {
   });
 });
 
-describe('R-FIN — plan de financement', () => {
+describe('R-FIN - plan de financement', () => {
   it('R-FIN-3 : solde = PR - (subventions + FP + autres prets)', () => {
     expect(
       soldeAFinancer({
@@ -252,7 +252,7 @@ describe('R-FIN — plan de financement', () => {
   });
 });
 
-describe('R-FISC — fiscalite', () => {
+describe('R-FISC - fiscalite', () => {
   it('R-FISC-1 : exoneration de 25 ans par defaut, duree parametrable (I-7)', () => {
     expect(exonerationTFPB({ annee_mise_en_location: 2028 }, baremes).annee_debut_tfpb).toBe(2053);
     expect(
@@ -312,7 +312,7 @@ describe('R-FISC — fiscalite', () => {
   });
 });
 
-describe('R-TVA-2/3 — ventilation du prix de revient par tranche', () => {
+describe('R-TVA-2/3 - ventilation du prix de revient par tranche', () => {
   const POSTES_V = [
     { chapitre: 'charge_fonciere', libelle: 'VEFA', montant_ht_eur: 1000000, taux_tva: 0.055 },
     { chapitre: 'honoraires', libelle: 'Honoraires', montant_ht_eur: 100000, taux_tva: 0.2 },

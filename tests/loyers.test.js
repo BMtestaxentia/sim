@@ -24,7 +24,7 @@ import {
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_2025.json'), 'utf8'));
 
-describe('R-SURF-1 — surface utile', () => {
+describe('R-SURF-1 - surface utile', () => {
   it('SU = SHAB + 0,5 x annexes, arrondie a 2 decimales', () => {
     expect(surfaceUtile({ shab_m2: 545.8, surfaces_annexes_m2: 40 }, baremes)).toBe(565.8);
     expect(surfaceUtile({ shab_m2: 100.333, surfaces_annexes_m2: 10.111 }, baremes)).toBe(105.39);
@@ -39,7 +39,7 @@ describe('R-SURF-1 — surface utile', () => {
   });
 });
 
-describe('R-SURF-2 — coefficient de structure', () => {
+describe('R-SURF-2 - coefficient de structure', () => {
   it('metropole habitat : CS = 0,77 x (1 + 20 x NL / SU)', () => {
     // Oracle a la main : 0,77 x (1 + 20 x 11 / 545,8) = 0,77 x 1,403078... = 1,08037...
     const cs = coefficientStructure({ nb_logements: 11, su_m2: 545.8 }, baremes);
@@ -73,7 +73,7 @@ describe('R-SURF-2 — coefficient de structure', () => {
   });
 });
 
-describe('R-SURF-3 — quotes-parts de surface utile', () => {
+describe('R-SURF-3 - quotes-parts de surface utile', () => {
   it('somment a 1', () => {
     const qp = quotesPartsSU({ PLUS: 600, PLAI: 400 });
     expect(qp.PLUS).toBeCloseTo(0.6, 12);
@@ -86,13 +86,13 @@ describe('R-SURF-3 — quotes-parts de surface utile', () => {
   });
 });
 
-describe('R-LOYER — baremes et loyer pratique', () => {
+describe('R-LOYER - baremes et loyer pratique', () => {
   it('lit le bareme par zonage 1/2/3 pour PLUS et PLAI', () => {
     expect(loyerMaxZone('PLUS', { zone_123: 2 }, baremes)).toBe(6.42);
     expect(loyerMaxZone('PLAI', { zone_123: 1 }, baremes)).toBe(6.5);
   });
 
-  it('lit le bareme par zonage A/B/C pour PLS — le zonage est une propriete du produit', () => {
+  it('lit le bareme par zonage A/B/C pour PLS - le zonage est une propriete du produit', () => {
     expect(loyerMaxZone('PLS', { zone_ABC: 'B1' }, baremes)).toBe(10.07);
     expect(loyerMaxZone('PLS', { zone_ABC: 'C' }, baremes)).toBe(8.94);
   });

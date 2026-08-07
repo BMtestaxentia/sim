@@ -35,7 +35,7 @@ const PRET_CDC = {
   duree_ans: 40, annee_premiere_echeance: 2028, revisabilite: 'TAUX FIXE',
 };
 
-describe('V1 — un pret « autre » n est compte qu une fois dans les ressources', () => {
+describe('V1 - un pret « autre » n est compte qu une fois dans les ressources', () => {
   const r = calculer(
     {
       ...BASE,
@@ -60,7 +60,7 @@ describe('V1 — un pret « autre » n est compte qu une fois dans les ressource
   });
 });
 
-describe('V2 — le profil de trajectoires du referentiel est reellement applique', () => {
+describe('V2 - le profil de trajectoires du referentiel est reellement applique', () => {
   it('convertit le fichier (une ligne par annee) en dictionnaires par poste', () => {
     const t = adapterTrajectoires(fichierTrajectoires);
     expect(t.par_poste.loyers_irl[2026]).toBe(0.023);
@@ -89,7 +89,7 @@ describe('V2 — le profil de trajectoires du referentiel est reellement appliqu
   });
 });
 
-describe('V3 — le coefficient de structure porte sur la tranche, pas sur la ligne de saisie', () => {
+describe('V3 - le coefficient de structure porte sur la tranche, pas sur la ligne de saisie', () => {
   it('donne le meme CS quel que soit le decoupage de la saisie', () => {
     const attendu = coefficientStructure({ nb_logements: 29, su_m2: 1180 }, baremes);
     const enUneLigne = calculer({ ...BASE, prets: [PRET_CDC] }, REFERENTIELS);
@@ -136,7 +136,7 @@ describe('V3 — le coefficient de structure porte sur la tranche, pas sur la li
   });
 });
 
-describe('V4 — les prets CDC theoriques sont calculables sans saisie', () => {
+describe('V4 - les prets CDC theoriques sont calculables sans saisie', () => {
   it('ne leve plus « Duree de pret invalide » quand aucun pret n est saisi', () => {
     const r = calculer({ ...BASE, prets: [] }, REFERENTIELS);
     expect(r.amortissements.length).toBeGreaterThan(0);
@@ -164,7 +164,7 @@ describe('V4 — les prets CDC theoriques sont calculables sans saisie', () => {
   });
 });
 
-describe('V5 — barèmes de loyer des produits', () => {
+describe('V5 - barèmes de loyer des produits', () => {
   it('tous les produits du perimetre V1 resolvent leur bareme', () => {
     for (const p of produitsOrdonnes().filter((x) => x.v1)) {
       expect(
@@ -233,7 +233,7 @@ describe('calendrier de l operation', () => {
   });
 });
 
-describe('saisie lot par lot — la SU ne derive pas', () => {
+describe('saisie lot par lot - la SU ne derive pas', () => {
   it('donne la meme SU de tranche que la saisie agregee', () => {
     // Six lots issus d'une repartition de 400 m2 SHAB et 40 m2 d'annexes.
     // Arrondir la SU lot par lot avant de sommer donnerait 420,02 au lieu de 420.
@@ -380,7 +380,7 @@ describe('Pas de produit principal : chaque financement a ses propres regles', (
   });
 });
 
-describe('R-TVA-3 — prix de revient saisi par tranche', () => {
+describe('R-TVA-3 - prix de revient saisi par tranche', () => {
   const SU = { PLAI: 300, PLS: 700 };
 
   it('ventile au prorata SU en l absence de saisie par tranche', () => {
@@ -512,7 +512,7 @@ describe('R-TVA-3 — prix de revient saisi par tranche', () => {
   });
 });
 
-describe('R-TVA-3 — sous-totaux de chapitre par tranche', () => {
+describe('R-TVA-3 - sous-totaux de chapitre par tranche', () => {
   const v = () =>
     prixDeRevientVentile(
       {
@@ -564,7 +564,7 @@ describe('R-TVA-3 — sous-totaux de chapitre par tranche', () => {
   });
 });
 
-describe('arrondirEnConservantLaSomme — total impose', () => {
+describe('arrondirEnConservantLaSomme - total impose', () => {
   it('atteint exactement un total impose different de l arrondi naturel', () => {
     // Somme exacte 10, mais le total a respecter vaut 11 : c'est le cas quand
     // le sous-total a deja ete ajuste pour boucler sur le prix de revient.
@@ -578,7 +578,7 @@ describe('arrondirEnConservantLaSomme — total impose', () => {
   });
 });
 
-describe('Q-27 — la vacance en transparence est signalee, pas subie en silence', () => {
+describe('Q-27 - la vacance en transparence est signalee, pas subie en silence', () => {
   const foyer = (exploitation) =>
     calculer(
       {
@@ -618,7 +618,7 @@ describe('Q-27 — la vacance en transparence est signalee, pas subie en silence
   });
 });
 
-describe('R-FIN-3 — prets CDC par tranche, ajustes au besoin de financement', () => {
+describe('R-FIN-3 - prets CDC par tranche, ajustes au besoin de financement', () => {
   const op = (surcharges = {}) => ({
     identite: { zone_123: 2, zone_ABC: 'B1' },
     dates: { annee_mise_en_location: 2028, duree_simulation_ans: 20 },
@@ -717,7 +717,7 @@ describe('R-FIN-3 — prets CDC par tranche, ajustes au besoin de financement', 
   });
 });
 
-describe('R-FIN-2 — assiette CDC du droit a pret foncier (Q-30, arbitrage 06/08/2026)', () => {
+describe('R-FIN-2 - assiette CDC du droit a pret foncier (Q-30, arbitrage 06/08/2026)', () => {
   const op = (subventions) => ({
     identite: { zone_123: 2, zone_ABC: 'B1' },
     dates: { annee_mise_en_location: 2028, duree_simulation_ans: 20 },
@@ -772,7 +772,7 @@ describe('R-FIN-2 — assiette CDC du droit a pret foncier (Q-30, arbitrage 06/0
   });
 });
 
-describe('R-FIN-7 — remuneration et reconstitution des fonds propres', () => {
+describe('R-FIN-7 - remuneration et reconstitution des fonds propres', () => {
   // Les QUATRE combinaisons existent : l'annexe MULHOUSE 3308 les porte toutes
   // dans une seule operation (PLS remunere et reconstitue, CD remunere seul,
   // LIB reconstitue seul, PLUS ni l'un ni l'autre).

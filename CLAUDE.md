@@ -1,10 +1,10 @@
-# CLAUDE.md — Moteur de simulation d'opérations (successeur LEON)
+# CLAUDE.md - Moteur de simulation d'opérations (successeur LEON)
 
 > Règles du projet pour toute instance Claude (Code ou chat) travaillant sur ce repo. Lire avant de toucher au code.
 
 ## 1. Objet du projet
 
-Moteur de calcul de simulations financières d'opérations de logement social (construction / VEFA / acquisition-amélioration), réécrit à partir de la rétro-ingénierie de la matrice LEON (Scepia). Périmètre V1 : PLUS/PLAI/PLS habitat. Cible : LLI (LOC), LIBRE, foyers — **le moteur est paramétrique dès le départ, le produit est une donnée, jamais une duplication de code.**
+Moteur de calcul de simulations financières d'opérations de logement social (construction / VEFA / acquisition-amélioration), réécrit à partir de la rétro-ingénierie de la matrice LEON (Scepia). Périmètre V1 : PLUS/PLAI/PLS habitat. Cible : LLI (LOC), LIBRE, foyers - **le moteur est paramétrique dès le départ, le produit est une donnée, jamais une duplication de code.**
 
 Les matrices LEON fournies sont mal conçues (moteur dupliqué 14 fois, constantes en dur, arrondis hétérogènes). **On en reprend les règles de calcul, jamais la structure** : liberté totale de restructuration tant que les résultats sont reproduits.
 
@@ -12,7 +12,7 @@ La spécification de référence est `docs/DICTIONNAIRE_REGLES_MOTEUR_PLUSPLAI_v
 
 ## 2. Contraintes d'environnement (réelles, vérifiées 04/08/2026)
 
-- Poste Windows, **pas de Docker**, pas de Python. Node/npm : à installer (voir §3) — ne rien supposer installé, vérifier.
+- Poste Windows, **pas de Docker**, pas de Python. Node/npm : à installer (voir §3) - ne rien supposer installé, vérifier.
 - **Aucun backend disponible** (VM SFO éteinte temporairement). Le moteur se développe et se teste **sans base de données** : entrées JSON → sorties JSON, fixtures sur disque.
 - La persistance (Postgres auto-hébergé de la VM, PostgREST) viendra plus tard. **Jamais Supabase cloud.**
 - Ce repo est **PRIVÉ** et doit le rester : les golden tests contiennent des exports d'opérations réelles AXENTIA (annexes LEON). Ne jamais copier ces fixtures vers le repo public `exnihilo`.
@@ -41,7 +41,7 @@ moteur/
   referentiels/
     baremes_2025.json          # barèmes réglementaires versionnés (extraits de ParaGEN)
     trajectoires_axentia_2026.json  # scénario macro (LA, IRL, TFPB...)
-  fixtures/                    # DONNÉES RÉELLES — raison du repo privé
+  fixtures/                    # DONNÉES RÉELLES - raison du repo privé
     mulhouse_3308_libre/       # entrees.json + attendus.json (depuis l'annexe LIBRE)
     mulhouse_3308_lli/
     bergerac_lls6_pls/         # PLS, depuis la matrice complète (tables d'amortissement LEON)
@@ -60,7 +60,7 @@ Règles d'architecture non négociables :
 - Arithmétique : calculs en nombre flottant standard MAIS arrondis explicites et centralisés (module unique `arrondis.js`) appliqués aux frontières définies par le dictionnaire (R-CONV / I-9). Pas d'accumulation itérative quand une forme fermée existe (leçon I-4).
 - Chaque fonction publique documente en JSDoc : règle(s) R-xxx couverte(s), unités, source LEON.
 
-## 5. Golden tests — le contrat du projet
+## 5. Golden tests - le contrat du projet
 
 - Une fixture = `entrees.json` (reconstruit depuis l'onglet IN de l'annexe LEON) + `attendus.json` (valeurs de la Présentation CA / Grille d'analyse / PMT).
 - Tolérances : ±1 EUR sur bilan et plan de financement ; ±0,1 % sur annuités et lignes d'exploitation. Un écart au-delà = bug du moteur OU bug documenté de LEON (à consigner dans ECARTS_LEON.md, jamais à masquer).
@@ -71,11 +71,11 @@ Règles d'architecture non négociables :
 
 - Langue : tout en français (code commenté, commits, docs). Pas de tiret cadratin dans les textes.
 - Commits directs sur `main` acceptés (comme SFO), messages en français, préfixés du module : `amortissement: gestion du différé type 1`.
-- Nombres : unités toujours explicites dans les noms (`montant_eur`, `taux`, `surface_m2`, `duree_ans`). Les montants d'exploitation LEON sont en k€ — le moteur travaille en euros et convertit uniquement à la présentation.
+- Nombres : unités toujours explicites dans les noms (`montant_eur`, `taux`, `surface_m2`, `duree_ans`). Les montants d'exploitation LEON sont en k€ - le moteur travaille en euros et convertit uniquement à la présentation.
 - Ne jamais modifier les fixtures pour faire passer un test.
 - Pas de données réelles dans les messages de commit ni dans les noms de fichiers au-delà du nécessaire (numéro de simulation OK).
 
 ## 7. Liens avec SFO / ExNihilo
 
 - Repo distinct, aucune dépendance croisée pour l'instant. À terme : la table `simulations` (Postgres VM) se liera aux `operations`/`tranches` de SFO, et la maquette importera `moteur/src/moteur.js` directement (d'où l'exigence ESM navigateur-compatible).
-- Le style UI (quand on y viendra) suivra la charte SFO : navy, Manrope, sobriété — mais l'UI n'est PAS dans ce repo pour l'instant.
+- Le style UI (quand on y viendra) suivra la charte SFO : navy, Manrope, sobriété - mais l'UI n'est PAS dans ce repo pour l'instant.

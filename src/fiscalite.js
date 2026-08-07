@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * R-FISC — Fiscalite : exoneration de TFPB, taxe d'amenagement, versement pour
+ * R-FISC - Fiscalite : exoneration de TFPB, taxe d'amenagement, versement pour
  * sous-densite.
  *
  * Sources : `SimPLUS!G37` (annee de fin d'exoneration TFPB),
@@ -15,7 +15,7 @@
 import { arrondiEuro } from './arrondis.js';
 
 /**
- * R-FISC-1 — Premiere annee d'assujettissement a la taxe fonciere.
+ * R-FISC-1 - Premiere annee d'assujettissement a la taxe fonciere.
  * `annee(mise en location) + duree d'exoneration`.
  * @param {Object} p
  * @param {number} p.annee_mise_en_location
@@ -34,7 +34,7 @@ export function exonerationTFPB({ annee_mise_en_location, duree_exoneration_ans 
 }
 
 /**
- * R-FISC-2 — Taxe d'amenagement.
+ * R-FISC-2 - Taxe d'amenagement.
  * `assiette = SDP x (1 - abattement) x valeur_forfaitaire`, la valeur forfaitaire
  * dependant de la localisation (Ile-de-France ou non). Les places de
  * stationnement exterieures s'ajoutent a un forfait par place.
@@ -72,7 +72,7 @@ export function taxeAmenagement(
 }
 
 /**
- * R-FISC-3 — Versement pour sous-densite : du seulement en neuf quand un seuil
+ * R-FISC-3 - Versement pour sous-densite : du seulement en neuf quand un seuil
  * minimal de densite est institue et que le projet reste en deca.
  * `VSD = MIN(valeur_terrain/2 x (1 - SDP/(seuil x surface_terrain)), plafond x valeur_terrain)`.
  * @param {Object} p

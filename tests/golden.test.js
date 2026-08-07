@@ -6,7 +6,7 @@
  * saisie) + attendus.json (valeurs de sortie de LEON). Tolerances : +/-1 EUR sur
  * le bilan et le plan de financement, +/-0,1 % sur les annuites et les lignes
  * d'exploitation. Un ecart au-dela est un bug du moteur OU un bug documente de
- * LEON (docs/ECARTS_LEON.md) — jamais une fixture qu'on ajuste.
+ * LEON (docs/ECARTS_LEON.md) - jamais une fixture qu'on ajuste.
  *
  * Couverture actuelle : R-AMT (amortissement). Le reste de la chaine (bilan,
  * loyers, financement, exploitation) viendra avec les modules correspondants.
@@ -31,7 +31,7 @@ function tolerance(valeurAttendue) {
   return Math.max(Math.abs(valeurAttendue) * 0.001, 0.01);
 }
 
-describe('golden — BERGERAC LLS 6 PLS (matrice LEON 2025-042d)', () => {
+describe('golden - BERGERAC LLS 6 PLS (matrice LEON 2025-042d)', () => {
   const entrees = fixture('bergerac_lls6_pls', 'entrees.json');
   const attendus = fixture('bergerac_lls6_pls', 'attendus.json');
   const { livret_a_origine, livret_a_par_annee } = entrees.referentiel_amortissement;
@@ -97,7 +97,7 @@ describe('golden — BERGERAC LLS 6 PLS (matrice LEON 2025-042d)', () => {
 });
 
 /**
- * MULHOUSE 3308 — partie LIBRE, VEFA zone 2 / B1, 11 logements.
+ * MULHOUSE 3308 - partie LIBRE, VEFA zone 2 / B1, 11 logements.
  *
  * Cette fixture vient d'une ANNEXE LEON (et non de la matrice) : elle porte les
  * valeurs de la Presentation CA et de la Grille d'analyse. Elle exerce la chaine
@@ -110,7 +110,7 @@ describe('golden — BERGERAC LLS 6 PLS (matrice LEON 2025-042d)', () => {
  * Voir QUESTIONS_SPEC Q-24 : est-ce une regle du produit ou une saisie propre a
  * cette operation ?
  */
-describe('golden — MULHOUSE 3308 LIBRE (annexe LEON, chaine complete)', () => {
+describe('golden - MULHOUSE 3308 LIBRE (annexe LEON, chaine complete)', () => {
   const attendus = fixture('mulhouse_3308_libre', 'attendus.json');
   const baremes = JSON.parse(
     readFileSync(join(RACINE, 'referentiels', 'baremes_2025.json'), 'utf8'),
@@ -261,7 +261,7 @@ describe('golden — MULHOUSE 3308 LIBRE (annexe LEON, chaine complete)', () => 
 });
 
 /**
- * MULHOUSE 3307 — partie LLI, meme operation que la fixture LIBRE.
+ * MULHOUSE 3307 - partie LLI, meme operation que la fixture LIBRE.
  *
  * Ce jeu porte trois prets dont deux en revisabilite DOUBLE avec progressivite
  * -0,5 %, ce qui en ferait le meilleur test possible du re-amortissement annuel
@@ -273,7 +273,7 @@ describe('golden — MULHOUSE 3308 LIBRE (annexe LEON, chaine complete)', () => 
  * revient, plan de financement et montants des prets. La comparaison des
  * annuites reste en attente.
  */
-describe('golden — MULHOUSE 3307 LLI (bilan et plan de financement)', () => {
+describe('golden - MULHOUSE 3307 LLI (bilan et plan de financement)', () => {
   const attendus = fixture('mulhouse_3308_lli', 'attendus.json');
   const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_2025.json'), 'utf8'));
   const trajectoires = JSON.parse(
@@ -289,7 +289,7 @@ describe('golden — MULHOUSE 3307 LLI (bilan et plan de financement)', () => {
       dates: { annee_mise_en_location: 2026, duree_simulation_ans: 18 },
       // Le loyer LLI n'est pas testable : son bareme est absent du referentiel
       // (defaut V5 connu). On passe par le produit LIBRE, dont seul le prix de
-      // revient nous interesse ici — la ventilation etant au prorata SU et
+      // revient nous interesse ici - la ventilation etant au prorata SU et
       // l'operation mono-tranche, le choix n'affecte aucun montant teste.
       lots: [{ code_produit: 'LIBRE', nb_logements: 121, shab_m2: 6000, surfaces_annexes_m2: 0 }],
       postes_bilan: attendus.bilan.postes
@@ -361,7 +361,7 @@ describe('golden — MULHOUSE 3307 LLI (bilan et plan de financement)', () => {
 });
 
 /**
- * ORLEANS 3463 — foyer PLUS/PLAI, la PREMIERE fixture du perimetre V1 declare.
+ * ORLEANS 3463 - foyer PLUS/PLAI, la PREMIERE fixture du perimetre V1 declare.
  *
  * C'est le test le plus exigeant du moteur d'amortissement : quatre prets CDC en
  * revisabilite DOUBLE avec progressivite -0,5 %, sur une trajectoire de Livret A
@@ -375,7 +375,7 @@ describe('golden — MULHOUSE 3307 LLI (bilan et plan de financement)', () => {
  * Hors perimetre ici : le compte d'exploitation en mode foyer (redevance,
  * Q-27) et le bilan (les postes ne sont pas repris dans cette fixture).
  */
-describe('golden — ORLEANS 3463 PLUS/PLAI (revisabilite DOUBLE, trajectoire LA reelle)', () => {
+describe('golden - ORLEANS 3463 PLUS/PLAI (revisabilite DOUBLE, trajectoire LA reelle)', () => {
   const entrees = fixture('orleans_3463_fplus_fplai', 'entrees.json');
   const attendus = fixture('orleans_3463_fplus_fplai', 'attendus.json');
 
@@ -452,7 +452,7 @@ describe('golden — ORLEANS 3463 PLUS/PLAI (revisabilite DOUBLE, trajectoire LA
   });
 
   // --------------------------------------------------------------------------
-  // Q-27 — Compte d'exploitation en mode foyer (redevance forfaitaire).
+  // Q-27 - Compte d'exploitation en mode foyer (redevance forfaitaire).
   //
   // Les parametres ci-dessous ne sont PAS transcrits de l'onglet IN : ils ont ete
   // IDENTIFIES sur les series de sortie de l'annexe. C'est pourquoi ils vivent

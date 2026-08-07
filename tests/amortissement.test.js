@@ -31,7 +31,7 @@ function sommeAmortissements(table) {
   return table.reduce((s, l) => s + l.amortissement_eur, 0);
 }
 
-describe('R-AMT-2 — forme fermee de l annuite', () => {
+describe('R-AMT-2 - forme fermee de l annuite', () => {
   it('progressivite 0 : annuite egale au PMT classique', () => {
     const a1 = premiereAnnuite({ montant_eur: 100000, taux: 0.02, progressivite: 0, nb_echeances: 25 });
     expect(a1).toBeCloseTo(pmt(100000, 0.02, 25), 8);
@@ -58,7 +58,7 @@ describe('R-AMT-2 — forme fermee de l annuite', () => {
   });
 });
 
-describe('R-AMT-4/5 — table a taux fixe', () => {
+describe('R-AMT-4/5 - table a taux fixe', () => {
   it('progressivite 0 : annuites constantes, CRD final nul, somme amortissements = capital', () => {
     const table = tableauAmortissement({
       montant_eur: 100000,
@@ -121,7 +121,7 @@ describe('R-AMT-4/5 — table a taux fixe', () => {
   });
 });
 
-describe('R-AMT-4 — revision Livret A', () => {
+describe('R-AMT-4 - revision Livret A', () => {
   // Pret type PLUS construction : LA_0 1,5 % + 0,6 % = 2,1 %, progressivite -0,5 %.
   const pretDouble = {
     montant_eur: 100000,
@@ -229,7 +229,7 @@ describe('R-AMT-4 — revision Livret A', () => {
   });
 });
 
-describe('R-AMT-4 — differes', () => {
+describe('R-AMT-4 - differes', () => {
   it('differe type 2 : annuite = interets seuls, CRD constant', () => {
     const table = tableauAmortissement({
       montant_eur: 100000,
@@ -281,7 +281,7 @@ describe('R-AMT-4 — differes', () => {
   });
 });
 
-describe('R-AMT-3 — date de premiere echeance PAR PRET (bug historique ALS)', () => {
+describe('R-AMT-3 - date de premiere echeance PAR PRET (bug historique ALS)', () => {
   it('mise en location + 1 an, decalage nul en demembrement', () => {
     expect(anneePremiereEcheance(2026)).toBe(2027);
     expect(anneePremiereEcheance(2026, { demembrement: true })).toBe(2026);
@@ -312,7 +312,7 @@ describe('normalisation des libelles LEON', () => {
   });
 });
 
-describe('R-FIN-6 — prefinancement (capitalisation actuarielle exact/365)', () => {
+describe('R-FIN-6 - prefinancement (capitalisation actuarielle exact/365)', () => {
   // Echeancier type SimPLUS!AL23:AL35 : tirages mensuels, capitalises jusqu au dernier.
   const tirages = [
     { montant_eur: 100000, date: '2027-01-01' },

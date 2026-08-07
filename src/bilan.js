@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * R-TVA — Prix de revient, TVA et livraison a soi-meme (LASM).
+ * R-TVA - Prix de revient, TVA et livraison a soi-meme (LASM).
  *
  * Structure LEON (onglets Bil*) : 4 chapitres (charge fonciere, batiment,
  * honoraires, frais divers) x (collectif, individuel) x (HT, TVA, TTC), chaque
@@ -31,7 +31,7 @@ import { produit } from './produits.js';
  */
 
 /**
- * R-TVA-1 — Ventilation HT / TVA / TTC d'un poste au taux de saisie.
+ * R-TVA-1 - Ventilation HT / TVA / TTC d'un poste au taux de saisie.
  * @param {Poste} poste
  * @returns {{ht_eur: number, tva_eur: number, ttc_eur: number}}
  */
@@ -46,13 +46,13 @@ export function ventilerPoste(poste) {
 }
 
 /**
- * R-TVA-3 — Montant HT d'un poste, quel que soit son mode de saisie.
+ * R-TVA-3 - Montant HT d'un poste, quel que soit son mode de saisie.
  *
  * Un poste se saisit de DEUX facons, au choix, ligne par ligne :
  *  - un montant GLOBAL (`montant_ht_eur`), que le moteur ventile au prorata de
  *    surface utile ;
  *  - un montant PAR TRANCHE (`montants_ht_par_produit`), quand la depense n'est
- *    pas proportionnelle aux surfaces — un ascenseur qui ne dessert qu'un
+ *    pas proportionnelle aux surfaces - un ascenseur qui ne dessert qu'un
  *    batiment, une subvention de travaux propre a une tranche.
  *
  * Des que la saisie par tranche existe, elle FAIT FOI et le total en decoule.
@@ -68,7 +68,7 @@ export function montantHTPoste(poste) {
 }
 
 /**
- * R-TVA-2 — Taux de TVA applicable a un poste POUR UNE TRANCHE donnee.
+ * R-TVA-2 - Taux de TVA applicable a un poste POUR UNE TRANCHE donnee.
  * Le taux se surcharge tranche par tranche : une meme ligne de travaux peut
  * relever de 5,5 % en PLAI et de 10 % en PLUS. A defaut, le taux de la ligne.
  * @param {{taux_tva?: number, taux_tva_par_produit?: Record<string, number>}} poste
@@ -83,7 +83,7 @@ export function tauxTVAPoste(poste, code) {
 /**
  * Taux de livraison a soi-meme applicable a un produit (R-TVA-2).
  * Attention : pour PLUS/PLAI, LEON utilise le taux reduit de la simulation
- * (10 %) et non la valeur historique 5,5 % du tableau ParaGEN!A78 — l'ecart est
+ * (10 %) et non la valeur historique 5,5 % du tableau ParaGEN!A78 - l'ecart est
  * documente dans baremes_2025.json.
  * @param {string} code_produit
  * @param {any} referentiels
@@ -100,7 +100,7 @@ export function tauxLASM(code_produit, referentiels) {
 }
 
 /**
- * R-TVA-1/2 — Prix de revient d'un produit.
+ * R-TVA-1/2 - Prix de revient d'un produit.
  *
  * Deux lectures du meme bilan :
  * - `saisie`      : TTC au taux de TVA de chaque poste (ce que coute l'operation) ;
@@ -178,7 +178,7 @@ export function prixDeRevient({ code_produit, postes, modulation_ttc_eur = 0 }, 
 }
 
 /**
- * R-TVA-2/3 — Prix de revient VENTILE par tranche de financement.
+ * R-TVA-2/3 - Prix de revient VENTILE par tranche de financement.
  *
  * Methode reprise de la maquette LEON REWORK (`PDR!B3` : « Saisie HT globale,
  * ventilation au prorata SU ») : chaque poste est saisi une fois, globalement,
@@ -405,7 +405,7 @@ export function baseAmortissementComptable({ prix_revient_ttc_eur, valeur_compta
 }
 
 /**
- * R-TVA-3 — Cle de repartition d'un montant global entre produits.
+ * R-TVA-3 - Cle de repartition d'un montant global entre produits.
  * Defaut : quote-part de surface utile. Les variantes SDP et SHAB se demandent
  * explicitement, elles ne sont pas un branchement cache.
  * @param {number} montant_eur

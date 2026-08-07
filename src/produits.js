@@ -127,7 +127,7 @@ export function produit(code) {
 /**
  * Ordre canonique d'affichage et de restitution : rang reglementaire, du plus
  * social au plus libre. Source unique pour les listes deroulantes, les
- * recapitulatifs par tranche et les tableaux — evite de recoder l'ordre partout.
+ * recapitulatifs par tranche et les tableaux - evite de recoder l'ordre partout.
  * @type {CodeProduit[]}
  */
 export const ORDRE_PRODUITS = ['PLAI', 'PLUS', 'PLUS33', 'PLS', 'LOC', 'LIBRE'];

@@ -232,7 +232,7 @@ export function calculer(entrees, referentiels) {
   const fondsPropres = fpParProduit
     ? Object.values(fpParProduit).reduce((s, v) => s + (Number(v) || 0), 0)
     : (entrees.fonds_propres_eur ?? 0);
-  // R-FIN-7 — Fonds propres REMUNERES : ceux dont la tranche porte un taux de
+  // R-FIN-7 - Fonds propres REMUNERES : ceux dont la tranche porte un taux de
   // remuneration et une duree de reconstitution produisent une annuite, comme
   // un pret que l'operation se fait a elle-meme. Les autres se reconstituent
   // sur l'autofinancement, sans charge annuelle.
@@ -315,7 +315,7 @@ export function calculer(entrees, referentiels) {
   /**
    * Prets a amortir. En l'absence de prets saisis, on mobilise les prets CDC
    * theoriques, dont les caracteristiques sont resolues depuis `produits.js`
-   * (R-AMT-1) et non laissees indefinies — sans quoi l'amortissement leve
+   * (R-AMT-1) et non laissees indefinies - sans quoi l'amortissement leve
    * « Duree de pret invalide » (defaut V4).
    * @type {Array<Object>}
    */
@@ -324,7 +324,7 @@ export function calculer(entrees, referentiels) {
     const surcharges = entrees.caracteristiques_prets_defaut ?? {};
     const codesFinances = codesPresents.length ? codesPresents : [];
 
-    // R-FIN-3 — Chaque tranche porte par defaut un pret CDC foncier et un pret
+    // R-FIN-3 - Chaque tranche porte par defaut un pret CDC foncier et un pret
     // CDC construction dont le MONTANT S'AJUSTE a son besoin de financement.
     // Rien a saisir tant que l'equilibre convient : modifier les subventions ou
     // les fonds propres d'une tranche suffit a faire bouger ses prets.
@@ -395,7 +395,7 @@ export function calculer(entrees, referentiels) {
     // Le droit a pret foncier se calcule GLOBALEMENT puis se repartit au prorata
     // de surface utile, et non tranche par tranche : c'est la marche de la
     // calculette CDC (`Construction!AT37` pour le total, `M49` pour la
-    // repartition). La difference n'est pas cosmetique — une subvention flechee
+    // repartition). La difference n'est pas cosmetique - une subvention flechee
     // sur une seule tranche reduit le droit a pret foncier de TOUTE l'operation,
     // pas seulement celui de la tranche qui la recoit.
     const droitFoncierTotal = foncierFinancable({

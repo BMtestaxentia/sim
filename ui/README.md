@@ -2,11 +2,11 @@
 
 Trois écrans, un seul document :
 
-- **Opération** — saisie : identification, calendrier, programme, prix de revient,
+- **Opération** - saisie : identification, calendrier, programme, prix de revient,
   subventions et fonds propres, prêts.
-- **Plan de financement** — restitution : équilibre, emplois, ressources, prêts,
+- **Plan de financement** - restitution : équilibre, emplois, ressources, prêts,
   indicateurs, contrôles.
-- **Paramètres du modèle** — barèmes, prêts CDC par défaut, coefficient de
+- **Paramètres du modèle** - barèmes, prêts CDC par défaut, coefficient de
   structure, trajectoires. **En lecture seule** : ces valeurs sont versionnées
   dans le dépôt, les rendre modifiables produirait des simulations non
   reproductibles.
@@ -23,7 +23,7 @@ importent le même moteur, seule la manière de le charger diffère.
 ## Sans rien installer (recommandé sur poste sans droits)
 
 Ouvrir `ui/simulation-autonome.html` par double-clic. C'est un fichier unique,
-sans serveur, sans node, sans connexion réseau — vérifié : la page ne charge
+sans serveur, sans node, sans connexion réseau - vérifié : la page ne charge
 aucune ressource distante. La police Manrope de la charte SFO est utilisée si
 elle est installée sur le poste, sinon la pile système prend le relais. Elle
 n'est volontairement pas chargée depuis un service externe, ce qui
@@ -53,7 +53,7 @@ node outils/generer_ui_autonome.js
 
 Le générateur échoue bruyamment plutôt que de produire un fichier cassé. Il
 refuse : un module du moteur absent de sa liste, un `await` de premier niveau
-restant, et **toute collision de nom racine** — y compris entre le moteur et
+restant, et **toute collision de nom racine** - y compris entre le moteur et
 `app.js`, puisque tout est concaténé dans une seule portée. Si vous ajoutez une
 constante à `app.js`, vérifiez qu'aucun module de `src/` ne porte déjà ce nom.
 

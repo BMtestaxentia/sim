@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * R-AMT — Moteur d'amortissement des prets (coeur du moteur, cible +/-0,1 % vs LEON).
+ * R-AMT - Moteur d'amortissement des prets (coeur du moteur, cible +/-0,1 % vs LEON).
  *
  * Transcription etablie a partir des formules VIVANTES de la matrice LEON
  * (classeur BERGERAC 07/2026, meme version 131 onglets que la matrice de
@@ -67,7 +67,7 @@ export function normaliserRevisabilite(libelle) {
 }
 
 /**
- * R-AMT-3 — Annee de premiere echeance d'un pret CDC :
+ * R-AMT-3 - Annee de premiere echeance d'un pret CDC :
  * annee(mise en location) + 1 ; en demembrement le decalage est nul.
  * Les prets « autres » portent leur propre date saisie (SimPLUS!AR17...) et ne
  * passent pas par cette fonction : chacun garde SA date.
@@ -98,7 +98,7 @@ export function facteurAnnuite(tx, rev, m) {
 }
 
 /**
- * R-AMT-2 — Premiere annuite d'un pret a profil progressif.
+ * R-AMT-2 - Premiere annuite d'un pret a profil progressif.
  * annuite_1 = K x facteurAnnuite(t, p, duree - differe).
  *
  * Ecart documente avec LEON : la cellule d'affichage SimPLUS!AM15 renvoie 0
@@ -163,7 +163,7 @@ function livretAPourAnnee(livret_a_par_annee, annee, defaut) {
  */
 
 /**
- * R-AMT-2/3/4/5 — Table d'amortissement annuelle d'un pret.
+ * R-AMT-2/3/4/5 - Table d'amortissement annuelle d'un pret.
  *
  * Transcription de SimPLUS!FF117:FN117. Pour chaque annee N (k = 0..duree-1,
  * annee = annee_premiere_echeance + k) :
@@ -302,7 +302,7 @@ export function jourUTC(date) {
  */
 
 /**
- * R-FIN-6 — Interets de prefinancement par echeancier de tirages dates.
+ * R-FIN-6 - Interets de prefinancement par echeancier de tirages dates.
  *
  * Transcription de SimPLUS!FA15:FD27 :
  *   capitalise = SOMME( montant_i x (1 + taux) ^ ((date_fin - date_i) / 365) )

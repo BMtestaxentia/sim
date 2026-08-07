@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * R-FIN — Plan de financement et prets CDC theoriques.
+ * R-FIN - Plan de financement et prets CDC theoriques.
  *
  * Sources : `calculs!D327` (controle sur/sous-financement), `calculs!D336`
  * (solde a financer), `calculs!B338` (arrondi du pret aux milliers superieurs),
@@ -12,7 +12,7 @@
 import { arrondiEuro, arrondiMillierSup } from './arrondis.js';
 
 /**
- * R-FIN-3 — Solde a financer par pret CDC :
+ * R-FIN-3 - Solde a financer par pret CDC :
  * `solde = PR_TTC_module - (subventions + fonds propres + autres prets)`.
  * @param {Object} p
  * @param {number} p.prix_revient_ttc_module_eur
@@ -33,7 +33,7 @@ export function soldeAFinancer({
 }
 
 /**
- * R-FIN-7 — Charge annuelle des fonds propres.
+ * R-FIN-7 - Charge annuelle des fonds propres.
  *
  * REMUNERATION et RECONSTITUTION sont DEUX OPTIONS INDEPENDANTES, et les quatre
  * combinaisons existent. L'annexe MULHOUSE 3308 les porte toutes les quatre dans
@@ -72,7 +72,7 @@ export function annuiteFondsPropres({ montant_eur, taux = 0, duree_ans = 0 }) {
 }
 
 /**
- * R-FIN-2 — Part de charge fonciere finançable.
+ * R-FIN-2 - Part de charge fonciere finançable.
  *
  *   foncier_financable = charge_fonciere x (1 - subventions / prix_de_revient)
  *
@@ -95,11 +95,11 @@ export function annuiteFondsPropres({ montant_eur, taux = 0, duree_ans = 0 }) {
  * @returns {number}
  */
 /**
- * R-FIN-3 bis — Redressement en serie des besoins de financement negatifs.
+ * R-FIN-3 bis - Redressement en serie des besoins de financement negatifs.
  *
  * Une tranche peut etre SURFINANCEE : sa subvention flechee et ses fonds propres
  * depassent son prix de revient. Son besoin est alors negatif, et cet excedent
- * finance les AUTRES tranches — il ne s'evapore pas. Le plafonner a zero ferait
+ * finance les AUTRES tranches - il ne s'evapore pas. Le plafonner a zero ferait
  * emprunter aux autres un montant deja couvert, et le plan sortirait
  * surfinance de cet excedent.
  *
@@ -165,7 +165,7 @@ export function quotiteFoncier(zone_ABC, referentiels, cle = 'terrain_vefa') {
 }
 
 /**
- * R-FIN-4 — Repartition du solde entre pret foncier et pret batiment.
+ * R-FIN-4 - Repartition du solde entre pret foncier et pret batiment.
  *   PRET FONCIER  = MIN(solde, foncier_finançable), plancher 0,
  *                   arrondi au millier superieur si l'option est active ;
  *   PRET BATIMENT = solde - prefinancement - pret foncier.
@@ -209,7 +209,7 @@ export function pretsCDCTheoriques({
 }
 
 /**
- * R-FIN-1 et R-FIN-5 — Controle d'equilibre du plan de financement.
+ * R-FIN-1 et R-FIN-5 - Controle d'equilibre du plan de financement.
  * `Subventions + FP + Prets = PR_TTC_module`. L'ecart est signale, jamais
  * absorbe silencieusement.
  * @param {Object} p

@@ -86,7 +86,7 @@ if (process.argv.includes('--json')) {
   const eur = (v) => (v === null || v === undefined ? '-' : v.toLocaleString('fr-FR') + ' EUR');
   const pct = (v) => (v === null || v === undefined ? '-' : (v * 100).toFixed(2) + ' %');
 
-  console.log(`\n=== ${entrees.identite.nom} — moteur v${r.version_moteur} ===\n`);
+  console.log(`\n=== ${entrees.identite.nom} - moteur v${r.version_moteur} ===\n`);
 
   console.log('PROGRAMME');
   console.log(`  Logements          ${r.indicateurs.nb_logements}`);

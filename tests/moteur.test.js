@@ -51,7 +51,7 @@ const ENTREES = {
 
 const REFERENTIELS = { baremes, trajectoires: {} };
 
-describe('moteur — orchestration bout-en-bout', () => {
+describe('moteur - orchestration bout-en-bout', () => {
   const r = calculer(ENTREES, REFERENTIELS);
 
   it('renvoie un resultat structure et versionne', () => {

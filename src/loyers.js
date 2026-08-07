@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * R-SURF + R-LOYER — Surfaces, coefficient de structure et loyers reglementes.
+ * R-SURF + R-LOYER - Surfaces, coefficient de structure et loyers reglementes.
  *
  * Sources LEON verifiees le 04/08/2026 (classeur BERGERAC, matrice complete) :
  * - `calculs!D384` : surface utile = SHAB + 0,5 x annexes.
@@ -23,7 +23,7 @@ import { produit } from './produits.js';
 const MOIS_PAR_AN = 12;
 
 /**
- * R-SURF-1 — Surface utile d'un lot : SU = SHAB + coefficient x surfaces annexes.
+ * R-SURF-1 - Surface utile d'un lot : SU = SHAB + coefficient x surfaces annexes.
  * Peut etre forcee par la saisie (la valeur forcee court-circuite le calcul).
  * @param {Object} p
  * @param {number} p.shab_m2
@@ -45,12 +45,12 @@ export function surfaceUtile({ shab_m2, surfaces_annexes_m2 = 0, su_forcee_m2, a
 }
 
 /**
- * R-SURF-2 — Coefficient de structure : `CS = base x (1 + facteur_nl x NL / SU)`.
+ * R-SURF-2 - Coefficient de structure : `CS = base x (1 + facteur_nl x NL / SU)`.
  * `facteur_nl` vaut 20 en habitat et 38 en foyers (referentiel).
  *
  * La variante DOM du dictionnaire n'est PAS implementee : hors perimetre
  * (decision du 06/08/2026). Le referentiel conserve ses coefficients pour
- * memoire, mais aucun code ne les lit — mieux vaut une absence franche qu'une
+ * memoire, mais aucun code ne les lit - mieux vaut une absence franche qu'une
  * branche jamais exercee et donc jamais testee.
  *
  * @param {Object} p
@@ -70,7 +70,7 @@ export function coefficientStructure({ nb_logements, su_m2, foyer = false, arron
 }
 
 /**
- * R-SURF-3 — Quotes-parts de surface utile, cle de ventilation de tous les
+ * R-SURF-3 - Quotes-parts de surface utile, cle de ventilation de tous les
  * montants partages entre produits (prix de revient, subventions, foncier).
  * @param {Record<string, number>} su_par_produit
  * @returns {Record<string, number>} quotes-parts sommant a 1 (ou toutes nulles)
@@ -108,7 +108,7 @@ export function loyerMaxZone(code_produit, zones, baremes) {
 }
 
 /**
- * R-LOYER-1 — Loyer de base = loyer max de zone + marge locale departementale.
+ * R-LOYER-1 - Loyer de base = loyer max de zone + marge locale departementale.
  * Le PLUS 33 % applique en plus une majoration multiplicative (arbitrage I-6 :
  * x1,33 partout, jamais +0,33).
  * @param {Object} p
@@ -129,7 +129,7 @@ export function loyerDeBase({ code_produit, zones, marge_locale_eur_m2 = 0 }, re
 }
 
 /**
- * R-LOYER-3 — Marge locale de majoration : somme des majorations affectees,
+ * R-LOYER-3 - Marge locale de majoration : somme des majorations affectees,
  * plafonnee. Le plafonnement est separe par produit (FinPLUS!S26:T29).
  * @param {number[]} majorations
  * @param {number} plafond
@@ -141,7 +141,7 @@ export function margePlafonnee(majorations, plafond) {
 }
 
 /**
- * R-LOYER-4 — Majoration liee aux locaux collectifs residentiels (LCR).
+ * R-LOYER-4 - Majoration liee aux locaux collectifs residentiels (LCR).
  * Sous le seuil bas : nulle. Au-dessus du seuil haut : majoration forfaitaire.
  * Entre les deux : ratio / 100 (borne intermediaire encore a confirmer, Q-10).
  * @param {number} ratio_lcr en pourcentage (ex. 15 pour 15 %)
@@ -156,7 +156,7 @@ export function majorationLCR(ratio_lcr, referentiels) {
 }
 
 /**
- * R-LOYER-2 et R-LOYER-5 — Loyer pratique d'un produit.
+ * R-LOYER-2 et R-LOYER-5 - Loyer pratique d'un produit.
  *   Lmax_base = CS x loyer_de_base   (les produits sans CS prennent le loyer de marche)
  *   loyer     = Lmax_base x (1 + marge_plafonnee)
  *   annuel    = 12 x SU x loyer
@@ -211,7 +211,7 @@ export function loyerProduit(
 }
 
 /**
- * R-LOYER-7 — Loyers des annexes louees separement (garages, parkings, commerces,
+ * R-LOYER-7 - Loyers des annexes louees separement (garages, parkings, commerces,
  * jardins) : ils ne passent PAS par le coefficient de structure.
  * @param {Array<{nombre: number, loyer_unitaire_eur_mois: number}>} annexes
  * @returns {number} loyer annuel en euros
@@ -223,7 +223,7 @@ export function loyerAnnexesSeparees(annexes) {
 }
 
 /**
- * R-LOYER-8 — Controles de coherence. Ne bloquent pas le calcul : ils remontent
+ * R-LOYER-8 - Controles de coherence. Ne bloquent pas le calcul : ils remontent
  * des alertes que l'appelant (ou l'UI) presente.
  * @param {{loyer_pratique_eur_m2: number, loyer_max_base_eur_m2: number, force: boolean}} loyer
  * @param {string} code_produit

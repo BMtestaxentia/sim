@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * R-SUB — Subventions : subvention de l'Etat (SLA), surcharge fonciere (SSF),
+ * R-SUB - Subventions : subvention de l'Etat (SLA), surcharge fonciere (SSF),
  * gratuite et affectation.
  *
  * Sources : `calculs!B254:B264` (SLA), `calculs!D274:B292` (SSF),
@@ -19,7 +19,7 @@ import { arrondiEuro } from './arrondis.js';
  */
 
 /**
- * R-SUB-3 — Agregation des subventions saisies, ventilees par produit.
+ * R-SUB-3 - Agregation des subventions saisies, ventilees par produit.
  * Une subvention affectee a un couple de produits ('PLUS-PLAI') est repartie au
  * prorata des quotes-parts de surface utile.
  * @param {Subvention[]} subventions
@@ -60,7 +60,7 @@ export function agregerSubventions(subventions, quotes_parts) {
 }
 
 /**
- * R-SUB-2 — Subvention de surcharge fonciere.
+ * R-SUB-2 - Subvention de surcharge fonciere.
  *
  *   depassement = valeur_fonciere_reelle - reference,  reference = VB x SU_SSF
  *   Si les participations des collectivites couvrent moins du seuil reglementaire

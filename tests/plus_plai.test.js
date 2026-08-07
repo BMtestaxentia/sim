@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * PLUS et PLAI — le perimetre V1 declare, et le seul produit qu'AUCUNE fixture
+ * PLUS et PLAI - le perimetre V1 declare, et le seul produit qu'AUCUNE fixture
  * ne couvre encore.
  *
  * Ces tests ne sont PAS des golden tests : ils ne comparent rien a LEON, faute
@@ -54,7 +54,7 @@ function operation(surcharges = {}) {
   };
 }
 
-describe('PLUS / PLAI — la chaine complete traverse le perimetre V1', () => {
+describe('PLUS / PLAI - la chaine complete traverse le perimetre V1', () => {
   const r = calculer(operation(), REFERENTIELS);
 
   it('produit un resultat complet, sans valeur indefinie dans les indicateurs', () => {
@@ -153,7 +153,7 @@ describe('PLUS / PLAI — la chaine complete traverse le perimetre V1', () => {
   });
 });
 
-describe('PLUS 33 % — majoration multiplicative (arbitrage I-6)', () => {
+describe('PLUS 33 % - majoration multiplicative (arbitrage I-6)', () => {
   it('applique x1,33 au loyer de base, et non +0,33', () => {
     const r = calculer(
       operation({
@@ -168,7 +168,7 @@ describe('PLUS 33 % — majoration multiplicative (arbitrage I-6)', () => {
   });
 });
 
-describe('PLUS / PLAI — robustesse de la saisie', () => {
+describe('PLUS / PLAI - robustesse de la saisie', () => {
   it('une operation mono-PLAI ne casse rien', () => {
     const r = calculer(
       operation({

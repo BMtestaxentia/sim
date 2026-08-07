@@ -190,7 +190,7 @@ const fEuro = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR
 const fNombre = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
 
 const nul = (v) => v === null || v === undefined || (typeof v === 'number' && Number.isNaN(v));
-const eur = (v) => (nul(v) ? '—' : fEuro.format(v));
+const eur = (v) => (nul(v) ? '-' : fEuro.format(v));
 /**
  * Pourcentage en ecriture francaise : « 97,3 % » et non « 97.3 % ».
  * `toFixed` produit un point decimal, seul reliquat anglo-saxon d'un ecran ou
@@ -199,14 +199,14 @@ const eur = (v) => (nul(v) ? '—' : fEuro.format(v));
  */
 const FORMATS_PCT = {};
 const pct = (v, d = 2) => {
-  if (nul(v)) return '—';
+  if (nul(v)) return '-';
   FORMATS_PCT[d] ??= new Intl.NumberFormat('fr-FR', {
     minimumFractionDigits: d,
     maximumFractionDigits: d,
   });
   return `${FORMATS_PCT[d].format(v * 100)} %`;
 };
-const nb = (v) => (nul(v) ? '—' : fNombre.format(v));
+const nb = (v) => (nul(v) ? '-' : fNombre.format(v));
 
 /**
  * Palette des barres emplois/ressources. Elle passe par les tokens de la charte
@@ -254,8 +254,8 @@ const CHAPITRES = Object.fromEntries(
 
 const OPTIONS_REVISABILITE = ['DOUBLE', 'D. LIMITEE', 'SIMPLE', 'TAUX FIXE'];
 const OPTIONS_DIFFERE = [
-  { v: 2, l: "2 — intérêts seuls" },
-  { v: 1, l: "1 — rien n'est dû" },
+  { v: 2, l: "2 - intérêts seuls" },
+  { v: 1, l: "1 - rien n'est dû" },
 ];
 const TAUX_TVA = [0.055, 0.1, 0.2, 0];
 
@@ -341,6 +341,53 @@ function zonageDeLaCommune(commune, departement) {
   // porter « ORLEANS » ou « Orleans » sans accent.
   const trouvee = communesDuDepartement(departement).find((c) => normaliserNom(c[1]) === cible);
   return trouvee ? { code_insee: trouvee[0], nom: trouvee[1], zone_ABC: trouvee[2] } : null;
+}
+
+/**
+ * Repartit des parts en garantissant a chacune une hauteur LISIBLE.
+ *
+ * Une jauge verticale etiquetee pose un probleme que la barre seule n'a pas :
+ * un poste a 2 % occupe quinze pixels, ou aucun texte ne tient. Plutot que de
+ * masquer ces postes - c'est justement eux qu'on cherche parfois -, on releve
+ * chaque part sous le minimum et on reduit les autres a proportion.
+ *
+ * L'operation se repete : relever les petites reduit les grandes, dont
+ * certaines peuvent a leur tour passer sous le minimum. Elle converge, chaque
+ * tour ne pouvant qu'ajouter des parts au groupe des relevees.
+ *
+ * La colonne des etiquettes cesse alors de suivre exactement la barre : c'est
+ * le prix a payer, et la pastille de couleur retablit le lien.
+ *
+ * @param {number[]} parts fractions de la hauteur totale, somme <= 1
+ * @param {number} [mini]  hauteur minimale garantie, en fraction
+ * @returns {number[]} parts ajustees, de meme somme
+ */
+function repartirLisible(parts, mini = 0.1) {
+  const n = parts.length;
+  if (!n) return [];
+  const total = parts.reduce((s, p) => s + p, 0);
+  // Trop de postes pour que le minimum tienne : tout le monde a la meme part.
+  if (n * mini >= total) return parts.map(() => total / n);
+
+  const releve = parts.map(() => false);
+  for (let tour = 0; tour < n; tour++) {
+    const fixe = parts.reduce((s, p, i) => s + (releve[i] ? mini : 0), 0);
+    const libre = parts.reduce((s, p, i) => s + (releve[i] ? 0 : p), 0);
+    const dispo = total - fixe;
+    let change = false;
+    parts.forEach((p, i) => {
+      if (!releve[i] && libre > 0 && (p / libre) * dispo < mini) {
+        releve[i] = true;
+        change = true;
+      }
+    });
+    if (!change) break;
+  }
+
+  const fixe = parts.reduce((s, p, i) => s + (releve[i] ? mini : 0), 0);
+  const libre = parts.reduce((s, p, i) => s + (releve[i] ? 0 : p), 0);
+  const dispo = Math.max(0, total - fixe);
+  return parts.map((p, i) => (releve[i] ? mini : libre > 0 ? (p / libre) * dispo : 0));
 }
 
 /** Une ligne de prix de revient est-elle saisie tranche par tranche ? */
@@ -446,7 +493,7 @@ function libelleProduit(code) {
  * propres.
  */
 /**
- * R-FIN-3 — Chaque tranche presente au programme porte un pret CDC foncier et un
+ * R-FIN-3 - Chaque tranche presente au programme porte un pret CDC foncier et un
  * pret CDC construction, crees des son apparition et en montant AUTOMATIQUE.
  *
  * On ne les supprime PAS quand la tranche disparait : l'utilisateur peut avoir
@@ -554,11 +601,11 @@ function rendreStructureTranches() {
                     value="${valNum(etat.fonds_propres_par_produit[code])}" />
                 </div>
                 <div class="jetons">
-                  <span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-fp="${code}">—</span></span>
-                  <span class="jeton"><span class="jeton__cle">reconstitution</span><span class="jeton__valeur" data-reconstitution-fp="${code}">—</span></span>
+                  <span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-fp="${code}">-</span></span>
+                  <span class="jeton"><span class="jeton__cle">reconstitution</span><span class="jeton__valeur" data-reconstitution-fp="${code}">-</span></span>
                   ${
                     RFP.remuneres || RFP.reconstitues
-                      ? `<span class="jeton"><span class="jeton__cle">charge annuelle</span><span class="jeton__valeur" data-annuite-fp="${code}">—</span></span>`
+                      ? `<span class="jeton"><span class="jeton__cle">charge annuelle</span><span class="jeton__valeur" data-annuite-fp="${code}">-</span></span>`
                       : ''
                   }
                 </div>
@@ -622,7 +669,7 @@ function rendreStructureTranches() {
                       data-nom="${att(s.libelle)}" title="Supprimer">×</button>
                   </span>
                 </div>
-                <div class="jetons"><span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-sub="${i}">—</span></span></div>
+                <div class="jetons"><span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-sub="${i}">-</span></span></div>
               </div>`,
                     )
                     .join('')
@@ -686,10 +733,10 @@ function gabaritPret(p, i) {
   // duree et revisabilite d'un pret CDC viennent du PRODUIT tant qu'ils ne sont
   // pas saisis, et les lire dans l'etat n'afficherait que des tirets.
   const jetons = [
-    jeton('taux', '—', 'taux'),
-    jeton('durée', '—', 'duree'),
-    jeton('1re éch.', '—', 'echeance'),
-    jeton('révis.', '—', 'revisabilite'),
+    jeton('taux', '-', 'taux'),
+    jeton('durée', '-', 'duree'),
+    jeton('1re éch.', '-', 'echeance'),
+    jeton('révis.', '-', 'revisabilite'),
     ...(p.progressivite ? [jeton('progr.', pct(p.progressivite, 2))] : []),
     ...(p.differe_ans ? [jeton('différé', `${p.differe_ans} ans · type ${p.differe_type ?? 2}`)] : []),
   ].join('');
@@ -745,7 +792,7 @@ function gabaritPret(p, i) {
                  valeur heritee, sans quoi il afficherait DOUBLE, sa premiere
                  option, pendant que le moteur applique autre chose. -->
             <select data-champ="prets.${i}.revisabilite">
-              <option value="" data-defaut="revisabilite" ${nul(p.revisabilite) ? 'selected' : ''}>— du produit —</option>
+              <option value="" data-defaut="revisabilite" ${nul(p.revisabilite) ? 'selected' : ''}>- du produit -</option>
               ${OPTIONS_REVISABILITE.map((v) => `<option value="${v}" ${v === p.revisabilite ? 'selected' : ''}>${v}</option>`).join('')}
             </select></label>
           <label class="champ"><span>Progressivité (%)</span>
@@ -764,7 +811,7 @@ function gabaritPret(p, i) {
 }
 
 /**
- * Q-16 — Table des cotisations et charges diverses. Le catalogue vient du
+ * Q-16 - Table des cotisations et charges diverses. Le catalogue vient du
  * referentiel ; l'ecran n'y ajoute que l'interrupteur et la surcharge de valeur.
  * La colonne « Année 1 » est remplie par `rendreExploitation` depuis le resultat
  * du moteur, jamais recalculee ici.
@@ -803,8 +850,8 @@ function rendreStructureCharges() {
 /**
  * Zonage : deduit de la commune quand elle est au referentiel, saisi sinon.
  *
- * Les deux selects restent presents dans les deux cas — le zonage doit toujours
- * etre lisible et corrigeable — mais l'ecran DIT d'ou vient la valeur. Un champ
+ * Les deux selects restent presents dans les deux cas - le zonage doit toujours
+ * etre lisible et corrigeable - mais l'ecran DIT d'ou vient la valeur. Un champ
  * prerempli sans provenance laisse croire a une saisie de l'utilisateur.
  */
 function rendreZonage() {
@@ -836,7 +883,7 @@ function rendreZonage() {
 }
 
 /**
- * Q-27 — Bloc foyer. Deux regimes, et ils ne se saisissent pas pareil :
+ * Q-27 - Bloc foyer. Deux regimes, et ils ne se saisissent pas pareil :
  *  - FORFAITAIRE : un montant negocie et son annee de valeur ;
  *  - TRANSPARENCE : rien a saisir, la redevance EST la somme des charges.
  * Afficher un champ « redevance » en transparence laisserait croire qu'il agit.
@@ -924,7 +971,7 @@ function rendreStructure() {
 }
 
 /**
- * R-TVA-3 — Table du prix de revient : un total qui se ventile, et une colonne
+ * R-TVA-3 - Table du prix de revient : un total qui se ventile, et une colonne
  * par tranche.
  *
  * Deux modes de saisie coexistent LIGNE PAR LIGNE :
@@ -1008,7 +1055,7 @@ function rendreTablePrixRevient() {
     if (!visibles.length) continue;
 
     lignes.push(
-      `<tr class="chapitre-entete"><td colspan="${nbCols}">${ch.numero} — ${att(ch.libelle)}</td></tr>`,
+      `<tr class="chapitre-entete"><td colspan="${nbCols}">${ch.numero} - ${att(ch.libelle)}</td></tr>`,
     );
 
     for (const { p, i } of visibles) {
@@ -1018,7 +1065,7 @@ function rendreTablePrixRevient() {
       // Total : saisissable tant que la ligne n'est pas ventilee, calcule ensuite.
       // Deux verites pour la meme grandeur, ce serait une de trop.
       const celluleTotal = ventile
-        ? `<td class="num calc" data-calc="total" title="Somme des tranches">—</td>`
+        ? `<td class="num calc" data-calc="total" title="Somme des tranches">-</td>`
         : `<td><input type="number" step="1" data-champ="postes_bilan.${i}.montant_ht_eur"
              data-type="nombre" value="${valNum(p.montant_ht_eur)}" /></td>`;
 
@@ -1125,12 +1172,12 @@ function rendreValeurs(r) {
       const td = tr.querySelector(`[data-calc="${cle}"]`);
       if (td) td.textContent = v;
     };
-    set('su', lot ? nb(lot.su_m2) : '—');
-    set('loyer', lot && c ? eur(lot.su_m2 * c.loyer_pratique_eur_m2) : '—');
+    set('su', lot ? nb(lot.su_m2) : '-');
+    set('loyer', lot && c ? eur(lot.su_m2 * c.loyer_pratique_eur_m2) : '-');
   }
   $('#table-lots').querySelector('tfoot').innerHTML = etat.lots.length
     ? `<tr>
-        <td colspan="5" class="libelle">Total — ${nb(ind.nb_logements)} logements</td>
+        <td colspan="5" class="libelle">Total - ${nb(ind.nb_logements)} logements</td>
         <td class="num">${nb(ind.shab_m2)}</td>
         <td class="num">${nb(ind.surfaces_annexes_m2)}</td>
         <td class="num">${nb(ind.su_m2)}</td>
@@ -1168,7 +1215,7 @@ function rendreValeurs(r) {
   // --- Recapitulatif de l'ecran Operation ---
   $('#recap-operation').innerHTML = [
     { l: 'Logements', v: nb(ind.nb_logements), d: `${etat.lots.length} lot${etat.lots.length > 1 ? 's' : ''} saisi${etat.lots.length > 1 ? 's' : ''}` },
-    { l: 'Tranches', v: r.surfaces.tranches.length, d: r.surfaces.tranches.map(libelleProduit).join(', ') || '—' },
+    { l: 'Tranches', v: r.surfaces.tranches.length, d: r.surfaces.tranches.map(libelleProduit).join(', ') || '-' },
     { l: 'Surface utile', v: `${nb(ind.su_m2)} m²`, d: `${nb(ind.shab_m2)} m² SHAB` },
     { l: 'Prix de revient', v: eur(ind.prix_revient_ttc_eur), d: `${eur(ind.prix_revient_par_logement_eur)} / logement` },
     { l: 'Loyers annuels', v: eur(ind.loyers_annuels_eur), d: `RMO ${pct(ind.rmo)}` },
@@ -1205,19 +1252,19 @@ function rendreValeurs(r) {
     const amorti = (r.amortissements ?? []).find((x) => x.code === p?.code);
     const poser = (champ, v) => {
       const el = ligne.querySelector(`[data-jeton="${champ}"]`);
-      if (el) el.textContent = v ?? '—';
+      if (el) el.textContent = v ?? '-';
     };
-    poser('taux', nul(a?.taux) ? '—' : pct(a.taux, 2));
-    poser('duree', nul(a?.duree_ans) ? '—' : `${a.duree_ans} ans`);
-    poser('echeance', amorti?.annee_premiere_echeance ?? p?.annee_premiere_echeance ?? '—');
-    poser('revisabilite', a?.revisabilite ?? p?.revisabilite ?? '—');
+    poser('taux', nul(a?.taux) ? '-' : pct(a.taux, 2));
+    poser('duree', nul(a?.duree_ans) ? '-' : `${a.duree_ans} ans`);
+    poser('echeance', amorti?.annee_premiere_echeance ?? p?.annee_premiere_echeance ?? '-');
+    poser('revisabilite', a?.revisabilite ?? p?.revisabilite ?? '-');
 
     // Le detail replie n'existe pas dans le DOM : ces champs ne sont a remplir
     // que quand il est ouvert.
     const defaut = (champ, v) => {
       const el = ligne.querySelector(`[data-defaut="${champ}"]`);
       if (!el) return;
-      if (el.tagName === 'OPTION') el.textContent = v ? `— du produit : ${v} —` : '— du produit —';
+      if (el.tagName === 'OPTION') el.textContent = v ? `- du produit : ${v} -` : '- du produit -';
       else /** @type {HTMLInputElement} */ (el).placeholder = v ?? '';
     };
     defaut('taux', nul(a?.taux) ? '' : String(enPourcent(a.taux)));
@@ -1243,8 +1290,8 @@ function rendreValeurs(r) {
         `<div class="indicateur__valeur">${v}</div><div class="indicateur__detail">${d}</div></div>`;
       bandeau.innerHTML = [
         tuile('Programme', `${nb(t.nb_logements)} lgts`, `${nb(t.su_m2)} m² SU · ${pct(t.quote_part_su, 1)} de l’opération`),
-        tuile('Loyer de sortie', l ? `${nb(l.loyer_pratique_eur_m2)} €` : '—', 'par m² SU et par mois'),
-        tuile('Loyer annuel', l ? eur(l.loyer_annuel_eur) : '—', `coefficient de structure ${l ? nb(l.cs) : '—'}`),
+        tuile('Loyer de sortie', l ? `${nb(l.loyer_pratique_eur_m2)} €` : '-', 'par m² SU et par mois'),
+        tuile('Loyer annuel', l ? eur(l.loyer_annuel_eur) : '-', `coefficient de structure ${l ? nb(l.cs) : '-'}`),
         tuile('Prix de revient', eur(t.prix_revient_ttc_eur), 'TTC / LASM de la tranche'),
         tuile('Ressources', eur(ressources), `${eur(totalPrets)} de prêts · ${eur(t.subventions_eur)} de subventions`),
         tuile(
@@ -1271,14 +1318,14 @@ function rendreValeurs(r) {
     // la lecture utile, un montant seul ne dit pas s'il pese.
     const pr = t.prix_revient_ttc_eur ?? 0;
     const partFP = document.querySelector(`[data-part-fp="${code}"]`);
-    if (partFP) partFP.textContent = pr > 0 ? pct((t.fonds_propres_eur ?? 0) / pr, 1) : '—';
+    if (partFP) partFP.textContent = pr > 0 ? pct((t.fonds_propres_eur ?? 0) / pr, 1) : '-';
 
     // R-FIN-7 : annuite servie si les fonds propres sont remuneres, annee de
-    // reconstitution sinon. Les deux repondent a la meme question — quand
-    // l'organisme revoit-il son argent — par deux mecaniques differentes.
+    // reconstitution sinon. Les deux repondent a la meme question - quand
+    // l'organisme revoit-il son argent - par deux mecaniques differentes.
     const fp = r.exploitation?.fonds_propres_par_tranche?.[code];
     const annuite = document.querySelector(`[data-annuite-fp="${code}"]`);
-    if (annuite) annuite.textContent = fp?.annuite_eur ? `${eur(fp.annuite_eur)}/an` : '—';
+    if (annuite) annuite.textContent = fp?.annuite_eur ? `${eur(fp.annuite_eur)}/an` : '-';
     const recon = document.querySelector(`[data-reconstitution-fp="${code}"]`);
     if (recon) {
       recon.textContent = fp?.reconstitues
@@ -1325,14 +1372,17 @@ function rendreValeurs(r) {
             ` title="${att(s.libelle)} : ${eur(s.montant)}"></span>`,
         )
         .join('');
-      // Sous 7 % de la hauteur, le segment fait moins de cinquante pixels :
-      // l'etiquette y serait tronquee a deux lettres. L'infobulle la porte.
+      // TOUS les postes sont etiquetes, y compris ceux de 2 % : la colonne des
+      // etiquettes ne suit donc pas exactement les proportions de la barre. Elle
+      // garantit a chacune une hauteur lisible, puis repartit ce qui reste au
+      // prorata. Une pastille de couleur rattache l'etiquette a son segment, la
+      // ou la position ne suffit plus.
+      const hauteurs = repartirLisible(segments.map((s) => s.montant / echelle));
       const etiquettes = segments
         .map(
-          (s) =>
-            `<span style="flex:0 0 ${part(s)}%">${
-              Number(part(s)) >= 7 ? `<i>${att(s.libelle)} — ${eur(s.montant)}</i>` : ''
-            }</span>`,
+          (s, k) =>
+            `<span style="flex:0 0 ${(hauteurs[k] * 100).toFixed(3)}%">` +
+            `<i><b style="background:${s.couleur}"></b>${att(s.libelle)} - ${eur(s.montant)}</i></span>`,
         )
         .join('');
       el.innerHTML = `<span class="jauge__barre">${barre}</span><span class="jauge__etiquettes">${etiquettes}</span>`;
@@ -1363,7 +1413,7 @@ function rendreValeurs(r) {
   for (const el of document.querySelectorAll('[data-part-sub]')) {
     const s = etat.subventions[Number(/** @type {HTMLElement} */ (el).dataset.partSub)];
     const pr = recap[s?.affectation]?.prix_revient_ttc_eur ?? 0;
-    el.textContent = pr > 0 ? pct((Number(s?.montant_eur) || 0) / pr, 1) : '—';
+    el.textContent = pr > 0 ? pct((Number(s?.montant_eur) || 0) / pr, 1) : '-';
   }
 
   // --- Postes : le detail vient du moteur, apparie par IDENTIFIANT et non par
@@ -1544,13 +1594,13 @@ function rendreFinancement(r) {
       .map(
         (s) => `<div class="legende__item"><span class="legende__puce" style="background:${s.couleur}"></span>
         <span>${att(s.libelle)}</span><span class="legende__montant">${eur(s.montant)}</span>
-        <span class="legende__part">${total ? pct(s.montant / total, 1) : '—'}</span></div>`,
+        <span class="legende__part">${total ? pct(s.montant / total, 1) : '-'}</span></div>`,
       )
       .join('');
   $('#legende-emplois').innerHTML = legende(emplois, totalEmplois);
   $('#legende-ressources').innerHTML = legende(ressources, totalRessources);
 
-  const part = (m, t) => (t ? pct(m / t, 1) : '—');
+  const part = (m, t) => (t ? pct(m / t, 1) : '-');
 
   const tE = $('#table-emplois');
   tE.querySelector('tbody').innerHTML = emplois
@@ -1586,7 +1636,7 @@ function rendreFinancement(r) {
         const total = t.reduce((s, l) => s + l.annuite_eur, 0);
         return `<tr>
           <td>${att(a.libelle)}</td><td class="num">${eur(a.montant_eur)}</td>
-          <td class="num">${nul(a.taux_saisi) ? '—' : pct(a.taux_saisi)}</td>
+          <td class="num">${nul(a.taux_saisi) ? '-' : pct(a.taux_saisi)}</td>
           <td class="num">${pct(t[0].taux)}</td><td class="num">${t.length} ans</td>
           <td class="num">${t[0].annee}</td><td class="num">${eur(t[0].annuite_eur)}</td>
           <td class="num">${eur(t.at(-1).annuite_eur)}</td><td class="num">${eur(total)}</td>
@@ -1737,8 +1787,8 @@ function viderRestitution(message) {
   $('#bandeau-exploitation').innerHTML = `<span class="bandeau__principal">Aucun résultat</span>`;
   $('#aide-graphe').textContent = '';
   $('#aide-exploitation').textContent = '';
-  $('#total-emplois').textContent = '—';
-  $('#total-ressources').textContent = '—';
+  $('#total-emplois').textContent = '-';
+  $('#total-ressources').textContent = '-';
   for (const id of ['#table-emplois', '#table-ressources', '#table-prets']) {
     $(id).querySelector('tbody').innerHTML = '';
     $(id).querySelector('tfoot').innerHTML = '';
@@ -1855,7 +1905,7 @@ function rendreExploitation(r) {
   const detailAn1 = e.lignes[0]?.detail_charges_diverses ?? [];
   for (const cel of document.querySelectorAll('[data-charge-montant]')) {
     const d = detailAn1.find((x) => x.code === cel.getAttribute('data-charge-montant'));
-    cel.textContent = d ? eur(d.montant_eur) : '—';
+    cel.textContent = d ? eur(d.montant_eur) : '-';
   }
 
   // --- Tuiles ---
@@ -1989,7 +2039,7 @@ function rendreParametres() {
       ['Foyers', nb(cs.metropole_habitat.base), nb(cs.foyers.facteur_nl)],
     ]),
     tableau('Trajectoires macro',
-      `${t.source} — ${t.trajectoires.length} années, de ${t.trajectoires[0].annee} à ${t.trajectoires.at(-1).annee}. ` +
+      `${t.source} - ${t.trajectoires.length} années, de ${t.trajectoires[0].annee} à ${t.trajectoires.at(-1).annee}. ` +
         `Au-delà, la dernière valeur connue est reconduite.`,
       ['Année', 'Loyers / IRL', 'Gros entretien', 'Gestion', 'TFPB', 'Livret A'],
       t.trajectoires.slice(0, 15).map((l) => [l.annee, pct(l.loyers_irl), pct(l.gros_entretien), pct(l.gestion), pct(l.tfpb), pct(l.livret_a)])),
@@ -2109,7 +2159,7 @@ function afficherEcran(cible) {
 /**
  * Theme clair ou sombre. Le sombre est celui de l'application ; le clair sert a
  * l'impression et a la videoprojection, ou un fond noir passe mal.
- * Persiste dans localStorage quand il est disponible — la version autonome
+ * Persiste dans localStorage quand il est disponible - la version autonome
  * ouverte en file:// y a droit aussi.
  */
 const CLE_THEME = 'moteur-sim.theme';
@@ -2170,7 +2220,7 @@ document.addEventListener('input', (ev) => {
 
   // Saisir un montant de pret le FIGE : il sort du calcul d'equilibre. La ligne
   // perd sa classe et le bouton de retour au calcul apparait, sans reconstruire
-  // la structure — sinon le premier caractere frappe couterait le focus.
+  // la structure - sinon le premier caractere frappe couterait le focus.
   const iPret = el.dataset.montantPret;
   if (iPret !== undefined && etat.prets[Number(iPret)]?.montant_auto !== false) {
     etat.prets[Number(iPret)].montant_auto = false;

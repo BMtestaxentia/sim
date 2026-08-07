@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="fr">
   <head>
-    <!-- FICHIER GENERE — ne pas editer. Source : ui/ + src/. Regenerer avec : node outils/generer_ui_autonome.js -->
+    <!-- FICHIER GENERE - ne pas editer. Source : ui/ + src/. Regenerer avec : node outils/generer_ui_autonome.js -->
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Moteur de simulation — montage d'opération</title>
+    <title>Moteur de simulation - montage d'opération</title>
     <!--
       Aucune ressource distante : la version autonome doit fonctionner sans reseau,
       et une balise vers une police hebergee contredirait cette promesse. Manrope
@@ -214,6 +214,12 @@ html, body {
   color: var(--text-tertiary); white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; max-height: 100%;
   font-variant-numeric: tabular-nums;
+}
+/* Pastille de rattachement : la colonne des etiquettes ne suit plus exactement
+   les proportions de la barre, la couleur retablit le lien. */
+.jauge__etiquettes b {
+  display: block; width: 5px; height: 5px; border-radius: 50%;
+  margin: 0 auto 4px; flex: none;
 }
 /* Les etiquettes coutent 74 px de chaque bord : sous 950 px elles prendraient
    plus de place qu'elles n'en valent, seules les barres restent. */
@@ -732,7 +738,7 @@ input[type='number']::-webkit-inner-spin-button {
 .pret__nature { flex: 0 0 130px; font-size: 12px; }
 .pret__actions { display: flex; align-items: center; gap: 2px; margin-left: auto; flex: none; }
 /* Montant de pret calcule : il se lit comme un resultat, pas comme une saisie,
-   mais il reste modifiable — c'est ainsi qu'on le fige. */
+   mais il reste modifiable - c'est ainsi qu'on le fige. */
 .pret--auto .pret__montant {
   background: transparent; border-style: dashed;
   border-color: var(--border-color-strong); color: var(--text-secondary);
@@ -773,8 +779,8 @@ input[type='number']::-webkit-inner-spin-button {
   .pret__entete { flex-wrap: wrap; }
   .pret__montant, .pret__nature { flex: 1 1 120px; }
 }
-/* Ressources d'une tranche : meme grammaire que les prets — une ligne compacte
-   et son jeton de lecture — pour qu'un plan de financement se parcoure d'un
+/* Ressources d'une tranche : meme grammaire que les prets - une ligne compacte
+   et son jeton de lecture - pour qu'un plan de financement se parcoure d'un
    seul mouvement au lieu d'alterner tables et cartes. */
 .ligne--ressource { border-left: 3px solid var(--cat, var(--cat-6)); padding: 9px 11px; }
 .ligne--fp { background: var(--bg-tertiary); border-left-width: 4px; }
@@ -858,7 +864,7 @@ span.ressource__libelle {
       <div class="entete__marque">
         <h1>Montage d'opération</h1>
         <p class="entete__sous-titre">
-          Logement social — saisie et plan de financement
+          Logement social - saisie et plan de financement
           <span class="entete__sep">·</span>
           moteur <span id="version-moteur">…</span>
         </p>
@@ -899,7 +905,7 @@ span.ressource__libelle {
 
     <div id="erreur" class="erreur" hidden></div>
 
-    <!-- ================= ÉCRAN 1 — OPÉRATION ================= -->
+    <!-- ================= ÉCRAN 1 - OPÉRATION ================= -->
     <main class="ecran" id="ecran-operation" role="tabpanel">
       <div class="colonnes">
         <section class="bloc">
@@ -1059,7 +1065,7 @@ span.ressource__libelle {
       </section>
     </main>
 
-    <!-- ================= ÉCRAN — PROGRAMME (lot par lot) ================= -->
+    <!-- ================= ÉCRAN - PROGRAMME (lot par lot) ================= -->
     <main class="ecran" id="ecran-programme" role="tabpanel" hidden>
       <section class="bloc">
         <h2 class="bloc__titre">Génération de lots</h2>
@@ -1157,7 +1163,7 @@ span.ressource__libelle {
       </section>
     </main>
 
-    <!-- ================= ÉCRAN — PRIX DE REVIENT ================= -->
+    <!-- ================= ÉCRAN - PRIX DE REVIENT ================= -->
     <main class="ecran" id="ecran-prix-revient" role="tabpanel" hidden>
       <section class="bloc">
         <h2 class="bloc__titre">
@@ -1207,10 +1213,10 @@ span.ressource__libelle {
       </section>
     </main>
 
-    <!-- ================= ÉCRANS — UNE TRANCHE PAR PRODUIT (generes) ========= -->
+    <!-- ================= ÉCRANS - UNE TRANCHE PAR PRODUIT (generes) ========= -->
     <div id="ecrans-tranches"></div>
 
-    <!-- ================= ÉCRAN 2 — PLAN DE FINANCEMENT ================= -->
+    <!-- ================= ÉCRAN 2 - PLAN DE FINANCEMENT ================= -->
     <main class="ecran" id="ecran-financement" role="tabpanel" hidden>
       <div id="bandeau-controle" class="bandeau"></div>
 
@@ -1223,13 +1229,13 @@ span.ressource__libelle {
             <div class="balance__colonne">
               <div class="balance__libelle">Emplois</div>
               <div class="barre" id="barre-emplois"></div>
-              <div class="balance__total" id="total-emplois">—</div>
+              <div class="balance__total" id="total-emplois">-</div>
               <div class="legende" id="legende-emplois"></div>
             </div>
             <div class="balance__colonne">
               <div class="balance__libelle">Ressources</div>
               <div class="barre" id="barre-ressources"></div>
-              <div class="balance__total" id="total-ressources">—</div>
+              <div class="balance__total" id="total-ressources">-</div>
               <div class="legende" id="legende-ressources"></div>
             </div>
           </div>
@@ -1310,7 +1316,7 @@ span.ressource__libelle {
       </section>
     </main>
 
-    <!-- ================= ÉCRAN 3 — EXPLOITATION ================= -->
+    <!-- ================= ÉCRAN 3 - EXPLOITATION ================= -->
     <main class="ecran" id="ecran-exploitation" role="tabpanel" hidden>
       <div id="bandeau-exploitation" class="bandeau"></div>
 
@@ -1372,7 +1378,7 @@ span.ressource__libelle {
       </section>
     </main>
 
-    <!-- ================= ÉCRAN 4 — PARAMÈTRES ================= -->
+    <!-- ================= ÉCRAN 4 - PARAMÈTRES ================= -->
     <main class="ecran" id="ecran-parametres" role="tabpanel" hidden>
       <div class="bandeau bandeau--info" id="bandeau-parametres"></div>
       <div id="contenu-parametres"></div>
@@ -1634,7 +1640,7 @@ function produit(code) {
 /**
  * Ordre canonique d'affichage et de restitution : rang reglementaire, du plus
  * social au plus libre. Source unique pour les listes deroulantes, les
- * recapitulatifs par tranche et les tableaux — evite de recoder l'ordre partout.
+ * recapitulatifs par tranche et les tableaux - evite de recoder l'ordre partout.
  * @type {CodeProduit[]}
  */
 const ORDRE_PRODUITS = ['PLAI', 'PLUS', 'PLUS33', 'PLS', 'LOC', 'LIBRE'];
@@ -1712,7 +1718,7 @@ function pretsDefautResolus(code, { zone_ABC, livret_a_reference, progressivite 
 /* ===== src/amortissement.js ===== */
 // @ts-check
 /**
- * R-AMT — Moteur d'amortissement des prets (coeur du moteur, cible +/-0,1 % vs LEON).
+ * R-AMT - Moteur d'amortissement des prets (coeur du moteur, cible +/-0,1 % vs LEON).
  *
  * Transcription etablie a partir des formules VIVANTES de la matrice LEON
  * (classeur BERGERAC 07/2026, meme version 131 onglets que la matrice de
@@ -1778,7 +1784,7 @@ function normaliserRevisabilite(libelle) {
 }
 
 /**
- * R-AMT-3 — Annee de premiere echeance d'un pret CDC :
+ * R-AMT-3 - Annee de premiere echeance d'un pret CDC :
  * annee(mise en location) + 1 ; en demembrement le decalage est nul.
  * Les prets « autres » portent leur propre date saisie (SimPLUS!AR17...) et ne
  * passent pas par cette fonction : chacun garde SA date.
@@ -1809,7 +1815,7 @@ function facteurAnnuite(tx, rev, m) {
 }
 
 /**
- * R-AMT-2 — Premiere annuite d'un pret a profil progressif.
+ * R-AMT-2 - Premiere annuite d'un pret a profil progressif.
  * annuite_1 = K x facteurAnnuite(t, p, duree - differe).
  *
  * Ecart documente avec LEON : la cellule d'affichage SimPLUS!AM15 renvoie 0
@@ -1874,7 +1880,7 @@ function livretAPourAnnee(livret_a_par_annee, annee, defaut) {
  */
 
 /**
- * R-AMT-2/3/4/5 — Table d'amortissement annuelle d'un pret.
+ * R-AMT-2/3/4/5 - Table d'amortissement annuelle d'un pret.
  *
  * Transcription de SimPLUS!FF117:FN117. Pour chaque annee N (k = 0..duree-1,
  * annee = annee_premiere_echeance + k) :
@@ -2013,7 +2019,7 @@ function jourUTC(date) {
  */
 
 /**
- * R-FIN-6 — Interets de prefinancement par echeancier de tirages dates.
+ * R-FIN-6 - Interets de prefinancement par echeancier de tirages dates.
  *
  * Transcription de SimPLUS!FA15:FD27 :
  *   capitalise = SOMME( montant_i x (1 + taux) ^ ((date_fin - date_i) / 365) )
@@ -2330,7 +2336,7 @@ function normaliserTrajectoires(t) {
 /* ===== src/loyers.js ===== */
 // @ts-check
 /**
- * R-SURF + R-LOYER — Surfaces, coefficient de structure et loyers reglementes.
+ * R-SURF + R-LOYER - Surfaces, coefficient de structure et loyers reglementes.
  *
  * Sources LEON verifiees le 04/08/2026 (classeur BERGERAC, matrice complete) :
  * - `calculs!D384` : surface utile = SHAB + 0,5 x annexes.
@@ -2352,7 +2358,7 @@ function normaliserTrajectoires(t) {
 const MOIS_PAR_AN = 12;
 
 /**
- * R-SURF-1 — Surface utile d'un lot : SU = SHAB + coefficient x surfaces annexes.
+ * R-SURF-1 - Surface utile d'un lot : SU = SHAB + coefficient x surfaces annexes.
  * Peut etre forcee par la saisie (la valeur forcee court-circuite le calcul).
  * @param {Object} p
  * @param {number} p.shab_m2
@@ -2374,12 +2380,12 @@ function surfaceUtile({ shab_m2, surfaces_annexes_m2 = 0, su_forcee_m2, arrondir
 }
 
 /**
- * R-SURF-2 — Coefficient de structure : `CS = base x (1 + facteur_nl x NL / SU)`.
+ * R-SURF-2 - Coefficient de structure : `CS = base x (1 + facteur_nl x NL / SU)`.
  * `facteur_nl` vaut 20 en habitat et 38 en foyers (referentiel).
  *
  * La variante DOM du dictionnaire n'est PAS implementee : hors perimetre
  * (decision du 06/08/2026). Le referentiel conserve ses coefficients pour
- * memoire, mais aucun code ne les lit — mieux vaut une absence franche qu'une
+ * memoire, mais aucun code ne les lit - mieux vaut une absence franche qu'une
  * branche jamais exercee et donc jamais testee.
  *
  * @param {Object} p
@@ -2399,7 +2405,7 @@ function coefficientStructure({ nb_logements, su_m2, foyer = false, arrondir = t
 }
 
 /**
- * R-SURF-3 — Quotes-parts de surface utile, cle de ventilation de tous les
+ * R-SURF-3 - Quotes-parts de surface utile, cle de ventilation de tous les
  * montants partages entre produits (prix de revient, subventions, foncier).
  * @param {Record<string, number>} su_par_produit
  * @returns {Record<string, number>} quotes-parts sommant a 1 (ou toutes nulles)
@@ -2437,7 +2443,7 @@ function loyerMaxZone(code_produit, zones, baremes) {
 }
 
 /**
- * R-LOYER-1 — Loyer de base = loyer max de zone + marge locale departementale.
+ * R-LOYER-1 - Loyer de base = loyer max de zone + marge locale departementale.
  * Le PLUS 33 % applique en plus une majoration multiplicative (arbitrage I-6 :
  * x1,33 partout, jamais +0,33).
  * @param {Object} p
@@ -2458,7 +2464,7 @@ function loyerDeBase({ code_produit, zones, marge_locale_eur_m2 = 0 }, referenti
 }
 
 /**
- * R-LOYER-3 — Marge locale de majoration : somme des majorations affectees,
+ * R-LOYER-3 - Marge locale de majoration : somme des majorations affectees,
  * plafonnee. Le plafonnement est separe par produit (FinPLUS!S26:T29).
  * @param {number[]} majorations
  * @param {number} plafond
@@ -2470,7 +2476,7 @@ function margePlafonnee(majorations, plafond) {
 }
 
 /**
- * R-LOYER-4 — Majoration liee aux locaux collectifs residentiels (LCR).
+ * R-LOYER-4 - Majoration liee aux locaux collectifs residentiels (LCR).
  * Sous le seuil bas : nulle. Au-dessus du seuil haut : majoration forfaitaire.
  * Entre les deux : ratio / 100 (borne intermediaire encore a confirmer, Q-10).
  * @param {number} ratio_lcr en pourcentage (ex. 15 pour 15 %)
@@ -2485,7 +2491,7 @@ function majorationLCR(ratio_lcr, referentiels) {
 }
 
 /**
- * R-LOYER-2 et R-LOYER-5 — Loyer pratique d'un produit.
+ * R-LOYER-2 et R-LOYER-5 - Loyer pratique d'un produit.
  *   Lmax_base = CS x loyer_de_base   (les produits sans CS prennent le loyer de marche)
  *   loyer     = Lmax_base x (1 + marge_plafonnee)
  *   annuel    = 12 x SU x loyer
@@ -2540,7 +2546,7 @@ function loyerProduit(
 }
 
 /**
- * R-LOYER-7 — Loyers des annexes louees separement (garages, parkings, commerces,
+ * R-LOYER-7 - Loyers des annexes louees separement (garages, parkings, commerces,
  * jardins) : ils ne passent PAS par le coefficient de structure.
  * @param {Array<{nombre: number, loyer_unitaire_eur_mois: number}>} annexes
  * @returns {number} loyer annuel en euros
@@ -2552,7 +2558,7 @@ function loyerAnnexesSeparees(annexes) {
 }
 
 /**
- * R-LOYER-8 — Controles de coherence. Ne bloquent pas le calcul : ils remontent
+ * R-LOYER-8 - Controles de coherence. Ne bloquent pas le calcul : ils remontent
  * des alertes que l'appelant (ou l'UI) presente.
  * @param {{loyer_pratique_eur_m2: number, loyer_max_base_eur_m2: number, force: boolean}} loyer
  * @param {string} code_produit
@@ -2572,7 +2578,7 @@ function controlesLoyer(loyer, code_produit) {
 /* ===== src/bilan.js ===== */
 // @ts-check
 /**
- * R-TVA — Prix de revient, TVA et livraison a soi-meme (LASM).
+ * R-TVA - Prix de revient, TVA et livraison a soi-meme (LASM).
  *
  * Structure LEON (onglets Bil*) : 4 chapitres (charge fonciere, batiment,
  * honoraires, frais divers) x (collectif, individuel) x (HT, TVA, TTC), chaque
@@ -2602,7 +2608,7 @@ function controlesLoyer(loyer, code_produit) {
  */
 
 /**
- * R-TVA-1 — Ventilation HT / TVA / TTC d'un poste au taux de saisie.
+ * R-TVA-1 - Ventilation HT / TVA / TTC d'un poste au taux de saisie.
  * @param {Poste} poste
  * @returns {{ht_eur: number, tva_eur: number, ttc_eur: number}}
  */
@@ -2617,13 +2623,13 @@ function ventilerPoste(poste) {
 }
 
 /**
- * R-TVA-3 — Montant HT d'un poste, quel que soit son mode de saisie.
+ * R-TVA-3 - Montant HT d'un poste, quel que soit son mode de saisie.
  *
  * Un poste se saisit de DEUX facons, au choix, ligne par ligne :
  *  - un montant GLOBAL (`montant_ht_eur`), que le moteur ventile au prorata de
  *    surface utile ;
  *  - un montant PAR TRANCHE (`montants_ht_par_produit`), quand la depense n'est
- *    pas proportionnelle aux surfaces — un ascenseur qui ne dessert qu'un
+ *    pas proportionnelle aux surfaces - un ascenseur qui ne dessert qu'un
  *    batiment, une subvention de travaux propre a une tranche.
  *
  * Des que la saisie par tranche existe, elle FAIT FOI et le total en decoule.
@@ -2639,7 +2645,7 @@ function montantHTPoste(poste) {
 }
 
 /**
- * R-TVA-2 — Taux de TVA applicable a un poste POUR UNE TRANCHE donnee.
+ * R-TVA-2 - Taux de TVA applicable a un poste POUR UNE TRANCHE donnee.
  * Le taux se surcharge tranche par tranche : une meme ligne de travaux peut
  * relever de 5,5 % en PLAI et de 10 % en PLUS. A defaut, le taux de la ligne.
  * @param {{taux_tva?: number, taux_tva_par_produit?: Record<string, number>}} poste
@@ -2654,7 +2660,7 @@ function tauxTVAPoste(poste, code) {
 /**
  * Taux de livraison a soi-meme applicable a un produit (R-TVA-2).
  * Attention : pour PLUS/PLAI, LEON utilise le taux reduit de la simulation
- * (10 %) et non la valeur historique 5,5 % du tableau ParaGEN!A78 — l'ecart est
+ * (10 %) et non la valeur historique 5,5 % du tableau ParaGEN!A78 - l'ecart est
  * documente dans baremes_2025.json.
  * @param {string} code_produit
  * @param {any} referentiels
@@ -2671,7 +2677,7 @@ function tauxLASM(code_produit, referentiels) {
 }
 
 /**
- * R-TVA-1/2 — Prix de revient d'un produit.
+ * R-TVA-1/2 - Prix de revient d'un produit.
  *
  * Deux lectures du meme bilan :
  * - `saisie`      : TTC au taux de TVA de chaque poste (ce que coute l'operation) ;
@@ -2749,7 +2755,7 @@ function prixDeRevient({ code_produit, postes, modulation_ttc_eur = 0 }, referen
 }
 
 /**
- * R-TVA-2/3 — Prix de revient VENTILE par tranche de financement.
+ * R-TVA-2/3 - Prix de revient VENTILE par tranche de financement.
  *
  * Methode reprise de la maquette LEON REWORK (`PDR!B3` : « Saisie HT globale,
  * ventilation au prorata SU ») : chaque poste est saisi une fois, globalement,
@@ -2976,7 +2982,7 @@ function baseAmortissementComptable({ prix_revient_ttc_eur, valeur_comptable_ter
 }
 
 /**
- * R-TVA-3 — Cle de repartition d'un montant global entre produits.
+ * R-TVA-3 - Cle de repartition d'un montant global entre produits.
  * Defaut : quote-part de surface utile. Les variantes SDP et SHAB se demandent
  * explicitement, elles ne sont pas un branchement cache.
  * @param {number} montant_eur
@@ -2993,7 +2999,7 @@ function ventilerParQuotePart(montant_eur, quotes_parts) {
 /* ===== src/subventions.js ===== */
 // @ts-check
 /**
- * R-SUB — Subventions : subvention de l'Etat (SLA), surcharge fonciere (SSF),
+ * R-SUB - Subventions : subvention de l'Etat (SLA), surcharge fonciere (SSF),
  * gratuite et affectation.
  *
  * Sources : `calculs!B254:B264` (SLA), `calculs!D274:B292` (SSF),
@@ -3011,7 +3017,7 @@ function ventilerParQuotePart(montant_eur, quotes_parts) {
  */
 
 /**
- * R-SUB-3 — Agregation des subventions saisies, ventilees par produit.
+ * R-SUB-3 - Agregation des subventions saisies, ventilees par produit.
  * Une subvention affectee a un couple de produits ('PLUS-PLAI') est repartie au
  * prorata des quotes-parts de surface utile.
  * @param {Subvention[]} subventions
@@ -3052,7 +3058,7 @@ function agregerSubventions(subventions, quotes_parts) {
 }
 
 /**
- * R-SUB-2 — Subvention de surcharge fonciere.
+ * R-SUB-2 - Subvention de surcharge fonciere.
  *
  *   depassement = valeur_fonciere_reelle - reference,  reference = VB x SU_SSF
  *   Si les participations des collectivites couvrent moins du seuil reglementaire
@@ -3149,7 +3155,7 @@ function subventionEtat({ mode, forfait_eur, nb_logements = 0, shab_m2 = 0, su_m
 /* ===== src/financement.js ===== */
 // @ts-check
 /**
- * R-FIN — Plan de financement et prets CDC theoriques.
+ * R-FIN - Plan de financement et prets CDC theoriques.
  *
  * Sources : `calculs!D327` (controle sur/sous-financement), `calculs!D336`
  * (solde a financer), `calculs!B338` (arrondi du pret aux milliers superieurs),
@@ -3160,7 +3166,7 @@ function subventionEtat({ mode, forfait_eur, nb_logements = 0, shab_m2 = 0, su_m
  */
 
 /**
- * R-FIN-3 — Solde a financer par pret CDC :
+ * R-FIN-3 - Solde a financer par pret CDC :
  * `solde = PR_TTC_module - (subventions + fonds propres + autres prets)`.
  * @param {Object} p
  * @param {number} p.prix_revient_ttc_module_eur
@@ -3181,7 +3187,7 @@ function soldeAFinancer({
 }
 
 /**
- * R-FIN-7 — Charge annuelle des fonds propres.
+ * R-FIN-7 - Charge annuelle des fonds propres.
  *
  * REMUNERATION et RECONSTITUTION sont DEUX OPTIONS INDEPENDANTES, et les quatre
  * combinaisons existent. L'annexe MULHOUSE 3308 les porte toutes les quatre dans
@@ -3220,7 +3226,7 @@ function annuiteFondsPropres({ montant_eur, taux = 0, duree_ans = 0 }) {
 }
 
 /**
- * R-FIN-2 — Part de charge fonciere finançable.
+ * R-FIN-2 - Part de charge fonciere finançable.
  *
  *   foncier_financable = charge_fonciere x (1 - subventions / prix_de_revient)
  *
@@ -3243,11 +3249,11 @@ function annuiteFondsPropres({ montant_eur, taux = 0, duree_ans = 0 }) {
  * @returns {number}
  */
 /**
- * R-FIN-3 bis — Redressement en serie des besoins de financement negatifs.
+ * R-FIN-3 bis - Redressement en serie des besoins de financement negatifs.
  *
  * Une tranche peut etre SURFINANCEE : sa subvention flechee et ses fonds propres
  * depassent son prix de revient. Son besoin est alors negatif, et cet excedent
- * finance les AUTRES tranches — il ne s'evapore pas. Le plafonner a zero ferait
+ * finance les AUTRES tranches - il ne s'evapore pas. Le plafonner a zero ferait
  * emprunter aux autres un montant deja couvert, et le plan sortirait
  * surfinance de cet excedent.
  *
@@ -3313,7 +3319,7 @@ function quotiteFoncier(zone_ABC, referentiels, cle = 'terrain_vefa') {
 }
 
 /**
- * R-FIN-4 — Repartition du solde entre pret foncier et pret batiment.
+ * R-FIN-4 - Repartition du solde entre pret foncier et pret batiment.
  *   PRET FONCIER  = MIN(solde, foncier_finançable), plancher 0,
  *                   arrondi au millier superieur si l'option est active ;
  *   PRET BATIMENT = solde - prefinancement - pret foncier.
@@ -3357,7 +3363,7 @@ function pretsCDCTheoriques({
 }
 
 /**
- * R-FIN-1 et R-FIN-5 — Controle d'equilibre du plan de financement.
+ * R-FIN-1 et R-FIN-5 - Controle d'equilibre du plan de financement.
  * `Subventions + FP + Prets = PR_TTC_module`. L'ecart est signale, jamais
  * absorbe silencieusement.
  * @param {Object} p
@@ -3410,7 +3416,7 @@ function controleEquilibre(
 /* ===== src/fiscalite.js ===== */
 // @ts-check
 /**
- * R-FISC — Fiscalite : exoneration de TFPB, taxe d'amenagement, versement pour
+ * R-FISC - Fiscalite : exoneration de TFPB, taxe d'amenagement, versement pour
  * sous-densite.
  *
  * Sources : `SimPLUS!G37` (annee de fin d'exoneration TFPB),
@@ -3424,7 +3430,7 @@ function controleEquilibre(
  */
 
 /**
- * R-FISC-1 — Premiere annee d'assujettissement a la taxe fonciere.
+ * R-FISC-1 - Premiere annee d'assujettissement a la taxe fonciere.
  * `annee(mise en location) + duree d'exoneration`.
  * @param {Object} p
  * @param {number} p.annee_mise_en_location
@@ -3443,7 +3449,7 @@ function exonerationTFPB({ annee_mise_en_location, duree_exoneration_ans }, refe
 }
 
 /**
- * R-FISC-2 — Taxe d'amenagement.
+ * R-FISC-2 - Taxe d'amenagement.
  * `assiette = SDP x (1 - abattement) x valeur_forfaitaire`, la valeur forfaitaire
  * dependant de la localisation (Ile-de-France ou non). Les places de
  * stationnement exterieures s'ajoutent a un forfait par place.
@@ -3481,7 +3487,7 @@ function taxeAmenagement(
 }
 
 /**
- * R-FISC-3 — Versement pour sous-densite : du seulement en neuf quand un seuil
+ * R-FISC-3 - Versement pour sous-densite : du seulement en neuf quand un seuil
  * minimal de densite est institue et que le projet reste en deca.
  * `VSD = MIN(valeur_terrain/2 x (1 - SDP/(seuil x surface_terrain)), plafond x valeur_terrain)`.
  * @param {Object} p
@@ -3534,7 +3540,7 @@ function tfpbAnnee({
 /* ===== src/exploitation.js ===== */
 // @ts-check
 /**
- * R-EXP — Compte d'exploitation previsionnel (50 a 60 ans).
+ * R-EXP - Compte d'exploitation previsionnel (50 a 60 ans).
  *
  * Structure LEON : un tableau annees x postes (SimPLS/SimPLUS, colonnes DO..EC
  * et suivantes), montants affiches en kEUR. Ici le calcul se fait en EUROS et la
@@ -3546,7 +3552,7 @@ function tfpbAnnee({
  *
  * Etat de validation : la mecanique (assiettes, indexation, enchainement des
  * soldes) suit le dictionnaire R-EXP. Le mapping fin des colonnes cachees de
- * LEON (GU/HB/HH/HX/IA) n'est pas encore confronte a un golden test — voir
+ * LEON (GU/HB/HH/HX/IA) n'est pas encore confronte a un golden test - voir
  * QUESTIONS_SPEC Q-11.
  *
  * Unites : montants en euros, taux en fraction.
@@ -3622,7 +3628,7 @@ function facteurIndexation(trajectoire, annee_debut, annee) {
  */
 
 /**
- * R-EXP — Deroule le compte d'exploitation annee par annee.
+ * R-EXP - Deroule le compte d'exploitation annee par annee.
  *
  * Produits : loyers (indexes IRL) + annexes + divers + produits financiers.
  * Charges  : annuites des prets (chaque pret compte a partir de SA date de
@@ -3669,7 +3675,7 @@ function compteExploitation(e) {
 
   // Les annuites arrivent sous forme de lignes (annee, montant) : on les agrege
   // par annee civile. Un pret qui demarre plus tard n'apparait tout simplement
-  // pas dans les annees anterieures — c'est la regle R-AMT-3 appliquee au compte.
+  // pas dans les annees anterieures - c'est la regle R-AMT-3 appliquee au compte.
   /** @type {Record<number, number>} */
   const annuitesParAnnee = {};
   for (const a of annuites) {
@@ -3888,11 +3894,11 @@ function compteExploitation(e) {
 }
 
 /**
- * Q-16 — Resout la saisie des charges diverses contre le catalogue du referentiel.
+ * Q-16 - Resout la saisie des charges diverses contre le catalogue du referentiel.
  *
  * La saisie ne porte qu'un code et, au besoin, une surcharge : assiette, valeur
  * et trajectoire restent la propriete du referentiel. Un poste absent du
- * catalogue est accepte s'il se decrit entierement lui-meme, et refuse sinon —
+ * catalogue est accepte s'il se decrit entierement lui-meme, et refuse sinon -
  * un code mal orthographie ne doit pas s'evaporer en silence.
  *
  * @param {Array<{code: string, actif?: boolean, libelle?: string, assiette?: string,
@@ -4253,7 +4259,7 @@ function calculer(entrees, referentiels) {
   const fondsPropres = fpParProduit
     ? Object.values(fpParProduit).reduce((s, v) => s + (Number(v) || 0), 0)
     : (entrees.fonds_propres_eur ?? 0);
-  // R-FIN-7 — Fonds propres REMUNERES : ceux dont la tranche porte un taux de
+  // R-FIN-7 - Fonds propres REMUNERES : ceux dont la tranche porte un taux de
   // remuneration et une duree de reconstitution produisent une annuite, comme
   // un pret que l'operation se fait a elle-meme. Les autres se reconstituent
   // sur l'autofinancement, sans charge annuelle.
@@ -4336,7 +4342,7 @@ function calculer(entrees, referentiels) {
   /**
    * Prets a amortir. En l'absence de prets saisis, on mobilise les prets CDC
    * theoriques, dont les caracteristiques sont resolues depuis `produits.js`
-   * (R-AMT-1) et non laissees indefinies — sans quoi l'amortissement leve
+   * (R-AMT-1) et non laissees indefinies - sans quoi l'amortissement leve
    * « Duree de pret invalide » (defaut V4).
    * @type {Array<Object>}
    */
@@ -4345,7 +4351,7 @@ function calculer(entrees, referentiels) {
     const surcharges = entrees.caracteristiques_prets_defaut ?? {};
     const codesFinances = codesPresents.length ? codesPresents : [];
 
-    // R-FIN-3 — Chaque tranche porte par defaut un pret CDC foncier et un pret
+    // R-FIN-3 - Chaque tranche porte par defaut un pret CDC foncier et un pret
     // CDC construction dont le MONTANT S'AJUSTE a son besoin de financement.
     // Rien a saisir tant que l'equilibre convient : modifier les subventions ou
     // les fonds propres d'une tranche suffit a faire bouger ses prets.
@@ -4416,7 +4422,7 @@ function calculer(entrees, referentiels) {
     // Le droit a pret foncier se calcule GLOBALEMENT puis se repartit au prorata
     // de surface utile, et non tranche par tranche : c'est la marche de la
     // calculette CDC (`Construction!AT37` pour le total, `M49` pour la
-    // repartition). La difference n'est pas cosmetique — une subvention flechee
+    // repartition). La difference n'est pas cosmetique - une subvention flechee
     // sur une seule tranche reduit le droit a pret foncier de TOUTE l'operation,
     // pas seulement celui de la tranche qui la recoit.
     const droitFoncierTotal = foncierFinancable({
@@ -5010,7 +5016,7 @@ const fEuro = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR
 const fNombre = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
 
 const nul = (v) => v === null || v === undefined || (typeof v === 'number' && Number.isNaN(v));
-const eur = (v) => (nul(v) ? '—' : fEuro.format(v));
+const eur = (v) => (nul(v) ? '-' : fEuro.format(v));
 /**
  * Pourcentage en ecriture francaise : « 97,3 % » et non « 97.3 % ».
  * `toFixed` produit un point decimal, seul reliquat anglo-saxon d'un ecran ou
@@ -5019,14 +5025,14 @@ const eur = (v) => (nul(v) ? '—' : fEuro.format(v));
  */
 const FORMATS_PCT = {};
 const pct = (v, d = 2) => {
-  if (nul(v)) return '—';
+  if (nul(v)) return '-';
   FORMATS_PCT[d] ??= new Intl.NumberFormat('fr-FR', {
     minimumFractionDigits: d,
     maximumFractionDigits: d,
   });
   return `${FORMATS_PCT[d].format(v * 100)} %`;
 };
-const nb = (v) => (nul(v) ? '—' : fNombre.format(v));
+const nb = (v) => (nul(v) ? '-' : fNombre.format(v));
 
 /**
  * Palette des barres emplois/ressources. Elle passe par les tokens de la charte
@@ -5074,8 +5080,8 @@ const CHAPITRES = Object.fromEntries(
 
 const OPTIONS_REVISABILITE = ['DOUBLE', 'D. LIMITEE', 'SIMPLE', 'TAUX FIXE'];
 const OPTIONS_DIFFERE = [
-  { v: 2, l: "2 — intérêts seuls" },
-  { v: 1, l: "1 — rien n'est dû" },
+  { v: 2, l: "2 - intérêts seuls" },
+  { v: 1, l: "1 - rien n'est dû" },
 ];
 const TAUX_TVA = [0.055, 0.1, 0.2, 0];
 
@@ -5161,6 +5167,53 @@ function zonageDeLaCommune(commune, departement) {
   // porter « ORLEANS » ou « Orleans » sans accent.
   const trouvee = communesDuDepartement(departement).find((c) => normaliserNom(c[1]) === cible);
   return trouvee ? { code_insee: trouvee[0], nom: trouvee[1], zone_ABC: trouvee[2] } : null;
+}
+
+/**
+ * Repartit des parts en garantissant a chacune une hauteur LISIBLE.
+ *
+ * Une jauge verticale etiquetee pose un probleme que la barre seule n'a pas :
+ * un poste a 2 % occupe quinze pixels, ou aucun texte ne tient. Plutot que de
+ * masquer ces postes - c'est justement eux qu'on cherche parfois -, on releve
+ * chaque part sous le minimum et on reduit les autres a proportion.
+ *
+ * L'operation se repete : relever les petites reduit les grandes, dont
+ * certaines peuvent a leur tour passer sous le minimum. Elle converge, chaque
+ * tour ne pouvant qu'ajouter des parts au groupe des relevees.
+ *
+ * La colonne des etiquettes cesse alors de suivre exactement la barre : c'est
+ * le prix a payer, et la pastille de couleur retablit le lien.
+ *
+ * @param {number[]} parts fractions de la hauteur totale, somme <= 1
+ * @param {number} [mini]  hauteur minimale garantie, en fraction
+ * @returns {number[]} parts ajustees, de meme somme
+ */
+function repartirLisible(parts, mini = 0.1) {
+  const n = parts.length;
+  if (!n) return [];
+  const total = parts.reduce((s, p) => s + p, 0);
+  // Trop de postes pour que le minimum tienne : tout le monde a la meme part.
+  if (n * mini >= total) return parts.map(() => total / n);
+
+  const releve = parts.map(() => false);
+  for (let tour = 0; tour < n; tour++) {
+    const fixe = parts.reduce((s, p, i) => s + (releve[i] ? mini : 0), 0);
+    const libre = parts.reduce((s, p, i) => s + (releve[i] ? 0 : p), 0);
+    const dispo = total - fixe;
+    let change = false;
+    parts.forEach((p, i) => {
+      if (!releve[i] && libre > 0 && (p / libre) * dispo < mini) {
+        releve[i] = true;
+        change = true;
+      }
+    });
+    if (!change) break;
+  }
+
+  const fixe = parts.reduce((s, p, i) => s + (releve[i] ? mini : 0), 0);
+  const libre = parts.reduce((s, p, i) => s + (releve[i] ? 0 : p), 0);
+  const dispo = Math.max(0, total - fixe);
+  return parts.map((p, i) => (releve[i] ? mini : libre > 0 ? (p / libre) * dispo : 0));
 }
 
 /** Une ligne de prix de revient est-elle saisie tranche par tranche ? */
@@ -5266,7 +5319,7 @@ function libelleProduit(code) {
  * propres.
  */
 /**
- * R-FIN-3 — Chaque tranche presente au programme porte un pret CDC foncier et un
+ * R-FIN-3 - Chaque tranche presente au programme porte un pret CDC foncier et un
  * pret CDC construction, crees des son apparition et en montant AUTOMATIQUE.
  *
  * On ne les supprime PAS quand la tranche disparait : l'utilisateur peut avoir
@@ -5374,11 +5427,11 @@ function rendreStructureTranches() {
                     value="${valNum(etat.fonds_propres_par_produit[code])}" />
                 </div>
                 <div class="jetons">
-                  <span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-fp="${code}">—</span></span>
-                  <span class="jeton"><span class="jeton__cle">reconstitution</span><span class="jeton__valeur" data-reconstitution-fp="${code}">—</span></span>
+                  <span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-fp="${code}">-</span></span>
+                  <span class="jeton"><span class="jeton__cle">reconstitution</span><span class="jeton__valeur" data-reconstitution-fp="${code}">-</span></span>
                   ${
                     RFP.remuneres || RFP.reconstitues
-                      ? `<span class="jeton"><span class="jeton__cle">charge annuelle</span><span class="jeton__valeur" data-annuite-fp="${code}">—</span></span>`
+                      ? `<span class="jeton"><span class="jeton__cle">charge annuelle</span><span class="jeton__valeur" data-annuite-fp="${code}">-</span></span>`
                       : ''
                   }
                 </div>
@@ -5442,7 +5495,7 @@ function rendreStructureTranches() {
                       data-nom="${att(s.libelle)}" title="Supprimer">×</button>
                   </span>
                 </div>
-                <div class="jetons"><span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-sub="${i}">—</span></span></div>
+                <div class="jetons"><span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-sub="${i}">-</span></span></div>
               </div>`,
                     )
                     .join('')
@@ -5506,10 +5559,10 @@ function gabaritPret(p, i) {
   // duree et revisabilite d'un pret CDC viennent du PRODUIT tant qu'ils ne sont
   // pas saisis, et les lire dans l'etat n'afficherait que des tirets.
   const jetons = [
-    jeton('taux', '—', 'taux'),
-    jeton('durée', '—', 'duree'),
-    jeton('1re éch.', '—', 'echeance'),
-    jeton('révis.', '—', 'revisabilite'),
+    jeton('taux', '-', 'taux'),
+    jeton('durée', '-', 'duree'),
+    jeton('1re éch.', '-', 'echeance'),
+    jeton('révis.', '-', 'revisabilite'),
     ...(p.progressivite ? [jeton('progr.', pct(p.progressivite, 2))] : []),
     ...(p.differe_ans ? [jeton('différé', `${p.differe_ans} ans · type ${p.differe_type ?? 2}`)] : []),
   ].join('');
@@ -5565,7 +5618,7 @@ function gabaritPret(p, i) {
                  valeur heritee, sans quoi il afficherait DOUBLE, sa premiere
                  option, pendant que le moteur applique autre chose. -->
             <select data-champ="prets.${i}.revisabilite">
-              <option value="" data-defaut="revisabilite" ${nul(p.revisabilite) ? 'selected' : ''}>— du produit —</option>
+              <option value="" data-defaut="revisabilite" ${nul(p.revisabilite) ? 'selected' : ''}>- du produit -</option>
               ${OPTIONS_REVISABILITE.map((v) => `<option value="${v}" ${v === p.revisabilite ? 'selected' : ''}>${v}</option>`).join('')}
             </select></label>
           <label class="champ"><span>Progressivité (%)</span>
@@ -5584,7 +5637,7 @@ function gabaritPret(p, i) {
 }
 
 /**
- * Q-16 — Table des cotisations et charges diverses. Le catalogue vient du
+ * Q-16 - Table des cotisations et charges diverses. Le catalogue vient du
  * referentiel ; l'ecran n'y ajoute que l'interrupteur et la surcharge de valeur.
  * La colonne « Année 1 » est remplie par `rendreExploitation` depuis le resultat
  * du moteur, jamais recalculee ici.
@@ -5623,8 +5676,8 @@ function rendreStructureCharges() {
 /**
  * Zonage : deduit de la commune quand elle est au referentiel, saisi sinon.
  *
- * Les deux selects restent presents dans les deux cas — le zonage doit toujours
- * etre lisible et corrigeable — mais l'ecran DIT d'ou vient la valeur. Un champ
+ * Les deux selects restent presents dans les deux cas - le zonage doit toujours
+ * etre lisible et corrigeable - mais l'ecran DIT d'ou vient la valeur. Un champ
  * prerempli sans provenance laisse croire a une saisie de l'utilisateur.
  */
 function rendreZonage() {
@@ -5656,7 +5709,7 @@ function rendreZonage() {
 }
 
 /**
- * Q-27 — Bloc foyer. Deux regimes, et ils ne se saisissent pas pareil :
+ * Q-27 - Bloc foyer. Deux regimes, et ils ne se saisissent pas pareil :
  *  - FORFAITAIRE : un montant negocie et son annee de valeur ;
  *  - TRANSPARENCE : rien a saisir, la redevance EST la somme des charges.
  * Afficher un champ « redevance » en transparence laisserait croire qu'il agit.
@@ -5744,7 +5797,7 @@ function rendreStructure() {
 }
 
 /**
- * R-TVA-3 — Table du prix de revient : un total qui se ventile, et une colonne
+ * R-TVA-3 - Table du prix de revient : un total qui se ventile, et une colonne
  * par tranche.
  *
  * Deux modes de saisie coexistent LIGNE PAR LIGNE :
@@ -5828,7 +5881,7 @@ function rendreTablePrixRevient() {
     if (!visibles.length) continue;
 
     lignes.push(
-      `<tr class="chapitre-entete"><td colspan="${nbCols}">${ch.numero} — ${att(ch.libelle)}</td></tr>`,
+      `<tr class="chapitre-entete"><td colspan="${nbCols}">${ch.numero} - ${att(ch.libelle)}</td></tr>`,
     );
 
     for (const { p, i } of visibles) {
@@ -5838,7 +5891,7 @@ function rendreTablePrixRevient() {
       // Total : saisissable tant que la ligne n'est pas ventilee, calcule ensuite.
       // Deux verites pour la meme grandeur, ce serait une de trop.
       const celluleTotal = ventile
-        ? `<td class="num calc" data-calc="total" title="Somme des tranches">—</td>`
+        ? `<td class="num calc" data-calc="total" title="Somme des tranches">-</td>`
         : `<td><input type="number" step="1" data-champ="postes_bilan.${i}.montant_ht_eur"
              data-type="nombre" value="${valNum(p.montant_ht_eur)}" /></td>`;
 
@@ -5945,12 +5998,12 @@ function rendreValeurs(r) {
       const td = tr.querySelector(`[data-calc="${cle}"]`);
       if (td) td.textContent = v;
     };
-    set('su', lot ? nb(lot.su_m2) : '—');
-    set('loyer', lot && c ? eur(lot.su_m2 * c.loyer_pratique_eur_m2) : '—');
+    set('su', lot ? nb(lot.su_m2) : '-');
+    set('loyer', lot && c ? eur(lot.su_m2 * c.loyer_pratique_eur_m2) : '-');
   }
   $('#table-lots').querySelector('tfoot').innerHTML = etat.lots.length
     ? `<tr>
-        <td colspan="5" class="libelle">Total — ${nb(ind.nb_logements)} logements</td>
+        <td colspan="5" class="libelle">Total - ${nb(ind.nb_logements)} logements</td>
         <td class="num">${nb(ind.shab_m2)}</td>
         <td class="num">${nb(ind.surfaces_annexes_m2)}</td>
         <td class="num">${nb(ind.su_m2)}</td>
@@ -5988,7 +6041,7 @@ function rendreValeurs(r) {
   // --- Recapitulatif de l'ecran Operation ---
   $('#recap-operation').innerHTML = [
     { l: 'Logements', v: nb(ind.nb_logements), d: `${etat.lots.length} lot${etat.lots.length > 1 ? 's' : ''} saisi${etat.lots.length > 1 ? 's' : ''}` },
-    { l: 'Tranches', v: r.surfaces.tranches.length, d: r.surfaces.tranches.map(libelleProduit).join(', ') || '—' },
+    { l: 'Tranches', v: r.surfaces.tranches.length, d: r.surfaces.tranches.map(libelleProduit).join(', ') || '-' },
     { l: 'Surface utile', v: `${nb(ind.su_m2)} m²`, d: `${nb(ind.shab_m2)} m² SHAB` },
     { l: 'Prix de revient', v: eur(ind.prix_revient_ttc_eur), d: `${eur(ind.prix_revient_par_logement_eur)} / logement` },
     { l: 'Loyers annuels', v: eur(ind.loyers_annuels_eur), d: `RMO ${pct(ind.rmo)}` },
@@ -6025,19 +6078,19 @@ function rendreValeurs(r) {
     const amorti = (r.amortissements ?? []).find((x) => x.code === p?.code);
     const poser = (champ, v) => {
       const el = ligne.querySelector(`[data-jeton="${champ}"]`);
-      if (el) el.textContent = v ?? '—';
+      if (el) el.textContent = v ?? '-';
     };
-    poser('taux', nul(a?.taux) ? '—' : pct(a.taux, 2));
-    poser('duree', nul(a?.duree_ans) ? '—' : `${a.duree_ans} ans`);
-    poser('echeance', amorti?.annee_premiere_echeance ?? p?.annee_premiere_echeance ?? '—');
-    poser('revisabilite', a?.revisabilite ?? p?.revisabilite ?? '—');
+    poser('taux', nul(a?.taux) ? '-' : pct(a.taux, 2));
+    poser('duree', nul(a?.duree_ans) ? '-' : `${a.duree_ans} ans`);
+    poser('echeance', amorti?.annee_premiere_echeance ?? p?.annee_premiere_echeance ?? '-');
+    poser('revisabilite', a?.revisabilite ?? p?.revisabilite ?? '-');
 
     // Le detail replie n'existe pas dans le DOM : ces champs ne sont a remplir
     // que quand il est ouvert.
     const defaut = (champ, v) => {
       const el = ligne.querySelector(`[data-defaut="${champ}"]`);
       if (!el) return;
-      if (el.tagName === 'OPTION') el.textContent = v ? `— du produit : ${v} —` : '— du produit —';
+      if (el.tagName === 'OPTION') el.textContent = v ? `- du produit : ${v} -` : '- du produit -';
       else /** @type {HTMLInputElement} */ (el).placeholder = v ?? '';
     };
     defaut('taux', nul(a?.taux) ? '' : String(enPourcent(a.taux)));
@@ -6063,8 +6116,8 @@ function rendreValeurs(r) {
         `<div class="indicateur__valeur">${v}</div><div class="indicateur__detail">${d}</div></div>`;
       bandeau.innerHTML = [
         tuile('Programme', `${nb(t.nb_logements)} lgts`, `${nb(t.su_m2)} m² SU · ${pct(t.quote_part_su, 1)} de l’opération`),
-        tuile('Loyer de sortie', l ? `${nb(l.loyer_pratique_eur_m2)} €` : '—', 'par m² SU et par mois'),
-        tuile('Loyer annuel', l ? eur(l.loyer_annuel_eur) : '—', `coefficient de structure ${l ? nb(l.cs) : '—'}`),
+        tuile('Loyer de sortie', l ? `${nb(l.loyer_pratique_eur_m2)} €` : '-', 'par m² SU et par mois'),
+        tuile('Loyer annuel', l ? eur(l.loyer_annuel_eur) : '-', `coefficient de structure ${l ? nb(l.cs) : '-'}`),
         tuile('Prix de revient', eur(t.prix_revient_ttc_eur), 'TTC / LASM de la tranche'),
         tuile('Ressources', eur(ressources), `${eur(totalPrets)} de prêts · ${eur(t.subventions_eur)} de subventions`),
         tuile(
@@ -6091,14 +6144,14 @@ function rendreValeurs(r) {
     // la lecture utile, un montant seul ne dit pas s'il pese.
     const pr = t.prix_revient_ttc_eur ?? 0;
     const partFP = document.querySelector(`[data-part-fp="${code}"]`);
-    if (partFP) partFP.textContent = pr > 0 ? pct((t.fonds_propres_eur ?? 0) / pr, 1) : '—';
+    if (partFP) partFP.textContent = pr > 0 ? pct((t.fonds_propres_eur ?? 0) / pr, 1) : '-';
 
     // R-FIN-7 : annuite servie si les fonds propres sont remuneres, annee de
-    // reconstitution sinon. Les deux repondent a la meme question — quand
-    // l'organisme revoit-il son argent — par deux mecaniques differentes.
+    // reconstitution sinon. Les deux repondent a la meme question - quand
+    // l'organisme revoit-il son argent - par deux mecaniques differentes.
     const fp = r.exploitation?.fonds_propres_par_tranche?.[code];
     const annuite = document.querySelector(`[data-annuite-fp="${code}"]`);
-    if (annuite) annuite.textContent = fp?.annuite_eur ? `${eur(fp.annuite_eur)}/an` : '—';
+    if (annuite) annuite.textContent = fp?.annuite_eur ? `${eur(fp.annuite_eur)}/an` : '-';
     const recon = document.querySelector(`[data-reconstitution-fp="${code}"]`);
     if (recon) {
       recon.textContent = fp?.reconstitues
@@ -6145,14 +6198,17 @@ function rendreValeurs(r) {
             ` title="${att(s.libelle)} : ${eur(s.montant)}"></span>`,
         )
         .join('');
-      // Sous 7 % de la hauteur, le segment fait moins de cinquante pixels :
-      // l'etiquette y serait tronquee a deux lettres. L'infobulle la porte.
+      // TOUS les postes sont etiquetes, y compris ceux de 2 % : la colonne des
+      // etiquettes ne suit donc pas exactement les proportions de la barre. Elle
+      // garantit a chacune une hauteur lisible, puis repartit ce qui reste au
+      // prorata. Une pastille de couleur rattache l'etiquette a son segment, la
+      // ou la position ne suffit plus.
+      const hauteurs = repartirLisible(segments.map((s) => s.montant / echelle));
       const etiquettes = segments
         .map(
-          (s) =>
-            `<span style="flex:0 0 ${part(s)}%">${
-              Number(part(s)) >= 7 ? `<i>${att(s.libelle)} — ${eur(s.montant)}</i>` : ''
-            }</span>`,
+          (s, k) =>
+            `<span style="flex:0 0 ${(hauteurs[k] * 100).toFixed(3)}%">` +
+            `<i><b style="background:${s.couleur}"></b>${att(s.libelle)} - ${eur(s.montant)}</i></span>`,
         )
         .join('');
       el.innerHTML = `<span class="jauge__barre">${barre}</span><span class="jauge__etiquettes">${etiquettes}</span>`;
@@ -6183,7 +6239,7 @@ function rendreValeurs(r) {
   for (const el of document.querySelectorAll('[data-part-sub]')) {
     const s = etat.subventions[Number(/** @type {HTMLElement} */ (el).dataset.partSub)];
     const pr = recap[s?.affectation]?.prix_revient_ttc_eur ?? 0;
-    el.textContent = pr > 0 ? pct((Number(s?.montant_eur) || 0) / pr, 1) : '—';
+    el.textContent = pr > 0 ? pct((Number(s?.montant_eur) || 0) / pr, 1) : '-';
   }
 
   // --- Postes : le detail vient du moteur, apparie par IDENTIFIANT et non par
@@ -6364,13 +6420,13 @@ function rendreFinancement(r) {
       .map(
         (s) => `<div class="legende__item"><span class="legende__puce" style="background:${s.couleur}"></span>
         <span>${att(s.libelle)}</span><span class="legende__montant">${eur(s.montant)}</span>
-        <span class="legende__part">${total ? pct(s.montant / total, 1) : '—'}</span></div>`,
+        <span class="legende__part">${total ? pct(s.montant / total, 1) : '-'}</span></div>`,
       )
       .join('');
   $('#legende-emplois').innerHTML = legende(emplois, totalEmplois);
   $('#legende-ressources').innerHTML = legende(ressources, totalRessources);
 
-  const part = (m, t) => (t ? pct(m / t, 1) : '—');
+  const part = (m, t) => (t ? pct(m / t, 1) : '-');
 
   const tE = $('#table-emplois');
   tE.querySelector('tbody').innerHTML = emplois
@@ -6406,7 +6462,7 @@ function rendreFinancement(r) {
         const total = t.reduce((s, l) => s + l.annuite_eur, 0);
         return `<tr>
           <td>${att(a.libelle)}</td><td class="num">${eur(a.montant_eur)}</td>
-          <td class="num">${nul(a.taux_saisi) ? '—' : pct(a.taux_saisi)}</td>
+          <td class="num">${nul(a.taux_saisi) ? '-' : pct(a.taux_saisi)}</td>
           <td class="num">${pct(t[0].taux)}</td><td class="num">${t.length} ans</td>
           <td class="num">${t[0].annee}</td><td class="num">${eur(t[0].annuite_eur)}</td>
           <td class="num">${eur(t.at(-1).annuite_eur)}</td><td class="num">${eur(total)}</td>
@@ -6557,8 +6613,8 @@ function viderRestitution(message) {
   $('#bandeau-exploitation').innerHTML = `<span class="bandeau__principal">Aucun résultat</span>`;
   $('#aide-graphe').textContent = '';
   $('#aide-exploitation').textContent = '';
-  $('#total-emplois').textContent = '—';
-  $('#total-ressources').textContent = '—';
+  $('#total-emplois').textContent = '-';
+  $('#total-ressources').textContent = '-';
   for (const id of ['#table-emplois', '#table-ressources', '#table-prets']) {
     $(id).querySelector('tbody').innerHTML = '';
     $(id).querySelector('tfoot').innerHTML = '';
@@ -6675,7 +6731,7 @@ function rendreExploitation(r) {
   const detailAn1 = e.lignes[0]?.detail_charges_diverses ?? [];
   for (const cel of document.querySelectorAll('[data-charge-montant]')) {
     const d = detailAn1.find((x) => x.code === cel.getAttribute('data-charge-montant'));
-    cel.textContent = d ? eur(d.montant_eur) : '—';
+    cel.textContent = d ? eur(d.montant_eur) : '-';
   }
 
   // --- Tuiles ---
@@ -6809,7 +6865,7 @@ function rendreParametres() {
       ['Foyers', nb(cs.metropole_habitat.base), nb(cs.foyers.facteur_nl)],
     ]),
     tableau('Trajectoires macro',
-      `${t.source} — ${t.trajectoires.length} années, de ${t.trajectoires[0].annee} à ${t.trajectoires.at(-1).annee}. ` +
+      `${t.source} - ${t.trajectoires.length} années, de ${t.trajectoires[0].annee} à ${t.trajectoires.at(-1).annee}. ` +
         `Au-delà, la dernière valeur connue est reconduite.`,
       ['Année', 'Loyers / IRL', 'Gros entretien', 'Gestion', 'TFPB', 'Livret A'],
       t.trajectoires.slice(0, 15).map((l) => [l.annee, pct(l.loyers_irl), pct(l.gros_entretien), pct(l.gestion), pct(l.tfpb), pct(l.livret_a)])),
@@ -6929,7 +6985,7 @@ function afficherEcran(cible) {
 /**
  * Theme clair ou sombre. Le sombre est celui de l'application ; le clair sert a
  * l'impression et a la videoprojection, ou un fond noir passe mal.
- * Persiste dans localStorage quand il est disponible — la version autonome
+ * Persiste dans localStorage quand il est disponible - la version autonome
  * ouverte en file:// y a droit aussi.
  */
 const CLE_THEME = 'moteur-sim.theme';
@@ -6990,7 +7046,7 @@ document.addEventListener('input', (ev) => {
 
   // Saisir un montant de pret le FIGE : il sort du calcul d'equilibre. La ligne
   // perd sa classe et le bouton de retour au calcul apparait, sans reconstruire
-  // la structure — sinon le premier caractere frappe couterait le focus.
+  // la structure - sinon le premier caractere frappe couterait le focus.
   const iPret = el.dataset.montantPret;
   if (iPret !== undefined && etat.prets[Number(iPret)]?.montant_auto !== false) {
     etat.prets[Number(iPret)].montant_auto = false;

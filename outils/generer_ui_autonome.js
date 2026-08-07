@@ -141,11 +141,11 @@ const html = lire('ui', 'index.html')
   )
   .replace(
     '<head>',
-    '<head>\n    <!-- FICHIER GENERE — ne pas editer. Source : ui/ + src/. ' +
+    '<head>\n    <!-- FICHIER GENERE - ne pas editer. Source : ui/ + src/. ' +
       'Regenerer avec : node outils/generer_ui_autonome.js -->',
   );
 
 const sortie = join(RACINE, 'ui', 'simulation-autonome.html');
 writeFileSync(sortie, html);
 console.log(`Fichier autonome ecrit : ${sortie}`);
-console.log(`Taille : ${(html.length / 1024).toFixed(0)} Ko — ouvrable par double-clic.`);
+console.log(`Taille : ${(html.length / 1024).toFixed(0)} Ko - ouvrable par double-clic.`);

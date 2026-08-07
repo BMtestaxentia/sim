@@ -122,6 +122,13 @@
     "arrondi_cs_loyers": { "flag_global": "ParaGEN!B26 (NON chez AXENTIA)", "cs_decimales": 4, "loyers_decimales": 2 }
   },
 
+  "fonds_propres": {
+    "note": "R-FIN-7. Des fonds propres REMUNERES se comportent comme un pret que l'operation se fait a elle-meme : elle en verse une annuite constante qui couvre la remuneration et la reconstitution du capital sur la duree convenue. Des fonds propres NON remuneres ne produisent aucune annuite, ils se reconstituent sur l'autofinancement. Ces valeurs sont des HYPOTHESES d'organisme, pas des baremes reglementaires : elles se surchargent tranche par tranche.",
+    "source": "Annexe LEON MULHOUSE 3308 (plan_financement.fonds_propres) : taux de 2,5 % sur PLS, CD et LOC1, 1,5 % sur REH, 0 % sur LIBRE ; duree de reconstitution de 30 ans.",
+    "taux_remuneration_defaut": 0.025,
+    "duree_reconstitution_defaut_ans": 30
+  },
+
   "charges_exploitation": {
     "note": "Postes de charge du compte d'exploitation autres que les annuites, les frais de gestion, la TFPB et le gros entretien, qui ont leur propre entree. Reponse a la question Q-16. Chaque poste est une DONNEE : son assiette, sa valeur et sa trajectoire d'indexation se lisent ici, aucun n'est cable dans le code (lecon I-2). AUCUN n'est actif par defaut : c'est la saisie qui les active, sans quoi les fixtures existantes changeraient de resultat en silence.",
     "assiettes_admises": {

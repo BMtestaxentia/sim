@@ -28,6 +28,7 @@ import { agregerSubventions, surchargeFonciere } from './subventions.js';
 import {
   soldeAFinancer,
   foncierFinancable,
+  annuiteFondsPropres,
   pretsCDCTheoriques,
   redresserBesoins,
   controleEquilibre,
@@ -231,6 +232,36 @@ export function calculer(entrees, referentiels) {
   const fondsPropres = fpParProduit
     ? Object.values(fpParProduit).reduce((s, v) => s + (Number(v) || 0), 0)
     : (entrees.fonds_propres_eur ?? 0);
+  // R-FIN-7 — Fonds propres REMUNERES : ceux dont la tranche porte un taux de
+  // remuneration et une duree de reconstitution produisent une annuite, comme
+  // un pret que l'operation se fait a elle-meme. Les autres se reconstituent
+  // sur l'autofinancement, sans charge annuelle.
+  const paramFP = entrees.remuneration_fonds_propres ?? {};
+  /** @type {Record<string, any>} */
+  const fondsPropresParTranche = {};
+  let annuiteFPTotale = 0;
+  let dureeFPMax = 0;
+  for (const c of codesPresents) {
+    const montant = fpParProduit
+      ? (Number(fpParProduit[c]) || 0)
+      : (quotesParts[c] ?? 0) * (entrees.fonds_propres_eur ?? 0);
+    const p = paramFP[c] ?? {};
+    const remuneres = p.remuneres === true;
+    const taux = remuneres ? (Number(p.taux) || 0) : 0;
+    const duree = remuneres ? (Number(p.duree_reconstitution_ans) || 0) : 0;
+    const annuite = remuneres ? annuiteFondsPropres({ montant_eur: montant, taux, duree_ans: duree }) : 0;
+    annuiteFPTotale += annuite;
+    if (duree > dureeFPMax) dureeFPMax = duree;
+    fondsPropresParTranche[c] = {
+      montant_eur: arrondiEuro(montant),
+      remuneres,
+      taux_remuneration: taux,
+      duree_reconstitution_ans: duree,
+      annuite_eur: annuite,
+    };
+  }
+  annuiteFPTotale = arrondiEuro(annuiteFPTotale);
+
   const pretsSaisis = entrees.prets ?? [];
   const autresPretsEur = pretsSaisis
     .filter((p) => p.nature === 'autre')
@@ -567,7 +598,10 @@ export function calculer(entrees, referentiels) {
     redevance_annuelle_eur: exp.redevance_annuelle_eur ?? 0,
     redevance_annee_valeur: exp.redevance_annee_valeur,
     index_redevance: exp.index_redevance ?? 'loyers_irl',
-    annuite_fonds_propres_eur: exp.annuite_fonds_propres_eur ?? 0,
+    // Somme des annuites de fonds propres remuneres des tranches (R-FIN-7).
+    // Une surcharge explicite reste possible pour un appel qui la connait deja.
+    annuite_fonds_propres_eur: exp.annuite_fonds_propres_eur ?? annuiteFPTotale,
+    duree_annuite_fonds_propres_ans: exp.duree_annuite_fonds_propres_ans ?? dureeFPMax,
     // Le nombre de places d'un foyer, c'est son nombre de lots : le programme
     // le porte deja, le redemander serait une saisie a tenir en double.
     nb_lits: exp.nb_lits ?? nbLogements,
@@ -624,6 +658,9 @@ export function calculer(entrees, referentiels) {
   );
   exploitation.fonds_propres_eur = fondsPropres;
   exploitation.charges_diverses_actives = chargesDiverses;
+  // R-FIN-7 : detail des fonds propres par tranche, remuneres ou non.
+  exploitation.fonds_propres_par_tranche = fondsPropresParTranche;
+  exploitation.annuite_fonds_propres_eur = annuiteFPTotale;
 
   // En transparence, la redevance vaut la somme des charges (annexe RA44). Un
   // taux de vacance la rabote donc SANS que les charges baissent : le compte
@@ -646,7 +683,6 @@ export function calculer(entrees, referentiels) {
   // CGLLS, ANCOLS et assurance PNO en sont sortis : ils sont desormais des
   // postes du referentiel que la saisie active (Q-16).
   exploitation.postes_absents = [
-    'Rémunération des fonds propres',
     'Frais de structure',
     'Dotation aux amortissements comptables',
     'Subvention d’exploitation à durée limitée',

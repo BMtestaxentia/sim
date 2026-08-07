@@ -162,6 +162,8 @@ const etat = {
   },
   subventions: [{ libelle: 'Ville', montant_eur: 20000, affectation: 'PLS' }],
   fonds_propres_par_produit: { PLS: 50000 },
+  // R-FIN-7 : regime des fonds propres, tranche par tranche.
+  remuneration_fonds_propres: {},
   mode_prets: 'saisis',
   // Les prets CDC de chaque tranche sont crees a la volee par
   // `pretsCDCParDefaut`, en montant AUTOMATIQUE : rien n'est fige au depart.
@@ -480,8 +482,17 @@ function pretsCDCParDefaut(codes) {
 
 function rendreStructureTranches() {
   const codes = tranchesActives();
+  const defautFP = referentiels.baremes.fonds_propres ?? {};
   for (const code of codes) {
     etat.loyers_par_produit[code] ??= { marge_majoration: 0, loyer_sortie_force: null };
+    // R-FIN-7 : non remuneres par defaut. Les valeurs de taux et de duree sont
+    // preremplies depuis le referentiel pour que cocher la case suffise, sans
+    // etre appliquees tant que la case ne l'est pas.
+    etat.remuneration_fonds_propres[code] ??= {
+      remuneres: false,
+      taux: defautFP.taux_remuneration_defaut ?? 0,
+      duree_reconstitution_ans: defautFP.duree_reconstitution_defaut_ans ?? 30,
+    };
   }
   pretsCDCParDefaut(codes);
 
@@ -496,6 +507,7 @@ function rendreStructureTranches() {
   $('#ecrans-tranches').innerHTML = codes
     .map((code) => {
       const L = etat.loyers_par_produit[code];
+      const RFP = etat.remuneration_fonds_propres[code] ?? { remuneres: false };
       const prets = etat.prets.map((p, i) => ({ p, i })).filter(({ p }) => (p.produit ?? code) === code);
       const subs = etat.subventions.map((s, i) => ({ s, i })).filter(({ s }) => s.affectation === code);
       return `
@@ -535,12 +547,49 @@ function rendreStructureTranches() {
                     data-champ="fonds_propres_par_produit.${code}" data-type="nombre"
                     value="${valNum(etat.fonds_propres_par_produit[code])}" />
                 </div>
-                <div class="jetons"><span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-fp="${code}">—</span></span></div>
+                <div class="jetons">
+                  <span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-fp="${code}">—</span></span>
+                  <span class="jeton"><span class="jeton__cle">reconstitution</span><span class="jeton__valeur" data-reconstitution-fp="${code}">—</span></span>
+                  ${
+                    RFP.remuneres
+                      ? `<span class="jeton"><span class="jeton__cle">annuité</span><span class="jeton__valeur" data-annuite-fp="${code}">—</span></span>`
+                      : ''
+                  }
+                </div>
               </div>
             </div>
+            <label class="champ champ--interrupteur">
+              <input type="checkbox" data-champ="remuneration_fonds_propres.${code}.remuneres"
+                data-type="booleen" data-structure="1" ${RFP.remuneres ? 'checked' : ''} />
+              <span>Fonds propres rémunérés et reconstitués</span>
+            </label>
+            ${
+              RFP.remuneres
+                ? `<div class="champs champs--serres">
+              <label class="champ">
+                <span>Taux de rémunération (%)</span>
+                <input type="number" step="0.01" min="0" data-champ="remuneration_fonds_propres.${code}.taux"
+                  data-type="pourcentage" value="${valNum(enPourcent(RFP.taux))}" />
+              </label>
+              <label class="champ">
+                <span>Durée de reconstitution (ans)</span>
+                <input type="number" step="1" min="1" data-champ="remuneration_fonds_propres.${code}.duree_reconstitution_ans"
+                  data-type="nombre" value="${valNum(RFP.duree_reconstitution_ans)}" />
+              </label>
+            </div>`
+                : ''
+            }
             <p class="aide">
-              ⚙ Ce qui reste à la charge de l'organisme. Augmenter les fonds propres réduit
-              d'autant les prêts CDC de la tranche.
+              ${
+                RFP.remuneres
+                  ? '⚙ Rémunérés, les fonds propres se comportent comme un prêt que l’opération se fait ' +
+                    'à elle-même : elle en verse une annuité constante qui couvre la rémunération et le ' +
+                    'remboursement du capital, puis s’arrête au terme. Cette annuité est une CHARGE du ' +
+                    'compte d’exploitation, elle ne change rien au plan de financement.'
+                  : '⚙ Non rémunérés, les fonds propres ne coûtent rien chaque année : ils se ' +
+                    'reconstituent sur l’autofinancement dégagé. L’année où le cumul les couvre est ' +
+                    'indiquée ci-dessus.'
+              }
             </p>
           </section>
         </div>
@@ -1213,6 +1262,19 @@ function rendreValeurs(r) {
     const pr = t.prix_revient_ttc_eur ?? 0;
     const partFP = document.querySelector(`[data-part-fp="${code}"]`);
     if (partFP) partFP.textContent = pr > 0 ? pct((t.fonds_propres_eur ?? 0) / pr, 1) : '—';
+
+    // R-FIN-7 : annuite servie si les fonds propres sont remuneres, annee de
+    // reconstitution sinon. Les deux repondent a la meme question — quand
+    // l'organisme revoit-il son argent — par deux mecaniques differentes.
+    const fp = r.exploitation?.fonds_propres_par_tranche?.[code];
+    const annuite = document.querySelector(`[data-annuite-fp="${code}"]`);
+    if (annuite) annuite.textContent = fp?.annuite_eur ? `${eur(fp.annuite_eur)}/an` : '—';
+    const recon = document.querySelector(`[data-reconstitution-fp="${code}"]`);
+    if (recon) {
+      recon.textContent = fp?.remuneres
+        ? `${fp.duree_reconstitution_ans} ans à ${pct(fp.taux_remuneration, 2)}`
+        : (r.indicateurs?.annee_reconstitution_fonds_propres ?? 'non atteinte');
+    }
   }
 
   for (const el of document.querySelectorAll('[data-part-sub]')) {

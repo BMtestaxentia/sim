@@ -771,3 +771,84 @@ describe('R-FIN-2 — assiette CDC du droit a pret foncier (Q-30, arbitrage 06/0
     }
   });
 });
+
+describe('R-FIN-7 — fonds propres remuneres et reconstitues', () => {
+  const op = (remuneration) => ({
+    identite: { zone_123: 2, zone_ABC: 'B1' },
+    dates: { annee_mise_en_location: 2028, duree_simulation_ans: 40 },
+    lots: [{ code_produit: 'PLS', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 40 }],
+    postes_bilan: [{ chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1000000, taux_tva: 0.1 }],
+    fonds_propres_par_produit: { PLS: 300000 },
+    remuneration_fonds_propres: remuneration,
+  });
+  const calc = (r) => calculer(op(r), REFERENTIELS);
+
+  it('sans remuneration, aucune annuite : les fonds propres se reconstituent sur l autofinancement', () => {
+    const r = calc({});
+    expect(r.exploitation.annuite_fonds_propres_eur).toBe(0);
+    expect(r.exploitation.lignes[0].annuite_fonds_propres_eur).toBe(0);
+    expect(r.exploitation.fonds_propres_par_tranche.PLS.remuneres).toBe(false);
+    // La reconstitution reste rapportee, elle ne depend pas de la remuneration.
+    expect(r.indicateurs.annee_reconstitution_fonds_propres).not.toBe(undefined);
+  });
+
+  it('remuneres, ils produisent une annuite constante d amortissement', () => {
+    const r = calc({ PLS: { remuneres: true, taux: 0.025, duree_reconstitution_ans: 30 } });
+    // 300 000 x 2,5 % / (1 - 1,025^-30) = 14 331 EUR
+    const attendu = Math.round((300000 * 0.025) / (1 - 1.025 ** -30));
+    expect(r.exploitation.annuite_fonds_propres_eur).toBe(attendu);
+    expect(r.exploitation.lignes[0].annuite_fonds_propres_eur).toBe(attendu);
+  });
+
+  it('a taux nul, l annuite rend le capital sans le remunerer', () => {
+    const r = calc({ PLS: { remuneres: true, taux: 0, duree_reconstitution_ans: 30 } });
+    expect(r.exploitation.annuite_fonds_propres_eur).toBe(10000); // 300 000 / 30
+  });
+
+  it('l annuite S ARRETE au terme de la duree de reconstitution', () => {
+    const r = calc({ PLS: { remuneres: true, taux: 0.025, duree_reconstitution_ans: 30 } });
+    const par = (annee) => r.exploitation.lignes.find((l) => l.annee === annee);
+    expect(par(2057).annuite_fonds_propres_eur).toBeGreaterThan(0); // 30e annee
+    expect(par(2058).annuite_fonds_propres_eur).toBe(0); // 31e : capital rendu
+  });
+
+  it('l annuite pese sur le resultat, comme une charge', () => {
+    const sans = calc({});
+    const avec = calc({ PLS: { remuneres: true, taux: 0.025, duree_reconstitution_ans: 30 } });
+    const ecart = sans.exploitation.lignes[0].resultat_eur - avec.exploitation.lignes[0].resultat_eur;
+    expect(ecart).toBe(avec.exploitation.annuite_fonds_propres_eur);
+  });
+
+  it('ne change RIEN au plan de financement : c est une charge, pas une ressource', () => {
+    const sans = calc({});
+    const avec = calc({ PLS: { remuneres: true, taux: 0.025, duree_reconstitution_ans: 30 } });
+    expect(avec.financement.equilibre.ressources_eur).toBe(sans.financement.equilibre.ressources_eur);
+    expect(avec.amortissements.map((a) => a.montant_eur)).toEqual(
+      sans.amortissements.map((a) => a.montant_eur),
+    );
+  });
+
+  it('chaque tranche a son propre regime', () => {
+    const r = calculer(
+      {
+        ...op({ PLAI: { remuneres: true, taux: 0.025, duree_reconstitution_ans: 30 } }),
+        lots: [
+          { code_produit: 'PLS', nb_logements: 6, shab_m2: 400 },
+          { code_produit: 'PLAI', nb_logements: 4, shab_m2: 240 },
+        ],
+        fonds_propres_par_produit: { PLS: 100000, PLAI: 200000 },
+      },
+      REFERENTIELS,
+    );
+    const fp = r.exploitation.fonds_propres_par_tranche;
+    expect(fp.PLS.remuneres).toBe(false);
+    expect(fp.PLS.annuite_eur).toBe(0);
+    expect(fp.PLAI.remuneres).toBe(true);
+    expect(fp.PLAI.annuite_eur).toBeGreaterThan(0);
+    expect(r.exploitation.annuite_fonds_propres_eur).toBe(fp.PLAI.annuite_eur);
+  });
+
+  it('la remuneration des fonds propres sort des postes non modelises', () => {
+    expect(calc({}).exploitation.postes_absents.some((p) => /fonds propres/i.test(p))).toBe(false);
+  });
+});

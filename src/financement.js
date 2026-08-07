@@ -33,6 +33,37 @@ export function soldeAFinancer({
 }
 
 /**
+ * R-FIN-7 — Annuite de fonds propres REMUNERES.
+ *
+ * Des fonds propres remuneres se comportent comme un pret que l'operation se
+ * fait a elle-meme : elle en verse chaque annee une annuite constante qui couvre
+ * la remuneration ET la reconstitution du capital sur la duree convenue. C'est
+ * la colonne « ANNUITES DE FP » de la table de transparence de la CDC, et le
+ * couple (taux de remuneration, duree de reconstitution) du dictionnaire LEON.
+ *
+ *   annuite = montant x taux / (1 - (1 + taux)^-duree)
+ *
+ * A taux nul, la limite est montant / duree : l'operation rend le capital sans
+ * le remunerer. Ecrire la formule generale ferait une division par zero la ou la
+ * reponse est evidente.
+ *
+ * Des fonds propres NON remuneres ne produisent aucune annuite : ils se
+ * reconstituent sur l'autofinancement, ce que rapporte deja
+ * `anneeReconstitutionFondsPropres`.
+ *
+ * @param {Object} p
+ * @param {number} p.montant_eur
+ * @param {number} [p.taux]        taux de remuneration annuel, en fraction
+ * @param {number} [p.duree_ans]   duree de reconstitution
+ * @returns {number} annuite annuelle en euros
+ */
+export function annuiteFondsPropres({ montant_eur, taux = 0, duree_ans = 0 }) {
+  if (!(montant_eur > 0) || !(duree_ans > 0)) return 0;
+  if (!taux) return arrondiEuro(montant_eur / duree_ans);
+  return arrondiEuro((montant_eur * taux) / (1 - (1 + taux) ** -duree_ans));
+}
+
+/**
  * R-FIN-2 — Part de charge fonciere finançable.
  *
  *   foncier_financable = charge_fonciere x (1 - subventions / prix_de_revient)

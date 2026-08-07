@@ -199,6 +199,10 @@ const etat = {
     redevance_annuelle_eur: null,
     redevance_annee_valeur: null,
   },
+  // Surcharges de parametrage, portees par la SIMULATION et non par un reglage
+  // global : une grille tarifaire modifiee doit voyager avec le dossier, sinon
+  // le meme fichier rejoue ailleurs ne donnerait pas les memes annuites.
+  parametrage: { marges_prets: {} },
   options: {},
 };
 
@@ -781,7 +785,11 @@ function gabaritPret(p, i) {
         <input type="number" step="1" min="0" class="pret__montant" data-champ="prets.${i}.montant_eur"
           data-type="nombre" data-montant-pret="${i}" value="${valNum(p.montant_eur)}"
           title="${auto ? 'Calculé pour équilibrer la tranche. Saisir un montant le fige.' : 'Montant figé'}" />
-        <select class="pret__nature" data-champ="prets.${i}.nature" ${p.principal ? 'disabled' : ''}
+        <!-- data-structure : passer un pret en « autre » lui retire son
+             indexation sur le Livret A, donc remplace sa cellule de marge par
+             une cellule de taux. La ligne doit etre reconstruite pour cela. -->
+        <select class="pret__nature" data-champ="prets.${i}.nature" data-structure="1"
+          ${p.principal ? 'disabled' : ''}
           title="${p.principal ? 'La nature d’un prêt structurant ne se change pas' : ''}">
           ${['construction', 'foncier', 'autre'].map((n) => `<option value="${n}" ${n === p.nature ? 'selected' : ''}>${n}</option>`).join('')}
         </select>
@@ -806,9 +814,21 @@ function gabaritPret(p, i) {
           <!-- Champ VIDE = valeur heritee du produit (R-AMT-1). Le placeholder
                dit laquelle, et il est rempli depuis le resultat du moteur. Sans
                cela le jeton affichait « 50 ans » au-dessus d'un champ vide. -->
-          <label class="champ"><span>Taux saisi (%)</span>
+          ${
+            p.nature === 'autre'
+              ? // Un pret hors fonds d'epargne n'est pas indexe sur le Livret A :
+                // c'est son taux qui se saisit, en clair.
+                `<label class="champ"><span>Taux (%)</span>
             <input type="number" step="0.01" data-champ="prets.${i}.taux" data-type="pourcentage"
-              data-defaut="taux" value="${valNum(enPourcent(p.taux))}" /></label>
+              data-defaut="taux" value="${valNum(enPourcent(p.taux))}" /></label>`
+              : // Un pret CDC est TOUJOURS indexe : ce qui se saisit est sa marge.
+                // Le taux resultant se lit dans le rappel juste en dessous, et le
+                // jeton de la ligne repliee le redit.
+                `<label class="champ champ--marge"><span>Marge sur Livret A (%)</span>
+            <input type="number" step="0.01" data-champ="prets.${i}.spread" data-type="pourcentage"
+              data-defaut="spread" value="${valNum(enPourcent(p.spread))}" />
+            <span class="champ__rappel" data-rappel-taux>-</span></label>`
+          }
           <label class="champ"><span>Durée (ans)</span>
             <input type="number" step="1" min="1" data-champ="prets.${i}.duree_ans" data-type="nombre"
               data-defaut="duree" value="${valNum(p.duree_ans)}" /></label>
@@ -1269,6 +1289,23 @@ function rendreValeurs(r) {
     if (el.value !== v) el.value = v;
   }
 
+  // Ecran des parametres : le taux resultant de chaque marge suit la saisie sans
+  // reconstruire la table, qui perdrait le focus a chaque frappe.
+  for (const cellule of document.querySelectorAll('[data-taux-marge]')) {
+    const cle = /** @type {HTMLElement} */ (cellule).dataset.tauxMarge;
+    const m = r.financement?.marges_prets?.[cle];
+    cellule.textContent = nul(m?.valeur) || nul(r.financement?.livret_a_reference)
+      ? '-'
+      : pct(r.financement.livret_a_reference + m.valeur, 2);
+    /** @type {HTMLElement} */ (cellule).classList.toggle('surchargee', m?.surchargee === true);
+  }
+  const btnMarges = document.getElementById('reinitialiser-marges');
+  if (btnMarges) {
+    /** @type {HTMLButtonElement} */ (btnMarges).disabled = !Object.values(
+      etat.parametrage?.marges_prets ?? {},
+    ).some((v) => !nul(v));
+  }
+
   // Jetons de synthese d'un pret : taux, duree et revisabilite viennent du
   // PRODUIT tant qu'ils ne sont pas saisis. C'est donc le resultat qui les porte.
   // On lit `prets_resolus` et non `amortissements` : un pret dont le montant est
@@ -1296,9 +1333,22 @@ function rendreValeurs(r) {
       else /** @type {HTMLInputElement} */ (el).placeholder = v ?? '';
     };
     defaut('taux', nul(a?.taux) ? '' : String(enPourcent(a.taux)));
+    defaut('spread', nul(a?.spread) ? '' : String(enPourcent(a.spread)));
     defaut('duree', nul(a?.duree_ans) ? '' : String(a.duree_ans));
     defaut('echeance', amorti?.annee_premiere_echeance ? String(amorti.annee_premiere_echeance) : '');
     defaut('revisabilite', a?.revisabilite ?? '');
+
+    // Rappel de composition du taux, sous la cellule de marge. Sans lui, la
+    // cellule affiche « 1,11 » sans dire de quoi c'est la marge ni ce que le
+    // pret paie au bout du compte.
+    const rappel = ligne.querySelector('[data-rappel-taux]');
+    if (rappel) {
+      const la = r.financement?.livret_a_reference;
+      rappel.textContent =
+        nul(la) || nul(a?.spread)
+          ? nul(a?.taux) ? '' : `taux ${pct(a.taux, 2)}`
+          : `Livret A ${pct(la, 2)} + ${pct(a.spread, 2)} = ${pct(a.taux, 2)}`;
+    }
   }
 
   for (const code of r.surfaces.tranches) {
@@ -2058,10 +2108,15 @@ function rendreParametres() {
   const b = referentiels.baremes;
   const t = referentiels.trajectoires;
 
+  const surcharges = etat.parametrage?.marges_prets ?? {};
+  const nbSurchargees = Object.values(surcharges).filter((v) => !nul(v)).length;
+
   $('#bandeau-parametres').innerHTML =
-    `<span class="bandeau__principal">Lecture seule</span>` +
-    `<span class="bandeau__detail">Barèmes ${b.date_valeur} · profil ${att(t.profil)}. ` +
-    `Ces valeurs sont versionnées dans le dépôt : les modifier ici rendrait les simulations non reproductibles.</span>`;
+    `<span class="bandeau__principal">${nbSurchargees ? `${nbSurchargees} marge${nbSurchargees > 1 ? 's' : ''} modifiée${nbSurchargees > 1 ? 's' : ''}` : 'Référentiel du dépôt'}</span>` +
+    `<span class="bandeau__detail">Barèmes ${b.date_valeur} · grille CDC ${b.prets_cdc?.date_valeur ?? '-'} · profil ${att(t.profil)}. ` +
+    `Seules les marges des prêts CDC se modifient ici : elles changent plusieurs fois par an. ` +
+    `La modification est portée par la simulation, pas par le poste, donc l'export JSON l'emmène avec lui. ` +
+    `Le reste est versionné dans le dépôt et se lit sans se toucher.</span>`;
 
   const tableau = (titre, source, entetes, lignes) => `
     <section class="bloc para-groupe">
@@ -2077,14 +2132,63 @@ function rendreParametres() {
   const lmABC = b.loyers_max_zone_ABC;
   const cs = b.constantes_reglementaires.coefficient_structure;
 
+  // Grille tarifaire CDC : le SEUL bloc modifiable de l'ecran. Le taux d'un pret
+  // CDC vaut Livret A + marge, et c'est la marge qui bouge - le Livret A, lui,
+  // vient de la trajectoire macro et se lit plus bas.
+  const la = dernierResultat?.financement?.livret_a_reference;
+  const marges = b.prets_cdc?.marges ?? {};
+  const grilleCDC = `
+    <section class="bloc para-groupe">
+      <h3>Marges des prêts CDC
+        <button type="button" class="bouton--discret" id="reinitialiser-marges"
+          ${nbSurchargees ? '' : 'disabled'} title="Revenir aux marges du référentiel">↺ référentiel</button>
+      </h3>
+      <p class="para-source">${att(b.prets_cdc?.source ?? '')}</p>
+      <div class="table-defilante"><table class="tableau">
+        <thead><tr>
+          <th>Produit</th><th class="num">Référentiel</th><th class="num">Marge appliquée (%)</th>
+          <th class="num">Taux résultant</th><th>Source</th>
+        </tr></thead>
+        <tbody>${Object.entries(marges)
+          .map(([cle, m]) => {
+            const surcharge = surcharges[cle];
+            const valeur = nul(surcharge) ? m.valeur : surcharge;
+            return `<tr>
+            <td>${att(m.libelle ?? cle)}</td>
+            <td class="num discret">${pct(m.valeur, 2)}</td>
+            <!-- Pas de data-structure : reconstruire l'ecran a chaque frappe
+                 couterait le focus des la premiere decimale. Les cellules qui en
+                 dependent sont rafraichies par remplirCalculs. -->
+            <td class="cellule-valeur"><input type="number" step="0.01"
+              data-champ="parametrage.marges_prets.${cle}" data-type="pourcentage"
+              placeholder="${enPourcent(m.valeur)}" value="${valNum(enPourcent(surcharge))}" />
+              <span class="unite">%</span></td>
+            <td class="num" data-taux-marge="${cle}">${nul(la) ? '-' : pct(la + valeur, 2)}</td>
+            <td class="discret">${att(m.source ?? '')}</td>
+          </tr>`;
+          })
+          .join('')}</tbody>
+        <tfoot><tr>
+          <td colspan="5" class="aide">Livret A de référence : ${nul(la) ? '-' : pct(la, 2)}
+          (trajectoire ${att(t.profil)}). Le taux d'un prêt CDC vaut Livret A + marge ;
+          chaque prêt peut en outre porter sa propre marge, saisie sur sa ligne.</td>
+        </tr></tfoot>
+      </table></div>
+    </section>`;
+
   $('#contenu-parametres').innerHTML = [
+    grilleCDC,
     tableau('Loyers plafonds par zone 1/2/3 (€/m² SU/mois)', lm123.source, ['Produit', ...lm123.zones],
       ['PLUS', 'PLAI', 'LIBRE'].map((p) => [p, ...lm123[p].map((v) => nb(v))])),
     tableau('Loyers plafonds par zone A/B/C (€/m² SU/mois)', lmABC.source, ['Produit', ...lmABC.zones],
       ['PLS', 'PLI'].map((p) => [p, ...lmABC[p].map((v) => nb(v))])),
-    tableau('Prêts CDC par défaut', 'R-AMT-1 ; spreads confirmés par la maquette LEON REWORK (ADMIN!C43:C46)',
-      ['Produit', 'Nature', 'Taux', 'Durée', 'Révisabilité'],
-      produitsOrdonnes().flatMap((p) => p.prets_defaut.map((d) => [p.libelle, d.nature, d.taux_ref, d.duree_ref, d.revisabilite]))),
+    tableau('Prêts CDC par défaut', 'R-AMT-1 ; les marges viennent de la grille ci-dessus, les durées du dictionnaire',
+      ['Produit', 'Nature', 'Marge', 'Durée', 'Révisabilité'],
+      produitsOrdonnes().flatMap((p) =>
+        p.prets_defaut.map((d) => {
+          const v = surcharges[d.cle_marge] ?? marges[d.cle_marge]?.valeur;
+          return [p.libelle, d.nature, `${d.cle_marge} (${pct(v, 2)})`, d.duree_ref, d.revisabilite];
+        }))),
     tableau('Taux de livraison à soi-même', b.tva.source, ['Clé', 'Taux'],
       Object.entries(b.tva.lasm_par_produit).filter(([, v]) => typeof v === 'number').map(([k, v]) => [k, pct(v, 1)])),
     // La variante DOM n'est plus implementee (hors perimetre) : elle ne figure
@@ -2310,6 +2414,12 @@ document.addEventListener('click', (ev) => {
   const onglet = el.closest('[data-ecran]');
   if (onglet) {
     afficherEcran(/** @type {HTMLElement} */ (onglet).dataset.ecran);
+    return;
+  }
+
+  if (el.closest('#reinitialiser-marges')) {
+    etat.parametrage = { ...etat.parametrage, marges_prets: {} };
+    rafraichirTout();
     return;
   }
 

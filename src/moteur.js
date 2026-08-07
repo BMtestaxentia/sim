@@ -17,7 +17,7 @@
 import { surfaceUtile, quotesPartsSU, loyerProduit, loyerAnnexesSeparees, controlesLoyer } from './loyers.js';
 import { normaliserTrajectoires } from './trajectoires.js';
 import { calendrierOperation } from './calendrier.js';
-import { pretsDefautResolus, produit, ORDRE_PRODUITS } from './produits.js';
+import { pretsDefautResolus, produit, marge, ORDRE_PRODUITS } from './produits.js';
 import {
   prixDeRevient,
   prixDeRevientVentile,
@@ -314,6 +314,22 @@ export function calculer(entrees, referentiels) {
   const laOrigine = trajectoires.taux_reference_livret_a;
   const laParAnnee = trajectoires.livret_a_par_annee;
 
+  // R-AMT-1 - Grille tarifaire des prets CDC. Les marges viennent du referentiel
+  // et peuvent etre surchargees PAR SIMULATION : une grille CDC change plusieurs
+  // fois par an, et attendre une release du moteur pour chiffrer au tarif du
+  // jour n'est pas tenable. La surcharge voyage avec les entrees, donc la
+  // simulation reste reproductible - c'est ce qui la distingue d'un reglage
+  // global mutable.
+  const margesReferentiel = baremes.prets_cdc?.marges ?? {};
+  const margesSurchargees = entrees.parametrage?.marges_prets ?? {};
+  /** @type {Record<string, any>} */
+  const margesPrets = { ...margesReferentiel };
+  for (const [cle, v] of Object.entries(margesSurchargees)) {
+    const valeur = typeof v === 'object' && v !== null ? v.valeur : v;
+    if (!Number.isFinite(valeur)) continue;
+    margesPrets[cle] = { ...(margesReferentiel[cle] ?? {}), valeur: Number(valeur), surchargee: true };
+  }
+
   /**
    * Prets a amortir. En l'absence de prets saisis, on mobilise les prets CDC
    * theoriques, dont les caracteristiques sont resolues depuis `produits.js`
@@ -421,6 +437,7 @@ export function calculer(entrees, referentiels) {
           pretsDefautResolus(code, {
             zone_ABC: identite.zone_ABC,
             livret_a_reference: surcharges.livret_a_origine ?? laOrigine,
+            marges: margesPrets,
             progressivite: surcharges.progressivite ?? 0,
           }).map((d) => [d.nature, d]),
         );
@@ -465,7 +482,7 @@ export function calculer(entrees, referentiels) {
       const renseignees = Object.fromEntries(
         Object.entries(p).filter(([, v]) => v !== undefined && v !== null),
       );
-      pretsACalculer.push({
+      const resolu = {
         ...(p.nature ? (defautsDe(code)?.[p.nature] ?? {}) : {}),
         ...renseignees,
         montant_eur: montant,
@@ -473,7 +490,17 @@ export function calculer(entrees, referentiels) {
         montant_calcule: auto(p),
         livret_a_origine: p.livret_a_origine ?? laOrigine,
         livret_a_par_annee: p.livret_a_par_annee ?? laParAnnee,
-      });
+      };
+      // Un pret CDC est TOUJOURS indexe sur le Livret A : ce qui se saisit est
+      // sa MARGE, pas son taux. Le taux s'en deduit et se recalcule donc ici,
+      // sans quoi une marge modifiee resterait sans effet, le taux par defaut du
+      // produit ayant deja ete pose par `defautsDe`.
+      // Un taux saisi en clair reste prioritaire : c'est le seul recours pour un
+      // pret hors fonds d'epargne, dont le taux n'est pas adosse au Livret A.
+      if (renseignees.taux === undefined && Number.isFinite(resolu.spread)) {
+        resolu.taux = resolu.livret_a_origine + resolu.spread;
+      }
+      pretsACalculer.push(resolu);
     }
 
     // Un pret theorique dont les caracteristiques n'ont pas pu etre resolues ne
@@ -603,6 +630,12 @@ export function calculer(entrees, referentiels) {
     montant_calcule: p.montant_calcule === true,
     derive: p.derive === true,
     taux: p.taux ?? null,
+    // Marge effectivement appliquee, a cote du taux qu'elle produit : l'ecran
+    // donne a saisir la MARGE, et sans elle il ne pourrait afficher que le taux,
+    // dont le lecteur ne saurait pas s'il vient du produit ou d'une surcharge.
+    // Nulle sur un pret a taux saisi, qui n'est pas indexe sur le Livret A.
+    spread: Number.isFinite(p.spread) && p.taux === p.livret_a_origine + p.spread ? p.spread : null,
+    cle_marge: p.cle_marge ?? null,
     duree_ans: p.duree_ans ?? null,
     revisabilite: p.revisabilite ?? null,
     progressivite: p.progressivite ?? 0,
@@ -898,6 +931,12 @@ export function calculer(entrees, referentiels) {
       solde_a_financer_eur: solde,
       prets_cdc_theoriques: cdcTheoriques,
       prets_resolus: pretsResolus,
+      // Grille tarifaire effectivement appliquee, surcharges comprises : l'ecran
+      // en a besoin pour afficher « Livret A 2,40 % + 0,60 % » a cote de chaque
+      // marge, et la restitution pour tracer sous quel tarif la simulation a ete
+      // chiffree.
+      livret_a_reference: laOrigine,
+      marges_prets: margesPrets,
       prefinancement: prefi,
       total_prets_eur: totalPrets,
       total_prets_cdc_eur: totalPretsCDC,

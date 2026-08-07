@@ -132,6 +132,20 @@ if (/\bawait\b/.test(app.split('\n').filter((l) => !l.trim().startsWith('*')).jo
 
 verifierCollisions([...morceaux, { nom: 'ui/app.js', code: app }]);
 
+// Le script assemble est du texte pour cet outil : une faute de syntaxe passe
+// sans bruit et n'apparait qu'a l'ouverture, sous la forme d'une page qui
+// s'affiche mais ou plus rien ne repond - les ecouteurs n'ayant jamais ete
+// poses. On la fait donc echouer ICI, ou le message est lisible.
+try {
+  new Function(`"use strict";\n${moteur}\n${app}`);
+} catch (e) {
+  throw new Error(
+    `Le script assemble ne compile pas : ${/** @type {Error} */ (e).message}. ` +
+      'Verifier ui/app.js et src/*.js (piege frequent : une apostrophe inverse dans un ' +
+      'commentaire place a l\'interieur d\'un litteral de gabarit, qui ferme la chaine).',
+  );
+}
+
 // --- Assemblage ---
 const html = lire('ui', 'index.html')
   .replace('<link rel="stylesheet" href="style.css" />', `<style>\n${lire('ui', 'style.css')}\n</style>`)

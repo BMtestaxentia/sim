@@ -20,10 +20,15 @@ describe('produits (I-1 : produit = donnee, pas de duplication)', () => {
     expect(produit('PLUS').v1).toBe(true);
     expect(produit('PLAI').v1).toBe(true);
   });
-  it('PLAI construction a un taux LA-0.20 et une revisabilite DOUBLE par defaut (R-AMT-1)', () => {
+  it('PLAI construction pointe vers la marge PLAI et revise en DOUBLE (R-AMT-1)', () => {
+    // Le produit ne porte QUE la cle tarifaire : la valeur de la marge vit au
+    // referentiel, ou elle se revise sans toucher au code (I-2).
     const pretC = produit('PLAI').prets_defaut.find((p) => p.nature === 'construction');
-    expect(pretC?.taux_ref).toBe('LA-0.20');
+    expect(pretC?.cle_marge).toBe('PLAI');
     expect(pretC?.revisabilite).toBe('DOUBLE');
+    for (const p of Object.values(PRODUITS).flatMap((x) => x.prets_defaut)) {
+      expect(p).not.toHaveProperty('taux_ref');
+    }
   });
   it('le libre ne passe pas par le coefficient de structure', () => {
     expect(PRODUITS.LIBRE.coefficient_structure).toBe(false);

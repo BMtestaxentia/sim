@@ -29,6 +29,9 @@ const trajectoires = JSON.parse(
 );
 const REFERENTIELS = { baremes, trajectoires };
 
+/** Grille tarifaire des prets CDC : les marges ne sont plus dans le code. */
+const MARGES = baremes.prets_cdc.marges;
+
 /** Operation type : 30 logements PLUS et 10 PLAI, VEFA zone 2 / B1. */
 function operation(surcharges = {}) {
   return {
@@ -114,15 +117,15 @@ describe('PLUS / PLAI - la chaine complete traverse le perimetre V1', () => {
 
   it('resout les caracteristiques de pret par defaut du dictionnaire (R-AMT-1)', () => {
     const la = 0.017;
-    const plus = pretsDefautResolus('PLUS', { zone_ABC: 'B1', livret_a_reference: la });
-    const plai = pretsDefautResolus('PLAI', { zone_ABC: 'B1', livret_a_reference: la });
+    const plus = pretsDefautResolus('PLUS', { zone_ABC: 'B1', livret_a_reference: la, marges: MARGES });
+    const plai = pretsDefautResolus('PLAI', { zone_ABC: 'B1', livret_a_reference: la, marges: MARGES });
     // PLUS : LA + 0,60 point ; PLAI : LA - 0,20 point.
     expect(plus.find((p) => p.nature === 'construction').taux).toBeCloseTo(la + 0.006, 10);
     expect(plai.find((p) => p.nature === 'construction').taux).toBeCloseTo(la - 0.002, 10);
     // Construction 40 ans, foncier 60 ans hors zones B2 et C.
     expect(plus.find((p) => p.nature === 'construction').duree_ans).toBe(40);
     expect(plus.find((p) => p.nature === 'foncier').duree_ans).toBe(60);
-    expect(pretsDefautResolus('PLUS', { zone_ABC: 'C', livret_a_reference: la })
+    expect(pretsDefautResolus('PLUS', { zone_ABC: 'C', livret_a_reference: la, marges: MARGES })
       .find((p) => p.nature === 'foncier').duree_ans).toBe(50);
   });
 

@@ -56,6 +56,24 @@
     "ssf_pge_acq_amelioration": [0.60, 0.60, 0.60, 0.60, 0.60]
   },
 
+  "prets_cdc": {
+    "date_valeur": "2026-06-01",
+    "source": "Calculette-production-LS-juin 2026.xlsx, feuille « Taux » (C11:C15)",
+    "usage": "Grille tarifaire des prets sur fonds d'epargne. Le taux d'un pret CDC vaut Livret A + marge : seule la MARGE (le spread) est propre au produit, le Livret A est commun a toute l'operation.",
+    "note": "Le Livret A retenu par le moteur est celui de la trajectoire (`taux_reference_livret_a`), pas le 1,50 % au 01/02/2026 de la calculette : deux simulations doivent pouvoir tourner sur des trajectoires differentes sans toucher a cette grille. Ces marges sont surchargeables par simulation via `entrees.parametrage.marges_prets` (ecran Parametres).",
+    "marges": {
+      "PLAI": { "valeur": -0.0020, "libelle": "PLAI", "source": "Taux!C11" },
+      "PLUS": { "valeur": 0.0060, "libelle": "PLUS", "source": "Taux!C12" },
+      "PLUS_VERTES": {
+        "valeur": 0.0020,
+        "libelle": "PLUS constructions vertes",
+        "source": "Taux!C15 ; guide d'utilisation B40 : s'applique au pret foncier ET au pret construction"
+      },
+      "PLS": { "valeur": 0.0111, "libelle": "PLS et CPLS", "source": "Taux!C13" },
+      "PLI": { "valeur": 0.0140, "libelle": "PLI / LLI", "source": "Taux!C14" }
+    }
+  },
+
   "tva": {
     "source": "calculs!B1223:B1228, ParaGLOB!J44/J46, ParaGEN!A77:H78",
     "taux_reduit_simulation": 0.10,

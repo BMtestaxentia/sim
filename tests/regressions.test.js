@@ -23,6 +23,8 @@ const fichierTrajectoires = JSON.parse(
   readFileSync(join(RACINE, 'referentiels', 'trajectoires_axentia_2026.json'), 'utf8'),
 );
 const REFERENTIELS = { baremes, trajectoires: fichierTrajectoires };
+/** Grille tarifaire des prets CDC : les marges ne sont plus dans le code. */
+const MARGES = baremes.prets_cdc.marges;
 
 const BASE = {
   identite: { zone_123: 2, zone_ABC: 'B1' },
@@ -147,9 +149,16 @@ describe('V4 - les prets CDC theoriques sont calculables sans saisie', () => {
   });
 
   it('resout taux et durees depuis les cles declaratives de produits.js', () => {
-    expect(resoudreTaux('LA+1.11', 0.017)).toBeCloseTo(0.0281, 10);
-    expect(resoudreTaux('LA-0.20', 0.017)).toBeCloseTo(0.015, 10);
-    expect(resoudreTaux('fixe', 0.017)).toBe(null);
+    // Le taux d'un pret CDC n'est plus ecrit dans le code : c'est le Livret A de
+    // reference plus la marge du referentiel, cle par cle.
+    expect(resoudreTaux('PLS', 0.017, MARGES)).toBeCloseTo(0.0281, 10);
+    expect(resoudreTaux('PLAI', 0.017, MARGES)).toBeCloseTo(0.015, 10);
+    expect(resoudreTaux('fixe', 0.017, MARGES)).toBe(null);
+    expect(resoudreTaux('', 0.017, MARGES)).toBe(null);
+    expect(() => resoudreTaux('INCONNU', 0.017, MARGES)).toThrow(/marge de pret/i);
+    // Une marge peut arriver en nombre nu : c'est la forme d'une surcharge de
+    // simulation, saisie a l'ecran des parametres.
+    expect(resoudreTaux('PLS', 0.017, { PLS: 0.02 })).toBeCloseTo(0.037, 10);
     expect(resoudreDuree('40')).toBe(40);
     expect(resoudreDuree('zone_abc:B2|C->50,sinon->60', 'B2')).toBe(50);
     expect(resoudreDuree('zone_abc:B2|C->50,sinon->60', 'B1')).toBe(60);
@@ -157,7 +166,7 @@ describe('V4 - les prets CDC theoriques sont calculables sans saisie', () => {
   });
 
   it('expose les prets par defaut d un produit', () => {
-    const p = pretsDefautResolus('PLUS', { zone_ABC: 'C', livret_a_reference: 0.017 });
+    const p = pretsDefautResolus('PLUS', { zone_ABC: 'C', livret_a_reference: 0.017, marges: MARGES });
     expect(p).toHaveLength(2);
     expect(p.find((x) => x.nature === 'construction')?.duree_ans).toBe(40);
     expect(p.find((x) => x.nature === 'foncier')?.duree_ans).toBe(50);
@@ -194,7 +203,7 @@ describe('V5 - barèmes de loyer des produits', () => {
 
   it('R-AMT-1 : le LLI a ses prets par defaut, releves sur l annexe MULHOUSE', () => {
     // LA + 1,40 %, 35 ans en travaux et 40 en foncier.
-    const p = pretsDefautResolus('LOC', { zone_ABC: 'B1', livret_a_reference: 0.017 });
+    const p = pretsDefautResolus('LOC', { zone_ABC: 'B1', livret_a_reference: 0.017, marges: MARGES });
     expect(p).toHaveLength(2);
     expect(p.find((x) => x.nature === 'construction')?.duree_ans).toBe(35);
     expect(p.find((x) => x.nature === 'foncier')?.duree_ans).toBe(40);
@@ -1048,5 +1057,77 @@ describe('R-FIN-8 - la scission PLS ne cree jamais de pret negatif', () => {
       .filter((p) => p.produit === 'PLS' && p.code !== 'CPLS' && p.nature !== 'autre')
       .reduce((s, p) => s + p.montant_eur, 0);
     expect(pls).toBeLessThanOrEqual(Math.round(pr * 0.55) + 1);
+  });
+});
+
+describe('R-AMT-1 - marges CDC : referentiel versionne et surcharge par simulation', () => {
+  // Le Livret A de reference du referentiel AXENTIA vaut 1,70 %.
+  const LA = 0.017;
+  const cdcDe = (r, nature) =>
+    r.financement.prets_resolus.find((p) => p.produit === 'PLS' && p.nature === nature);
+
+  it('applique la marge du referentiel, sans marge ecrite dans le code', () => {
+    const r = calculer({ ...BASE, prets: [] }, REFERENTIELS);
+    // 1,70 % + 1,11 % = 2,81 %, sur les deux prets de la tranche.
+    expect(cdcDe(r, 'construction').taux).toBeCloseTo(LA + 0.0111, 10);
+    expect(cdcDe(r, 'foncier').taux).toBeCloseTo(LA + 0.0111, 10);
+    expect(cdcDe(r, 'construction').spread).toBeCloseTo(0.0111, 10);
+    expect(r.financement.livret_a_reference).toBe(LA);
+  });
+
+  it('une marge surchargee par la simulation deplace le taux des prets CDC', () => {
+    const r = calculer(
+      { ...BASE, prets: [], parametrage: { marges_prets: { PLS: 0.02 } } },
+      REFERENTIELS,
+    );
+    expect(cdcDe(r, 'construction').taux).toBeCloseTo(LA + 0.02, 10);
+    expect(r.financement.marges_prets.PLS.valeur).toBe(0.02);
+    expect(r.financement.marges_prets.PLS.surchargee).toBe(true);
+    // Les autres marges restent celles du referentiel, avec leur tracabilite.
+    expect(r.financement.marges_prets.PLUS.valeur).toBe(0.006);
+    expect(r.financement.marges_prets.PLUS.surchargee).toBeUndefined();
+  });
+
+  it('ne laisse pas une surcharge vide effacer la marge du referentiel', () => {
+    // Vider la cellule a l'ecran envoie `null` : la marge doit revenir au
+    // referentiel, pas rendre le pret inamortissable.
+    for (const vide of [null, undefined, '', NaN]) {
+      const r = calculer(
+        { ...BASE, prets: [], parametrage: { marges_prets: { PLS: vide } } },
+        REFERENTIELS,
+      );
+      expect(cdcDe(r, 'construction').taux, `surcharge ${String(vide)}`)
+        .toBeCloseTo(LA + 0.0111, 10);
+    }
+  });
+
+  it('une marge saisie sur UN pret ne deplace que celui-la', () => {
+    const r = calculer(
+      {
+        ...BASE,
+        prets: [
+          { code: 'CDC_BATIMENT_PLS', nature: 'construction', produit: 'PLS',
+            montant_auto: true, spread: 0.008 },
+          { code: 'CDC_FONCIER_PLS', nature: 'foncier', produit: 'PLS', montant_auto: true },
+        ],
+      },
+      REFERENTIELS,
+    );
+    expect(cdcDe(r, 'construction').taux).toBeCloseTo(LA + 0.008, 10);
+    expect(cdcDe(r, 'foncier').taux).toBeCloseTo(LA + 0.0111, 10);
+  });
+
+  it('un taux saisi en clair prime sur la marge : un pret hors fonds d epargne n est pas indexe', () => {
+    const r = calculer(
+      {
+        ...BASE,
+        prets: [
+          { code: 'CDC_BATIMENT_PLS', nature: 'construction', produit: 'PLS',
+            montant_auto: true, spread: 0.008, taux: 0.045 },
+        ],
+      },
+      REFERENTIELS,
+    );
+    expect(cdcDe(r, 'construction').taux).toBe(0.045);
   });
 });

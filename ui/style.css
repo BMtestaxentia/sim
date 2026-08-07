@@ -851,6 +851,20 @@ span.ressource__libelle {
 .para-groupe { margin-bottom: 16px; }
 .para-groupe:last-child { margin-bottom: 0; }
 .para-source { font-size: 10.5px; color: var(--text-tertiary); margin: 0 0 7px; line-height: 1.45; }
+/* Le bouton de retour au referentiel vit dans le titre du bloc, qui est en
+   petites capitales : il doit s'en detacher sans crier. */
+.para-groupe h3 { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.para-groupe h3 .bouton--discret { text-transform: none; letter-spacing: 0; font-size: 11px; padding: 3px 9px; }
+/* Un taux issu d'une marge modifiee ne doit pas se lire comme le tarif CDC. */
+.tableau td.surchargee { color: var(--warning-text); font-weight: 650; }
+
+/* Marge d'un pret CDC : la cellule de saisie et, dessous, la composition du
+   taux qu'elle produit. Sans ce rappel, « 1,11 » ne dit ni de quoi c'est la
+   marge ni ce que le pret paie. */
+.champ--marge .champ__rappel {
+  font-size: 10.5px; color: var(--text-tertiary); margin-top: 3px;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
 
 .interrupteur { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-secondary); font-weight: 500; text-transform: none; letter-spacing: 0; cursor: pointer; }
 .interrupteur input { width: auto; }

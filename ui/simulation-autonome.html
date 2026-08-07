@@ -176,7 +176,7 @@ html, body {
 .ecran--tranche[hidden] { display: none; }
 .ecran__corps { flex: 1; min-width: 0; }
 .jauge {
-  flex: 0 0 74px; align-self: flex-start;
+  flex: 0 0 205px; align-self: flex-start;
   /* Elle accompagne le defilement plutot que de s'etirer sur mille pixels :
      l'equilibre reste lisible ou que l'on soit dans la saisie. */
   position: sticky; top: 74px; height: calc(100vh - 110px);
@@ -197,33 +197,35 @@ html, body {
 
 /* Emplois a gauche du contenu : barre collee a l'interieur, etiquettes dehors. */
 .jauge[data-jauge='emplois'] .jauge__barre { right: 0; }
-.jauge[data-jauge='emplois'] .jauge__etiquettes { left: 0; right: 15px; justify-content: flex-start; }
+.jauge[data-jauge='emplois'] .jauge__etiquettes { left: 0; right: 16px; }
+/* Cote emplois, l'etiquette se colle a la barre : elle finit a droite et sa
+   pastille passe apres le texte, au contact du segment qu'elle designe. */
 .jauge[data-jauge='emplois'] .jauge__etiquettes > span { justify-content: flex-end; }
+.jauge[data-jauge='emplois'] .jauge__etiquettes i { flex-direction: row-reverse; }
 /* Ressources a droite : tout est en miroir. */
 .jauge[data-jauge='ressources'] .jauge__barre { left: 0; }
-.jauge[data-jauge='ressources'] .jauge__etiquettes { left: 15px; right: 0; }
+.jauge[data-jauge='ressources'] .jauge__etiquettes { left: 16px; right: 0; }
 
-/* Texte PARALLELE a la barre. `vertical-rl` le fait courir de haut en bas, dans
-   le sens de lecture des segments. */
+/* Texte HORIZONTAL, cale en haut de son segment : c'est la que commence le
+   poste, et une etiquette centree flotterait loin de sa couleur sur un grand
+   segment. */
+.jauge__etiquettes > span { align-items: flex-start; }
 .jauge__etiquettes i {
-  /* `display: block` est INDISPENSABLE : `writing-mode` n'a aucun effet sur une
-     boite inline, et l'etiquette restait invisible sans lever d'erreur. */
-  display: block;
-  writing-mode: vertical-rl; font-style: normal;
-  font-size: 9.5px; letter-spacing: 0.02em;
-  color: var(--text-tertiary); white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; max-height: 100%;
+  display: flex; align-items: center; gap: 5px;
+  font-style: normal; font-size: 10px; line-height: 1.25;
+  color: var(--text-secondary); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 100%;
   font-variant-numeric: tabular-nums;
 }
 /* Pastille de rattachement : la colonne des etiquettes ne suit plus exactement
    les proportions de la barre, la couleur retablit le lien. */
 .jauge__etiquettes b {
-  display: block; width: 5px; height: 5px; border-radius: 50%;
-  margin: 0 auto 4px; flex: none;
+  width: 7px; height: 7px; border-radius: 50%; flex: none;
 }
-/* Les etiquettes coutent 74 px de chaque bord : sous 950 px elles prendraient
-   plus de place qu'elles n'en valent, seules les barres restent. */
-@media (max-width: 950px) { .jauge { flex-basis: 14px; } .jauge__etiquettes { display: none; } }
+/* Les etiquettes horizontales coutent 205 px de chaque bord : sous 1250 px de
+   large, elles prendraient plus de place qu'elles n'en valent et seules les
+   barres restent. Sous 760 px, tout s'efface au profit du contenu. */
+@media (max-width: 1250px) { .jauge { flex-basis: 14px; } .jauge__etiquettes { display: none; } }
 @media (max-width: 760px) { .jauge { display: none; } }
 
 .colonnes { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; }
@@ -5040,17 +5042,24 @@ const nb = (v) => (nul(v) ? '-' : fNombre.format(v));
  * en dur ici resterait celle du theme sombre quand on bascule en clair.
  * Lue au calcul et non a la declaration, pour suivre le theme courant.
  */
+// Teintes choisies pour se DISTINGUER LES UNES DES AUTRES a l'interieur d'une
+// meme barre, pas pour se ressembler : deux bleus voisins rendaient deux
+// chapitres indiscernables. Emplois et ressources formant deux listes separees,
+// une meme teinte peut servir dans les deux sans creer de confusion.
 const TOKENS_COULEUR = {
+  // Emplois : bleu, ambre, vert, violet, corail, gris.
   charge_fonciere: '--cat-1',
-  batiment: '--cat-3',
-  honoraires: '--cat-5',
-  frais_divers: '--cat-4',
+  batiment: '--cat-2',
+  honoraires: '--success-accent',
+  frais_divers: '--purple-accent',
+  frais_financiers: '--coral-accent',
   modulation: '--cat-6',
+  // Ressources : vert, ambre, bleu, violet, corail.
   subventions: '--success-accent',
-  fonds_propres: '--warning-accent',
-  pret_construction: '--info-accent',
-  pret_foncier: '--cat-5',
-  pret_autre: '--cat-4',
+  fonds_propres: '--cat-2',
+  pret_construction: '--cat-1',
+  pret_foncier: '--purple-accent',
+  pret_autre: '--coral-accent',
 };
 const couleur = (cle) =>
   getComputedStyle(document.documentElement).getPropertyValue(TOKENS_COULEUR[cle] ?? '--cat-6').trim() ||
@@ -6198,12 +6207,10 @@ function rendreValeurs(r) {
             ` title="${att(s.libelle)} : ${eur(s.montant)}"></span>`,
         )
         .join('');
-      // TOUS les postes sont etiquetes, y compris ceux de 2 % : la colonne des
-      // etiquettes ne suit donc pas exactement les proportions de la barre. Elle
-      // garantit a chacune une hauteur lisible, puis repartit ce qui reste au
-      // prorata. Une pastille de couleur rattache l'etiquette a son segment, la
-      // ou la position ne suffit plus.
-      const hauteurs = repartirLisible(segments.map((s) => s.montant / echelle));
+      // TOUS les postes sont etiquetes, y compris ceux de 2 %. Le texte etant
+      // HORIZONTAL, une ligne tient dans 3 % de la hauteur : le minimum garanti
+      // reste donc petit, et les etiquettes suivent leur segment de tres pres.
+      const hauteurs = repartirLisible(segments.map((s) => s.montant / echelle), 0.032);
       const etiquettes = segments
         .map(
           (s, k) =>

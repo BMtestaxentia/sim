@@ -214,17 +214,24 @@ const nb = (v) => (nul(v) ? '-' : fNombre.format(v));
  * en dur ici resterait celle du theme sombre quand on bascule en clair.
  * Lue au calcul et non a la declaration, pour suivre le theme courant.
  */
+// Teintes choisies pour se DISTINGUER LES UNES DES AUTRES a l'interieur d'une
+// meme barre, pas pour se ressembler : deux bleus voisins rendaient deux
+// chapitres indiscernables. Emplois et ressources formant deux listes separees,
+// une meme teinte peut servir dans les deux sans creer de confusion.
 const TOKENS_COULEUR = {
+  // Emplois : bleu, ambre, vert, violet, corail, gris.
   charge_fonciere: '--cat-1',
-  batiment: '--cat-3',
-  honoraires: '--cat-5',
-  frais_divers: '--cat-4',
+  batiment: '--cat-2',
+  honoraires: '--success-accent',
+  frais_divers: '--purple-accent',
+  frais_financiers: '--coral-accent',
   modulation: '--cat-6',
+  // Ressources : vert, ambre, bleu, violet, corail.
   subventions: '--success-accent',
-  fonds_propres: '--warning-accent',
-  pret_construction: '--info-accent',
-  pret_foncier: '--cat-5',
-  pret_autre: '--cat-4',
+  fonds_propres: '--cat-2',
+  pret_construction: '--cat-1',
+  pret_foncier: '--purple-accent',
+  pret_autre: '--coral-accent',
 };
 const couleur = (cle) =>
   getComputedStyle(document.documentElement).getPropertyValue(TOKENS_COULEUR[cle] ?? '--cat-6').trim() ||
@@ -1372,12 +1379,10 @@ function rendreValeurs(r) {
             ` title="${att(s.libelle)} : ${eur(s.montant)}"></span>`,
         )
         .join('');
-      // TOUS les postes sont etiquetes, y compris ceux de 2 % : la colonne des
-      // etiquettes ne suit donc pas exactement les proportions de la barre. Elle
-      // garantit a chacune une hauteur lisible, puis repartit ce qui reste au
-      // prorata. Une pastille de couleur rattache l'etiquette a son segment, la
-      // ou la position ne suffit plus.
-      const hauteurs = repartirLisible(segments.map((s) => s.montant / echelle));
+      // TOUS les postes sont etiquetes, y compris ceux de 2 %. Le texte etant
+      // HORIZONTAL, une ligne tient dans 3 % de la hauteur : le minimum garanti
+      // reste donc petit, et les etiquettes suivent leur segment de tres pres.
+      const hauteurs = repartirLisible(segments.map((s) => s.montant / echelle), 0.032);
       const etiquettes = segments
         .map(
           (s, k) =>

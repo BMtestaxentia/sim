@@ -206,10 +206,9 @@ html, body {
 .jauge[data-jauge='ressources'] .jauge__barre { left: 0; }
 .jauge[data-jauge='ressources'] .jauge__etiquettes { left: 16px; right: 0; }
 
-/* Texte HORIZONTAL, cale en haut de son segment : c'est la que commence le
-   poste, et une etiquette centree flotterait loin de sa couleur sur un grand
-   segment. */
-.jauge__etiquettes > span { align-items: flex-start; }
+/* Texte HORIZONTAL, CENTRE dans la hauteur de son segment : c'est la position
+   qui designe le mieux une plage, un calage en haut se lisant comme une borne. */
+.jauge__etiquettes > span { align-items: center; }
 .jauge__etiquettes i {
   display: flex; align-items: center; gap: 5px;
   font-style: normal; font-size: 10px; line-height: 1.25;

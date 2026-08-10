@@ -502,7 +502,21 @@
 
     <!-- ================= ÉCRAN 4 - PARAMÈTRES ================= -->
     <main class="ecran" id="ecran-parametres" role="tabpanel" hidden>
-      <div id="contenu-parametres"></div>
+      <!-- La barre de tete est STATIQUE : le champ de recherche s'y trouve, et
+           le reconstruire a chaque frappe lui couterait le focus. Seul le
+           contenu des deux zones dynamiques est reecrit. -->
+      <div class="para-tete">
+        <div class="para-tete__profil" id="para-profil"></div>
+        <label class="para-tete__recherche">
+          <span class="para-tete__loupe" aria-hidden="true">⌕</span>
+          <input type="search" id="recherche-parametre" placeholder="Rechercher un paramètre…"
+            aria-label="Rechercher un paramètre" />
+        </label>
+      </div>
+      <div class="para-corps">
+        <nav class="para-rail" id="para-rail" aria-label="Sections de paramétrage"></nav>
+        <div id="contenu-parametres"></div>
+      </div>
     </main>
 
     <dialog id="dialogue-json" class="dialogue">

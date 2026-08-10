@@ -904,28 +904,102 @@ span.ressource__libelle {
 .para-groupe { margin-bottom: 16px; }
 .para-groupe:last-child { margin-bottom: 0; }
 .para-source { font-size: 10.5px; color: var(--text-tertiary); margin: 0 0 7px; line-height: 1.45; }
-/* Les boutons d'un groupe vivent dans son titre, qui est en petites capitales :
-   ils doivent s'en detacher sans crier. */
-.para-groupe h3 { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.para-groupe h3 .bouton--discret { text-transform: none; letter-spacing: 0; font-size: 11px; padding: 3px 9px; }
-.para-groupe__date { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text-tertiary); font-size: 10.5px; }
+/* ---------- Ecran de parametrage ----------
+   Cent quarante champs en une seule colonne, c'etait huit ecrans de defilement
+   et des tables de mille six cents pixels dont neuf dixiemes de vide. La page
+   se lit maintenant en trois zones : une tete qui porte le profil et la
+   recherche, un rail de sections, et une seule section a la fois. */
+.para-tete {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 10px 14px; margin-bottom: 14px;
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  border-radius: var(--radius); position: sticky; top: 58px; z-index: 20;
+}
+.para-tete__profil { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1; min-width: 0; }
+.para-tete__profil select { min-width: 220px; }
+.para-tete__etat { font-size: 11px; color: var(--text-tertiary); white-space: nowrap; }
+.para-tete__etat--modifie { color: var(--warning-text); font-weight: 650; }
+.para-tete__actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.para-tete__recherche { position: relative; display: flex; align-items: center; flex: none; }
+.para-tete__loupe { position: absolute; left: 9px; color: var(--text-tertiary); font-size: 14px; pointer-events: none; }
+.para-tete__recherche input { width: 240px; padding-left: 26px; }
 
-/* Barre de profils : le selecteur d'abord, ses actions ensuite. C'est le seul
-   endroit de l'ecran ou l'on change de jeu de parametres, il ouvre donc. */
-.para-profils { border-color: var(--info-accent); }
-.para-profils__barre { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
-.para-profils__barre .champ { margin-bottom: 0; }
-.para-profils__barre select { min-width: 230px; }
-.para-profils__actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.para-profils .aide { margin-top: 10px; }
+.para-corps { display: grid; grid-template-columns: 232px 1fr; gap: 16px; align-items: start; }
+.para-rail { display: flex; flex-direction: column; gap: 3px; position: sticky; top: 128px; }
+.para-rail__item {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 8px;
+  text-align: left; padding: 8px 11px; border-radius: var(--radius-sm);
+  background: transparent; border: 1px solid transparent; cursor: pointer;
+  font-family: inherit; color: var(--text-secondary);
+}
+.para-rail__item:hover { background: var(--bg-secondary); }
+.para-rail__item--actif {
+  background: var(--info-bg); border-color: var(--info-accent); color: var(--info-text);
+}
+.para-rail__titre { font-size: 12.5px; font-weight: 650; }
+.para-rail__resume { grid-column: 1; font-size: 10.5px; color: var(--text-tertiary); line-height: 1.3; }
+.para-rail__compteur {
+  grid-row: 1; align-self: center; min-width: 18px; text-align: center;
+  font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: var(--radius-pill);
+  background: var(--warning-bg); color: var(--warning-text);
+}
+
+.para-section h3 { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* Une carte par grandeur : libelle, saisie, et la valeur du referentiel juste
+   dessous. Elles s'alignent en grille, donc quinze constantes tiennent en cinq
+   rangees au lieu de quinze lignes de table. */
+.para-grille {
+  display: grid; gap: 10px; margin-top: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+}
+.para-carte {
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 9px 11px; border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm); background: var(--bg-secondary);
+}
+.para-carte--modifiee { border-color: var(--warning-accent); background: var(--warning-bg); }
+.para-carte__libelle { font-size: 11px; font-weight: 600; color: var(--text-secondary); line-height: 1.3; }
+.para-carte__saisie { display: flex; align-items: center; gap: 6px; }
+.para-carte__saisie input { flex: 1; min-width: 0; text-align: right; }
+.para-carte__pied { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 15px; }
+.para-carte__ref { font-size: 10px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.para-carte__annuler {
+  border: none; background: transparent; cursor: pointer; padding: 0 3px;
+  color: var(--warning-text); font-size: 12px; line-height: 1;
+}
+.para-carte__annuler:hover { color: var(--text-primary); }
+
+.para-matrice { margin-top: 16px; }
+.para-matrice h4 {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 0 0 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--text-tertiary);
+}
+.para-matrice h4 .bouton--discret { text-transform: none; letter-spacing: 0; font-size: 11px; padding: 3px 9px; }
+.tableau--serre td, .tableau--serre th { padding: 3px 6px; }
+.tableau--serre .cellule-valeur input { text-align: right; }
+/* « tout » applique une valeur a l'ensemble des annees : poser cinquante et un
+   taux a la main n'est pas une saisie, c'est une corvee. */
+.para-tout {
+  display: block; margin: 2px 0 0 auto; border: none; background: transparent;
+  color: var(--info-text); font-size: 9.5px; text-transform: none; letter-spacing: 0;
+  cursor: pointer; padding: 0; font-family: inherit;
+}
+.para-tout:hover { text-decoration: underline; }
 
 /* Une cellule qui s'ecarte du referentiel doit se voir sans etre criarde : la
-   valeur du depot reste lisible dans la colonne voisine. */
-.tableau td.surchargee { position: relative; }
+   valeur du depot reste lisible en filigrane, dans le placeholder. */
 .tableau td.surchargee > input {
   border-color: var(--warning-accent); color: var(--warning-text); font-weight: 650;
 }
-.para-ligne--annee td { background: var(--bg-tertiary); }
+
+@media (max-width: 1100px) {
+  .para-corps { grid-template-columns: 1fr; }
+  .para-rail { position: static; flex-direction: row; flex-wrap: wrap; }
+  .para-rail__item { flex: 1 1 160px; }
+  .para-tete__recherche input { width: 180px; }
+}
 
 /* Marge d'un pret CDC : la cellule de saisie et, dessous, la composition du
    taux qu'elle produit. Sans ce rappel, « 1,11 » ne dit ni de quoi c'est la

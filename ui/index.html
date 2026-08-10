@@ -548,16 +548,6 @@
                   <span>Gros entretien (€/m² SHAB/an)</span>
                   <input type="number" step="0.1" min="0" data-champ="exploitation.gros_entretien_eur_m2" data-type="nombre" />
                 </label>
-                <!-- La TFPB depend de la COMMUNE : son taux d'imposition n'est
-                     pas le meme d'une operation a l'autre. Elle a donc sa place
-                     ici, en surcharge de simulation, a cote du montant de
-                     reference qui reste au referentiel. Laisser vide reprend ce
-                     dernier - c'est ce que dit le filigrane. -->
-                <label class="champ">
-                  <span>Taxe foncière (€/logement/an)</span>
-                  <input type="number" step="1" min="0" id="tfpb-simulation"
-                    data-champ="exploitation.tfpb_par_logement_eur" data-type="nombre" />
-                </label>
               </div>
 
               <h4 class="sous-titre">Cotisations et charges diverses</h4>
@@ -577,6 +567,20 @@
                 Aucun n'est actif par défaut, pour qu'une simulation ne change jamais de résultat
                 sans qu'on l'ait décidé.
               </p>
+
+              <!-- La taxe fonciere se lit avec les autres charges assises sur le
+                   logement, mais hors du tableau : celui-ci n'active que des
+                   postes facultatifs du referentiel, et elle n'est pas
+                   facultative. Ce qui la suspend, c'est l'exoneration, et cette
+                   duree-la tient au produit, pas a une case a cocher. -->
+              <div class="champs champs--serres">
+                <label class="champ">
+                  <span>Taxe foncière (€/logement/an)</span>
+                  <input type="number" step="1" min="0" id="tfpb-simulation"
+                    data-champ="exploitation.tfpb_par_logement_eur" data-type="nombre" />
+                </label>
+              </div>
+              <p class="aide" id="aide-tfpb"></p>
             </section>
           </div>
           <div id="contenu-parametres"></div>

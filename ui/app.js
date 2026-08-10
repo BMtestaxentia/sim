@@ -2267,9 +2267,12 @@ function rendreFinancement(r) {
   rendrePerimetreFinancement(r);
   const p = perimetreFinancement(r);
 
+  // Ordre de MONTAGE : les subventions d'abord, ce qu'on va chercher ; les
+  // prets ensuite, ce qu'on emprunte ; les fonds propres en dernier, parce
+  // qu'ils bouchent ce qui reste. C'est aussi l'ordre dans lequel on les
+  // decide, et le solde se lit alors au bout de la barre.
   const ressources = [];
   if (p.subventions_eur) ressources.push({ libelle: 'Subventions', montant: p.subventions_eur, couleur: COULEURS.subventions });
-  if (p.fonds_propres_eur) ressources.push({ libelle: 'Fonds propres', montant: p.fonds_propres_eur, couleur: COULEURS.fonds_propres });
   // Les prets se lisent en DEUX postes et non un par ligne. Sept lignes de prets
   // pour deux subventions donnaient a la legende le detail d'un tableau
   // d'emprunts, alors qu'elle repond a une seule question : d'ou vient l'argent.
@@ -2293,6 +2296,13 @@ function rendreFinancement(r) {
     p.amortissements.filter((a) => !a.principal),
     COULEURS.pret_autre,
   );
+  if (p.fonds_propres_eur) {
+    ressources.push({
+      libelle: 'Fonds propres',
+      montant: p.fonds_propres_eur,
+      couleur: COULEURS.fonds_propres,
+    });
+  }
 
   // Les totaux viennent du moteur ; l'echelle des barres, elle, est un choix de
   // presentation et peut se deduire des segments.
@@ -2533,7 +2543,7 @@ const dateLisible = (iso) => {
  * lui, un champ vide laisserait croire a une taxe nulle alors que le compte en
  * porte bien une - c'est exactement la question qui s'est posee.
  */
-function rendreFiligraneTFPB() {
+function rendreFiligraneTFPB(r) {
   const champ = /** @type {HTMLInputElement|null} */ (document.getElementById('tfpb-simulation'));
   if (!champ) return;
   const ref = referentiels.baremes.constantes_reglementaires?.tfpb?.montant_par_logement_eur;
@@ -2541,6 +2551,17 @@ function rendreFiligraneTFPB() {
   champ.title = nul(ref)
     ? ''
     : `Référentiel : ${eur(ref)} par logement et par an. Laisser vide pour le reprendre.`;
+
+  // Dire QUAND la taxe commence a courir. Une exoneration de vingt-cinq ans
+  // rend la ligne nulle sur la moitie du compte, et on cherche alors le montant
+  // sans le trouver - c'est ce qui s'est produit.
+  const aide = document.getElementById('aide-tfpb');
+  if (!aide) return;
+  const premiere = r?.exploitation?.lignes?.find((l) => (l.tfpb_eur ?? 0) > 0);
+  aide.textContent = premiere
+    ? `⚙ Exonérée jusqu’en ${premiere.annee - 1} : la taxe entre au compte en ${premiere.annee}, ` +
+      `pour ${eur(premiere.tfpb_eur)}, puis suit la trajectoire. La durée d’exonération tient au produit.`
+    : "⚙ Exonérée sur toute la durée de simulation : aucune taxe n’entre au compte. La durée d’exonération tient au produit.";
 }
 
 function rendreCalendrier(r) {
@@ -3467,7 +3488,7 @@ function recalculer() {
     erreur.hidden = true;
     $('#version-moteur').textContent = `v${r.version_moteur}`;
     rendreCalendrier(r);
-    rendreFiligraneTFPB();
+    rendreFiligraneTFPB(r);
     rendreValeurs(r);
     pastille.textContent = 'à jour';
     pastille.className = 'pastille pastille--ok';

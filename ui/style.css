@@ -423,6 +423,11 @@ td.calc { text-align: right; }
    gardent l'encre pleine, le bloc comptable se lit ensuite. */
 #table-exploitation tbody td:nth-child(5),
 #table-exploitation tbody td:nth-child(6) { font-weight: 650; color: var(--text-primary); }
+/* Aucun nombre ne se coupe : « 74,9 % » passait a la ligne et la table gagnait
+   une hauteur de rang pour rien, alors qu'il restait de la place a cote. Le
+   navigateur elargit la colonne au lieu de replier son contenu, et les autres
+   se resserrent - elles avaient du mou. */
+#table-exploitation th, #table-exploitation td { white-space: nowrap; }
 
 /* ============================================================ BOUTONS */
 
@@ -450,6 +455,13 @@ td.calc { text-align: right; }
   border-radius: var(--radius-pill); padding: 4px 12px; font-size: 11.5px;
 }
 .bouton--ajout:hover { background: var(--info-accent); color: #fff; }
+/* Meme gabarit que les boutons voisins, mais en rouge : l'action detruit, et
+   elle est passagere - elle n'apparait que le temps d'une selection. */
+.bouton--danger {
+  background: var(--danger-bg); border-color: transparent; color: var(--danger-text);
+  border-radius: var(--radius-pill); padding: 4px 12px; font-size: 11.5px;
+}
+.bouton--danger:hover { background: var(--danger-accent); color: #fff; }
 .bouton--icone {
   width: 30px; height: 30px; padding: 0; flex: none;
   display: grid; place-items: center; font-size: 14px; line-height: 1;
@@ -1006,6 +1018,9 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 .graphe__repere { stroke: var(--warning-accent); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.7; }
 .graphe__texte { fill: var(--text-tertiary); font-size: 9.5px; }
 .graphe__texte--repere { fill: var(--warning-text); font-size: 9px; font-weight: 700; }
+/* Nombre d'evenements groupes sur la meme annee : discret, c'est un decompte
+   et non une donnee - le detail se lit en infobulle et sous le graphe. */
+.graphe__compteur { fill: var(--text-tertiary); font-weight: 600; }
 
 /* ============================================================ DIVERS */
 

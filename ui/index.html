@@ -227,6 +227,9 @@
           Lots
           <span class="bloc__outils">
             <button type="button" class="bouton bouton--ajout" data-ajouter="lots">+ lot</button>
+            <!-- N'apparait que le temps d'une selection : une action qui detruit
+                 plusieurs lignes d'un coup se propose quand elle a un sens. -->
+            <button type="button" class="bouton bouton--danger" id="btn-supprimer-lots" hidden></button>
             <button type="button" class="bouton bouton--ajout" id="btn-vider-lots">Tout supprimer</button>
           </span>
         </h2>

@@ -1235,6 +1235,15 @@ function rendreSelectionLots() {
       `${n} lots sélectionnés — modifier une cellule de l’un d’eux applique la valeur ` +
       'aux autres. L’ID reste propre à chaque lot.';
   }
+
+  // Suppression groupee : le bouton n'existe QUE tant qu'une selection existe.
+  // Une action qui detruit plusieurs lignes d'un coup n'a pas a rester offerte
+  // en permanence - elle se propose quand elle a un sens, et disparait ensuite.
+  const btn = document.getElementById('btn-supprimer-lots');
+  if (btn) {
+    btn.hidden = n === 0;
+    btn.textContent = `Supprimer ${n} lot${n > 1 ? 's' : ''} sélectionné${n > 1 ? 's' : ''}`;
+  }
 }
 
 /**
@@ -2618,7 +2627,9 @@ function grapheExploitation(lignes, evenements) {
 
   const L = 1000;
   const H = 260;
-  const marge = { haut: 16, bas: 34, gauche: 8, droite: 8 };
+  // La marge haute loge les etiquettes de repere, sur trois rangs au plus quand
+  // des annees voisines se bousculent : 4 px de garde, puis 11 px par rang.
+  const marge = { haut: 38, bas: 34, gauche: 8, droite: 8 };
   const largeurTrace = L - marge.gauche - marge.droite;
   const hauteurTrace = H - marge.haut - marge.bas;
 
@@ -2649,13 +2660,44 @@ function grapheExploitation(lignes, evenements) {
 
   const trace = lignes.map((l, i) => `${xCentre(i).toFixed(1)},${yCum(l.cumul_autofinancement_eur).toFixed(1)}`).join(' ');
 
-  const reperes = evenements
+  // Reperes verticaux. Deux ecueils, tous deux visibles des qu'une operation
+  // porte six prets :
+  //  - PLUSIEURS evenements tombent la meme annee - cinq prets qui s'eteignent
+  //    en 2068 tracaient cinq traits confondus et cinq fois le meme millesime ;
+  //  - deux annees VOISINES se chevauchent - « 2067 » et « 2068 » se
+  //    superposaient en un « 2062068 » illisible.
+  // Un trait par ANNEE regle le premier, un etagement des etiquettes le second.
+  const parAnnee = new Map();
+  for (const e of evenements) {
+    if (!parAnnee.has(e.annee)) parAnnee.set(e.annee, []);
+    parAnnee.get(e.annee).push(e.libelle);
+  }
+
+  // Largeur d'un millesime a la fonte du graphe, en unites du viewBox. Deux
+  // etiquettes plus proches que cela se toucheraient : la seconde descend d'un
+  // cran. Trois rangs suffisent - au-dela, les traits eux-memes se confondent
+  // et c'est la legende sous le graphe qui prend le relais.
+  const largeurEtiquette = 30;
+  const RANGS = 3;
+  const dernierX = new Array(RANGS).fill(-Infinity);
+
+  const reperes = [...parAnnee.entries()]
+    .map(([annee, libelles]) => ({ annee, libelles, i: lignes.findIndex((l) => l.annee === annee) }))
+    .filter((e) => e.i >= 0)
+    .sort((a, b) => a.i - b.i)
     .map((e) => {
-      const i = lignes.findIndex((l) => l.annee === e.annee);
-      if (i < 0) return '';
-      const x = xCentre(i).toFixed(1);
-      return `<line class="graphe__repere" x1="${x}" y1="${marge.haut}" x2="${x}" y2="${marge.haut + hauteurTrace}" />
-        <text class="graphe__texte graphe__texte--repere" x="${x}" y="${marge.haut - 4}" text-anchor="middle">${att(e.annee)}</text>`;
+      const x = xCentre(e.i);
+      let rang = dernierX.findIndex((d) => x - d >= largeurEtiquette);
+      if (rang < 0) rang = RANGS - 1;
+      dernierX[rang] = x;
+      const xa = x.toFixed(1);
+      // Le trait porte le detail en infobulle : l'annee seule ne dit pas ce qui
+      // s'y passe, et cinq echeances groupees le disent encore moins.
+      const detail = `${e.annee} : ${e.libelles.join(', ').toLowerCase()}`;
+      return `<line class="graphe__repere" x1="${xa}" y1="${marge.haut}" x2="${xa}" y2="${marge.haut + hauteurTrace}"><title>${att(detail)}</title></line>
+        <text class="graphe__texte graphe__texte--repere" x="${xa}" y="${(marge.haut - 4 - rang * 11).toFixed(1)}" text-anchor="middle">${att(e.annee)}${
+          e.libelles.length > 1 ? `<tspan class="graphe__compteur"> ×${e.libelles.length}</tspan>` : ''
+        }<title>${att(detail)}</title></text>`;
     })
     .join('');
 
@@ -2760,8 +2802,20 @@ function rendreExploitation(r) {
 
   // --- Graphe ---
   $('#graphe-exploitation').innerHTML = grapheExploitation(e.lignes, e.evenements);
-  $('#aide-graphe').textContent = e.evenements.length
-    ? `⚙ Repères verticaux : ${e.evenements.map((x) => `${x.annee} ${x.libelle.toLowerCase()}`).join(' · ')}.`
+  // La legende suit le graphe : un poste par ANNEE, ses evenements a la suite.
+  // Repeter le millesime autant de fois qu'il y a d'echeances donnait une phrase
+  // ou « 2068 » revenait cinq fois sans qu'on voie qu'il s'agissait de la meme
+  // annee.
+  const parAnneeGraphe = new Map();
+  for (const x of e.evenements) {
+    if (!parAnneeGraphe.has(x.annee)) parAnneeGraphe.set(x.annee, []);
+    parAnneeGraphe.get(x.annee).push(x.libelle.toLowerCase());
+  }
+  $('#aide-graphe').textContent = parAnneeGraphe.size
+    ? `⚙ Repères verticaux — ${[...parAnneeGraphe.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([annee, l]) => `${annee} : ${l.join(', ')}`)
+        .join(' · ')}.`
     : '';
 
   // --- Tableau ---
@@ -4299,6 +4353,19 @@ document.addEventListener('click', (ev) => {
         batiment: lire('gen-batiment'),
       }),
     );
+    rafraichirTout();
+    return;
+  }
+
+  if (el.id === 'btn-supprimer-lots') {
+    const cibles = [...lotsSelectionnes].sort((a, b) => b - a);
+    if (!cibles.length) return;
+    if (!window.confirm(`Supprimer les ${cibles.length} lots sélectionnés ?`)) return;
+    // Du DERNIER index vers le premier : supprimer par le debut decalerait les
+    // suivants et l'on effacerait des lots voisins de ceux qu'on visait.
+    for (const i of cibles) etat.lots.splice(i, 1);
+    lotsSelectionnes.clear();
+    dernierLotCoche = null;
     rafraichirTout();
     return;
   }

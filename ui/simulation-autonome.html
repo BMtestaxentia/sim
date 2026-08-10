@@ -380,6 +380,20 @@ td.calc { text-align: right; }
    montants comparable d'un coup d'oeil. */
 .tableau td.num--second { color: var(--text-tertiary); }
 
+/* Bloc COMPTABLE du compte d'exploitation : une seconde lecture des memes
+   annees, posee a droite de la premiere plutot qu'entremelee avec elle. Meme
+   grammaire que les blocs de tranche du prix de revient - un filet ouvre le
+   bloc, un fond discret le porte - pour que la vue tresorerie garde le premier
+   plan sans que la vue comptable soit releguee. */
+.tableau .col-comptable { background: var(--bg-secondary); color: var(--text-secondary); }
+.tableau .col-comptable--debut { border-left: 2px solid var(--border-color-strong); }
+.tableau thead th.col-comptable { background: var(--bg-tertiary); }
+.tableau tbody tr:hover td.col-comptable { background: var(--bg-tertiary); }
+/* Les colonnes de la vue tresorerie portent la lecture principale : elles
+   gardent l'encre pleine, le bloc comptable se lit ensuite. */
+#table-exploitation tbody td:nth-child(5),
+#table-exploitation tbody td:nth-child(6) { font-weight: 650; color: var(--text-primary); }
+
 /* ============================================================ BOUTONS */
 
 .bouton {
@@ -1666,20 +1680,22 @@ span.ressource__libelle {
         <div class="table-defilante">
           <table class="tableau" id="table-exploitation">
             <thead>
-              <!-- DEUX soldes, et non deux noms pour le meme : l'autofinancement
-                   deduit les annuites, le resultat comptable deduit les interets
-                   et la dotation aux amortissements a leur place. -->
+              <!-- DEUX vues, cote a cote et non entremelees. La vue TRESORERIE
+                   occupe les colonnes de gauche, dans leur ordre d'origine :
+                   c'est elle qu'on lit d'abord. La vue COMPTABLE forme un bloc
+                   a droite, ouvert par un filet - meme grammaire que les blocs
+                   de tranche du prix de revient. -->
               <tr>
                 <th>Période</th>
                 <th class="num">Produits</th>
                 <th class="num">Annuités</th>
-                <th class="num">dont intérêts</th>
                 <th class="num">Autres charges</th>
                 <th class="num">Autofinancement</th>
                 <th class="num">Cumul autofi.</th>
-                <th class="num">Dotation amort.</th>
-                <th class="num">Résultat comptable</th>
                 <th class="num">Marge</th>
+                <th class="num col-comptable col-comptable--debut">dont intérêts</th>
+                <th class="num col-comptable">Dotation amort.</th>
+                <th class="num col-comptable">Résultat comptable</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -8504,15 +8520,19 @@ function rendreExploitation(r) {
       const autresCharges = j.total_charges_eur - j.annuites_eur;
       const marques = (j.evenements ?? []).map((x) => `<span class="evenement">${att(x)}</span>`).join('');
       const classe = j.type === 'moyenne' ? 'ligne--moyenne' : marques ? 'ligne--rupture' : '';
+      // Vue TRESORERIE a gauche, vue COMPTABLE dans son bloc a droite.
+      const comptable = (v) =>
+        nul(v)
+          ? '<td class="num col-comptable">-</td>'
+          : `<td class="num col-comptable ${v < 0 ? 'montant--negatif' : ''}">${eur(v)}</td>`;
       return `<tr class="${classe}">
         <td>${att(j.libelle)}${marques}</td>
-        ${montant(j.total_produits_eur)}${montant(j.annuites_eur)}
-        <td class="num num--second">${nul(j.interets_eur) ? '-' : eur(j.interets_eur)}</td>
-        ${montant(autresCharges)}
+        ${montant(j.total_produits_eur)}${montant(j.annuites_eur)}${montant(autresCharges)}
         ${montant(j.autofinancement_eur)}${montant(j.cumul_autofinancement_eur)}
-        <td class="num num--second">${nul(j.dotation_amortissements_eur) ? '-' : eur(j.dotation_amortissements_eur)}</td>
-        ${nul(j.resultat_comptable_eur) ? '<td class="num">-</td>' : montant(j.resultat_comptable_eur)}
         <td class="num">${pct(j.taux_marge, 1)}</td>
+        <td class="num col-comptable col-comptable--debut">${nul(j.interets_eur) ? '-' : eur(j.interets_eur)}</td>
+        <td class="num col-comptable">${nul(j.dotation_amortissements_eur) ? '-' : eur(j.dotation_amortissements_eur)}</td>
+        ${comptable(j.resultat_comptable_eur)}
       </tr>`;
     })
     .join('');
@@ -8521,12 +8541,16 @@ function rendreExploitation(r) {
   $('#table-exploitation').querySelector('tfoot').innerHTML = `<tr>
       <td class="libelle">Cumul sur ${e.lignes.length} ans</td>
       ${montant(t.produits_eur)}${montant(t.annuites_eur)}
-      <td class="num num--second">${eur(t.interets_eur)}</td>
       ${montant(t.charges_eur - t.annuites_eur)}${montant(t.autofinancement_eur)}
-      <td></td>
-      <td class="num num--second">${nul(t.dotation_amortissements_eur) ? '-' : eur(t.dotation_amortissements_eur)}</td>
-      ${nul(t.resultat_comptable_eur) ? '<td class="num">-</td>' : montant(t.resultat_comptable_eur)}
-      <td></td></tr>`;
+      <td></td><td></td>
+      <td class="num col-comptable col-comptable--debut">${eur(t.interets_eur)}</td>
+      <td class="num col-comptable">${nul(t.dotation_amortissements_eur) ? '-' : eur(t.dotation_amortissements_eur)}</td>
+      ${
+        nul(t.resultat_comptable_eur)
+          ? '<td class="num col-comptable">-</td>'
+          : `<td class="num col-comptable ${t.resultat_comptable_eur < 0 ? 'montant--negatif' : ''}">${eur(t.resultat_comptable_eur)}</td>`
+      }
+    </tr>`;
 
   $('#aide-exploitation').textContent =
     vueExploitation === 'jalons'

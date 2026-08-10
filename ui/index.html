@@ -488,20 +488,22 @@
         <div class="table-defilante">
           <table class="tableau" id="table-exploitation">
             <thead>
-              <!-- DEUX soldes, et non deux noms pour le meme : l'autofinancement
-                   deduit les annuites, le resultat comptable deduit les interets
-                   et la dotation aux amortissements a leur place. -->
+              <!-- DEUX vues, cote a cote et non entremelees. La vue TRESORERIE
+                   occupe les colonnes de gauche, dans leur ordre d'origine :
+                   c'est elle qu'on lit d'abord. La vue COMPTABLE forme un bloc
+                   a droite, ouvert par un filet - meme grammaire que les blocs
+                   de tranche du prix de revient. -->
               <tr>
                 <th>Période</th>
                 <th class="num">Produits</th>
                 <th class="num">Annuités</th>
-                <th class="num">dont intérêts</th>
                 <th class="num">Autres charges</th>
                 <th class="num">Autofinancement</th>
                 <th class="num">Cumul autofi.</th>
-                <th class="num">Dotation amort.</th>
-                <th class="num">Résultat comptable</th>
                 <th class="num">Marge</th>
+                <th class="num col-comptable col-comptable--debut">dont intérêts</th>
+                <th class="num col-comptable">Dotation amort.</th>
+                <th class="num col-comptable">Résultat comptable</th>
               </tr>
             </thead>
             <tbody></tbody>

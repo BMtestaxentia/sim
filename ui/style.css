@@ -366,6 +366,20 @@ td.calc { text-align: right; }
    montants comparable d'un coup d'oeil. */
 .tableau td.num--second { color: var(--text-tertiary); }
 
+/* Bloc COMPTABLE du compte d'exploitation : une seconde lecture des memes
+   annees, posee a droite de la premiere plutot qu'entremelee avec elle. Meme
+   grammaire que les blocs de tranche du prix de revient - un filet ouvre le
+   bloc, un fond discret le porte - pour que la vue tresorerie garde le premier
+   plan sans que la vue comptable soit releguee. */
+.tableau .col-comptable { background: var(--bg-secondary); color: var(--text-secondary); }
+.tableau .col-comptable--debut { border-left: 2px solid var(--border-color-strong); }
+.tableau thead th.col-comptable { background: var(--bg-tertiary); }
+.tableau tbody tr:hover td.col-comptable { background: var(--bg-tertiary); }
+/* Les colonnes de la vue tresorerie portent la lecture principale : elles
+   gardent l'encre pleine, le bloc comptable se lit ensuite. */
+#table-exploitation tbody td:nth-child(5),
+#table-exploitation tbody td:nth-child(6) { font-weight: 650; color: var(--text-primary); }
+
 /* ============================================================ BOUTONS */
 
 .bouton {

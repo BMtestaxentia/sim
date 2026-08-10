@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { calculer, VERSION_MOTEUR } from '../src/moteur.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_2025.json'), 'utf8'));
+const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_her_2027.json'), 'utf8'));
 
 /** Operation de reference : 6 logements PLS en VEFA, calquee sur BERGERAC. */
 const ENTREES = {

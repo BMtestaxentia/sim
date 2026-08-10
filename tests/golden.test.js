@@ -113,7 +113,7 @@ describe('golden - BERGERAC LLS 6 PLS (matrice LEON 2025-042d)', () => {
 describe('golden - MULHOUSE 3308 LIBRE (annexe LEON, chaine complete)', () => {
   const attendus = fixture('mulhouse_3308_libre', 'attendus.json');
   const baremes = JSON.parse(
-    readFileSync(join(RACINE, 'referentiels', 'baremes_2025.json'), 'utf8'),
+    readFileSync(join(RACINE, 'referentiels', 'baremes_her_2027.json'), 'utf8'),
   );
   const trajectoires = JSON.parse(
     readFileSync(join(RACINE, 'referentiels', 'trajectoires_axentia_2026.json'), 'utf8'),
@@ -275,7 +275,7 @@ describe('golden - MULHOUSE 3308 LIBRE (annexe LEON, chaine complete)', () => {
  */
 describe('golden - MULHOUSE 3307 LLI (bilan et plan de financement)', () => {
   const attendus = fixture('mulhouse_3308_lli', 'attendus.json');
-  const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_2025.json'), 'utf8'));
+  const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_her_2027.json'), 'utf8'));
   const trajectoires = JSON.parse(
     readFileSync(join(RACINE, 'referentiels', 'trajectoires_axentia_2026.json'), 'utf8'),
   );

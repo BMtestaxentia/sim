@@ -250,13 +250,24 @@ export function calculer(entrees, referentiels) {
   // Elle sert de socle (chapitres, detail par poste) et la ventilation par
   // tranche la remplace des qu'il y a un programme.
   const bilan = prixDeRevient(
-    { code_produit: trancheUnique ?? codesPresents[0], postes: postesBilan, modulation_ttc_eur: modulation },
+    {
+      code_produit: trancheUnique ?? codesPresents[0],
+      postes: postesBilan,
+      modulation_ttc_eur: modulation,
+      // R-TVA-2 : le PLUS en quartier prioritaire releve du taux social.
+      qpv: identite.qpv === true,
+    },
     baremes,
   );
 
   if (codesPresents.length) {
     const ventilation = prixDeRevientVentile(
-      { postes: postesBilan, su_par_produit: suParProduit, modulation_ttc_eur: modulation },
+      {
+        postes: postesBilan,
+        su_par_produit: suParProduit,
+        modulation_ttc_eur: modulation,
+        qpv: identite.qpv === true,
+      },
       baremes,
     );
     // La ventilation fait FOI des qu'elle existe : elle applique a chaque tranche
@@ -843,6 +854,27 @@ export function calculer(entrees, referentiels) {
 
   // --- 8. Exploitation (R-EXP) ---
   const exp = entrees.exploitation ?? {};
+
+  // R-EXP-PGE - Assiette de la provision pour gros entretien (`SimPLUS!BK31`).
+  // En VEFA, c'est le prix de revient TTC tel quel. Hors VEFA, LEON en retranche
+  // ce qu'une provision pour gros entretien n'a pas a couvrir : une part du
+  // foncier, les frais d'acte et les frais financiers. Les postes retranches et
+  // leur quotite viennent du referentiel, jamais du code.
+  const cfgPGE = baremes.provision_gros_entretien ?? {};
+  const assiettePGE = (() => {
+    const total = bilan.total_ttc_module_eur;
+    const vefa = /vefa/i.test(String(identite.type_operation ?? ''));
+    if (vefa) return total;
+    const parId = {};
+    for (const p of bilan.postes ?? []) {
+      if (p.id) parId[p.id] = (parId[p.id] ?? 0) + (p.ttc_lasm_eur ?? p.ttc_eur ?? 0);
+    }
+    const deductions = (cfgPGE.assiette?.hors_vefa_deductions ?? []).reduce(
+      (s, d) => s + (parId[d.poste] ?? 0) * (d.quotite ?? 1),
+      0,
+    );
+    return arrondiEuro(Math.max(0, total - deductions));
+  })();
   const annuitesAplaties = amortissements.flatMap((a) =>
     a.tableau.map((l) => ({ annee: l.annee, annuite_eur: l.annuite_eur })),
   );
@@ -885,13 +917,9 @@ export function calculer(entrees, referentiels) {
     frais_gestion_pct_loyers: exp.frais_gestion_pct_loyers ?? 0,
     rel_annuel_eur: exp.rel_annuel_eur ?? 0,
     gros_entretien_eur_m2: exp.gros_entretien_eur_m2 ?? 0,
-    // R-EXP-PGE - Provision pour gros entretien (PCRC), en pourcentage du prix
-    // de revient. L'assiette par defaut est celle de LEON en VEFA
-    // (`SimPLUS!BK31`) : le prix de revient TTC apres modulation. Une assiette
-    // saisie prime, pour les montages ou LEON en retranche certains postes.
-    pge_taux: exp.pge_taux ?? 0,
+    pge_taux: exp.pge_taux ?? cfgPGE.taux_defaut ?? 0,
     pge_taux_par_annee: exp.pge_taux_par_annee ?? [],
-    pge_base_eur: exp.pge_base_eur ?? bilan.total_ttc_module_eur,
+    pge_base_eur: exp.pge_base_eur ?? assiettePGE,
     shab_m2: shabTotal,
     taux_vacance_impayes: exp.taux_vacance_impayes ?? 0,
     taux_produits_financiers: exp.taux_produits_financiers ?? 0,

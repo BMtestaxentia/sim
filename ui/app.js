@@ -22,12 +22,13 @@ import { calculer } from '../src/moteur.js';
 import { produitsOrdonnes } from '../src/produits.js';
 import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
 import { ecartsParametrage } from '../src/parametrage.js';
+import { tauxLASM } from '../src/bilan.js';
 
 const $ = (sel) => /** @type {HTMLElement} */ (document.querySelector(sel));
 
 // __REFERENTIELS_DEBUT__ (bloc remplace par des litteraux dans la version autonome)
 const referentiels = {
-  baremes: await (await fetch('../referentiels/baremes_2025.json')).json(),
+  baremes: await (await fetch('../referentiels/baremes_her_2027.json')).json(),
   // Profil EN VIGUEUR (HER 2027). Le profil precedent reste au depot : les
   // golden tests s'y adossent, ils reproduisent la matrice qui le portait.
   trajectoires: await (await fetch('../referentiels/trajectoires_her_2027.json')).json(),
@@ -207,38 +208,14 @@ const etat = {
   // surcharges sont portees par la SIMULATION et non par un reglage global -
   // une grille tarifaire modifiee doit voyager avec le dossier, sinon le meme
   // fichier rejoue ailleurs ne donnerait pas les memes annuites.
+  // AXENTIA HER 2027 EST le referentiel du depot : ses valeurs sont dans
+  // `baremes_her_2027.json` et `trajectoires_her_2027.json`, pas dans une
+  // surcharge. Ce profil de base ne surcharge donc rien, et n'est pas
+  // modifiable - editer un parametre en derive une copie.
   profils: [
-    { id: 'referentiel', nom: 'Référentiel du dépôt', parametrage: {} },
-    // Profil EN VIGUEUR, releve sur la matrice LEON 2026-043h (SIMTEST_BM_HAB,
-    // profil AXENTIA HER 2027 / PMT2026). Il est actif par defaut : c'est avec
-    // ces valeurs qu'on chiffre aujourd'hui. Le referentiel du depot reste la
-    // reference de comparaison, et les golden tests continuent de s'y adosser -
-    // ils reproduisent LEON 2025-042d, qui portait les valeurs precedentes.
-    {
-      id: 'her-2027',
-      nom: 'AXENTIA HER 2027 (en vigueur)',
-      parametrage: {
-        baremes: {
-          // Loyers plafonds du millesime 2026 (ParaGEN!D22:G24 et D56:H59).
-          loyers_max_zone_123: {
-            annee_reference: 2026,
-            PLUS: [7.4, 6.49, 6.01, 7.85],
-            PLAI: [6.57, 5.77, 5.33, 7.0],
-          },
-          loyers_max_zone_ABC: {
-            annee_reference: 2026,
-            PLS: [11.8, 15.32, 10.17, 9.74, 9.03],
-            PLI: [14.64, 19.71, 11.8, 10.26, 10.26],
-            PSLA_plafond_loyer: [11.87, 15.46, 10.24, 9.83, 9.09],
-            PSLA_plafond_prix_vente_ht: [4423, 5837, 3542, 3269, 2857],
-          },
-          // Valeurs forfaitaires de la taxe d'amenagement (ParaGEN!B31:B32).
-          taxe_amenagement: { hors_idf: 892, idf: 1011 },
-        },
-      },
-    },
+    { id: 'referentiel', nom: 'AXENTIA HER 2027 (référentiel)', parametrage: {} },
   ],
-  profil_actif: 'her-2027',
+  profil_actif: 'referentiel',
   options: {},
 };
 
@@ -322,7 +299,33 @@ const OPTIONS_DIFFERE = [
   { v: 2, l: "2 - intérêts seuls" },
   { v: 1, l: "1 - rien n'est dû" },
 ];
-const TAUX_TVA = [0.055, 0.1, 0.2, 0];
+/**
+ * Taux de TVA qu'une ligne de prix de revient peut porter sur une tranche.
+ *
+ * Le taux social est propre au PRODUIT : 5,5 % existe sur du PLAI, pas sur du
+ * PLS. Proposer la meme liste partout laissait saisir un taux inexistant, et
+ * c'est ainsi qu'une tranche PLS se retrouvait a 5,5 %. La regle vit dans le
+ * moteur (R-TVA-2), l'ecran ne fait que la lire.
+ *
+ * Memoise : la liste ne depend que du produit et du referentiel, et la table du
+ * prix de revient la redemande une fois par cellule.
+ */
+function tauxProduit(code) {
+  // Le taux resolu par le MOTEUR, qui a deja fusionne le profil de parametres :
+  // le relire au referentiel brut ignorerait un taux regle a l'ecran.
+  const t = dernierResultat?.bilan?.taux_lasm_par_tranche?.[code];
+  if (t !== undefined) return t;
+  try {
+    return tauxLASM(code, referentiels.baremes, { qpv: etat.identite?.qpv === true });
+  } catch {
+    return referentiels.baremes.tva.taux_normal;
+  }
+}
+function tauxAdmis(code) {
+  const normal = referentiels.baremes.tva.taux_normal;
+  if (!code) return [0, normal];
+  return [...new Set([0, normal, tauxProduit(code)])].sort((a, b) => a - b);
+}
 
 // ---------------------------------------------------------------- utilitaires
 
@@ -1335,10 +1338,23 @@ function rendreTablePrixRevient() {
         : `<td><input type="text" inputmode="decimal" data-champ="postes_bilan.${i}.montant_ht_eur"
              data-type="montant" data-l="${l}" data-c="0" value="${valMontant(p.montant_ht_eur)}" /></td>`;
 
-      const selectTVA = (chemin, valeur, col) =>
-        `<select data-champ="${chemin}" data-type="nombre"${col === undefined ? '' : ` data-l="${l}" data-c="${col}"`}>
-          ${TAUX_TVA.map((v) => `<option value="${v}" ${v === valeur ? 'selected' : ''}>${(v * 100).toFixed(1)} %</option>`).join('')}
+      // Les taux proposes sont ceux qui EXISTENT pour la tranche visee : le taux
+      // social est propre au produit, 5,5 % n'a pas de sens sur du PLS. Un taux
+      // deja saisi hors liste y est ajoute plutot que perdu en silence - on ne
+      // reecrit pas une saisie sans le dire, la validation le signale.
+      const selectTVA = (chemin, valeur, col, code) => {
+        const admis = tauxAdmis(code);
+        const options = admis.includes(valeur) || nul(valeur) ? admis : [...admis, valeur].sort((a, b) => a - b);
+        return `<select data-champ="${chemin}" data-type="nombre"${col === undefined ? '' : ` data-l="${l}" data-c="${col}"`}>
+          ${options
+            .map(
+              (v) =>
+                `<option value="${v}" ${v === valeur ? 'selected' : ''}${admis.includes(v) ? '' : ' data-hors-bareme="1"'}>` +
+                `${(v * 100).toFixed(1)} %${admis.includes(v) ? '' : ' (hors barème)'}</option>`,
+            )
+            .join('')}
         </select>`;
+      };
 
       const cellulesTranches = parTranche
         ? codes
@@ -1359,8 +1375,9 @@ function rendreTablePrixRevient() {
                   (tva
                     ? `<td class="col-tranche${finBloc(c)}" ${style}>${selectTVA(
                         `postes_bilan.${i}.taux_tva_par_produit.${c}`,
-                        p.taux_tva_par_produit?.[c] ?? p.taux_tva,
+                        p.taux_tva_par_produit?.[c] ?? tauxProduit(c),
                         col + 1,
+                        c,
                       )}</td>`
                     : '')
                 );
@@ -1373,8 +1390,9 @@ function rendreTablePrixRevient() {
                 (tva
                   ? `<td class="col-tranche${finBloc(c)}" ${style}>${selectTVA(
                       `postes_bilan.${i}.taux_tva_par_produit.${c}`,
-                      p.taux_tva_par_produit?.[c] ?? p.taux_tva,
+                      p.taux_tva_par_produit?.[c] ?? tauxProduit(c),
                       col + 1,
+                      c,
                     )}</td>`
                   : '')
               );
@@ -1393,7 +1411,7 @@ function rendreTablePrixRevient() {
                  title="${ventile ? 'Regrouper en un total unique' : 'Ventiler ce montant sur les tranches'}">${ventile ? '↤' : '⇥'}</button>`
             : ''
         }</td>
-        ${tvaGlobale ? `<td>${selectTVA(`postes_bilan.${i}.taux_tva`, p.taux_tva, 1)}</td>` : ''}
+        ${tvaGlobale ? `<td>${selectTVA(`postes_bilan.${i}.taux_tva`, p.taux_tva, 1, codes[0])}</td>` : ''}
         ${cellulesTranches}
         <td class="calc" data-calc="tva"></td>
         <td class="calc" data-calc="ttc"></td>
@@ -3102,7 +3120,22 @@ function rafraichirTout() {
   rendreStructure();
   if (cible) afficherEcran(cible);
   recalculer();
+  // La STRUCTURE lit parfois le resultat du moteur - le taux de TVA par defaut
+  // d'une tranche, par exemple, qui vient du bareme fusionne. Rendue avant le
+  // calcul, elle affiche celui du coup precedent. On la redessine donc une fois
+  // le resultat connu, et seulement si ce resultat a change quelque chose
+  // qu'elle porte : sans cette garde, chaque frappe couterait deux rendus.
+  const empreinte = JSON.stringify(dernierResultat?.bilan?.taux_lasm_par_tranche ?? null);
+  if (empreinte !== empreinteTauxTVA) {
+    empreinteTauxTVA = empreinte;
+    rendreStructure();
+    if (cible) afficherEcran(cible);
+    recalculer();
+  }
 }
+
+/** Derniers taux de TVA par tranche rendus : voir `rafraichirTout`. */
+let empreinteTauxTVA = null;
 
 /** Bascule l'affichage vers un ecran, onglets et panneaux d'un seul tenant. */
 function afficherEcran(cible) {

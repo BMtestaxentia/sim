@@ -1,101 +1,232 @@
 {
-  "date_valeur": "2025-01-01",
-  "source": "LEON 2025-042d, onglet ParaGEN, profil AXENTIA HER 2026 (PMT 2025), extrait le 2026-08-04",
+  "date_valeur": "2026-01-01",
+  "source": "LEON 2026-043h (SIMTEST_BM_HAB), onglet ParaGEN, profil AXENTIA HER 2027 (PMT2026), extrait le 2026-08-10",
   "note": "Baremes reglementaires versionnes. Toutes les valeurs sont lues dans la matrice, aucune n'est inventee. Les cellules sources sont citees pour audit.",
-
   "loyers_max_zone_123": {
     "unite": "EUR/m2 SU/mois",
-    "annee_reference": 2025,
+    "annee_reference": 2026,
     "note_annee": "Millesime du bareme. Les plafonds sont revalorises au 1er janvier : simuler une mise en location posterieure avec ce millesime sous-estime les loyers, et le moteur le signale (R-LOYER-9).",
     "source": "ParaGEN!D22:G24 (plage LMZone_Neuf)",
-    "zones": ["zone_1", "zone_2", "zone_3", "zone_1bis"],
-    "PLUS":  [7.32, 6.42, 5.95, 7.77],
-    "PLAI":  [6.50, 5.71, 5.28, 6.93],
-    "LIBRE": [15.00, 11.00, 8.00, 18.00]
+    "zones": [
+      "zone_1",
+      "zone_2",
+      "zone_3",
+      "zone_1bis"
+    ],
+    "PLUS": [
+      7.4,
+      6.49,
+      6.01,
+      7.85
+    ],
+    "PLAI": [
+      6.57,
+      5.77,
+      5.33,
+      7
+    ],
+    "LIBRE": [
+      15,
+      11,
+      8,
+      18
+    ]
   },
-
   "loyers_max_zone_ABC": {
     "unite": "EUR/m2 SU/mois",
-    "annee_reference": 2025,
+    "annee_reference": 2026,
     "source": "ParaGEN!D56:H59",
-    "zones": ["A", "A_bis", "B1", "B2", "C"],
-    "PLS":  [11.68, 15.16, 10.07, 9.64, 8.94],
-    "PLI":  [14.49, 19.51, 11.68, 10.15, 10.15],
-    "PSLA_plafond_loyer": [11.75, 15.30, 10.13, 9.73, 9.00],
-    "PSLA_plafond_prix_vente_ht": [4675, 6170, 3744, 3269, 2857]
+    "zones": [
+      "A",
+      "A_bis",
+      "B1",
+      "B2",
+      "C"
+    ],
+    "PLS": [
+      11.8,
+      15.32,
+      10.17,
+      9.74,
+      9.03
+    ],
+    "PLI": [
+      14.64,
+      19.71,
+      11.8,
+      10.26,
+      10.26
+    ],
+    "PSLA_plafond_loyer": [
+      11.87,
+      15.46,
+      10.24,
+      9.83,
+      9.09
+    ],
+    "PSLA_plafond_prix_vente_ht": [
+      4423,
+      5837,
+      3542,
+      3269,
+      2857
+    ]
   },
-
   "valeurs_de_base": {
     "unite": "EUR/m2",
     "usage": "Assiette subvention (VB), MQECO ; selectionne par zone_123 x neuf/acquisition x collectif/individuel",
     "source": "ParaGEN!D36:G41",
-    "zones": ["zone_1", "zone_2", "zone_3", "zone_1bis"],
-    "neuf":        { "collectif": [1767, 1473, 1473, 1767], "individuel": [1767, 1619, 1619, 1767] },
-    "acquisition": { "collectif": [1767, 1382, 1382, 1767], "individuel": [1767, 1473, 1473, 1767] }
+    "zones": [
+      "zone_1",
+      "zone_2",
+      "zone_3",
+      "zone_1bis"
+    ],
+    "neuf": {
+      "collectif": [
+        1767,
+        1473,
+        1473,
+        1767
+      ],
+      "individuel": [
+        1767,
+        1619,
+        1619,
+        1767
+      ]
+    },
+    "acquisition": {
+      "collectif": [
+        1767,
+        1382,
+        1382,
+        1767
+      ],
+      "individuel": [
+        1767,
+        1473,
+        1473,
+        1767
+      ]
+    }
   },
-
   "taxe_amenagement": {
     "unite": "EUR/m2 (valeur forfaitaire)",
     "source": "ParaGEN!B31:B32 ; selection IdF si zone A ou A bis (calculs!B1254)",
-    "hors_idf": 930,
-    "idf": 1054,
-    "abattement_logement_social": 0.50,
+    "hors_idf": 892,
+    "idf": 1011,
+    "abattement_logement_social": 0.5,
     "abattement_source": "50 % reglementaire, applique via ParaGLOB!H54 dans l'assiette (calculs!B1255)"
   },
-
   "versement_sous_densite": {
     "plafond_valeur_terrain": 0.25,
     "part_valeur_terrain": 0.5,
     "source": "R-FISC-3 ; MIN(valeur_terrain/2 * (1 - SDP/(seuil*surface)), 25 % * valeur_terrain)"
   },
-
   "quotites_foncier_vefa": {
     "usage": "Ventilation d'un prix global en foncier/batiment. Ligne 'terrain' = quote-part terrain pour le pret foncier ; ligne 'ssf_pge' = quote-part pour l'assiette SSF et la valeur comptable terrain.",
     "source": "ParaGEN!C61:H69 (plage qpFonc_VEFA), mode de calcul du pret foncier : ParaGEN!A64 = 'global'",
-    "zones": ["A", "A_bis", "B1", "B2", "C"],
-    "terrain_vefa": [0.35, 0.45, 0.30, 0.25, 0.20],
-    "terrain_acq_amelioration": [0.35, 0.45, 0.30, 0.25, 0.20],
-    "valeur_comptable_terrain_vefa": [0.25, 0.25, 0.13, 0.13, 0.11],
-    "ssf_pge_acq_amelioration": [0.60, 0.60, 0.60, 0.60, 0.60]
+    "zones": [
+      "A",
+      "A_bis",
+      "B1",
+      "B2",
+      "C"
+    ],
+    "terrain_vefa": [
+      0.35,
+      0.45,
+      0.3,
+      0.25,
+      0.2
+    ],
+    "terrain_acq_amelioration": [
+      0.35,
+      0.45,
+      0.3,
+      0.25,
+      0.2
+    ],
+    "valeur_comptable_terrain_vefa": [
+      0.25,
+      0.25,
+      0.13,
+      0.13,
+      0.11
+    ],
+    "ssf_pge_acq_amelioration": [
+      0.6,
+      0.6,
+      0.6,
+      0.6,
+      0.6
+    ]
   },
-
   "prets_cdc": {
     "date_valeur": "2026-06-01",
     "source": "Calculette-production-LS-juin 2026.xlsx, feuille « Taux » (C11:C15)",
     "usage": "Grille tarifaire des prets sur fonds d'epargne. Le taux d'un pret CDC vaut Livret A + marge : seule la MARGE (le spread) est propre au produit, le Livret A est commun a toute l'operation.",
     "note": "Le Livret A retenu par le moteur est celui de la trajectoire (`taux_reference_livret_a`), pas le 1,50 % au 01/02/2026 de la calculette : deux simulations doivent pouvoir tourner sur des trajectoires differentes sans toucher a cette grille. Comme toute valeur de ce fichier, ces marges se surchargent par simulation via `entrees.parametrage.baremes` (R-PARAM, ecran Parametres).",
     "marges": {
-      "PLAI": { "valeur": -0.0020, "libelle": "PLAI", "source": "Taux!C11" },
-      "PLUS": { "valeur": 0.0060, "libelle": "PLUS", "source": "Taux!C12" },
+      "PLAI": {
+        "valeur": -0.002,
+        "libelle": "PLAI",
+        "source": "Taux!C11"
+      },
+      "PLUS": {
+        "valeur": 0.006,
+        "libelle": "PLUS",
+        "source": "Taux!C12"
+      },
       "PLUS_VERTES": {
-        "valeur": 0.0020,
+        "valeur": 0.002,
         "libelle": "PLUS constructions vertes",
         "source": "Taux!C15 ; guide d'utilisation B40 : s'applique au pret foncier ET au pret construction"
       },
-      "PLS": { "valeur": 0.0111, "libelle": "PLS et CPLS", "source": "Taux!C13" },
-      "PLI": { "valeur": 0.0140, "libelle": "PLI / LLI", "source": "Taux!C14" }
+      "PLS": {
+        "valeur": 0.0111,
+        "libelle": "PLS et CPLS",
+        "source": "Taux!C13"
+      },
+      "PLI": {
+        "valeur": 0.014,
+        "libelle": "PLI / LLI",
+        "source": "Taux!C14"
+      }
     }
   },
-
   "tva": {
-    "source": "calculs!B1223:B1228, ParaGLOB!J44/J46, ParaGEN!A77:H78",
-    "taux_reduit_simulation": 0.10,
-    "taux_normal": 0.20,
+    "source": "CGI art. 278 sexies et 278 sexies-0 A ; verifie contre bofip.impots.gouv.fr et le flash juridique Union sociale pour l habitat du 26/06/2024 sur les QPV",
+    "taux_reduit_simulation": 0.1,
+    "taux_normal": 0.2,
     "lasm_par_produit": {
-      "note": "Le PLAI releve de 5,5 %, le PLUS du taux reduit de 10 %. Arbitrage de Bastien du 06/08/2026 (Q-13 close) : LEON appliquait 10 % aux deux (ParaGLOB!J44), la maquette LEON REWORK (ADMIN!C48) distingue, et c'est elle qui fait foi. Les cles par produit priment sur `cle_lasm` (voir tauxLASM).",
+      "note": "Taux de TVA applicable a la livraison a soi-meme, par produit de financement. 5,5 % pour le PLAI (CGI 278 sexies, operations les plus sociales) ; 10 % pour le PLUS, le PLS et le logement intermediaire ; 20 % pour le libre. Le PLUS releve du taux de 5,5 % en quartier prioritaire ou sous convention de renouvellement urbain : c'est l'option  ci-dessous, et non un autre produit.",
       "PLAI": 0.055,
-      "PLUS": 0.10,
-      "PLUS_PLAI": 0.10,
+      "PLUS": 0.1,
+      "PLUS_PLAI": 0.1,
       "PLUS_CD": 0.055,
-      "PLS": 0.10,
-      "LLI_PLI": 0.10,
-      "LIBRE": 0.20,
-      "ACCESSION": 0.20,
-      "REHAB": 0.10,
+      "PLS": 0.1,
+      "LLI_PLI": 0.1,
+      "LIBRE": 0.2,
+      "ACCESSION": 0.2,
+      "REHAB": 0.1,
       "FOYER_PLUS": 0.055
+    },
+    "taux_reduit_social": 0.055,
+    "plus_en_qpv": {
+      "taux": 0.055,
+      "usage": "Taux applicable au PLUS en quartier prioritaire de la politique de la ville ou sous convention NPNRU. Active par l entree identite.qpv.",
+      "source": "CGI art. 278 sexies ; flash juridique USH n° 24 du 26/06/2024"
+    },
+    "taux_saisie_admissibles": {
+      "usage": "Taux qu une ligne de prix de revient peut porter sur une tranche donnee : le taux social du produit, le taux normal, et zero. Le taux reduit social d un AUTRE produit n y figure pas - 5,5 % sur du PLS n existe pas.",
+      "toujours": [
+        0,
+        0.2
+      ]
     }
   },
-
   "constantes_reglementaires": {
     "coefficient_surface_annexes": {
       "valeur": 0.5,
@@ -104,13 +235,29 @@
     },
     "coefficient_structure": {
       "source": "calculs!D91:D116",
-      "metropole_habitat": { "base": 0.77, "facteur_nl": 20, "formule": "CS = 0.77 * (1 + 20 * NL / SU)" },
-      "foyers": { "facteur_nl": 38 },
-      "dom": { "base": 0.685, "facteur_nl": 31, "formule": "CS = 0.685 * (31 * NL + SF) / SF" }
+      "metropole_habitat": {
+        "base": 0.77,
+        "facteur_nl": 20,
+        "formule": "CS = 0.77 * (1 + 20 * NL / SU)"
+      },
+      "foyers": {
+        "facteur_nl": 38
+      },
+      "dom": {
+        "base": 0.685,
+        "facteur_nl": 31,
+        "formule": "CS = 0.685 * (31 * NL + SF) / SF"
+      }
     },
     "majoration_plus_33": 0.33,
-    "majoration_loyers_depassement_plafonds": { "valeur": 0.33, "source": "COMMUN!B22" },
-    "marge_locale_plafond_defaut": { "valeur": 0.12, "source": "ParaPLUS!AD30 (saisi par simulation)" },
+    "majoration_loyers_depassement_plafonds": {
+      "valeur": 0.33,
+      "source": "COMMUN!B22"
+    },
+    "marge_locale_plafond_defaut": {
+      "valeur": 0.12,
+      "source": "ParaPLUS!AD30 (saisi par simulation)"
+    },
     "majoration_lcr": {
       "regle": "ratio < seuil_bas -> 0 ; ratio > seuil_haut -> majoration_au_dessus ; sinon ratio/100",
       "seuil_bas": 10,
@@ -119,23 +266,39 @@
       "source": "calculs!B152:B153"
     },
     "ssf": {
-      "seuil_participation_collectivites": 0.40,
-      "part_max_depassement": 0.50,
+      "seuil_participation_collectivites": 0.4,
+      "part_max_depassement": 0.5,
       "plafond_si_sous_seuil": "min(taux_depassement_plafonne * reference, part_max_depassement * depassement)",
-      "taux_subvention": { "neuf": 2, "neuf_dom": 3, "acq_amelioration": 0.4 },
-      "taux_depassement_plafonne": { "neuf": 1, "acq_amelioration": 0.2 },
+      "taux_subvention": {
+        "neuf": 2,
+        "neuf_dom": 3,
+        "acq_amelioration": 0.4
+      },
+      "taux_depassement_plafonne": {
+        "neuf": 1,
+        "acq_amelioration": 0.2
+      },
       "source": "calculs!D275:G276"
     },
     "prets_cdc_defauts": {
       "source": "SimPLUS!AL10:AP21",
-      "taux": { "PLUS": "LA + 0.006", "PLAI": "LA - 0.002" },
+      "taux": {
+        "PLUS": "LA + 0.006",
+        "PLAI": "LA - 0.002"
+      },
       "duree_construction_ans": 40,
-      "duree_foncier_ans": { "zones_B2_C": 50, "autres_zones": 60 },
+      "duree_foncier_ans": {
+        "zones_B2_C": 50,
+        "autres_zones": 60
+      },
       "revisabilite": "DOUBLE",
       "progressivite_axentia": -0.005,
       "premiere_echeance": "annee(mise_en_location) + 1 an (+0 si demembrement)"
     },
-    "controle_ratio_prets_cdc_min": { "valeur": 0.50, "source": "calculs!B1234:B1235" },
+    "controle_ratio_prets_cdc_min": {
+      "valeur": 0.5,
+      "source": "calculs!B1234:B1235"
+    },
     "tfpb": {
       "montant_par_logement_eur": 345,
       "duree_exoneration_defaut_ans": 25,
@@ -151,16 +314,18 @@
       }
     },
     "arrondi_prets": "milliers superieurs si option active (SimPLUS!AR26)",
-    "arrondi_cs_loyers": { "flag_global": "ParaGEN!B26 (NON chez AXENTIA)", "cs_decimales": 4, "loyers_decimales": 2 }
+    "arrondi_cs_loyers": {
+      "flag_global": "ParaGEN!B26 (NON chez AXENTIA)",
+      "cs_decimales": 4,
+      "loyers_decimales": 2
+    }
   },
-
   "fonds_propres": {
     "note": "R-FIN-7. REMUNERATION et RECONSTITUTION sont deux options INDEPENDANTES, et les quatre combinaisons se rencontrent : remuneres sans etre reconstitues (l'operation sert l'interet mais ne rend jamais le capital), reconstitues sans etre remuneres (le capital est rendu par parts egales), les deux (annuite d'amortissement classique, qui s'arrete au terme), ou ni l'un ni l'autre (reconstitution sur le seul autofinancement). Ces valeurs sont des HYPOTHESES d'organisme, pas des baremes reglementaires : elles se surchargent tranche par tranche.",
     "source": "Annexe LEON MULHOUSE 3308, `plan_financement.fonds_propres`. Elle porte les QUATRE combinaisons dans une seule operation : PLS et LOC1 a 2,5 % sur 30 ans, CD a 2,5 % sans duree, LIB sans taux sur 30 ans, PLI sans taux sur 35 ans, REH a 1,5 % sur 25 ans, PLUS et PLAI ni l'un ni l'autre.",
     "taux_remuneration_defaut": 0.025,
     "duree_reconstitution_defaut_ans": 30
   },
-
   "charges_exploitation": {
     "note": "Postes de charge du compte d'exploitation autres que les annuites, les frais de gestion, la TFPB et le gros entretien, qui ont leur propre entree. Reponse a la question Q-16. Chaque poste est une DONNEE : son assiette, sa valeur et sa trajectoire d'indexation se lisent ici, aucun n'est cable dans le code (lecon I-2). AUCUN n'est actif par defaut : c'est la saisie qui les active, sans quoi les fixtures existantes changeraient de resultat en silence.",
     "assiettes_admises": {
@@ -205,5 +370,36 @@
         "source": "cotisations_her_pmt2026.json, taux 2026 reconduit. L'assiette exacte reste a confirmer (la note HER dit « a confirmer (produits locatifs) »)."
       }
     ]
+  },
+  "provision_gros_entretien": {
+    "source": "SimPLUS!BH12 (taux), SimPLUS!BK31 (assiette), SimPLUS!DX15 (charge annuelle)",
+    "usage": "Provision pour gros entretien, dite aussi PCRC. PGE(N) = taux x assiette x cumul d'indexation du gros entretien. LEON la presente au m2 mais la SHAB se simplifie : ce n'est pas une grandeur au metre carre.",
+    "taux_defaut": 0.006,
+    "assiette": {
+      "vefa": "prix_revient_ttc",
+      "note": "Hors VEFA, LEON retranche du prix de revient TTC ce qu'une provision pour gros entretien n'a pas a couvrir : une part du foncier, les frais d'acte et les frais financiers.",
+      "hors_vefa_deductions": [
+        {
+          "poste": "cf_acquisition",
+          "quotite": 0.25,
+          "source": "BilTOTAL!S7 x 25 %"
+        },
+        {
+          "poste": "cf_notaire",
+          "quotite": 1,
+          "source": "BilTOTAL!S15"
+        },
+        {
+          "poste": "hon_interets_immobilisables",
+          "quotite": 1,
+          "source": "BilTOTAL!S50 (FRAIS FINANCIERS)"
+        },
+        {
+          "poste": "ff_interets_prefi",
+          "quotite": 1,
+          "source": "BilTOTAL!S68 (INTERETS PREFI. FORFAITES)"
+        }
+      ]
+    }
   }
 }

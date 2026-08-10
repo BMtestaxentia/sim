@@ -23,7 +23,7 @@ import { pretsDefautResolus } from '../src/produits.js';
 import { tauxLASM } from '../src/bilan.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_2025.json'), 'utf8'));
+const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_her_2027.json'), 'utf8'));
 const trajectoires = JSON.parse(
   readFileSync(join(RACINE, 'referentiels', 'trajectoires_axentia_2026.json'), 'utf8'),
 );

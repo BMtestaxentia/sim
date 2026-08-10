@@ -18,7 +18,7 @@ const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (p) => JSON.parse(readFileSync(join(RACINE, p), 'utf8'));
 
 const referentiels = {
-  baremes: lire('referentiels/baremes_2025.json'),
+  baremes: lire('referentiels/baremes_her_2027.json'),
   trajectoires: lire('referentiels/trajectoires_axentia_2026.json'),
 };
 

@@ -24,7 +24,7 @@
  * @typedef {Object} DefinitionProduit
  * @property {CodeProduit} code
  * @property {string} libelle
- * @property {string} cle_bareme_loyer   cle dans referentiels/baremes_2025.json (ex. 'PLUS')
+ * @property {string} cle_bareme_loyer   cle dans referentiels/baremes_her_2027.json (ex. 'PLUS')
  * @property {'123'|'ABC'} zonage        quel zonage indexe le bareme de loyer de ce produit
  * @property {string} [majoration_loyer] cle d'une majoration multiplicative du loyer de base
  * @property {string} cle_lasm           cle du taux LASM (ex. 'taux_reduit_simulation')
@@ -79,7 +79,7 @@ export const PRODUITS = {
   PLS: {
     code: 'PLS',
     libelle: 'PLS',
-    cle_bareme_loyer: 'PLS', // bareme par zone ABC (baremes_2025.json/loyers_max_zone_ABC)
+    cle_bareme_loyer: 'PLS', // bareme par zone ABC (baremes_her_2027.json/loyers_max_zone_ABC)
     zonage: 'ABC',
     cle_lasm: 'taux_reduit_simulation',
     coefficient_structure: true,

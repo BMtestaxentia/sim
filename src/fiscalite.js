@@ -5,7 +5,7 @@
  *
  * Sources : `SimPLUS!G37` (annee de fin d'exoneration TFPB),
  * `calculs!B1255:B1259` (assiette de taxe d'amenagement),
- * baremes_2025.json/taxe_amenagement et constantes_reglementaires.tfpb.
+ * baremes_her_2027.json/taxe_amenagement et constantes_reglementaires.tfpb.
  *
  * La duree d'exoneration est un PARAMETRE (irregularite I-7 : LEON la cable a
  * 25 ans a un endroit et lit « EXONERATION 2 » a un autre).

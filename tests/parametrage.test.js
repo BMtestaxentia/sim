@@ -16,11 +16,15 @@ import { normaliserTrajectoires } from '../src/trajectoires.js';
 import { calculer } from '../src/moteur.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_2025.json'), 'utf8'));
+const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_her_2027.json'), 'utf8'));
 const fichierTrajectoires = JSON.parse(
   readFileSync(join(RACINE, 'referentiels', 'trajectoires_axentia_2026.json'), 'utf8'),
 );
 const REFERENTIELS = { baremes, trajectoires: fichierTrajectoires };
+/** Plafond PLS en zone B1, lu au referentiel : il change a chaque millesime. */
+const PLAFOND_PLS_B1 = baremes.loyers_max_zone_ABC.PLS[2];
+/** Millesime du bareme de loyers, idem. */
+const MILLESIME = baremes.loyers_max_zone_ABC.annee_reference;
 
 const BASE = {
   identite: { zone_123: 2, zone_ABC: 'B1' },
@@ -135,7 +139,7 @@ describe('R-PARAM de bout en bout : la surcharge change le resultat', () => {
     expect(sur.indicateurs.loyers_annuels_eur).toBeGreaterThan(ref.indicateurs.loyers_annuels_eur);
     // Les autres zones du meme bareme n'ont pas bouge.
     expect(sur.parametrage.baremes_ecarts).toEqual([
-      { chemin: 'loyers_max_zone_ABC.PLS.2', referentiel: 10.07, applique: 12 },
+      { chemin: 'loyers_max_zone_ABC.PLS.2', referentiel: PLAFOND_PLS_B1, applique: 12 },
     ]);
   });
 
@@ -163,8 +167,8 @@ describe('R-PARAM de bout en bout : la surcharge change le resultat', () => {
       { ...BASE, parametrage: { baremes: { loyers_max_zone_ABC: { PLS: [null, null, 12] } } } },
       REFERENTIELS,
     );
-    expect(baremes.loyers_max_zone_ABC.PLS[2]).toBe(10.07);
-    expect(calculer(BASE, REFERENTIELS).loyers[0].loyer_base_eur_m2).toBe(10.07);
+    expect(baremes.loyers_max_zone_ABC.PLS[2]).toBe(PLAFOND_PLS_B1);
+    expect(calculer(BASE, REFERENTIELS).loyers[0].loyer_base_eur_m2).toBe(PLAFOND_PLS_B1);
   });
 });
 
@@ -172,41 +176,47 @@ describe('R-LOYER-9 - millesime du bareme de loyers', () => {
   /** Meme operation, mais avec la revalorisation dans son etat par defaut. */
   const AVEC = { ...BASE, options: {} };
   const SANS = BASE;
+  /** Annees a rattraper entre le millesime du bareme et la mise en location. */
+  const ANNEES = [];
+  for (let a = MILLESIME + 1; a <= 2028; a++) ANNEES.push(a);
+  const cumulIRL = () => {
+    const t = normaliserTrajectoires(fichierTrajectoires).par_poste.loyers_irl;
+    return ANNEES.reduce((c, a) => c * (1 + (t[a] ?? 0)), 1);
+  };
 
   it('revalorise PAR DEFAUT du millesime a la mise en location', () => {
-    // Bareme 2025 -> mise en location 2028 : trois annees d'IRL a rattraper.
-    const t = normaliserTrajectoires(fichierTrajectoires).par_poste.loyers_irl;
-    const cumul = [2026, 2027, 2028].reduce((c, a) => c * (1 + (t[a] ?? 0)), 1);
+    const cumul = cumulIRL();
     const avec = calculer(AVEC, REFERENTIELS);
     const sans = calculer(SANS, REFERENTIELS);
-    expect(sans.loyers[0].loyer_base_eur_m2).toBe(10.07); // le plafond du bareme
-    expect(avec.loyers[0].loyer_base_eur_m2).toBeCloseTo(Math.round(10.07 * cumul * 100) / 100, 2);
+    expect(sans.loyers[0].loyer_base_eur_m2).toBe(PLAFOND_PLS_B1); // le plafond du bareme
+    expect(avec.loyers[0].loyer_base_eur_m2).toBeCloseTo(Math.round(PLAFOND_PLS_B1 * cumul * 100) / 100, 2);
     expect(avec.indicateurs.loyers_annuels_eur).toBeGreaterThan(sans.indicateurs.loyers_annuels_eur);
   });
 
   it('nomme l ecart avec LEON, qui applique le bareme tel quel', () => {
-    const a = calculer(AVEC, REFERENTIELS).alertes.find((x) => /revalorises du millesime 2025/.test(x));
+    const a = calculer(AVEC, REFERENTIELS).alertes
+      .find((x) => new RegExp('revalorises du millesime ' + MILLESIME).test(x));
     expect(a).toBeDefined();
     expect(a).toMatch(/Ecart assume avec LEON/);
   });
 
   it('desactivee, chiffre ce que le millesime perime coute', () => {
-    const a = calculer(SANS, REFERENTIELS).alertes.find((x) => /Bareme de loyers 2025/.test(x));
+    const a = calculer(SANS, REFERENTIELS).alertes
+      .find((x) => new RegExp('Bareme de loyers ' + MILLESIME).test(x));
     expect(a).toBeDefined();
-    expect(a).toMatch(/3 ans de revalorisation/);
+    expect(a).toMatch(new RegExp(ANNEES.length + ' ans? de revalorisation'));
     expect(a).toMatch(/EUR de loyers annuels/);
   });
 
   it('ne touche QUE le plafond de zone, pas la marge locale', () => {
     // La marge locale est une saisie en euros du jour : elle n'a pas de
     // millesime a rattraper, et doit donc s'ajouter apres revalorisation.
-    const t = normaliserTrajectoires(fichierTrajectoires).par_poste.loyers_irl;
-    const cumul = [2026, 2027, 2028].reduce((c, a) => c * (1 + (t[a] ?? 0)), 1);
+    const cumul = cumulIRL();
     const r = calculer(
       { ...AVEC, loyers_par_produit: { PLS: { marge_locale_eur_m2: 1 } } },
       REFERENTIELS,
     );
-    expect(r.loyers[0].loyer_base_eur_m2).toBeCloseTo(Math.round((10.07 * cumul + 1) * 100) / 100, 2);
+    expect(r.loyers[0].loyer_base_eur_m2).toBeCloseTo(Math.round((PLAFOND_PLS_B1 * cumul + 1) * 100) / 100, 2);
   });
 
   it('se tait quand le bareme est au millesime de la mise en location', () => {
@@ -223,6 +233,6 @@ describe('R-LOYER-9 - millesime du bareme de loyers', () => {
       REFERENTIELS,
     );
     expect(r.alertes.some((x) => /millesime|Bareme de loyers/.test(x))).toBe(false);
-    expect(r.loyers[0].loyer_base_eur_m2).toBe(10.07);
+    expect(r.loyers[0].loyer_base_eur_m2).toBe(PLAFOND_PLS_B1);
   });
 });

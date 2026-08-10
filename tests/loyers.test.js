@@ -22,7 +22,7 @@ import {
 } from '../src/loyers.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_2025.json'), 'utf8'));
+const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_her_2027.json'), 'utf8'));
 
 describe('R-SURF-1 - surface utile', () => {
   it('SU = SHAB + 0,5 x annexes, arrondie a 2 decimales', () => {
@@ -88,17 +88,23 @@ describe('R-SURF-3 - quotes-parts de surface utile', () => {
 
 describe('R-LOYER - baremes et loyer pratique', () => {
   it('lit le bareme par zonage 1/2/3 pour PLUS et PLAI', () => {
-    expect(loyerMaxZone('PLUS', { zone_123: 2 }, baremes)).toBe(6.42);
-    expect(loyerMaxZone('PLAI', { zone_123: 1 }, baremes)).toBe(6.5);
+    // Les valeurs viennent du REFERENTIEL et ne sont pas recopiees : un bareme
+    // se revise chaque annee, et un test qui en fige les chiffres casse a chaque
+    // millesime sans rien dire du moteur. Ce qui se verifie ici, c'est que le
+    // bon zonage et la bonne colonne sont lus.
+    expect(loyerMaxZone('PLUS', { zone_123: 2 }, baremes)).toBe(baremes.loyers_max_zone_123.PLUS[1]);
+    expect(loyerMaxZone('PLAI', { zone_123: 1 }, baremes)).toBe(baremes.loyers_max_zone_123.PLAI[0]);
   });
 
   it('lit le bareme par zonage A/B/C pour PLS - le zonage est une propriete du produit', () => {
-    expect(loyerMaxZone('PLS', { zone_ABC: 'B1' }, baremes)).toBe(10.07);
-    expect(loyerMaxZone('PLS', { zone_ABC: 'C' }, baremes)).toBe(8.94);
+    expect(loyerMaxZone('PLS', { zone_ABC: 'B1' }, baremes)).toBe(baremes.loyers_max_zone_ABC.PLS[2]);
+    expect(loyerMaxZone('PLS', { zone_ABC: 'C' }, baremes)).toBe(baremes.loyers_max_zone_ABC.PLS[4]);
   });
 
   it('R-LOYER-1 : loyer de base = bareme + marge locale', () => {
-    expect(loyerDeBase({ code_produit: 'PLUS', zones: { zone_123: 2 }, marge_locale_eur_m2: 0.5 }, baremes)).toBe(6.92);
+    const plafond = baremes.loyers_max_zone_123.PLUS[1];
+    expect(loyerDeBase({ code_produit: 'PLUS', zones: { zone_123: 2 }, marge_locale_eur_m2: 0.5 }, baremes))
+      .toBeCloseTo(plafond + 0.5, 2);
   });
 
   it('PLUS 33 % applique x1,33 et non +0,33 (arbitrage I-6)', () => {
@@ -114,7 +120,7 @@ describe('R-LOYER - baremes et loyer pratique', () => {
       baremes,
     );
     expect(r.cs).toBe(1.0804);
-    expect(r.loyer_max_base_eur_m2).toBeCloseTo(1.0804 * 6.42, 2);
+    expect(r.loyer_max_base_eur_m2).toBeCloseTo(1.0804 * baremes.loyers_max_zone_123.PLUS[1], 2);
     expect(r.loyer_pratique_eur_m2).toBeCloseTo(r.loyer_max_base_eur_m2 * 1.05, 2);
     // Loyer annuel = 12 x SU x loyer
     expect(r.loyer_annuel_eur).toBe(Math.round(12 * 545.8 * r.loyer_pratique_eur_m2));

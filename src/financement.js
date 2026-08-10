@@ -5,7 +5,7 @@
  * Sources : `calculs!D327` (controle sur/sous-financement), `calculs!D336`
  * (solde a financer), `calculs!B338` (arrondi du pret aux milliers superieurs),
  * `calculs!B1281:B1287` (prix du foncier par quotites VEFA),
- * baremes_2025.json/quotites_foncier_vefa.
+ * baremes_her_2027.json/quotites_foncier_vefa.
  *
  * Unites : montants en euros.
  */

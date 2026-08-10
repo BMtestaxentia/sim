@@ -18,7 +18,7 @@ import { calendrierOperation, decalerMois } from '../src/calendrier.js';
 import { resoudreTaux, resoudreDuree, pretsDefautResolus, produitsOrdonnes } from '../src/produits.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_2025.json'), 'utf8'));
+const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_her_2027.json'), 'utf8'));
 const fichierTrajectoires = JSON.parse(
   readFileSync(join(RACINE, 'referentiels', 'trajectoires_axentia_2026.json'), 'utf8'),
 );
@@ -1222,5 +1222,55 @@ describe('R-FIN - plan de financement PAR TRANCHE', () => {
       .filter(Boolean)
       .reduce((s, ch) => s + ch.ttc_lasm_eur, 0);
     expect(Math.abs(somme - t.prix_revient_ttc_eur)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('R-EXP-PGE - assiette de la provision, relevee sur SIMTEST_BM_HAB', () => {
+  const postes = [
+    { id: 'cf_acquisition', chapitre: 'charge_fonciere', libelle: 'Terrain', montant_ht_eur: 500000, taux_tva: 0.055 },
+    { id: 'cf_notaire', chapitre: 'charge_fonciere', libelle: 'Notaire', montant_ht_eur: 7100, taux_tva: 0.2 },
+    { id: 'ff_interets_prefi', chapitre: 'frais_financiers', libelle: 'Préfi', montant_ht_eur: 40000, taux_tva: 0 },
+    { chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1200000, taux_tva: 0.1 },
+  ];
+  const op = (type_operation) => ({
+    ...BASE,
+    identite: { zone_123: 2, zone_ABC: 'B1', type_operation },
+    dates: { annee_mise_en_location: 2028, duree_simulation_ans: 5 },
+    postes_bilan: postes,
+    prets: [],
+  });
+
+  it('EN VEFA : le prix de revient TTC tel quel', () => {
+    const r = calculer(op('VEFA'), REFERENTIELS);
+    const taux = baremes.provision_gros_entretien.taux_defaut;
+    expect(r.exploitation.lignes[0].gros_entretien_eur)
+      .toBe(Math.round(r.bilan.total_ttc_module_eur * taux));
+  });
+
+  it('HORS VEFA : moins un quart du foncier, les frais d acte et les frais financiers', () => {
+    // `SimPLUS!BK31` : une provision pour gros entretien n'a pas a couvrir le
+    // terrain, l'acte ni le portage. Les postes retranches viennent du
+    // referentiel, pas du code.
+    const r = calculer(op('Neuf'), REFERENTIELS);
+    const ttc = Object.fromEntries(
+      r.bilan.postes.filter((p) => p.id).map((p) => [p.id, p.ttc_lasm_eur]),
+    );
+    const attendue =
+      r.bilan.total_ttc_module_eur
+      - 0.25 * ttc.cf_acquisition
+      - ttc.cf_notaire
+      - ttc.ff_interets_prefi;
+    const taux = baremes.provision_gros_entretien.taux_defaut;
+    expect(r.exploitation.lignes[0].gros_entretien_eur).toBe(Math.round(attendue * taux));
+    // Et elle est bien INFERIEURE a celle d'une VEFA de meme prix de revient.
+    const vefa = calculer(op('VEFA'), REFERENTIELS);
+    expect(r.exploitation.lignes[0].gros_entretien_eur)
+      .toBeLessThan(vefa.exploitation.lignes[0].gros_entretien_eur);
+  });
+
+  it('s indexe ensuite sur la trajectoire de gros entretien', () => {
+    const r = calculer(op('VEFA'), REFERENTIELS);
+    const l = r.exploitation.lignes;
+    expect(l[4].gros_entretien_eur).toBeGreaterThan(l[0].gros_entretien_eur);
   });
 });

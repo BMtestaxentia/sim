@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
-  ventilerPoste, tauxLASM, prixDeRevient, prixDeRevientVentile, ventilerParQuotePart,
+  ventilerPoste, tauxLASM, tauxTVAAdmissibles, prixDeRevient, prixDeRevientVentile, ventilerParQuotePart,
 } from '../src/bilan.js';
 import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
 import { agregerSubventions, surchargeFonciere, subventionEtat } from '../src/subventions.js';
@@ -27,7 +27,7 @@ import {
 } from '../src/fiscalite.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_2025.json'), 'utf8'));
+const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_her_2027.json'), 'utf8'));
 
 const POSTES = [
   { chapitre: 'charge_fonciere', libelle: 'Acquisition VEFA', montant_ht_eur: 1000000, taux_tva: 0.055 },
@@ -265,13 +265,17 @@ describe('R-FISC - fiscalite', () => {
 
   it('R-FISC-2 : assiette de taxe d amenagement avec abattement de 50 %', () => {
     const r = taxeAmenagement({ sdp_m2: 1000, taux_commune: 0.05, taux_departement: 0.025 }, baremes);
-    expect(r.valeur_forfaitaire_eur_m2).toBe(930);
-    expect(r.assiette_eur).toBe(465000); // 1000 x 0,5 x 930
-    expect(r.montant_eur).toBe(Math.round(465000 * 0.075));
+    // Valeur forfaitaire lue au referentiel : elle est revisee chaque annee, et
+    // la figer ici casserait le test a chaque millesime sans rien dire du calcul.
+    const vf = baremes.taxe_amenagement.hors_idf;
+    expect(r.valeur_forfaitaire_eur_m2).toBe(vf);
+    expect(r.assiette_eur).toBe(1000 * 0.5 * vf);
+    expect(r.montant_eur).toBe(Math.round(1000 * 0.5 * vf * 0.075));
   });
 
   it('R-FISC-2 : valeur forfaitaire majoree en Ile-de-France', () => {
-    expect(taxeAmenagement({ sdp_m2: 1000, idf: true }, baremes).valeur_forfaitaire_eur_m2).toBe(1054);
+    expect(taxeAmenagement({ sdp_m2: 1000, idf: true }, baremes).valeur_forfaitaire_eur_m2)
+      .toBe(baremes.taxe_amenagement.idf);
   });
 
   it('R-FISC-3 : pas de VSD sans seuil de densite institue', () => {
@@ -405,5 +409,88 @@ describe('arrondi conservant la somme (R-CONV)', () => {
 
   it('gere les valeurs deja entieres', () => {
     expect(arrondirEnConservantLaSomme([10, 20, 30])).toEqual([10, 20, 30]);
+  });
+});
+
+describe('R-TVA-2 - taux applicables par produit (CGI 278 sexies)', () => {
+  it('le taux social est celui du PRODUIT, pas une liste commune', () => {
+    // 5,5 % pour le PLAI, 10 % pour le PLUS et le PLS, 20 % pour le libre.
+    expect(tauxLASM('PLAI', baremes)).toBe(0.055);
+    expect(tauxLASM('PLUS', baremes)).toBe(0.1);
+    expect(tauxLASM('PLS', baremes)).toBe(0.1);
+    expect(tauxLASM('LOC', baremes)).toBe(0.1);
+    expect(tauxLASM('LIBRE', baremes)).toBe(0.2);
+  });
+
+  it('le PLUS en quartier prioritaire releve du taux social de 5,5 %', () => {
+    // Condition de LOCALISATION, pas autre produit : le PLS reste a 10 % en QPV.
+    expect(tauxLASM('PLUS', baremes, { qpv: true })).toBe(0.055);
+    expect(tauxLASM('PLS', baremes, { qpv: true })).toBe(0.1);
+    expect(tauxLASM('PLAI', baremes, { qpv: true })).toBe(0.055);
+  });
+
+  it('5,5 % n existe pas sur du PLS : la liste des taux saisissables le refuse', () => {
+    expect(tauxTVAAdmissibles('PLS', baremes)).toEqual([0, 0.1, 0.2]);
+    expect(tauxTVAAdmissibles('PLAI', baremes)).toEqual([0, 0.055, 0.2]);
+    expect(tauxTVAAdmissibles('PLUS', baremes)).toEqual([0, 0.1, 0.2]);
+    expect(tauxTVAAdmissibles('PLUS', baremes, { qpv: true })).toEqual([0, 0.055, 0.2]);
+    // Le taux normal et le taux nul restent partout : des honoraires se
+    // facturent a 20 %, une taxe ne porte pas de TVA.
+    for (const p of ['PLAI', 'PLUS', 'PLS', 'LOC', 'LIBRE']) {
+      const t = tauxTVAAdmissibles(p, baremes);
+      expect(t, p).toContain(0);
+      expect(t, p).toContain(0.2);
+    }
+  });
+});
+
+describe('R-TVA-2 - le taux par defaut d une tranche est celui de SON produit', () => {
+  const deuxTranches = (poste) =>
+    prixDeRevientVentile({ postes: [poste], su_par_produit: { PLAI: 500, PLS: 500 } }, baremes);
+
+  it('chaque tranche prend le taux de son produit, pas celui de la ligne', () => {
+    // Cas signale par Bastien : une ligne a 5,5 % faisait apparaitre 5,5 % sur
+    // la part PLS, taux qui n'existe pas pour ce produit.
+    const r = deuxTranches({ chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 200000, taux_tva: 0.055 });
+    expect(r.postes[0].par_tranche.PLAI.taux_tva).toBe(0.055);
+    expect(r.postes[0].par_tranche.PLS.taux_tva).toBe(0.1);
+  });
+
+  it('le taux du produit prime meme quand celui de la ligne serait admissible', () => {
+    // Le taux de la tranche se regle a l ecran des parametres, et de la seule
+    // saisie de la ligne on ne peut pas deduire qu il vaut pour tous les
+    // produits. Une ligne a 20 % qui doit le rester se saisit tranche par tranche.
+    const r = deuxTranches({ chapitre: 'honoraires', libelle: 'Archi', montant_ht_eur: 100000, taux_tva: 0.2 });
+    expect(r.postes[0].par_tranche.PLAI.taux_tva).toBe(0.055);
+    expect(r.postes[0].par_tranche.PLS.taux_tva).toBe(0.1);
+  });
+
+  it('un taux regle au referentiel se propage aux lignes du produit', () => {
+    // « Si je mets 17 % de TVA au PLS dans les parametres, ca s applique par
+    // defaut a mes lignes de cout PLS. »
+    const surcharge = JSON.parse(JSON.stringify(baremes));
+    surcharge.tva.lasm_par_produit.PLS = 0.17;
+    const r = prixDeRevientVentile(
+      { postes: [{ chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 200000, taux_tva: 0.055 }],
+        su_par_produit: { PLAI: 500, PLS: 500 } },
+      surcharge,
+    );
+    expect(r.postes[0].par_tranche.PLS.taux_tva).toBe(0.17);
+    expect(r.postes[0].par_tranche.PLAI.taux_tva).toBe(0.055);
+  });
+
+  it('une saisie EXPRESSE sur la tranche prime sur le taux du produit', () => {
+    const r = deuxTranches({
+      chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 200000,
+      taux_tva: 0.1, taux_tva_par_produit: { PLS: 0.2 },
+    });
+    expect(r.postes[0].par_tranche.PLS.taux_tva).toBe(0.2);
+  });
+
+  it('un poste HORS CHAMP de la LASM garde son taux de saisie', () => {
+    // Il est en dehors du regime du produit : lui appliquer le taux de ce
+    // produit n aurait pas de sens (annexes MULHOUSE, Q-24).
+    const r = deuxTranches({ chapitre: 'batiment', libelle: 'T', montant_ht_eur: 100000, taux_tva: 0, hors_lasm: true });
+    expect(r.postes[0].par_tranche.PLS.taux_tva).toBe(0);
   });
 });

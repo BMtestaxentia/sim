@@ -103,7 +103,7 @@ const moteur = morceaux
 
 // --- Referentiels inlines a la place du bloc fetch ---
 const referentiels = {
-  baremes: JSON.parse(lire('referentiels', 'baremes_2025.json')),
+  baremes: JSON.parse(lire('referentiels', 'baremes_her_2027.json')),
   trajectoires: JSON.parse(lire('referentiels', 'trajectoires_her_2027.json')),
   nomenclature_pdr: JSON.parse(lire('referentiels', 'nomenclature_pdr.json')),
   zonage_abc: JSON.parse(lire('referentiels', 'zonage_abc_communes.json')),

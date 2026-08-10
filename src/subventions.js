@@ -4,7 +4,7 @@
  * gratuite et affectation.
  *
  * Sources : `calculs!B254:B264` (SLA), `calculs!D274:B292` (SSF),
- * `calculs!D295:D314` (gratuite / affectation), baremes_2025.json/ssf.
+ * `calculs!D295:D314` (gratuite / affectation), baremes_her_2027.json/ssf.
  *
  * Unites : montants en euros, taux en fraction.
  */

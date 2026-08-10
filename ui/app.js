@@ -2836,7 +2836,15 @@ function rendreExploitation(r) {
   $('#table-exploitation').querySelector('tbody').innerHTML = rangs
     .map((j) => {
       const autresCharges = j.total_charges_eur - j.annuites_eur;
-      const marques = (j.evenements ?? []).map((x) => `<span class="evenement">${att(x)}</span>`).join('');
+      // Une PASTILLE et non les libelles en clair. Cinq echeances la meme annee
+      // faisaient cinq etiquettes empilees dans la cellule, et cette ligne-la
+      // devenait dix fois plus haute que ses voisines : la colonne des annees
+      // n'etait plus une colonne, et l'oeil perdait l'alignement des chiffres.
+      // Le detail se lit au survol, et en toutes lettres sous le graphe.
+      const ev = j.evenements ?? [];
+      const marques = ev.length
+        ? `<span class="evenement" title="${att(ev.join(' · '))}">${ev.length > 1 ? ev.length : '●'}</span>`
+        : '';
       const classe = j.type === 'moyenne' ? 'ligne--moyenne' : marques ? 'ligne--rupture' : '';
       // Vue TRESORERIE a gauche, vue COMPTABLE dans son bloc a droite.
       const comptable = (v) =>

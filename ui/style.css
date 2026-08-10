@@ -1176,11 +1176,18 @@ span.ressource__libelle {
   font-size: 11.5px; color: var(--text-tertiary);
 }
 
+/* Marque de rupture : une pastille de taille FIXE, jamais un libelle. Les
+   libelles s'empilaient dans la cellule et la ligne enflait a proportion du
+   nombre d'echeances - la colonne des annees cessait d'en etre une. Ici la
+   hauteur ne bouge pas, quel que soit le nombre d'evenements ; le detail se lit
+   au survol, et en toutes lettres sous le graphe. */
 .evenement {
-  display: inline-block; margin-left: 7px;
-  font-size: 9.5px; font-weight: 700; padding: 1px 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-left: 7px; width: 16px; height: 16px; vertical-align: middle;
+  font-size: 9.5px; font-weight: 700; line-height: 1;
   border-radius: var(--radius-pill);
-  background: var(--warning-bg); color: var(--warning-text);
+  background: var(--warning-accent); color: var(--bg-primary);
+  cursor: help;
 }
 .ligne--rupture td { background: color-mix(in srgb, var(--warning-accent) 8%, transparent); }
 .ligne--moyenne td { color: var(--text-tertiary); font-style: italic; }

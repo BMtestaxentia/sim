@@ -1071,20 +1071,20 @@ export function calculer(entrees, referentiels) {
   exploitation.fonds_propres_par_tranche = fondsPropresParTranche;
   exploitation.annuite_fonds_propres_eur = annuiteFPTotale;
 
-  // En transparence, la redevance vaut la somme des charges (annexe RA44). Un
-  // taux de vacance la rabote donc SANS que les charges baissent : le compte
-  // sort en deficit permanent de ce taux, ce qui ressemble a un bug de modele
-  // alors que c'est une hypothese de saisie. Sous bail a gestionnaire la
-  // redevance est garantie et la vacance vaut zero.
+  // En transparence, la redevance vaut la somme des charges (annexe RA44), et le
+  // bailleur ne porte ni vacance ni impaye : le gestionnaire lui doit ces frais
+  // que les places soient occupees ou non. Le taux saisi est donc NEUTRALISE par
+  // le compte. On le dit quand meme : une valeur saisie qui ne produit rien doit
+  // etre signalee, sans quoi l'utilisateur la croirait prise en compte.
   if (
     (exp.mode ?? 'loyers') === 'redevance' &&
     (exp.mode_redevance ?? 'forfaitaire') === 'transparence' &&
     (exp.taux_vacance_impayes ?? 0) > 0
   ) {
     alertes.push(
-      `Redevance en transparence avec ${((exp.taux_vacance_impayes ?? 0) * 100).toFixed(1)} % de ` +
-        'vacance : la redevance refacture les charges mais la vacance en retranche une part, ' +
-        "d'ou un deficit permanent de ce meme taux. Mettre la vacance a 0 % sous bail a gestionnaire.",
+      `Redevance en transparence : les ${((exp.taux_vacance_impayes ?? 0) * 100).toFixed(1)} % de ` +
+        'vacance et impayes ne sont pas appliques. Sous bail a gestionnaire, la redevance ' +
+        'refacture les charges quelle que soit l’occupation - le risque est porte par le gestionnaire.',
     );
   }
   // Postes du compte que le moteur ne sait pas encore produire, listes pour que

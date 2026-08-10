@@ -606,7 +606,7 @@ describe('arrondirEnConservantLaSomme - total impose', () => {
   });
 });
 
-describe('Q-27 - la vacance en transparence est signalee, pas subie en silence', () => {
+describe('Q-27 - la vacance ne s applique pas en transparence, et on le dit', () => {
   const foyer = (exploitation) =>
     calculer(
       {
@@ -629,12 +629,18 @@ describe('Q-27 - la vacance en transparence est signalee, pas subie en silence',
     expect(r.alertes.some((a) => /transparence/.test(a))).toBe(false);
   });
 
-  it('avec vacance, le deficit permanent est annonce', () => {
+  it('avec vacance, le compte reste a l equilibre et le taux est signale', () => {
+    // Le bailleur refacture ses frais : le gestionnaire les lui doit que les
+    // places soient occupees ou non, donc la vacance ne le concerne pas. Le
+    // compte doit rester exactement equilibre, comme sans taux du tout.
     const r = foyer({ annuite_fonds_propres_eur: 4000, taux_vacance_impayes: 0.02 });
-    // Le deficit vaut exactement le taux de vacance applique a la redevance.
-    const l = r.exploitation.lignes[0];
-    expect(l.autofinancement_eur).toBeLessThan(0);
-    expect(Math.abs(l.autofinancement_eur)).toBe(Math.round(l.redevance_eur * 0.02));
+    const nu = foyer({ annuite_fonds_propres_eur: 4000 });
+    for (const [i, l] of r.exploitation.lignes.entries()) {
+      expect(l.autofinancement_eur, `année ${l.annee}`).toBe(0);
+      expect(l.redevance_eur, `année ${l.annee}`).toBe(nu.exploitation.lignes[i].redevance_eur);
+    }
+    // Neutralise n'est pas ignore : une valeur saisie sans effet se signale,
+    // sinon l'utilisateur la croit prise en compte.
     expect(r.alertes.some((a) => /transparence/.test(a) && /vacance/.test(a))).toBe(true);
   });
 

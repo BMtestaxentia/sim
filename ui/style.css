@@ -158,14 +158,29 @@ html, body {
 /* Ecran de tranche encadre par ses deux jauges : ce qu'elle coute a gauche, ce
    qui la finance a droite, a la meme echelle. C'est la barre d'equilibre du
    plan de financement, tournee d'un quart de tour et posee sur les bords. */
-.ecran--tranche { display: flex; align-items: stretch; gap: 14px; }
+.ecran--tranche { display: block; }
 .ecran--tranche[hidden] { display: none; }
-.ecran__corps { flex: 1; min-width: 0; }
+/* Les jauges sortent du flux (voir plus bas) : le corps leur reserve sa place
+   par une marge, sans quoi la saisie passerait dessous. */
+.ecran__corps { margin: 0 219px; min-width: 0; }
+/* FIXE, et non collante : une boite collante reste prisonniere de son conteneur
+   et se fait pousser vers le haut quand celui-ci se termine - au bas de la page,
+   les jauges glissaient sous le bandeau. Fixe, elles ignorent le defilement.
+   Le prix a payer est de les placer a la main : l'ecran est centre et plafonne a
+   1720 px, donc leur bord suit ce cadre tant qu'il y a la place, et retombe sur
+   la marge de page au-dela. */
 .jauge {
-  flex: 0 0 205px; align-self: flex-start;
-  /* Elle accompagne le defilement plutot que de s'etirer sur mille pixels :
-     l'equilibre reste lisible ou que l'on soit dans la saisie. */
-  position: sticky; top: 74px; height: calc(100vh - 110px);
+  position: fixed; top: 70px; bottom: 18px; width: 205px; z-index: 5;
+  --marge-page: 20px;
+  --bord-jauge: max(var(--marge-page), calc((100vw - 1720px) / 2 + var(--marge-page)));
+}
+.jauge[data-jauge='emplois'] { left: var(--bord-jauge); }
+.jauge[data-jauge='ressources'] { right: var(--bord-jauge); }
+@media (max-width: 1150px) {
+  /* La page se resserre a 12 px : les jauges suivent, sinon elles decolleraient
+     du cadre qu'elles bordent. */
+  .jauge { --marge-page: 12px; }
+  .ecran__corps { margin: 0 211px; }
 }
 /* La BARRE est rognee pour garder ses coins arrondis ; les ETIQUETTES doivent
    au contraire deborder vers l'exterieur. D'ou deux couches superposees, aux
@@ -477,11 +492,18 @@ td.calc { text-align: right; }
   letter-spacing: 0.05em; color: var(--text-tertiary);
   border-bottom: 1px solid var(--border-color);
 }
-/* Le LIBELLE d'une colonne chiffree se centre, la VALEUR reste calee a droite :
-   un intitule en petites capitales n'a pas de raison de suivre l'alignement des
-   nombres, qui eux doivent s'empiler pour se comparer. Plus specifique que la
-   regle `.num` qui suit, sans quoi elle l'emporterait. */
-.tableau th.num { text-align: center; }
+/* L'intitule d'une colonne chiffree se cale a DROITE, sur ses valeurs. Centre,
+   il flottait au milieu d'une colonne large pendant que les nombres s'alignaient
+   a son bord : le lecteur ne savait plus quel intitule coiffait quelle colonne.
+   Plus specifique que la regle `.num` qui suit, sans quoi elle l'emporterait. */
+.tableau th.num { text-align: right; }
+/* Entete triable : la fleche n'occupe la place que lorsqu'elle sert, sinon huit
+   colonnes reserveraient chacune un espace vide. Le survol seul signale que
+   l'entete repond. */
+.tableau th.tri { cursor: pointer; user-select: none; }
+.tableau th.tri:hover { color: var(--text-primary); }
+.tableau th.tri[aria-sort='ascending'], .tableau th.tri[aria-sort='descending'] { color: var(--info-text); }
+.tri__fleche:not(:empty) { margin-left: 4px; font-size: 8px; vertical-align: 1px; }
 .tableau td {
   padding: 5px 9px; border-bottom: 1px solid var(--border-color);
   color: var(--text-primary); vertical-align: middle;
@@ -531,6 +553,9 @@ td.calc { text-align: right; }
    separerait ce qu'il doit rassembler. */
 .col-tranche { background: color-mix(in srgb, var(--cat, var(--cat-6)) 9%, transparent); }
 .col-tranche--debut { border-left: 2px solid var(--cat, var(--cat-6)); }
+/* Le bloc se ferme comme il s'ouvre : sans ce filet, la derniere tranche coulait
+   dans les colonnes de total qui la suivent. */
+.col-tranche--fin { border-right: 2px solid var(--cat, var(--cat-6)); }
 /* Le survol de ligne ne doit pas effacer l'appartenance a une tranche. */
 .tableau tbody tr:hover td.col-tranche {
   background: color-mix(in srgb, var(--cat, var(--cat-6)) 16%, var(--bg-secondary));
@@ -700,20 +725,26 @@ td.calc { text-align: right; }
   min-width: 46px; text-align: right;
 }
 /* Cote emplois : une colonne de plus pour le HT, le TTC restant la valeur de
-   reference. Le libelle se tronque plutot que de pousser les nombres hors du
-   bloc - c'est la colonne la plus elastique des cinq. */
-.legende--detail .legende__item { grid-template-columns: 9px 1fr auto auto auto; }
+   reference. La grille est portee par la LISTE et non par chaque ligne, les
+   lignes s'y fondant par `display: contents` - une grille par ligne dimensionne
+   ses colonnes sur son seul contenu, et l'entete se calait alors sur la largeur
+   de ses propres mots au lieu de coiffer les nombres.
+   Le libelle se tronque plutot que de pousser les nombres hors du bloc : c'est
+   la colonne la plus elastique des cinq. */
+.legende--detail {
+  display: grid; grid-template-columns: 9px 1fr auto auto auto;
+  align-items: center; column-gap: 8px; row-gap: 3px;
+}
+.legende--detail .legende__item { display: contents; }
 .legende__libelle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .legende__ht {
-  font-variant-numeric: tabular-nums; color: var(--text-secondary);
-  min-width: 86px; text-align: right;
+  font-variant-numeric: tabular-nums; color: var(--text-secondary); text-align: right;
 }
-.legende--detail .legende__montant { min-width: 92px; text-align: right; }
-.legende__item--entete {
+.legende--detail .legende__montant { text-align: right; }
+.legende__item--entete > span {
   font-size: 9.5px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.05em; color: var(--text-tertiary);
-  padding-bottom: 3px; border-bottom: 1px solid var(--border-color);
-  margin-bottom: 2px;
+  padding-bottom: 2px; margin-bottom: 1px;
 }
 .legende__item--entete > span:nth-child(n + 3) { text-align: right; }
 

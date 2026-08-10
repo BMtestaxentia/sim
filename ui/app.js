@@ -315,6 +315,33 @@ function att(v) {
 const valNum = (v) => (nul(v) ? '' : v);
 
 /**
+ * Montants a la saisie : groupes par milliers, « 642 780 » et non « 642780 ».
+ *
+ * Un `<input type="number">` ne peut PAS l'afficher - il refuse toute valeur
+ * contenant un espace et vide la case. Les cellules de montant sont donc du
+ * TEXTE, avec `inputmode` pour garder le pave numerique sur mobile, et le
+ * groupement se fait ici. Corollaire : ce que le navigateur nous rend est une
+ * chaine ecrite a la francaise, qu'il faut relire avant de la donner au moteur.
+ */
+const fMontantSaisie = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
+const valMontant = (v) => (nul(v) ? '' : att(fMontantSaisie.format(v)));
+
+/**
+ * Relit un montant saisi. Tolere les espaces de groupement sous leurs trois
+ * formes - l'espace fine insecable qu'`Intl` produit en francais, l'insecable
+ * ordinaire d'un copier-coller depuis Excel, l'espace simple d'une frappe - et
+ * la virgule decimale.
+ * @returns {number|null|undefined} le montant, `null` si la case est vide,
+ *   `undefined` si la frappe n'est pas encore un nombre (« 12- », « , »).
+ */
+function lireMontant(texte) {
+  const net = String(texte ?? '').replace(/[\s   ]/g, '').replace(',', '.');
+  if (net === '') return null;
+  const n = Number(net);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
  * La TVA occupe une colonne par tranche : on doit pouvoir la replier.
  *
  * L'etat vit ICI et non dans la case a cocher : l'attribut `checked` du HTML ne
@@ -621,9 +648,9 @@ function rendreStructureTranches() {
               <div class="ligne ligne--ressource ligne--fp">
                 <div class="pret__entete">
                   <span class="ressource__libelle">Apport de la tranche</span>
-                  <input type="number" step="1" min="0" class="pret__montant"
-                    data-champ="fonds_propres_par_produit.${code}" data-type="nombre"
-                    value="${valNum(etat.fonds_propres_par_produit[code])}" />
+                  <input type="text" inputmode="decimal" class="pret__montant"
+                    data-champ="fonds_propres_par_produit.${code}" data-type="montant"
+                    value="${valMontant(etat.fonds_propres_par_produit[code])}" />
                 </div>
                 <div class="jetons">
                   <span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-fp="${code}">-</span></span>
@@ -687,8 +714,8 @@ function rendreStructureTranches() {
                       ({ s, i }) => `<div class="ligne ligne--ressource">
                 <div class="pret__entete">
                   <input type="text" class="ressource__libelle" data-champ="subventions.${i}.libelle" value="${att(s.libelle)}" />
-                  <input type="number" step="1" class="pret__montant" data-champ="subventions.${i}.montant_eur"
-                    data-type="nombre" value="${valNum(s.montant_eur)}" />
+                  <input type="text" inputmode="decimal" class="pret__montant" data-champ="subventions.${i}.montant_eur"
+                    data-type="montant" value="${valMontant(s.montant_eur)}" />
                   <span class="pret__actions">
                     <button type="button" class="bouton--supprimer" data-supprimer="subventions" data-index="${i}"
                       data-nom="${att(s.libelle)}" title="Supprimer">×</button>
@@ -774,8 +801,8 @@ function gabaritPret(p, i) {
       data-pret="${i}" style="--cat:${catProduit(p.produit)}">
       <div class="pret__entete">
         <input type="text" class="pret__libelle" data-champ="prets.${i}.libelle" value="${att(p.libelle)}" />
-        <input type="number" step="1" min="0" class="pret__montant" data-champ="prets.${i}.montant_eur"
-          data-type="nombre" data-montant-pret="${i}" value="${valNum(p.montant_eur)}"
+        <input type="text" inputmode="decimal" class="pret__montant" data-champ="prets.${i}.montant_eur"
+          data-type="montant" data-montant-pret="${i}" value="${valMontant(p.montant_eur)}"
           title="${auto ? 'Calculé pour équilibrer la tranche. Saisir un montant le fige.' : 'Montant figé'}" />
         <!-- data-structure : passer un pret en « autre » lui retire son
              indexation sur le Livret A, donc remplace sa cellule de marge par
@@ -872,10 +899,15 @@ function rendreStructureCharges() {
           data-type="booleen" data-structure="1" ${c.actif ? 'checked' : ''} /></td>
         <td>${att(ref.libelle)}</td>
         <td class="discret">${att(LIBELLES_ASSIETTE[ref.assiette] ?? ref.assiette)}</td>
-        <td class="cellule-valeur"><input type="number" step="${taux ? '0.001' : '1'}" min="0"
-          data-champ="exploitation.charges_diverses.${i}.valeur"
-          data-type="${taux ? 'pourcentage' : 'nombre'}"
-          value="${valNum(taux ? enPourcent(v) : v)}" ${c.actif ? '' : 'disabled'} />
+        <td class="cellule-valeur">${
+          taux
+            ? `<input type="number" step="0.001" min="0"
+          data-champ="exploitation.charges_diverses.${i}.valeur" data-type="pourcentage"
+          value="${valNum(enPourcent(v))}" ${c.actif ? '' : 'disabled'} />`
+            : `<input type="text" inputmode="decimal"
+          data-champ="exploitation.charges_diverses.${i}.valeur" data-type="montant"
+          value="${valMontant(v)}" ${c.actif ? '' : 'disabled'} />`
+        }
           ${taux ? '<span class="unite">%</span>' : '<span class="unite">€</span>'}</td>
         <td class="discret">${ref.index ? att(ref.index) : 'aucune'}</td>
         <td class="num calc" data-charge-montant="${ref.code}"></td>
@@ -963,6 +995,72 @@ function rendreBlocRedevance() {
   }
 }
 
+/**
+ * Tri de la table des lots : colonne cliquee et sens, ou `null` pour l'ordre de
+ * saisie. Etat purement visuel - il ne touche pas a `etat.lots`, qui reste dans
+ * son ordre d'origine. C'est ce qui permet au troisieme clic de le retrouver, et
+ * aux liaisons de saisie de continuer a pointer le bon lot : une ligne affiche
+ * l'index REEL de son lot, quelle que soit sa place a l'ecran.
+ * @type {{cle: string, sens: 'asc'|'desc'}|null}
+ */
+let triLots = null;
+
+/**
+ * Valeur de tri d'un lot, colonne par colonne. Les deux dernieres ne sont pas
+ * saisies mais calculees : elles se lisent dans le dernier resultat du moteur,
+ * et valent zero tant qu'il n'y en a pas.
+ */
+const VALEUR_TRI_LOT = {
+  numero: (lot, i) => i,
+  identifiant: (lot) => lot.identifiant ?? '',
+  batiment: (lot) => lot.batiment ?? '',
+  etage: (lot) => lot.etage ?? '',
+  typologie: (lot) => lot.typologie ?? '',
+  // Par rang reglementaire et non par ordre alphabetique : PLAI avant PLUS
+  // avant PLS, comme partout ailleurs dans l'outil.
+  code_produit: (lot) => ORDRE_PRODUITS.indexOf(lot.code_produit),
+  shab_m2: (lot) => Number(lot.shab_m2) || 0,
+  surfaces_annexes_m2: (lot) => Number(lot.surfaces_annexes_m2) || 0,
+  su: (lot, i) => dernierResultat?.surfaces?.detail?.[i]?.su_m2 ?? 0,
+  loyer: (lot, i) => {
+    const d = dernierResultat?.surfaces?.detail?.[i];
+    const l = dernierResultat?.loyers?.find((x) => x.code_produit === lot.code_produit);
+    return d && l ? d.su_m2 * l.loyer_pratique_eur_m2 : 0;
+  },
+};
+
+/**
+ * Lots dans leur ordre d'AFFICHAGE, chacun avec son index reel. Le tri est
+ * stable : a valeur egale, les lots restent dans leur ordre de saisie.
+ * @returns {Array<{lot: Object, i: number}>}
+ */
+function ordreAffichageLots() {
+  const lignes = etat.lots.map((lot, i) => ({ lot, i }));
+  const valeur = triLots && VALEUR_TRI_LOT[triLots.cle];
+  if (!valeur) return lignes;
+  const signe = triLots.sens === 'desc' ? -1 : 1;
+  return lignes.sort((a, b) => {
+    const va = valeur(a.lot, a.i);
+    const vb = valeur(b.lot, b.i);
+    const c =
+      typeof va === 'string'
+        ? va.localeCompare(String(vb), 'fr', { numeric: true, sensitivity: 'base' })
+        : va - vb;
+    return c * signe;
+  });
+}
+
+/** Fleche de tri et etat d'accessibilite sur les entetes cliquables. */
+function rendreEntetesTriLots() {
+  for (const th of document.querySelectorAll('#table-lots thead th[data-tri]')) {
+    const el = /** @type {HTMLElement} */ (th);
+    const actif = triLots?.cle === el.dataset.tri;
+    el.setAttribute('aria-sort', actif ? (triLots.sens === 'asc' ? 'ascending' : 'descending') : 'none');
+    const fleche = el.querySelector('.tri__fleche');
+    if (fleche) fleche.textContent = actif ? (triLots.sens === 'asc' ? '▲' : '▼') : '';
+  }
+}
+
 function rendreStructure() {
   // --- Programme : une ligne par LOT ---
   const optionsProduit = (selection) =>
@@ -970,11 +1068,17 @@ function rendreStructure() {
       .map((p) => `<option value="${p.code}" ${p.code === selection ? 'selected' : ''} ${p.v1 ? '' : 'disabled'}>${p.libelle}</option>`)
       .join('');
 
+  const lotsAffiches = ordreAffichageLots();
   $('#table-lots').querySelector('tbody').innerHTML = etat.lots.length
-    ? etat.lots
+    ? lotsAffiches
         .map(
-          (lot, i) => `<tr data-lot="${i}">
+          ({ lot, i }) => `<tr data-lot="${i}">
         <td class="num num-poste">${i + 1}</td>
+        <!-- L'ID est la reference du lot au plan de vente ou a l'EDD. Le N° a
+             gauche, lui, n'est qu'un rang de saisie : il bouge des qu'on
+             supprime une ligne, l'ID non. -->
+        <td><input type="text" class="lot__id" data-champ="lots.${i}.identifiant"
+          value="${att(lot.identifiant)}" placeholder="-" /></td>
         <td><input type="text" data-champ="lots.${i}.batiment" value="${att(lot.batiment)}" /></td>
         <td><input type="text" data-champ="lots.${i}.etage" value="${att(lot.etage)}" /></td>
         <td><select data-champ="lots.${i}.typologie">
@@ -990,7 +1094,8 @@ function rendreStructure() {
       </tr>`,
         )
         .join('')
-    : '<tr><td colspan="10" class="vide">Aucun lot. Utiliser le générateur ci-dessus ou « + lot ».</td></tr>';
+    : '<tr><td colspan="11" class="vide">Aucun lot. Utiliser le générateur ci-dessus ou « + lot ».</td></tr>';
+  rendreEntetesTriLots();
 
   // --- Onglets et ecrans de tranche, un par produit present ---
   rendreStructureTranches();
@@ -1037,18 +1142,22 @@ function rendreTablePrixRevient() {
   // TVA d'un meme produit se lisent alors comme un bloc, et deux tranches
   // voisines ne se confondent plus. Un filet colore ouvre chaque bloc, un fond
   // teinte le porte jusqu'au bas du tableau.
+  // Le bloc des tranches s'OUVRE sur un filet colore et se FERME sur le meme :
+  // sans le second, la derniere tranche debordait visuellement sur les colonnes
+  // de total qui la suivent.
+  const finBloc = (c) => (c === codes[codes.length - 1] ? ' col-tranche--fin' : '');
   const groupes = codes
     .map(
       (c) =>
-        `<th class="col-groupe" colspan="${tva ? 2 : 1}" style="--cat:${catProduit(c)}">` +
+        `<th class="col-groupe${finBloc(c)}" colspan="${tva ? 2 : 1}" style="--cat:${catProduit(c)}">` +
         `<span class="col-groupe__puce"></span>${att(libelleProduit(c))}</th>`,
     )
     .join('');
   const sousColonnes = codes
     .map(
       (c) =>
-        `<th class="num col-tranche col-tranche--debut" style="--cat:${catProduit(c)}">HT (€)</th>` +
-        (tva ? `<th class="num col-tranche" style="--cat:${catProduit(c)}">TVA</th>` : ''),
+        `<th class="num col-tranche col-tranche--debut${tva ? '' : finBloc(c)}" style="--cat:${catProduit(c)}">HT (€)</th>` +
+        (tva ? `<th class="num col-tranche${finBloc(c)}" style="--cat:${catProduit(c)}">TVA</th>` : ''),
     )
     .join('');
 
@@ -1106,8 +1215,8 @@ function rendreTablePrixRevient() {
       // Deux verites pour la meme grandeur, ce serait une de trop.
       const celluleTotal = ventile
         ? `<td class="num calc" data-calc="total" title="Somme des tranches">-</td>`
-        : `<td><input type="number" step="1" data-champ="postes_bilan.${i}.montant_ht_eur"
-             data-type="nombre" value="${valNum(p.montant_ht_eur)}" /></td>`;
+        : `<td><input type="text" inputmode="decimal" data-champ="postes_bilan.${i}.montant_ht_eur"
+             data-type="montant" value="${valMontant(p.montant_ht_eur)}" /></td>`;
 
       const selectTVA = (chemin, valeur) =>
         `<select data-champ="${chemin}" data-type="nombre">
@@ -1120,21 +1229,21 @@ function rendreTablePrixRevient() {
               const style = `style="--cat:${catProduit(c)}"`;
               // `--debut` porte le filet colore : il ouvre le bloc de la
               // tranche, il ne separe pas HT de sa TVA.
-              const deb = 'col-tranche col-tranche--debut';
+              const deb = `col-tranche col-tranche--debut${tva ? '' : finBloc(c)}`;
               if (!ventile) {
                 // Ligne non ventilee : on montre ce que la cle SU donnerait,
                 // en lecture seule. C'est un apercu, pas une saisie.
                 return (
                   `<td class="num calc ${deb}" ${style} data-apercu="${c}"></td>` +
-                  (tva ? `<td class="num calc col-tranche" ${style}></td>` : '')
+                  (tva ? `<td class="num calc col-tranche${finBloc(c)}" ${style}></td>` : '')
                 );
               }
               return (
-                `<td class="${deb}" ${style}><input type="number" step="1"
-                   data-champ="postes_bilan.${i}.montants_ht_par_produit.${c}" data-type="nombre"
-                   value="${valNum(p.montants_ht_par_produit?.[c])}" /></td>` +
+                `<td class="${deb}" ${style}><input type="text" inputmode="decimal"
+                   data-champ="postes_bilan.${i}.montants_ht_par_produit.${c}" data-type="montant"
+                   value="${valMontant(p.montants_ht_par_produit?.[c])}" /></td>` +
                 (tva
-                  ? `<td class="col-tranche" ${style}>${selectTVA(
+                  ? `<td class="col-tranche${finBloc(c)}" ${style}>${selectTVA(
                       `postes_bilan.${i}.taux_tva_par_produit.${c}`,
                       p.taux_tva_par_produit?.[c] ?? p.taux_tva,
                     )}</td>`
@@ -1168,9 +1277,9 @@ function rendreTablePrixRevient() {
       ? codes
           .map(
             (c) =>
-              `<td class="num col-tranche col-tranche--debut" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="ht_eur"></td>` +
+              `<td class="num col-tranche col-tranche--debut${tva ? '' : finBloc(c)}" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="ht_eur"></td>` +
               (tva
-                ? `<td class="num col-tranche" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="tva_eur"></td>`
+                ? `<td class="num col-tranche${finBloc(c)}" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="tva_eur"></td>`
                 : ''),
           )
           .join('')
@@ -1217,7 +1326,7 @@ function rendreValeurs(r) {
   }
   $('#table-lots').querySelector('tfoot').innerHTML = etat.lots.length
     ? `<tr>
-        <td colspan="5" class="libelle">Total - ${nb(ind.nb_logements)} logements</td>
+        <td colspan="6" class="libelle">Total - ${nb(ind.nb_logements)} logements</td>
         <td class="num">${nb(ind.shab_m2)}</td>
         <td class="num">${nb(ind.surfaces_annexes_m2)}</td>
         <td class="num">${nb(ind.su_m2)}</td>
@@ -1277,7 +1386,7 @@ function rendreValeurs(r) {
     // Il vaut bien zero, et le champ doit le dire : une case vide se lirait
     // comme « pas encore calcule ».
     const a = (r.financement?.prets_resolus ?? []).find((x) => x.code === etat.prets[i]?.code);
-    const v = String(Math.round(a?.montant_eur ?? 0));
+    const v = fMontantSaisie.format(Math.round(a?.montant_eur ?? 0));
     if (el.value !== v) el.value = v;
   }
 
@@ -1362,7 +1471,7 @@ function rendreValeurs(r) {
       // a gauche comme la jauge des emplois, les ressources a droite comme la
       // sienne. Ce qui coute et ce qui finance restent du meme cote partout.
       bandeau.innerHTML = [
-        tuile('Prix de revient', eur(t.prix_revient_ttc_eur), 'TTC / LASM de la tranche'),
+        tuile('Prix de revient', eur(t.prix_revient_ttc_eur), 'TTC de la tranche'),
         tuile('Programme', `${nb(t.nb_logements)} lgts`, `${nb(t.su_m2)} m² SU · ${pct(t.quote_part_su, 1)} de l’opération`),
         tuile('Loyer de sortie', l ? `${nb(l.loyer_pratique_eur_m2)} €` : '-', 'par m² SU et par mois'),
         tuile('Loyer annuel', l ? eur(l.loyer_annuel_eur) : '-', `coefficient de structure ${l ? nb(l.cs) : '-'}`),
@@ -1578,12 +1687,13 @@ function rendreValeurs(r) {
   const tvaVisible = afficherTVA();
   const parTr = codesTr.length > 1;
   const nbCols = 4 + (tvaVisible ? 1 : 0) + (parTr ? codesTr.length * (tvaVisible ? 2 : 1) : 0) + 2;
+  const finTr = (c) => (c === codesTr[codesTr.length - 1] ? ' col-tranche--fin' : '');
   const totauxTranches = parTr
     ? codesTr
         .map(
           (c) =>
-            `<td class="num col-tranche col-tranche--debut" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_ht_eur)}</td>` +
-            (tvaVisible ? `<td class="num col-tranche" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_tva_eur)}</td>` : ''),
+            `<td class="num col-tranche col-tranche--debut${tvaVisible ? '' : finTr(c)}" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_ht_eur)}</td>` +
+            (tvaVisible ? `<td class="num col-tranche${finTr(c)}" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_tva_eur)}</td>` : ''),
         )
         .join('')
     : '';
@@ -1597,7 +1707,7 @@ function rendreValeurs(r) {
       <td class="num">${eur(b.total_ttc_eur)}</td>
     </tr>
     <tr>
-      <td></td><td class="libelle">Base finançable (TTC / LASM)</td>
+      <td></td><td class="libelle">Base finançable (TTC)</td>
       <td colspan="${nbCols - 3}"></td>
       <td class="num">${eur(b.total_ttc_module_eur)}</td>
     </tr>
@@ -1694,7 +1804,7 @@ function rendreFinancement(r) {
   const legende = (segments, total, avecHT = false) => {
     const entete = avecHT
       ? `<div class="legende__item legende__item--entete" aria-hidden="true">
-        <span></span><span></span><span>HT</span><span>TTC / LASM</span><span>Part</span></div>`
+        <span></span><span></span><span>HT</span><span>TTC</span><span>Part</span></div>`
       : '';
     return (
       entete +
@@ -2352,7 +2462,13 @@ document.addEventListener('input', (ev) => {
   if (!chemin) return;
 
   let valeur;
-  if (el.dataset.type === 'nombre' || el.dataset.type === 'pourcentage') {
+  if (el.dataset.type === 'montant') {
+    // Une frappe intermediaire (« 12- », « , ») n'est pas encore un nombre : on
+    // la laisse a l'ecran sans rien ecrire, plutot que d'effacer la saisie.
+    const m = lireMontant(el.value);
+    if (m === undefined) return;
+    valeur = m;
+  } else if (el.dataset.type === 'nombre' || el.dataset.type === 'pourcentage') {
     // Un champ `number` en cours de frappe (« 40. » avant la decimale) expose une
     // valeur VIDE et signale `badInput`. Sans cette distinction, la frappe serait
     // interpretee comme un effacement et le chiffre deja saisi serait perdu.
@@ -2389,6 +2505,20 @@ document.addEventListener('input', (ev) => {
   else recalculer();
 });
 
+// Regroupement des milliers a la SORTIE du champ, jamais pendant la frappe :
+// reformater a chaque caractere deplacerait le curseur d'un cran a chaque
+// millier franchi. En capture, `blur` ne remontant pas.
+document.addEventListener(
+  'blur',
+  (ev) => {
+    const el = /** @type {HTMLInputElement} */ (ev.target);
+    if (el?.dataset?.type !== 'montant') return;
+    const m = lireMontant(el.value);
+    el.value = nul(m) || m === undefined ? '' : fMontantSaisie.format(m);
+  },
+  true,
+);
+
 document.addEventListener('change', (ev) => {
   // L'interrupteur de masquage change la STRUCTURE de la table, pas l'etat.
   const id = /** @type {HTMLElement} */ (ev.target).id;
@@ -2411,6 +2541,22 @@ document.addEventListener('click', (ev) => {
   const onglet = el.closest('[data-ecran]');
   if (onglet) {
     afficherEcran(/** @type {HTMLElement} */ (onglet).dataset.ecran);
+    return;
+  }
+
+  // Tri de la table des lots : ascendant, descendant, puis retour a l'ordre de
+  // saisie. Trois etats et non deux : sans le troisieme, on ne peut plus revenir
+  // a l'ordre dans lequel on a saisi, qui porte lui aussi du sens.
+  const enteteTri = el.closest('#table-lots thead th[data-tri]');
+  if (enteteTri) {
+    const cle = /** @type {HTMLElement} */ (enteteTri).dataset.tri;
+    triLots =
+      triLots?.cle !== cle
+        ? { cle, sens: 'asc' }
+        : triLots.sens === 'asc'
+          ? { cle, sens: 'desc' }
+          : null;
+    rafraichirTout();
     return;
   }
 

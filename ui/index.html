@@ -202,7 +202,7 @@
         <div class="champs" id="champs-redevance">
           <label class="champ" data-si-redevance="forfaitaire">
             <span>Redevance annuelle (€)</span>
-            <input type="number" step="1" min="0" data-champ="exploitation.redevance_annuelle_eur" data-type="nombre" />
+            <input type="text" inputmode="decimal" data-champ="exploitation.redevance_annuelle_eur" data-type="montant" />
           </label>
           <label class="champ" data-si-redevance="forfaitaire">
             <span>Année de valeur de la redevance</span>
@@ -269,16 +269,20 @@
         <div class="table-defilante">
           <table class="tableau tableau--saisie" id="table-lots">
             <thead>
+              <!-- Entetes cliquables : un clic trie, deux inversent, trois
+                   rendent l'ordre de saisie. Le tri ne touche qu'a l'affichage,
+                   jamais a l'ordre des lots. -->
               <tr>
-                <th class="num">N°</th>
-                <th>Bâtiment</th>
-                <th>Étage</th>
-                <th>Typologie</th>
-                <th>Financement</th>
-                <th class="num">SHAB (m²)</th>
-                <th class="num">Annexes (m²)</th>
-                <th class="num calc">SU (m²)</th>
-                <th class="num calc">Loyer (€/mois)</th>
+                <th class="num tri" data-tri="numero" aria-sort="none">N°<span class="tri__fleche"></span></th>
+                <th class="tri" data-tri="identifiant" aria-sort="none">ID<span class="tri__fleche"></span></th>
+                <th class="tri" data-tri="batiment" aria-sort="none">Bâtiment<span class="tri__fleche"></span></th>
+                <th class="tri" data-tri="etage" aria-sort="none">Étage<span class="tri__fleche"></span></th>
+                <th class="tri" data-tri="typologie" aria-sort="none">Typologie<span class="tri__fleche"></span></th>
+                <th class="tri" data-tri="code_produit" aria-sort="none">Financement<span class="tri__fleche"></span></th>
+                <th class="num tri" data-tri="shab_m2" aria-sort="none">SHAB (m²)<span class="tri__fleche"></span></th>
+                <th class="num tri" data-tri="surfaces_annexes_m2" aria-sort="none">Annexes (m²)<span class="tri__fleche"></span></th>
+                <th class="num calc tri" data-tri="su" aria-sort="none">SU (m²)<span class="tri__fleche"></span></th>
+                <th class="num calc tri" data-tri="loyer" aria-sort="none">Loyer (€/mois)<span class="tri__fleche"></span></th>
                 <th></th>
               </tr>
             </thead>
@@ -286,11 +290,6 @@
             <tfoot></tfoot>
           </table>
         </div>
-        <p class="aide">
-          ⚙ Un lot = un logement. Le coefficient de structure et le loyer se calculent sur la
-          <strong>tranche entière</strong> (règle R-SURF-2) : le loyer affiché par lot est celui de
-          sa tranche, appliqué à sa surface utile.
-        </p>
       </section>
 
       <section class="bloc">
@@ -355,7 +354,7 @@
                 <th class="num">Part</th>
                 <th class="num">HT</th>
                 <th class="num">Taux LASM</th>
-                <th class="num">TTC / LASM</th>
+                <th class="num">TTC</th>
               </tr>
             </thead>
             <tbody></tbody>

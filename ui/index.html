@@ -466,8 +466,13 @@
             <button type="button" class="bascule__option" data-vue-exploitation="annuel">Année par année</button>
           </span>
         </h2>
-        <div class="table-defilante">
-          <table class="tableau" id="table-exploitation">
+        <!-- PAS de conteneur defilant ici : il ferait une barre horizontale sur
+             une table qui tient dans la page, et surtout il enfermerait le
+             defilement vertical, ce qui empeche d'y figer les intitules. Le
+             compte se lit sur soixante lignes - les garder sous les yeux
+             compte plus que le repli d'une colonne sur un ecran etroit. -->
+        <div>
+          <table class="tableau tableau--entete-figee" id="table-exploitation">
             <thead>
               <!-- DEUX vues, cote a cote et non entremelees. La vue TRESORERIE
                    occupe les colonnes de gauche, dans leur ordre d'origine :

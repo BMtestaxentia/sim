@@ -437,11 +437,35 @@ td.calc { text-align: right; }
    gardent l'encre pleine, le bloc comptable se lit ensuite. */
 #table-exploitation tbody td:nth-child(5),
 #table-exploitation tbody td:nth-child(6) { font-weight: 650; color: var(--text-primary); }
-/* Aucun nombre ne se coupe : « 74,9 % » passait a la ligne et la table gagnait
-   une hauteur de rang pour rien, alors qu'il restait de la place a cote. Le
-   navigateur elargit la colonne au lieu de replier son contenu, et les autres
-   se resserrent - elles avaient du mou. */
-#table-exploitation th, #table-exploitation td { white-space: nowrap; }
+/* Seule la colonne de MARGE refuse le repli : « 74,9 % » y passait a la ligne et
+   la table gagnait une hauteur de rang pour rien. Le poser sur toutes les
+   cellules elargissait la table au-dela de son conteneur et faisait apparaitre
+   une barre de defilement horizontale pour un demi-caractere gagne. */
+#table-exploitation th:nth-child(7), #table-exploitation td:nth-child(7) {
+  white-space: nowrap;
+}
+/* La colonne de PERIODE ne porte qu'une annee : sans bride, c'est elle qui
+   absorbait tout le jeu de la table et ouvrait un vide de plusieurs centaines
+   de pixels avant le premier montant. Bornee, le jeu se repartit entre les
+   colonnes de chiffres, qui en ont l'usage. */
+#table-exploitation th:first-child, #table-exploitation td:first-child { width: 88px; }
+
+/* ---------- Intitules figes ----------
+   Un compte de soixante lignes se lit en faisant defiler la page, et l'on perd
+   de vue a quoi correspond la colonne qu'on suit. Les intitules restent donc
+   colles sous le bandeau de l'application. `top` vaut sa hauteur : au-dessus,
+   ils passeraient dessous ; en dessous, ils flotteraient. */
+.tableau--entete-figee thead th {
+  position: sticky; top: 58px; z-index: 5;
+  background: var(--bg-primary);
+}
+.tableau--entete-figee thead th.col-comptable { background: var(--bg-tertiary); }
+/* Le filet du bas voyage avec l'entete : sans lui, les chiffres semblent
+   remonter dans les intitules au moment ou ils passent dessous. */
+.tableau--entete-figee thead th::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0;
+  border-bottom: 1px solid var(--border-color-strong);
+}
 
 /* ============================================================ BOUTONS */
 
@@ -1833,8 +1857,13 @@ span.ressource__libelle {
             <button type="button" class="bascule__option" data-vue-exploitation="annuel">Année par année</button>
           </span>
         </h2>
-        <div class="table-defilante">
-          <table class="tableau" id="table-exploitation">
+        <!-- PAS de conteneur defilant ici : il ferait une barre horizontale sur
+             une table qui tient dans la page, et surtout il enfermerait le
+             defilement vertical, ce qui empeche d'y figer les intitules. Le
+             compte se lit sur soixante lignes - les garder sous les yeux
+             compte plus que le repli d'une colonne sur un ecran etroit. -->
+        <div>
+          <table class="tableau tableau--entete-figee" id="table-exploitation">
             <thead>
               <!-- DEUX vues, cote a cote et non entremelees. La vue TRESORERIE
                    occupe les colonnes de gauche, dans leur ordre d'origine :

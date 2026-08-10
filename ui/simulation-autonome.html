@@ -9028,9 +9028,20 @@ function rendreControles(r) {
     `${passes > 1 ? 'passés' : 'passé'}${echecs ? `, ${echecs} à examiner` : ''}.</span>`;
 }
 
+/**
+ * Date ISO en date lisible. Le champ de livraison est un `input[type=date]`, que
+ * le navigateur affiche au format local ; la mise en location, elle, est
+ * CALCULEE et reste en texte pour ne pas se laisser modifier. Sans conversion,
+ * les deux dates voisines s'affichaient dans deux formats differents.
+ */
+const dateLisible = (iso) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? '');
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso ?? '');
+};
+
 function rendreCalendrier(r) {
   const c = r.calendrier;
-  $('#date-mel').value = c?.date_mise_en_location ?? '';
+  $('#date-mel').value = dateLisible(c?.date_mise_en_location);
   const champ = /** @type {HTMLInputElement} */ (document.querySelector('[data-champ="dates.date_livraison"]'));
   const deduite = c?.origine?.date_livraison === 'calcule';
   champ.classList.toggle('champ--calcule', deduite);

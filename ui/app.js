@@ -972,10 +972,14 @@ function gabaritPret(p, i) {
     ...(p.differe_ans ? [jeton('différé', `${p.differe_ans} ans · type ${p.differe_type ?? 2}`)] : []),
   ].join('');
 
-  // Montant AUTOMATIQUE : la valeur affichee vient du moteur et se reajuste a
-  // chaque changement de subvention ou de fonds propres. Taper dedans fige le
-  // montant et fait apparaitre le bouton de retour au calcul.
-  const auto = p.montant_auto !== false;
+  // Montant AUTOMATIQUE, reserve aux prets STRUCTURANTS de la tranche - les CDC
+  // foncier, construction et le CPLS derive. Eux seuls absorbent l'ecart du plan
+  // de financement, c'est ce qui donne un sens a leur calcul. Un pret ajoute a
+  // cote finance un besoin identifie, pas un solde : son montant est une saisie.
+  // Le moteur le voit deja ainsi - il nait avec un montant de zero, donc fige -
+  // seul l'affichage le presentait en automatique, avec un bouton qui n'aurait
+  // rien eu a recalculer.
+  const auto = p.principal === true && p.montant_auto !== false;
   return `
     <div class="ligne ligne--pret ${auto ? 'pret--auto' : ''} ${p.principal ? 'pret--principal' : ''}"
       data-pret="${i}" style="--cat:${catProduit(p.produit)}">
@@ -2266,13 +2270,23 @@ function rendreFinancement(r) {
   const ressources = [];
   if (p.subventions_eur) ressources.push({ libelle: 'Subventions', montant: p.subventions_eur, couleur: COULEURS.subventions });
   if (p.fonds_propres_eur) ressources.push({ libelle: 'Fonds propres', montant: p.fonds_propres_eur, couleur: COULEURS.fonds_propres });
-  for (const a of p.amortissements) {
-    ressources.push({
-      libelle: a.libelle || a.code,
-      montant: a.montant_eur,
-      couleur: COULEURS[`pret_${a.nature}`] ?? COULEURS.pret_autre,
-    });
-  }
+  // Les prets se lisent en DEUX postes et non un par ligne. Sept lignes de prets
+  // pour deux subventions donnaient a la legende le detail d'un tableau
+  // d'emprunts, alors qu'elle repond a une seule question : d'ou vient l'argent.
+  // Les prets structurants d'une tranche - CDC foncier, construction, CPLS - ne
+  // se choisissent pas un par un, ils sortent du meme calcul d'equilibre : les
+  // separer n'apprend rien. Le detail reste entier dans le tableau des prets.
+  const cumulerPrets = (libelle, lot, couleur) => {
+    const montant = lot.reduce((s, a) => s + a.montant_eur, 0);
+    if (montant > 0) ressources.push({ libelle, montant, couleur });
+  };
+  const principaux = p.amortissements.filter((a) => a.principal);
+  cumulerPrets('Prêt principal', principaux, COULEURS.pret_construction);
+  cumulerPrets(
+    p.amortissements.length - principaux.length > 1 ? 'Autres prêts' : 'Autre prêt',
+    p.amortissements.filter((a) => !a.principal),
+    COULEURS.pret_autre,
+  );
 
   // Les totaux viennent du moteur ; l'echelle des barres, elle, est un choix de
   // presentation et peut se deduire des segments.

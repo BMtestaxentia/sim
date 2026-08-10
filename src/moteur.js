@@ -727,6 +727,11 @@ export function calculer(entrees, referentiels) {
       montant_calcule: p.montant_calcule === true,
       // Pret DERIVE d'une regle et non saisi : l'ecran le montre en lecture seule.
       derive: p.derive === true,
+      // Pret STRUCTURANT de la tranche : c'est lui qui absorbe l'ecart du plan
+      // de financement. Un pret ajoute a cote finance un besoin identifie, pas
+      // un solde - la distinction sert a l'ecran, qui ne les presente pas de la
+      // meme facon, et un pret derive l'est toujours (le CPLS nait du plafond).
+      principal: p.principal === true || p.derive === true,
       taux_saisi: p.taux,
       annee_premiere_echeance:
         p.annee_premiere_echeance ??

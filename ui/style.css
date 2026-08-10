@@ -571,6 +571,16 @@ td.calc { text-align: right; }
    chrome propre, et le quadrillage vient du tableau. Une table de saisie ou
    chaque case porte sa propre bordure arrondie se lit comme une pile de
    formulaires, pas comme un tableau ou l'on compare une colonne. */
+/* Largeurs DECLAREES et non deduites du contenu : le prix de revient deplace sa
+   saisie d'une colonne a l'autre quand on ventile, et la table entiere sautait
+   a chaque bascule. Le `colgroup` pose la geometrie, `fixed` interdit au
+   contenu de la reprendre. `min-width` garde la table lisible dans son cadre
+   defilant quand les tranches se multiplient. */
+#table-postes { table-layout: fixed; min-width: 100%; width: max-content; }
+/* Le `colgroup` est la seule source : une largeur posee sur la cellule la
+   court-circuiterait, et deux declarations pour la meme colonne finiraient par
+   se contredire. */
+#table-postes .num-poste, #table-postes .col-action { width: auto; }
 .grille--saisie td { border-right: 1px solid var(--border-color); }
 .grille--saisie td:last-child { border-right: none; }
 .grille--saisie input:not([type='checkbox']), .grille--saisie select {

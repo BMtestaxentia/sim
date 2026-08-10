@@ -585,6 +585,16 @@ td.calc { text-align: right; }
    chrome propre, et le quadrillage vient du tableau. Une table de saisie ou
    chaque case porte sa propre bordure arrondie se lit comme une pile de
    formulaires, pas comme un tableau ou l'on compare une colonne. */
+/* Largeurs DECLAREES et non deduites du contenu : le prix de revient deplace sa
+   saisie d'une colonne a l'autre quand on ventile, et la table entiere sautait
+   a chaque bascule. Le `colgroup` pose la geometrie, `fixed` interdit au
+   contenu de la reprendre. `min-width` garde la table lisible dans son cadre
+   defilant quand les tranches se multiplient. */
+#table-postes { table-layout: fixed; min-width: 100%; width: max-content; }
+/* Le `colgroup` est la seule source : une largeur posee sur la cellule la
+   court-circuiterait, et deux declarations pour la meme colonne finiraient par
+   se contredire. */
+#table-postes .num-poste, #table-postes .col-action { width: auto; }
 .grille--saisie td { border-right: 1px solid var(--border-color); }
 .grille--saisie td:last-child { border-right: none; }
 .grille--saisie input:not([type='checkbox']), .grille--saisie select {
@@ -6202,6 +6212,27 @@ function totalPoste(p) {
 }
 
 /**
+ * Une ligne ventilee porte-t-elle une repartition SUR MESURE, c'est-a-dire
+ * differente de ce que la cle de surface utile donnerait ?
+ *
+ * C'est la seule information qui compte avant de regrouper : regrouper une
+ * ligne au prorata ne perd rien, on saurait la reconstruire ; regrouper une
+ * ligne repartie a la main perd un arbitrage que rien ne retrouvera.
+ */
+function ventilationSurMesure(p, quotesParts) {
+  if (!estVentile(p)) return false;
+  const codes = tranchesActives();
+  const total = totalPoste(p);
+  if (nul(total)) return false;
+  const attendu = arrondirEnConservantLaSomme(
+    codes.map((c) => (quotesParts[c] ?? 1 / codes.length) * total),
+  );
+  // Un euro de tolerance : l'arrondi de la repartition ne doit pas se faire
+  // passer pour une saisie manuelle.
+  return codes.some((c, i) => Math.abs((p.montants_ht_par_produit?.[c] ?? 0) - attendu[i]) > 1);
+}
+
+/**
  * Ventile une ligne sur les tranches au prorata de surface utile, ou la
  * regroupe en un total unique.
  *
@@ -6220,10 +6251,13 @@ function basculerVentilation(p, ventiler, quotesParts) {
     delete p.taux_tva_par_produit;
     return;
   }
-  const total = totalPoste(p) ?? 0;
-  const parts = arrondirEnConservantLaSomme(
-    codes.map((c) => (quotesParts[c] ?? 1 / codes.length) * total),
-  );
+  const total = totalPoste(p);
+  // Une ligne VIDE se ventile en cases vides, pas en zeros : elle doit rester
+  // « non renseignee » - sinon basculer toute la nomenclature la remplirait de
+  // zeros, et le filtre des lignes vides ne masquerait plus rien.
+  const parts = nul(total)
+    ? codes.map(() => null)
+    : arrondirEnConservantLaSomme(codes.map((c) => (quotesParts[c] ?? 1 / codes.length) * total));
   p.montants_ht_par_produit = Object.fromEntries(codes.map((c, i) => [c, parts[i]]));
   // Le taux de la ligne devient le taux de depart de chaque tranche : la
   // ventilation ne doit rien changer au calcul tant qu'on ne le modifie pas.
@@ -6907,12 +6941,16 @@ function rendreTablePrixRevient() {
     )
     .join('');
 
+  // La TVA appartient a la TRANCHE, jamais a l'operation : sa colonne unique
+  // n'existe que quand il n'y a pas de colonnes de tranche ou la loger. Des deux
+  // tranches, chaque bloc porte la sienne.
+  const tvaGlobale = tva && !parTranche;
   const fixes = [
     ['num', 'N°'],
     ['', 'Poste'],
     ['num', 'Total HT (€)'],
     ['', ''],
-    ...(tva ? [['num', 'TVA']] : []),
+    ...(tvaGlobale ? [['num', 'TVA']] : []),
   ];
   const fin = [
     ['num calc', 'TVA (€)'],
@@ -6925,7 +6963,21 @@ function rendreTablePrixRevient() {
     ? `<tr>${cellulesFixes(fixes)}${groupes}${cellulesFixes(fin)}</tr><tr>${sousColonnes}</tr>`
     : `<tr>${cellulesFixes(fixes)}${cellulesFixes(fin)}</tr>`;
   const nbCols =
-    4 + (tva ? 1 : 0) + (parTranche ? codes.length * (tva ? 2 : 1) : 0) + 2;
+    4 + (tvaGlobale ? 1 : 0) + (parTranche ? codes.length * (tva ? 2 : 1) : 0) + 2;
+
+  // GEOMETRIE FIGEE. Ventiler deplace la saisie de la colonne globale vers les
+  // colonnes de tranche, et la TVA avec elle : a largeur libre, les colonnes se
+  // redimensionnaient sur leur contenu et toute la table sautait a chaque
+  // bascule. Les largeurs sont donc declarees, et seule la colonne des libelles
+  // absorbe le reste.
+  const col = (l) => `<col style="width:${l}px" />`;
+  table.querySelector('colgroup')?.remove();
+  table.insertAdjacentHTML(
+    'afterbegin',
+    `<colgroup>${col(38)}<col />${col(132)}${col(34)}${tvaGlobale ? col(96) : ''}` +
+      (parTranche ? codes.map(() => col(124) + (tva ? col(96) : '')).join('') : '') +
+      `${col(104)}${col(124)}</colgroup>`,
+  );
 
   // La bascule n'a de sens qu'a partir de deux tranches. Son libelle nomme le
   // TRAJET - d'ou l'on part, vers ou l'on va - plutot que l'action : « ventiler »
@@ -6933,8 +6985,10 @@ function rendreTablePrixRevient() {
   // deviner ce que le bouton allait faire.
   const btnTout = /** @type {HTMLButtonElement} */ (document.getElementById('btn-ventiler-tout'));
   if (btnTout) {
-    const remplies = etat.postes_bilan.filter((p) => !nul(totalPoste(p)));
-    const toutVentile = remplies.length > 0 && remplies.every(estVentile);
+    // L'etat se lit sur TOUTES les lignes, comme la bascule les traite toutes :
+    // le juger sur les seules lignes remplies faisait dire au bouton l'inverse
+    // de ce qu'il allait faire des que le reste de la nomenclature divergeait.
+    const toutVentile = etat.postes_bilan.length > 0 && etat.postes_bilan.every(estVentile);
     btnTout.hidden = !parTranche;
     btnTout.textContent = toutVentile ? '↤ Tranche vers global' : '⇥ Global vers tranche';
     btnTout.title = toutVentile
@@ -6963,7 +7017,7 @@ function rendreTablePrixRevient() {
       // seule cellule traversante : un bloc de colonnes se ferme par un filet
       // continu, qu'une ligne traversante interrompait a chaque chapitre.
       `<tr class="chapitre-entete">` +
-        `<td colspan="${4 + (tva ? 1 : 0)}">${ch.numero} - ${att(ch.libelle)}</td>` +
+        `<td colspan="${4 + (tvaGlobale ? 1 : 0)}">${ch.numero} - ${att(ch.libelle)}</td>` +
         (parTranche
           ? codes
               .map(
@@ -7003,11 +7057,19 @@ function rendreTablePrixRevient() {
               // tranche, il ne separe pas HT de sa TVA.
               const deb = `col-tranche col-tranche--debut${tva ? '' : finBloc(c)}`;
               if (!ventile) {
-                // Ligne non ventilee : on montre ce que la cle SU donnerait,
-                // en lecture seule. C'est un apercu, pas une saisie.
+                // Ligne non ventilee : le MONTANT n'est qu'un apercu de ce que
+                // la cle SU donnerait, en lecture seule. Le TAUX, lui, reste
+                // saisissable : il appartient a la tranche, que le montant soit
+                // saisi globalement ou tranche par tranche.
                 return (
                   `<td class="num calc ${deb}" ${style} data-apercu="${c}"></td>` +
-                  (tva ? `<td class="num calc col-tranche${finBloc(c)}" ${style}></td>` : '')
+                  (tva
+                    ? `<td class="col-tranche${finBloc(c)}" ${style}>${selectTVA(
+                        `postes_bilan.${i}.taux_tva_par_produit.${c}`,
+                        p.taux_tva_par_produit?.[c] ?? p.taux_tva,
+                        col + 1,
+                      )}</td>`
+                    : '')
                 );
               }
               return (
@@ -7038,7 +7100,7 @@ function rendreTablePrixRevient() {
                  title="${ventile ? 'Regrouper en un total unique' : 'Ventiler ce montant sur les tranches'}">${ventile ? '↤' : '⇥'}</button>`
             : ''
         }</td>
-        ${tva ? `<td>${ventile ? '' : selectTVA(`postes_bilan.${i}.taux_tva`, p.taux_tva)}</td>` : ''}
+        ${tvaGlobale ? `<td>${selectTVA(`postes_bilan.${i}.taux_tva`, p.taux_tva, 1)}</td>` : ''}
         ${cellulesTranches}
         <td class="calc" data-calc="tva"></td>
         <td class="calc" data-calc="ttc"></td>
@@ -7063,7 +7125,7 @@ function rendreTablePrixRevient() {
         <td></td><td class="libelle">Sous-total ${att(ch.libelle.toLowerCase())}</td>
         <td class="num" data-total="ht"></td>
         <td></td>
-        ${tva ? '<td></td>' : ''}
+        ${tvaGlobale ? '<td></td>' : ''}
         ${sousTotauxTranches}
         <td class="num" data-total="tva"></td><td class="num" data-total="ttc"></td>
       </tr>`,
@@ -7447,6 +7509,9 @@ function rendreValeurs(r) {
   const parTr = codesTr.length > 1;
   const nbCols = 4 + (tvaVisible ? 1 : 0) + (parTr ? codesTr.length * (tvaVisible ? 2 : 1) : 0) + 2;
   const finTr = (c) => (c === codesTr[codesTr.length - 1] ? ' col-tranche--fin' : '');
+  // Meme regle qu'au corps : la colonne de TVA globale n'existe que faute de
+  // colonnes de tranche ou la loger. La TVA appartient a la tranche.
+  const tvaGlobaleTr = tvaVisible && !parTr;
   const totauxTranches = parTr
     ? codesTr
         .map(
@@ -7460,14 +7525,14 @@ function rendreValeurs(r) {
   $('#table-postes').querySelector('tfoot').innerHTML = `<tr>
       <td></td><td class="libelle">Prix de revient total</td>
       <td class="num">${eur(b.total_ht_eur)}</td><td></td>
-      ${tvaVisible ? '<td></td>' : ''}
+      ${tvaGlobaleTr ? '<td></td>' : ''}
       ${totauxTranches}
       <td class="num">${eur(b.total_tva_eur)}</td>
       <td class="num">${eur(b.total_ttc_eur)}</td>
     </tr>
     <tr>
       <td></td><td class="libelle">Base finançable (TTC)</td>
-      <td colspan="${2 + (tvaVisible ? 1 : 0)}"></td>
+      <td colspan="${2 + (tvaGlobaleTr ? 1 : 0)}"></td>
       ${
         parTr
           ? codesTr
@@ -7483,7 +7548,7 @@ function rendreValeurs(r) {
       <td class="num">${eur(b.total_ttc_module_eur)}</td>
     </tr>
     <tr>
-      <td></td><td colspan="${3 + (tvaVisible ? 1 : 0)}" style="font-weight:400;color:var(--text-tertiary);border-top:none">
+      <td></td><td colspan="${3 + (tvaGlobaleTr ? 1 : 0)}" style="font-weight:400;color:var(--text-tertiary);border-top:none">
         ${renseignes} poste${renseignes > 1 ? 's' : ''} renseigné${renseignes > 1 ? 's' : ''}
         sur ${etat.postes_bilan.length} de la nomenclature${
           ventiles ? ` · ${ventiles} ventilé${ventiles > 1 ? 's' : ''} à la main` : ''
@@ -8311,12 +8376,23 @@ function modeleParametres() {
       aide:
         'Le taux du produit détermine le TTC de sa tranche. Les taux réduit et normal servent ' +
         "aux postes qui ne relèvent pas d'un produit.",
-      champs: [
-        ch('baremes.tva.taux_reduit_simulation', 'Taux réduit', b.tva.taux_reduit_simulation, 'pourcentage'),
-        ch('baremes.tva.taux_normal', 'Taux normal', b.tva.taux_normal, 'pourcentage'),
-        ...Object.entries(b.tva.lasm_par_produit)
-          .filter(([, v]) => typeof v === 'number')
-          .map(([cle, v]) => ch(`baremes.tva.lasm_par_produit.${cle}`, cle.replace(/_/g, ' '), v, 'pourcentage')),
+      // Une colonne de taux et rien d'autre : la table les empile, donc les rend
+      // comparables d'un coup d'oeil, ce qu'une grille de cartes ne fait pas.
+      matrices: [
+        {
+          titre: 'Taux par produit',
+          zones: ['Taux'],
+          lignes: [
+            ['baremes.tva.taux_reduit_simulation', 'Taux réduit', b.tva.taux_reduit_simulation],
+            ['baremes.tva.taux_normal', 'Taux normal', b.tva.taux_normal],
+            ...Object.entries(b.tva.lasm_par_produit)
+              .filter(([, v]) => typeof v === 'number')
+              .map(([cle, v]) => [`baremes.tva.lasm_par_produit.${cle}`, cle.replace(/_/g, ' '), v]),
+          ].map(([chemin, libelle, valeur]) => ({
+            libelle,
+            cellules: [{ chemin, libelle, valeur, type: 'pourcentage' }],
+          })),
+        },
       ],
     },
     {
@@ -9187,7 +9263,21 @@ document.addEventListener('click', (ev) => {
   if (ventiler) {
     const i = Number(/** @type {HTMLElement} */ (ventiler).dataset.ventiler);
     const p = etat.postes_bilan[i];
-    basculerVentilation(p, !estVentile(p), dernierResultat?.surfaces?.quotes_parts ?? {});
+    const qp = dernierResultat?.surfaces?.quotes_parts ?? {};
+    // Regrouper une repartition faite a la main la PERD : elle sera refaite au
+    // prorata si l'on reventile. On ne detruit pas un arbitrage sans le dire.
+    if (
+      estVentile(p) &&
+      ventilationSurMesure(p, qp) &&
+      !confirm(
+        `« ${p.libelle} » porte une répartition saisie à la main. La regrouper la remplacera ` +
+          'par un montant unique, et une nouvelle ventilation repartirait au prorata de surface ' +
+          'utile. Continuer ?',
+      )
+    ) {
+      return;
+    }
+    basculerVentilation(p, !estVentile(p), qp);
     rafraichirTout();
     return;
   }
@@ -9195,10 +9285,23 @@ document.addEventListener('click', (ev) => {
   if (el.closest('#btn-ventiler-tout')) {
     const vers = /** @type {HTMLElement} */ (el.closest('#btn-ventiler-tout')).dataset.action === 'ventiler';
     const qp = dernierResultat?.surfaces?.quotes_parts ?? {};
-    // Seules les lignes RENSEIGNEES sont touchees : ventiler les quarante-six
-    // postes de la nomenclature remplirait la table de zeros.
+    // TOUTES les lignes basculent, renseignees ou non : le mode de saisie est
+    // une propriete de la table, pas de son remplissage. Une ligne vide se
+    // ventile en cases vides et reste « non renseignee ».
+    const aPerdre = etat.postes_bilan.filter((p) => estVentile(p) && ventilationSurMesure(p, qp));
+    if (
+      !vers &&
+      aPerdre.length &&
+      !confirm(
+        `${aPerdre.length} ligne${aPerdre.length > 1 ? 's portent' : ' porte'} une répartition ` +
+          `saisie à la main (${aPerdre.slice(0, 3).map((p) => p.libelle).join(', ')}` +
+          `${aPerdre.length > 3 ? '…' : ''}). ${aPerdre.length > 1 ? 'Les' : 'La'} regrouper ` +
+          `${aPerdre.length > 1 ? 'les' : 'la'} remplacera par un montant unique. Continuer ?`,
+      )
+    ) {
+      return;
+    }
     for (const p of etat.postes_bilan) {
-      if (nul(totalPoste(p))) continue;
       if (estVentile(p) !== vers) basculerVentilation(p, vers, qp);
     }
     rafraichirTout();

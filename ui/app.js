@@ -1817,24 +1817,128 @@ function rendreBarre(element, segments, echelle) {
   if (total < echelle) element.insertAdjacentHTML('beforeend', `<div style="flex-grow:${echelle - total}"></div>`);
 }
 
-function rendreFinancement(r) {
+/**
+ * Perimetre affiche sur le plan de financement : l'operation entiere, ou une
+ * seule tranche. Une operation mixte n'a pas UN plan de financement mais autant
+ * de plans qu'elle porte de produits, et c'est a ce niveau que se juge un
+ * equilibre - une tranche peut etre sous-financee quand l'ensemble tombe juste.
+ */
+let vueFinancement = 'consolide';
+
+/**
+ * Reduit le resultat au perimetre demande. Toutes les valeurs viennent du
+ * MOTEUR : la ventilation des subventions non affectees, notamment, est une
+ * regle de calcul (`financement.par_tranche`), pas une commodite d'affichage.
+ * La refaire ici serait la deuxieme occasion de s'en ecarter.
+ */
+function perimetreFinancement(r) {
   const ind = r.indicateurs;
   const eq = r.financement.equilibre;
+  const tranches = r.surfaces?.tranches ?? [];
+  // Le perimetre retombe sur le consolide des que la tranche choisie disparait
+  // du programme : un ecran fige sur une tranche effacee n'afficherait rien.
+  const code = tranches.includes(vueFinancement) ? vueFinancement : null;
 
-  const emplois = Object.entries(r.bilan.chapitres).map(([code, c]) => ({
-    libelle: CHAPITRES[code] ?? code,
-    montant: c.ttc_lasm_eur,
-    ht: c.ht_eur,
-    couleur: COULEURS[code] ?? COULEURS.frais_divers,
-  }));
-  if (r.bilan.modulation_ttc_eur) {
-    emplois.push({ libelle: 'Modulation', montant: r.bilan.modulation_ttc_eur, ht: null, couleur: COULEURS.modulation });
+  if (!code) {
+    const emplois = Object.entries(r.bilan.chapitres).map(([c, v]) => ({
+      libelle: CHAPITRES[c] ?? c,
+      montant: v.ttc_lasm_eur,
+      ht: v.ht_eur,
+      couleur: COULEURS[c] ?? COULEURS.frais_divers,
+    }));
+    if (r.bilan.modulation_ttc_eur) {
+      emplois.push({ libelle: 'Modulation', montant: r.bilan.modulation_ttc_eur, ht: null, couleur: COULEURS.modulation });
+    }
+    return {
+      code: null,
+      emplois,
+      total_emplois: ind.prix_revient_ttc_eur,
+      ht_eur: r.bilan.total_ht_eur,
+      nb_logements: ind.nb_logements,
+      shab_m2: ind.shab_m2,
+      su_m2: ind.su_m2,
+      loyers_annuels_eur: ind.loyers_annuels_eur,
+      prix_revient_par_logement_eur: ind.prix_revient_par_logement_eur,
+      prix_revient_par_m2_shab_eur: ind.prix_revient_par_m2_shab_eur,
+      subventions_eur: ind.subventions_eur,
+      fonds_propres_eur: ind.fonds_propres_eur,
+      taux_fonds_propres: ind.taux_fonds_propres,
+      amortissements: r.amortissements,
+      total_prets_eur: r.financement.total_prets_eur,
+      total_prets_cdc_eur: r.financement.total_prets_cdc_eur,
+      ratio_prets_cdc: eq.ratio_prets_cdc,
+      total_ressources: ind.ressources_eur,
+      ecart_eur: eq.ecart_eur,
+    };
   }
 
+  const t = r.financement.par_tranche?.[code] ?? {};
+  const l = r.loyers?.find((x) => x.code_produit === code) ?? {};
+  const emplois = Object.entries(t.chapitres ?? {})
+    .filter(([, v]) => v)
+    .map(([c, v]) => ({
+      libelle: CHAPITRES[c] ?? c,
+      montant: v.ttc_lasm_eur,
+      ht: v.ht_eur,
+      couleur: COULEURS[c] ?? COULEURS.frais_divers,
+    }));
+  const amortissements = r.amortissements.filter((a) => a.produit === code);
+  const cdc = amortissements.filter((a) => a.nature !== 'autre').reduce((s, a) => s + a.montant_eur, 0);
+  const ht = emplois.reduce((s, e) => s + (e.ht ?? 0), 0);
+  const pr = t.prix_revient_ttc_eur ?? 0;
+  return {
+    code,
+    emplois,
+    total_emplois: pr,
+    ht_eur: ht,
+    nb_logements: l.nb_logements ?? 0,
+    shab_m2: l.shab_m2 ?? 0,
+    su_m2: l.su_m2 ?? 0,
+    loyers_annuels_eur: l.loyer_annuel_eur ?? 0,
+    prix_revient_par_logement_eur: l.nb_logements ? Math.round(pr / l.nb_logements) : null,
+    prix_revient_par_m2_shab_eur: l.shab_m2 ? Math.round(pr / l.shab_m2) : null,
+    subventions_eur: t.subventions_eur ?? 0,
+    fonds_propres_eur: t.fonds_propres_eur ?? 0,
+    taux_fonds_propres: pr ? (t.fonds_propres_eur ?? 0) / pr : 0,
+    amortissements,
+    total_prets_eur: t.total_prets_eur ?? 0,
+    total_prets_cdc_eur: Math.round(cdc),
+    ratio_prets_cdc: pr ? cdc / pr : 0,
+    total_ressources: t.ressources_eur ?? 0,
+    ecart_eur: t.ecart_eur ?? 0,
+  };
+}
+
+/** Selecteur de perimetre : consolide, puis une entree par tranche. */
+function rendrePerimetreFinancement(r) {
+  const barre = document.getElementById('vue-financement');
+  if (!barre) return;
+  const tranches = r.surfaces?.tranches ?? [];
+  // A une seule tranche, le consolide EST la tranche : proposer un choix entre
+  // deux vues identiques ne ferait qu'encombrer.
+  barre.hidden = tranches.length < 2;
+  if (barre.hidden) return;
+  const actif = tranches.includes(vueFinancement) ? vueFinancement : 'consolide';
+  barre.innerHTML =
+    `<button type="button" class="bascule__option ${actif === 'consolide' ? 'bascule__option--actif' : ''}"
+       data-vue-financement="consolide">Consolidé</button>` +
+    tranches
+      .map(
+        (c) => `<button type="button" class="bascule__option ${actif === c ? 'bascule__option--actif' : ''}"
+          data-vue-financement="${att(c)}" style="--cat:${catProduit(c)}">
+          <span class="bascule__puce"></span>${att(libelleProduit(c))}</button>`,
+      )
+      .join('');
+}
+
+function rendreFinancement(r) {
+  rendrePerimetreFinancement(r);
+  const p = perimetreFinancement(r);
+
   const ressources = [];
-  if (ind.subventions_eur) ressources.push({ libelle: 'Subventions', montant: ind.subventions_eur, couleur: COULEURS.subventions });
-  if (ind.fonds_propres_eur) ressources.push({ libelle: 'Fonds propres', montant: ind.fonds_propres_eur, couleur: COULEURS.fonds_propres });
-  for (const a of r.amortissements) {
+  if (p.subventions_eur) ressources.push({ libelle: 'Subventions', montant: p.subventions_eur, couleur: COULEURS.subventions });
+  if (p.fonds_propres_eur) ressources.push({ libelle: 'Fonds propres', montant: p.fonds_propres_eur, couleur: COULEURS.fonds_propres });
+  for (const a of p.amortissements) {
     ressources.push({
       libelle: a.libelle || a.code,
       montant: a.montant_eur,
@@ -1844,14 +1948,12 @@ function rendreFinancement(r) {
 
   // Les totaux viennent du moteur ; l'echelle des barres, elle, est un choix de
   // presentation et peut se deduire des segments.
-  const totalEmplois = ind.prix_revient_ttc_eur;
-  const totalRessources = ind.ressources_eur;
-  const echelle = Math.max(totalEmplois, totalRessources, 1);
+  const echelle = Math.max(p.total_emplois, p.total_ressources, 1);
 
-  rendreBarre($('#barre-emplois'), emplois, echelle);
+  rendreBarre($('#barre-emplois'), p.emplois, echelle);
   rendreBarre($('#barre-ressources'), ressources, echelle);
-  $('#total-emplois').textContent = eur(totalEmplois);
-  $('#total-ressources').textContent = eur(totalRessources);
+  $('#total-emplois').textContent = eur(p.total_emplois);
+  $('#total-ressources').textContent = eur(p.total_ressources);
   // Une legende PAR COTE, et le poids de chaque poste dans SON total : la part
   // d'un pret se lit dans les ressources, pas dans le prix de revient.
   //
@@ -1879,29 +1981,29 @@ function rendreFinancement(r) {
         .join('')
     );
   };
-  $('#legende-emplois').innerHTML = legende(emplois, totalEmplois, true);
-  $('#legende-ressources').innerHTML = legende(ressources, totalRessources);
+  $('#legende-emplois').innerHTML = legende(p.emplois, p.total_emplois, true);
+  $('#legende-ressources').innerHTML = legende(ressources, p.total_ressources);
 
   // Sous chaque total, ce que la barre ne peut pas montrer : le total HT et les
-  // ratios d'un cote, le besoin de financement restant de l'autre.
+  // ratios d'un cote, l'equilibre de l'autre.
   $('#precision-emplois').innerHTML =
-    `${eur(r.bilan.total_ht_eur)} HT · ${eur(ind.prix_revient_par_logement_eur)} / logement · ` +
-    `${eur(ind.prix_revient_par_m2_shab_eur)} / m² SHAB`;
+    `${eur(p.ht_eur)} HT · ${eur(p.prix_revient_par_logement_eur)} / logement · ` +
+    `${eur(p.prix_revient_par_m2_shab_eur)} / m² SHAB`;
   // Le besoin en prets CDC est deja une tuile d'indicateur : le redire ici
   // n'apprendrait rien. Ce que les deux totaux ne disent pas, c'est s'ils sont
   // egaux - a sept chiffres, l'oeil ne le voit pas. C'est donc le controle
   // d'equilibre qui prend la place.
-  $('#precision-ressources').innerHTML = eq.ecart_eur
-    ? `<span class="precision--alerte">Écart de ${eur(eq.ecart_eur)} avec les emplois</span>`
+  $('#precision-ressources').innerHTML = p.ecart_eur
+    ? `<span class="precision--alerte">Écart de ${eur(p.ecart_eur)} avec les emplois</span>`
     : `<span class="discret">Plan équilibré</span>`;
 
   const corps = $('#table-prets').querySelector('tbody');
   const pied = $('#table-prets').querySelector('tfoot');
-  if (!r.amortissements.length) {
+  if (!p.amortissements.length) {
     corps.innerHTML = '<tr><td colspan="9" class="vide">Aucun prêt mobilisé</td></tr>';
     pied.innerHTML = '';
   } else {
-    corps.innerHTML = r.amortissements
+    corps.innerHTML = p.amortissements
       .map((a) => {
         const t = a.tableau;
         const total = t.reduce((s, l) => s + l.annuite_eur, 0);
@@ -1915,10 +2017,10 @@ function rendreFinancement(r) {
       })
       .join('');
     pied.innerHTML = `<tr><td class="libelle">Total</td>
-      <td class="num">${eur(r.financement.total_prets_eur)}</td><td colspan="7"></td></tr>`;
+      <td class="num">${eur(p.total_prets_eur)}</td><td colspan="7"></td></tr>`;
   }
 
-  const ecarts = r.amortissements.filter((a) => !nul(a.taux_saisi) && Math.abs(a.tableau[0].taux - a.taux_saisi) > 1e-9);
+  const ecarts = p.amortissements.filter((a) => !nul(a.taux_saisi) && Math.abs(a.tableau[0].taux - a.taux_saisi) > 1e-9);
   $('#aide-taux').textContent = ecarts.length
     ? `⚙ Le taux appliqué diffère du taux saisi : la révision Livret A joue dès la première ` +
       `échéance. Profil ${r.profil_trajectoires ?? 'non renseigné'}.`
@@ -1926,25 +2028,36 @@ function rendreFinancement(r) {
 
   // Le prix de revient a quitte ces tuiles : la balance le porte deja, en gros
   // et avec ses ratios. Le RMO aussi, retire a la demande de Bastien.
-  $('#indicateurs').innerHTML = [
-    { l: 'Coût au m² SHAB', v: eur(ind.prix_revient_par_m2_shab_eur), d: `${nb(ind.shab_m2)} m² SHAB` },
-    { l: 'Surface utile', v: `${nb(ind.su_m2)} m²`, d: `${nb(ind.nb_logements)} logements` },
-    { l: 'Loyers annuels', v: eur(ind.loyers_annuels_eur), d: `${nb(ind.nb_logements)} logements loués` },
-    { l: 'Fonds propres', v: pct(ind.taux_fonds_propres), d: eur(ind.fonds_propres_eur) },
-    { l: 'Prêts CDC', v: pct(eq.ratio_prets_cdc), d: eur(r.financement.total_prets_cdc_eur) },
-    {
-      l: 'Reconstitution FP',
-      v: ind.annee_reconstitution_fonds_propres ?? 'non atteinte',
-      d: 'cumul d’autofinancement ≥ fonds propres',
-    },
-    { l: 'Début TFPB', v: ind.annee_debut_tfpb, d: 'fin d’exonération' },
-  ]
+  //
+  // Les deux dernieres tuiles ne s'affichent qu'en consolide : la reconstitution
+  // des fonds propres et l'entree en TFPB se lisent sur le compte d'exploitation
+  // de l'OPERATION. Les repeter sous une tranche leur ferait dire ce qu'elles ne
+  // disent pas.
+  const tuiles = [
+    { l: 'Coût au m² SHAB', v: eur(p.prix_revient_par_m2_shab_eur), d: `${nb(p.shab_m2)} m² SHAB` },
+    { l: 'Surface utile', v: `${nb(p.su_m2)} m²`, d: `${nb(p.nb_logements)} logements` },
+    { l: 'Loyers annuels', v: eur(p.loyers_annuels_eur), d: `${nb(p.nb_logements)} logements loués` },
+    { l: 'Fonds propres', v: pct(p.taux_fonds_propres), d: eur(p.fonds_propres_eur) },
+    { l: 'Prêts CDC', v: pct(p.ratio_prets_cdc), d: eur(p.total_prets_cdc_eur) },
+  ];
+  if (!p.code) {
+    tuiles.push(
+      {
+        l: 'Reconstitution FP',
+        v: r.indicateurs.annee_reconstitution_fonds_propres ?? 'non atteinte',
+        d: 'cumul d’autofinancement ≥ fonds propres',
+      },
+      { l: 'Début TFPB', v: r.indicateurs.annee_debut_tfpb, d: 'fin d’exonération' },
+    );
+  }
+  $('#indicateurs').innerHTML = tuiles
     .map((i) => `<div class="indicateur"><div class="indicateur__libelle">${i.l}</div>
       <div class="indicateur__valeur">${i.v}</div><div class="indicateur__detail">${i.d}</div></div>`)
     .join('');
 
   rendreControles(r);
 }
+
 
 /**
  * Controles TOUJOURS visibles, y compris satisfaits : masquer un controle qui
@@ -3217,6 +3330,13 @@ document.addEventListener('click', (ev) => {
   if (el.closest('#deplier-trajectoire')) {
     trajectoireDepliee = !trajectoireDepliee;
     rendreParametres();
+    return;
+  }
+
+  const perim = el.closest('[data-vue-financement]');
+  if (perim) {
+    vueFinancement = /** @type {HTMLElement} */ (perim).dataset.vueFinancement;
+    if (dernierResultat) rendreFinancement(dernierResultat);
     return;
   }
 

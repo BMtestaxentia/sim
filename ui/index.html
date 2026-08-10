@@ -370,6 +370,12 @@
 
     <!-- ================= ÉCRAN 2 - PLAN DE FINANCEMENT ================= -->
     <main class="ecran" id="ecran-financement" role="tabpanel" hidden>
+      <!-- Selecteur de perimetre : l'operation entiere, ou une seule tranche de
+           financement. Une operation mixte n'a pas un plan de financement mais
+           autant de plans qu'elle porte de produits. Rempli par le rendu, les
+           tranches n'etant connues qu'apres calcul. -->
+      <div class="bascule bascule--perimetre" id="vue-financement"></div>
+
       <div id="bandeau-controle" class="bandeau"></div>
 
       <div class="colonnes colonnes--balance">

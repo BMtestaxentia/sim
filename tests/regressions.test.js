@@ -1138,3 +1138,67 @@ describe('R-AMT-1 - marges CDC : referentiel versionne et surcharge par simulati
     expect(cdcDe(r, 'construction').taux).toBe(0.045);
   });
 });
+
+describe('R-FIN - plan de financement PAR TRANCHE', () => {
+  const mixte = {
+    ...BASE,
+    lots: [
+      { code_produit: 'PLS', nb_logements: 10, shab_m2: 600 },
+      { code_produit: 'PLAI', nb_logements: 5, shab_m2: 300 },
+    ],
+    postes_bilan: [
+      { chapitre: 'charge_fonciere', libelle: 'Terrain', montant_ht_eur: 500000, taux_tva: 0.055 },
+      { chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1200000, taux_tva: 0.1 },
+    ],
+    subventions: [
+      { libelle: 'Ville', montant_eur: 50000, affectation: 'PLAI' },
+      { libelle: 'Agglo', montant_eur: 30000 },
+    ],
+    prets: [],
+  };
+  const r = calculer(mixte, REFERENTIELS);
+
+  it('expose un plan complet par tranche', () => {
+    expect(Object.keys(r.financement.par_tranche).sort()).toEqual(['PLAI', 'PLS']);
+    for (const t of Object.values(r.financement.par_tranche)) {
+      expect(t.prix_revient_ttc_eur).toBeGreaterThan(0);
+      expect(t.prets.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('chaque tranche s equilibre, et leur somme fait l operation', () => {
+    const p = r.financement.par_tranche;
+    for (const [c, t] of Object.entries(p)) expect(t.ecart_eur, `tranche ${c}`).toBe(0);
+    const somme = Object.values(p).reduce((s, t) => s + t.prix_revient_ttc_eur, 0);
+    expect(somme).toBe(r.bilan.total_ttc_module_eur);
+  });
+
+  it('affecte la subvention flechee a SA tranche et ventile l autre', () => {
+    // Ville (50 000) est flechee PLAI ; Agglo (30 000) profite a tous, au
+    // prorata de surface utile - c'est la meme regle que le calcul des besoins,
+    // et non une seconde ventilation qui pourrait en diverger.
+    const p = r.financement.par_tranche;
+    const qp = r.surfaces.quotes_parts;
+    expect(p.PLAI.subventions_eur).toBe(Math.round(50000 + 30000 * qp.PLAI));
+    expect(p.PLS.subventions_eur).toBe(Math.round(30000 * qp.PLS));
+    const somme = p.PLAI.subventions_eur + p.PLS.subventions_eur;
+    expect(Math.abs(somme - 80000)).toBeLessThanOrEqual(1);
+  });
+
+  it('n attribue a une tranche que SES prets', () => {
+    for (const [c, t] of Object.entries(r.financement.par_tranche)) {
+      for (const pret of t.prets) expect(pret.produit, `${c} / ${pret.code}`).toBe(c);
+    }
+    const total = Object.values(r.financement.par_tranche)
+      .reduce((s, t) => s + t.total_prets_eur, 0);
+    expect(Math.abs(total - r.financement.total_prets_eur)).toBeLessThanOrEqual(1);
+  });
+
+  it('decline le prix de revient par chapitre sous chaque tranche', () => {
+    const t = r.financement.par_tranche.PLS;
+    const somme = Object.values(t.chapitres)
+      .filter(Boolean)
+      .reduce((s, ch) => s + ch.ttc_lasm_eur, 0);
+    expect(Math.abs(somme - t.prix_revient_ttc_eur)).toBeLessThanOrEqual(1);
+  });
+});

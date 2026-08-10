@@ -416,6 +416,22 @@ td.calc { text-align: right; }
 .bascule__option:hover { color: var(--text-primary); }
 .bascule__option[aria-pressed='true'] { background: var(--info-bg); color: var(--info-text); }
 
+/* Selecteur de perimetre du plan de financement. L'option active d'une TRANCHE
+   prend la couleur de cette tranche, la meme que son onglet et ses lignes de
+   pret : on sait de quel produit on lit le plan avant d'avoir lu le libelle. */
+.bascule--perimetre { margin-bottom: 12px; }
+.bascule--perimetre[hidden] { display: none; }
+.bascule__option--actif { background: var(--info-bg); color: var(--info-text); }
+.bascule__option[data-vue-financement] { display: inline-flex; align-items: center; gap: 6px; }
+.bascule__puce {
+  width: 7px; height: 7px; border-radius: 50%; flex: none;
+  background: var(--cat, var(--cat-6));
+}
+.bascule__option--actif[style*='--cat'] {
+  background: color-mix(in srgb, var(--cat, var(--cat-6)) 20%, transparent);
+  color: var(--cat, var(--cat-6));
+}
+
 /* ============================================================ PILULES ET JETONS */
 
 /* Etat : vert acquis, bleu en cours, ambre a surveiller, rouge bloquant. */

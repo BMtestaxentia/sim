@@ -383,6 +383,12 @@ export function calculer(entrees, referentiels) {
    * @type {Array<Object>}
    */
   let pretsACalculer;
+  /**
+   * Subventions et fonds propres revenant a chaque tranche, une fois ventilees.
+   * Rempli par le calcul des besoins, relu par la restitution par tranche.
+   * @type {Record<string, {subventions_eur: number, fonds_propres_eur: number}>}
+   */
+  const ressourcesParTranche = {};
   {
     const surcharges = entrees.caracteristiques_prets_defaut ?? {};
     const codesFinances = codesPresents.length ? codesPresents : [];
@@ -432,6 +438,11 @@ export function calculer(entrees, referentiels) {
       const pr = bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0;
       const sub = (subAffectees[c] ?? 0) + (quotesParts[c] ?? 0) * subNonAffectees;
       const fp = fpParProduit ? (Number(fpParProduit[c]) || 0) : (quotesParts[c] ?? 0) * fondsPropres;
+      // Memorise pour la restitution par tranche : la ventilation des ressources
+      // est une regle du moteur (une subvention non affectee profite a tous, au
+      // prorata de surface utile), pas une commodite d'affichage. La refaire a
+      // l'ecran serait la deuxieme occasion de s'en ecarter.
+      ressourcesParTranche[c] = { subventions_eur: arrondiEuro(sub), fonds_propres_eur: arrondiEuro(fp) };
       const fixes = prets
         .filter((p) => !auto(p) && (p.produit ?? trancheUnique) === c)
         .reduce((s, p) => s + (Number(p.montant_eur) || 0), 0);
@@ -590,7 +601,7 @@ export function calculer(entrees, referentiels) {
         pretsACalculer.push({
           ...modele,
           code: 'CPLS',
-          libelle: 'CPLS (complément au PLS)',
+          libelle: 'CPLS',
           nature: 'construction',
           produit: 'PLS',
           montant_eur: scission.cpls_eur,
@@ -707,6 +718,38 @@ export function calculer(entrees, referentiels) {
     baremes,
   );
   alertes.push(...equilibre.alertes);
+
+  // Plan de financement PAR TRANCHE. Une operation mixte n'a pas un plan mais
+  // autant de plans qu'elle porte de produits : chacun a son prix de revient,
+  // ses subventions, ses fonds propres et ses prets, et c'est a ce niveau que
+  // se juge un equilibre. Les ressources ventilees viennent du calcul des
+  // besoins, jamais d'un recalcul : deux ventilations finiraient par diverger.
+  /** @type {Record<string, any>} */
+  const planParTranche = {};
+  for (const code of codesPresents) {
+    const t = bilan.par_tranche?.[code];
+    if (!t) continue;
+    const res = ressourcesParTranche[code] ?? { subventions_eur: 0, fonds_propres_eur: 0 };
+    const prets = pretsResolus.filter((p) => p.produit === code);
+    const totalPretsTranche = arrondiEuro(prets.reduce((s, p) => s + (p.montant_eur || 0), 0));
+    const ressources = arrondiEuro(
+      res.subventions_eur + res.fonds_propres_eur + totalPretsTranche,
+    );
+    planParTranche[code] = {
+      // Emplois : le prix de revient de la tranche, decline par chapitre.
+      chapitres: Object.fromEntries(
+        Object.entries(bilan.chapitres).map(([ch, v]) => [ch, v.par_tranche?.[code] ?? null]),
+      ),
+      prix_revient_ttc_eur: t.total_ttc_module_eur,
+      part_su: t.part_su,
+      subventions_eur: res.subventions_eur,
+      fonds_propres_eur: res.fonds_propres_eur,
+      prets,
+      total_prets_eur: totalPretsTranche,
+      ressources_eur: ressources,
+      ecart_eur: arrondiEuro(ressources - t.total_ttc_module_eur),
+    };
+  }
 
   // Un pret dont les echeances depassent l'horizon de simulation voit ses
   // annuites disparaitre des totaux d'exploitation SANS AUCUN SIGNAL : le compte
@@ -990,6 +1033,7 @@ export function calculer(entrees, referentiels) {
       total_prets_eur: totalPrets,
       total_prets_cdc_eur: totalPretsCDC,
       equilibre,
+      par_tranche: planParTranche,
     },
     amortissements,
     fiscalite: { tfpb, taxe_amenagement: ta },

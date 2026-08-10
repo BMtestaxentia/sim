@@ -1334,3 +1334,39 @@ describe('R-FIN-7 - apport en fonds propres laisse au calcul', () => {
     expect(r.exploitation.fonds_propres_par_tranche.PLS.montant_auto_eur).toBe(Math.round(ttc * 0.05));
   });
 });
+
+describe('R-FIN-7 - un apport automatique finance vraiment la tranche', () => {
+  const op = (fp) =>
+    calculer(
+      {
+        identite: { zone_123: 2, zone_ABC: 'B1' },
+        dates: { annee_mise_en_location: 2028, duree_simulation_ans: 5 },
+        lots: [{ code_produit: 'PLS', nb_logements: 6, shab_m2: 400 }],
+        postes_bilan: [{ chapitre: 'batiment', libelle: 'T', montant_ht_eur: 1000000, taux_tva: 0.1 }],
+        fonds_propres_par_produit: fp,
+      },
+      REFERENTIELS,
+    );
+
+  it('compte dans les ressources de la tranche, pas seulement dans le total', () => {
+    const r = op({});
+    const auto = r.exploitation.fonds_propres_par_tranche.PLS.montant_eur;
+    expect(auto).toBeGreaterThan(0);
+    // La restitution par tranche doit voir le meme apport que le total : sans
+    // cela la part du prix de revient s'affiche a 0 % et les prets CDC couvrent
+    // un besoin deja finance.
+    expect(r.financement.par_tranche.PLS.fonds_propres_eur).toBe(auto);
+    // Le recapitulatif de tranche aussi : c'est lui qui porte la part du prix
+    // de revient affichee a l'ecran.
+    expect(r.surfaces.recapitulatif.PLS.fonds_propres_eur).toBe(auto);
+  });
+
+  it('reduit d autant le pret CDC theorique', () => {
+    const avec = op({});
+    const sans = op({ PLS: 0 });
+    const pret = (r) => r.financement.par_tranche.PLS.total_prets_eur;
+    expect(pret(sans) - pret(avec)).toBe(
+      avec.exploitation.fonds_propres_par_tranche.PLS.montant_eur,
+    );
+  });
+});

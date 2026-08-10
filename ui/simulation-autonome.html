@@ -5787,7 +5787,11 @@ function calculer(entrees, referentiels) {
     for (const c of codesFinances) {
       const pr = bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0;
       const sub = lignesSub.reduce((s, l) => s + (l.par_tranche[c] ?? 0), 0);
-      const fp = fpParProduit ? (Number(fpParProduit[c]) || 0) : (quotesParts[c] ?? 0) * fondsPropres;
+      // `apportDe` et non la saisie brute : un apport laisse au calcul vaut sa
+      // part du prix de revient, pas zero. Lire la saisie ici faisait croire la
+      // tranche sans fonds propres - la part affichee tombait a 0,0 % et les
+      // prets CDC couvraient un besoin qu'ils n'avaient pas a couvrir.
+      const fp = fpParProduit ? apportDe(c) : (quotesParts[c] ?? 0) * fondsPropres;
       // Memorise pour la restitution par tranche : la ventilation des ressources
       // est une regle du moteur (une subvention non affectee profite a tous, au
       // prorata de surface utile), pas une commodite d'affichage. La refaire a
@@ -6492,7 +6496,10 @@ function calculer(entrees, referentiels) {
             shab_m2: arrondiSurface(tranches[c].shab_m2),
             su_m2: arrondiSurface(tranches[c].su_m2),
             quote_part_su: quotesParts[c],
-            fonds_propres_eur: fpParProduit?.[c] ?? null,
+            // Apport RESOLU et non saisie brute : laisse au calcul, il vaut sa
+            // part du prix de revient. Publier la saisie ici affichait une part
+            // de 0 % sous un apport pourtant bien present.
+            fonds_propres_eur: fpParProduit ? apportDe(c) : null,
             subventions_eur: subventions.par_produit[c] ?? 0,
             prix_revient_ttc_eur: bilan.par_tranche?.[c]?.total_ttc_module_eur ?? null,
             prets: amortissements

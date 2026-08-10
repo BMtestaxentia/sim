@@ -18,6 +18,7 @@ import { surfaceUtile, quotesPartsSU, loyerProduit, loyerAnnexesSeparees, contro
 import { normaliserTrajectoires } from './trajectoires.js';
 import { calendrierOperation } from './calendrier.js';
 import { pretsDefautResolus, produit, marge, ORDRE_PRODUITS } from './produits.js';
+import { fusionner, surchargerTrajectoires, ecartsParametrage } from './parametrage.js';
 import {
   prixDeRevient,
   prixDeRevientVentile,
@@ -68,11 +69,19 @@ export const VERSION_MOTEUR = '0.4.0';
  * @returns {Object} resultats structures
  */
 export function calculer(entrees, referentiels) {
-  const baremes = referentiels.baremes ?? referentiels;
+  // R-PARAM - Les referentiels du depot font foi, la simulation peut les
+  // surcharger. La fusion a lieu ICI, une fois, et tous les modules travaillent
+  // ensuite sur le bareme effectif : un module qui irait rechercher la valeur
+  // d'origine ailleurs produirait deux verites pour la meme grandeur.
+  const baremesReferentiel = referentiels.baremes ?? referentiels;
+  const baremes = fusionner(baremesReferentiel, entrees.parametrage?.baremes);
   // Le referentiel de trajectoires stocke une ligne par annee ; les modules de
   // calcul consomment un dictionnaire par poste. Sans cette normalisation,
   // l'indexation retombe silencieusement a zero (defaut V2).
-  const trajectoires = normaliserTrajectoires(referentiels.trajectoires);
+  const trajectoires = surchargerTrajectoires(
+    normaliserTrajectoires(referentiels.trajectoires),
+    entrees.parametrage?.trajectoires,
+  );
   const alertes = [];
 
   const { identite = {}, dates = {}, lots = [], options = {} } = entrees;
@@ -151,6 +160,37 @@ export function calculer(entrees, referentiels) {
       ...l,
     };
   });
+
+  // R-LOYER-9 - Millesime du bareme de loyers. Les plafonds sont revalorises au
+  // 1er janvier : les appliquer tels quels a une mise en location posterieure
+  // sous-estime les recettes de toute la simulation. Le moteur ne les revalorise
+  // PAS de lui-meme - aucune source ne dit que LEON le fait, et l'inventer
+  // fausserait les golden tests - mais il refuse de laisser l'ecart passer
+  // inapercu, et chiffre ce qu'il coute.
+  {
+    const anneesBareme = [
+      baremes.loyers_max_zone_123?.annee_reference,
+      baremes.loyers_max_zone_ABC?.annee_reference,
+    ].filter((a) => Number.isFinite(a));
+    const millesime = anneesBareme.length ? Math.min(...anneesBareme) : null;
+    const ecartAns = millesime === null ? 0 : anneeMEL - millesime;
+    if (ecartAns > 0 && loyers.length) {
+      let cumul = 1;
+      for (let a = millesime + 1; a <= anneeMEL; a++) {
+        cumul *= 1 + (trajectoires.par_poste?.loyers_irl?.[a] ?? 0);
+      }
+      const manque = arrondiEuro(
+        loyers.reduce((s, l) => s + l.loyer_annuel_eur, 0) * (cumul - 1),
+      );
+      alertes.push(
+        `Bareme de loyers ${millesime} applique a une mise en location ${anneeMEL}, ` +
+          `soit ${ecartAns} an${ecartAns > 1 ? 's' : ''} de revalorisation non pris en compte. ` +
+          `Aux trajectoires du profil, les plafonds vaudraient ${((cumul - 1) * 100).toFixed(1)} % ` +
+          `de plus, soit ${manque} EUR de loyers annuels. Saisir le bareme du millesime attendu ` +
+          "a l'ecran Parametres, ou assumer l'ecart.",
+      );
+    }
+  }
 
   const loyersLogementsAnnuels = arrondiEuro(
     loyers.reduce((s, l) => s + l.loyer_annuel_eur, 0),
@@ -314,21 +354,10 @@ export function calculer(entrees, referentiels) {
   const laOrigine = trajectoires.taux_reference_livret_a;
   const laParAnnee = trajectoires.livret_a_par_annee;
 
-  // R-AMT-1 - Grille tarifaire des prets CDC. Les marges viennent du referentiel
-  // et peuvent etre surchargees PAR SIMULATION : une grille CDC change plusieurs
-  // fois par an, et attendre une release du moteur pour chiffrer au tarif du
-  // jour n'est pas tenable. La surcharge voyage avec les entrees, donc la
-  // simulation reste reproductible - c'est ce qui la distingue d'un reglage
-  // global mutable.
-  const margesReferentiel = baremes.prets_cdc?.marges ?? {};
-  const margesSurchargees = entrees.parametrage?.marges_prets ?? {};
-  /** @type {Record<string, any>} */
-  const margesPrets = { ...margesReferentiel };
-  for (const [cle, v] of Object.entries(margesSurchargees)) {
-    const valeur = typeof v === 'object' && v !== null ? v.valeur : v;
-    if (!Number.isFinite(valeur)) continue;
-    margesPrets[cle] = { ...(margesReferentiel[cle] ?? {}), valeur: Number(valeur), surchargee: true };
-  }
+  // R-AMT-1 - Grille tarifaire des prets CDC, deja surchargee par la fusion des
+  // referentiels : le taux d'un pret vaut Livret A + marge, et seule la marge
+  // est propre au produit.
+  const margesPrets = baremes.prets_cdc?.marges ?? {};
 
   /**
    * Prets a amortir. En l'absence de prets saisis, on mobilise les prets CDC
@@ -897,6 +926,13 @@ export function calculer(entrees, referentiels) {
     identite,
     calendrier,
     profil_trajectoires: trajectoires.profil ?? null,
+    // R-PARAM - Ce qui a ete chiffre hors referentiel du depot. Une simulation
+    // qui s'ecarte du bareme doit le dire : deux exports identiques a l'oeil
+    // peuvent sinon porter des tarifs differents.
+    parametrage: {
+      baremes_ecarts: ecartsParametrage(baremesReferentiel, entrees.parametrage?.baremes),
+      trajectoires_surchargees: Object.keys(entrees.parametrage?.trajectoires?.par_annee ?? {}).length,
+    },
     surfaces: {
       par_produit: suParProduit,
       quotes_parts: quotesParts,
@@ -931,8 +967,7 @@ export function calculer(entrees, referentiels) {
       prets_resolus: pretsResolus,
       // Grille tarifaire effectivement appliquee, surcharges comprises : l'ecran
       // en a besoin pour afficher « Livret A 2,40 % + 0,60 % » a cote de chaque
-      // marge, et la restitution pour tracer sous quel tarif la simulation a ete
-      // chiffree.
+      // marge.
       livret_a_reference: laOrigine,
       marges_prets: margesPrets,
       prefinancement: prefi,

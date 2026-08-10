@@ -29,6 +29,7 @@ const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 /** Ordre de dependance des modules du moteur (aucun cycle : chacun ne cite que les precedents). */
 const MODULES = [
   'arrondis.js',
+  'parametrage.js',
   'produits.js',
   'amortissement.js',
   'calendrier.js', // depend de amortissement.js (jourUTC)

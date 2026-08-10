@@ -21,6 +21,7 @@
 import { calculer } from '../src/moteur.js';
 import { produitsOrdonnes } from '../src/produits.js';
 import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
+import { ecartsParametrage } from '../src/parametrage.js';
 
 const $ = (sel) => /** @type {HTMLElement} */ (document.querySelector(sel));
 
@@ -199,10 +200,15 @@ const etat = {
     redevance_annuelle_eur: null,
     redevance_annee_valeur: null,
   },
-  // Surcharges de parametrage, portees par la SIMULATION et non par un reglage
-  // global : une grille tarifaire modifiee doit voyager avec le dossier, sinon
-  // le meme fichier rejoue ailleurs ne donnerait pas les memes annuites.
-  parametrage: { marges_prets: {} },
+  // Profils de parametres (R-PARAM). Le premier est le referentiel du depot :
+  // surcharge vide, non modifiable, il sert de point de comparaison. Les
+  // surcharges sont portees par la SIMULATION et non par un reglage global -
+  // une grille tarifaire modifiee doit voyager avec le dossier, sinon le meme
+  // fichier rejoue ailleurs ne donnerait pas les memes annuites.
+  profils: [
+    { id: 'referentiel', nom: 'Référentiel du dépôt', parametrage: {} },
+  ],
+  profil_actif: 'referentiel',
   options: {},
 };
 
@@ -293,11 +299,19 @@ const TAUX_TVA = [0.055, 0.1, 0.2, 0];
 function ecrireChemin(cible, chemin, valeur) {
   const cles = chemin.split('.');
   let ref = cible;
-  for (const cle of cles.slice(0, -1)) {
+  for (let i = 0; i < cles.length - 1; i++) {
+    const cle = cles[i];
     // Cree les niveaux manquants : `postes_bilan.3.montants_ht_par_produit.PLS`
     // doit pouvoir s'ecrire meme si le dictionnaire de tranches n'existe pas
     // encore. Sans cela la frappe leve au lieu d'ecrire.
-    if (ref[cle] === undefined || ref[cle] === null) ref[cle] = {};
+    //
+    // Le niveau cree est un TABLEAU quand la cle suivante est un indice. Un
+    // objet `{2: 12}` la ou le referentiel porte une liste ferait remplacer la
+    // liste entiere a la fusion, et les quatre autres zones d'un bareme
+    // disparaitraient pour une seule corrigee.
+    if (ref[cle] === undefined || ref[cle] === null) {
+      ref[cle] = /^\d+$/.test(cles[i + 1]) ? [] : {};
+    }
     ref = ref[cle];
   }
   ref[cles.at(-1)] = valeur;
@@ -1398,13 +1412,6 @@ function rendreValeurs(r) {
     cellule.textContent = nul(m?.valeur) || nul(r.financement?.livret_a_reference)
       ? '-'
       : pct(r.financement.livret_a_reference + m.valeur, 2);
-    /** @type {HTMLElement} */ (cellule).classList.toggle('surchargee', m?.surchargee === true);
-  }
-  const btnMarges = document.getElementById('reinitialiser-marges');
-  if (btnMarges) {
-    /** @type {HTMLButtonElement} */ (btnMarges).disabled = !Object.values(
-      etat.parametrage?.marges_prets ?? {},
-    ).some((v) => !nul(v));
   }
 
   // Jetons de synthese d'un pret : taux, duree et revisabilite viennent du
@@ -2211,106 +2218,393 @@ function rendreExploitation(r) {
 
 // ---------------------------------------------------------------- ecran parametres
 
+/**
+ * PROFILS DE PARAMETRES (R-PARAM).
+ *
+ * Un profil est un jeu nomme de surcharges du referentiel : la grille CDC du
+ * mois, un scenario macro prudent, les plafonds d'un millesime a venir. En
+ * choisir un rechiffre toute la simulation.
+ *
+ * Le profil « Referentiel du depot » est la reference : surcharge vide,
+ * non modifiable. Editer un parametre alors qu'il est actif ne l'abime pas, cela
+ * DERIVE un nouveau profil - on ne peut pas perdre le point de comparaison par
+ * inadvertance.
+ *
+ * La persistance viendra plus tard (CLAUDE.md §2 : pas de base pour l'instant) :
+ * les profils vivent donc dans l'etat de la simulation et partent avec son
+ * export JSON. La structure, elle, est deja celle qu'une table `profils`
+ * attendra - un identifiant, un nom, un arbre de surcharges.
+ */
+const PROFIL_REFERENTIEL = 'referentiel';
+
+/** Profil actif, ou le profil de reference a defaut. */
+function profilActif() {
+  return etat.profils.find((p) => p.id === etat.profil_actif) ?? etat.profils[0];
+}
+
+/** Surcharges du profil actif : c'est ce que le moteur recoit. */
+function parametrageActif() {
+  return profilActif()?.parametrage ?? {};
+}
+
+/** Identifiant sans collision, sans horloge : le moteur comme l'UI restent deterministes. */
+function idProfil() {
+  let n = etat.profils.length + 1;
+  while (etat.profils.some((p) => p.id === `profil-${n}`)) n++;
+  return `profil-${n}`;
+}
+
+/**
+ * Ecrit une surcharge dans le profil actif. Si c'est le referentiel qui est
+ * actif, on en derive d'abord une copie : la reference doit rester intacte.
+ * @returns {Object} le profil reellement modifie
+ */
+function profilModifiable() {
+  const p = profilActif();
+  if (p.id !== PROFIL_REFERENTIEL) return p;
+  const copie = {
+    id: idProfil(),
+    nom: 'Profil personnalisé',
+    parametrage: { baremes: {}, trajectoires: { par_annee: {} } },
+  };
+  etat.profils.push(copie);
+  etat.profil_actif = copie.id;
+  return copie;
+}
+
+/** Libelles lisibles des postes de trajectoire, dans l'ordre d'affichage. */
+const POSTES_TRAJECTOIRE = [
+  { cle: 'loyers_irl', libelle: 'Loyers / IRL' },
+  { cle: 'gros_entretien', libelle: 'Gros entretien' },
+  { cle: 'gestion', libelle: 'Gestion' },
+  { cle: 'tfpb', libelle: 'TFPB' },
+  { cle: 'livret_a', libelle: 'Livret A' },
+];
+
+/** Nombre d'années de trajectoire affichées avant dépliage. */
+const ANNEES_TRAJECTOIRE_VISIBLES = 12;
+let trajectoireDepliee = false;
+
+/**
+ * Cellule de saisie d'un parametre. Le champ VIDE vaut « valeur du
+ * referentiel », que le placeholder rappelle : c'est ce qui permet de revenir
+ * en arriere sans se souvenir du chiffre d'origine.
+ *
+ * @param {string} chemin   chemin dans `parametrage` (ex. `baremes.tva.taux_normal`)
+ * @param {number} refValeur  valeur du referentiel
+ * @param {number|null|undefined} surcharge  valeur saisie
+ * @param {'pourcentage'|'montant'|'nombre'} type
+ */
+function celluleParametre(chemin, refValeur, surcharge, type = 'nombre') {
+  const enPct = type === 'pourcentage';
+  const affiche = (v) => (nul(v) ? '' : enPct ? enPourcent(v) : v);
+  const modifie = !nul(surcharge) && surcharge !== refValeur;
+  if (type === 'montant') {
+    return `<td class="cellule-valeur ${modifie ? 'surchargee' : ''}">
+      <input type="text" inputmode="decimal" data-champ="${chemin}" data-type="montant"
+        placeholder="${att(fMontantSaisie.format(refValeur ?? 0))}" value="${valMontant(surcharge)}" /></td>`;
+  }
+  return `<td class="cellule-valeur ${modifie ? 'surchargee' : ''}">
+    <input type="number" step="${enPct ? '0.01' : 'any'}" data-champ="${chemin}"
+      data-type="${enPct ? 'pourcentage' : 'nombre'}"
+      placeholder="${att(String(affiche(refValeur)))}" value="${valNum(affiche(surcharge))}" />
+    ${enPct ? '<span class="unite">%</span>' : ''}</td>`;
+}
+
+/** Lit une surcharge dans le profil actif, par chemin pointe. */
+function surchargeDe(chemin) {
+  let n = parametrageActif();
+  for (const cle of chemin.split('.')) {
+    if (n === null || n === undefined) return undefined;
+    n = n[cle];
+  }
+  return n;
+}
+
 function rendreParametres() {
   const b = referentiels.baremes;
   const t = referentiels.trajectoires;
+  const profil = profilActif();
+  // Compte les ecarts sur le PROFIL et non sur le dernier resultat : l'ecran se
+  // redessine avant que le moteur n'ait retourne, et la barre afficherait alors
+  // le compte du calcul precedent - zero juste apres la premiere saisie.
+  const ecarts = ecartsParametrage(b, parametrageActif().baremes);
+  const nbTraj = Object.values(parametrageActif().trajectoires?.par_annee ?? {})
+    .reduce((t, postes) => t + Object.values(postes ?? {}).filter((v) => !nul(v)).length, 0);
 
-  const surcharges = etat.parametrage?.marges_prets ?? {};
-  const nbSurchargees = Object.values(surcharges).filter((v) => !nul(v)).length;
+  // --- Barre de profils ---
+  const barre = `
+    <section class="bloc para-profils">
+      <div class="para-profils__barre">
+        <label class="champ champ--serre">
+          <span>Profil de paramètres</span>
+          <select id="select-profil">
+            ${etat.profils
+              .map((p) => `<option value="${att(p.id)}" ${p.id === profil.id ? 'selected' : ''}>${att(p.nom)}</option>`)
+              .join('')}
+          </select>
+        </label>
+        <span class="para-profils__actions">
+          <button type="button" class="bouton bouton--ajout" data-profil="dupliquer">Dupliquer</button>
+          <button type="button" class="bouton bouton--discret" data-profil="renommer"
+            ${profil.id === PROFIL_REFERENTIEL ? 'disabled' : ''}>Renommer</button>
+          <button type="button" class="bouton bouton--discret" data-profil="reinitialiser"
+            ${profil.id === PROFIL_REFERENTIEL ? 'disabled' : ''}>↺ tout</button>
+          <button type="button" class="bouton bouton--discret" data-profil="supprimer"
+            ${profil.id === PROFIL_REFERENTIEL ? 'disabled' : ''}>Supprimer</button>
+        </span>
+      </div>
+      <p class="aide">
+        ${
+          profil.id === PROFIL_REFERENTIEL
+            ? `Référentiel du dépôt, non modifiable : c'est le point de comparaison. ` +
+              `Modifier un paramètre ici crée automatiquement un profil dérivé.`
+            : `${ecarts.length + nbTraj} paramètre${ecarts.length + nbTraj > 1 ? 's' : ''} ` +
+              `modifié${ecarts.length + nbTraj > 1 ? 's' : ''} par rapport au référentiel. ` +
+              `Une cellule vidée revient à la valeur du dépôt.`
+        }
+        Les profils partent avec l'export JSON de la simulation.
+      </p>
+    </section>`;
 
-  $('#bandeau-parametres').innerHTML =
-    `<span class="bandeau__principal">${nbSurchargees ? `${nbSurchargees} marge${nbSurchargees > 1 ? 's' : ''} modifiée${nbSurchargees > 1 ? 's' : ''}` : 'Référentiel du dépôt'}</span>` +
-    `<span class="bandeau__detail">Barèmes ${b.date_valeur} · grille CDC ${b.prets_cdc?.date_valeur ?? '-'} · profil ${att(t.profil)}. ` +
-    `Seules les marges des prêts CDC se modifient ici : elles changent plusieurs fois par an. ` +
-    `La modification est portée par la simulation, pas par le poste, donc l'export JSON l'emmène avec lui. ` +
-    `Le reste est versionné dans le dépôt et se lit sans se toucher.</span>`;
-
-  const tableau = (titre, source, entetes, lignes) => `
+  // --- Fabrique de groupe : entetes, lignes, source masquee ---
+  const groupe = (titre, aide, entetes, lignes) => `
     <section class="bloc para-groupe">
       <h3>${titre}</h3>
-      ${source ? `<p class="para-source">${att(source)}</p>` : ''}
+      ${aide ? `<p class="para-source">${att(aide)}</p>` : ''}
       <div class="table-defilante"><table class="tableau">
         <thead><tr>${entetes.map((e, i) => `<th ${i ? 'class="num"' : ''}>${e}</th>`).join('')}</tr></thead>
-        <tbody>${lignes.map((l) => `<tr>${l.map((c, i) => `<td ${i ? 'class="num"' : ''}>${c}</td>`).join('')}</tr>`).join('')}</tbody>
+        <tbody>${lignes.join('')}</tbody>
       </table></div>
     </section>`;
 
-  const lm123 = b.loyers_max_zone_123;
-  const lmABC = b.loyers_max_zone_ABC;
-  const cs = b.constantes_reglementaires.coefficient_structure;
+  /** Ligne « libelle + une cellule de saisie par colonne ». */
+  const ligne = (libelle, cellules, detail) =>
+    `<tr><td>${att(libelle)}${detail ? ` <span class="discret">${att(detail)}</span>` : ''}</td>${cellules.join('')}</tr>`;
 
-  // Grille tarifaire CDC : le SEUL bloc modifiable de l'ecran. Le taux d'un pret
-  // CDC vaut Livret A + marge, et c'est la marge qui bouge - le Livret A, lui,
-  // vient de la trajectoire macro et se lit plus bas.
+  // --- Marges des prets CDC ---
   const la = dernierResultat?.financement?.livret_a_reference;
   const marges = b.prets_cdc?.marges ?? {};
-  const grilleCDC = `
+  const grilleCDC = groupe(
+    `Marges des prêts CDC <span class="para-groupe__date">grille ${att(b.prets_cdc?.date_valeur ?? '')}</span>`,
+    `Le taux d'un prêt CDC vaut Livret A + marge. Livret A de référence : ${nul(la) ? '-' : pct(la, 2)}. ` +
+      `Chaque prêt peut en outre porter sa propre marge, saisie sur sa ligne.`,
+    ['Produit', 'Référentiel', 'Marge appliquée', 'Taux résultant'],
+    Object.entries(marges).map(([cle, m]) => {
+      const chemin = `baremes.prets_cdc.marges.${cle}.valeur`;
+      const s = surchargeDe(chemin);
+      const v = nul(s) ? m.valeur : s;
+      return ligne(m.libelle ?? cle, [
+        `<td class="num discret">${pct(m.valeur, 2)}</td>`,
+        celluleParametre(chemin, m.valeur, s, 'pourcentage'),
+        `<td class="num" data-taux-marge="${cle}">${nul(la) ? '-' : pct(la + v, 2)}</td>`,
+      ]);
+    }),
+  );
+
+  // --- Loyers plafonds, par zonage ---
+  const bareme = (cle, titre, produits) => {
+    const src = b[cle];
+    const cheminAn = `baremes.${cle}.annee_reference`;
+    const sAn = surchargeDe(cheminAn);
+    return groupe(
+      titre,
+      `Millésime du barème : les plafonds sont revalorisés au 1er janvier. Un millésime ` +
+        `antérieur à la mise en location sous-estime les recettes, le moteur le signale.`,
+      ['Produit', ...src.zones.map((z) => z.replace('zone_', ''))],
+      [
+        `<tr class="para-ligne--annee"><td>Année de référence</td>
+          ${celluleParametre(cheminAn, src.annee_reference, sAn, 'nombre')}
+          <td colspan="${src.zones.length - 1}" class="discret">
+            millésime appliqué : ${nul(sAn) ? src.annee_reference : sAn}</td></tr>`,
+        ...produits.map((p) =>
+          ligne(
+            p,
+            src.zones.map((z, i) => {
+              const chemin = `baremes.${cle}.${p}.${i}`;
+              return celluleParametre(chemin, src[p][i], surchargeDe(chemin), 'nombre');
+            }),
+          ),
+        ),
+      ],
+    );
+  };
+
+  // --- Taux de TVA ---
+  const tvaProduits = Object.entries(b.tva.lasm_par_produit).filter(([, v]) => typeof v === 'number');
+  const grilleTVA = groupe(
+    'Taux de TVA',
+    "Taux appliqué au prix de revient de chaque tranche pour obtenir son TTC. Le taux réduit " +
+      "et le taux normal servent aux postes qui ne relèvent pas d'un produit.",
+    ['Poste', 'Référentiel', 'Taux appliqué'],
+    [
+      ...[
+        ['taux_reduit_simulation', 'Taux réduit'],
+        ['taux_normal', 'Taux normal'],
+      ].map(([cle, lib]) => {
+        const chemin = `baremes.tva.${cle}`;
+        return ligne(lib, [
+          `<td class="num discret">${pct(b.tva[cle], 1)}</td>`,
+          celluleParametre(chemin, b.tva[cle], surchargeDe(chemin), 'pourcentage'),
+        ]);
+      }),
+      ...tvaProduits.map(([cle, v]) => {
+        const chemin = `baremes.tva.lasm_par_produit.${cle}`;
+        return ligne(cle, [
+          `<td class="num discret">${pct(v, 1)}</td>`,
+          celluleParametre(chemin, v, surchargeDe(chemin), 'pourcentage'),
+        ]);
+      }),
+    ],
+  );
+
+  // --- Constantes reglementaires reellement lues par le moteur ---
+  const cr = b.constantes_reglementaires;
+  const cs = cr.coefficient_structure;
+  const constante = (chemin, libelle, valeur, type, detail) => {
+    const c = `baremes.constantes_reglementaires.${chemin}`;
+    return ligne(libelle, [
+      `<td class="num discret">${type === 'pourcentage' ? pct(valeur, 2) : nb(valeur)}</td>`,
+      celluleParametre(c, valeur, surchargeDe(c), type),
+    ], detail);
+  };
+  const grilleConstantes = groupe(
+    'Constantes réglementaires',
+    'Seules figurent ici les constantes que le moteur lit réellement : ' +
+      'un paramètre affiché mais inutilisé donnerait le sentiment de piloter ce qui ne bouge pas.',
+    ['Constante', 'Référentiel', 'Valeur appliquée'],
+    [
+      constante('coefficient_surface_annexes.valeur', 'Coefficient des surfaces annexes', cr.coefficient_surface_annexes.valeur, 'nombre', '(SU = SHAB + k x annexes)'),
+      constante('coefficient_structure.metropole_habitat.base', 'Coefficient de structure - base', cs.metropole_habitat.base, 'nombre'),
+      constante('coefficient_structure.metropole_habitat.facteur_nl', 'Coefficient de structure - facteur logements', cs.metropole_habitat.facteur_nl, 'nombre'),
+      constante('coefficient_structure.foyers.facteur_nl', 'Coefficient de structure - foyers', cs.foyers.facteur_nl, 'nombre'),
+      constante('majoration_plus_33', 'Majoration PLUS 33 %', cr.majoration_plus_33, 'pourcentage'),
+      constante('majoration_loyers_depassement_plafonds.valeur', 'Majoration de loyer en dépassement de plafond', cr.majoration_loyers_depassement_plafonds.valeur, 'pourcentage'),
+      constante('marge_locale_plafond_defaut.valeur', 'Plafond de marge locale', cr.marge_locale_plafond_defaut.valeur, 'pourcentage'),
+      constante('majoration_lcr.seuil_bas', 'Majoration LCR - seuil bas', cr.majoration_lcr.seuil_bas, 'nombre'),
+      constante('majoration_lcr.seuil_haut', 'Majoration LCR - seuil haut', cr.majoration_lcr.seuil_haut, 'nombre'),
+      constante('majoration_lcr.majoration_au_dessus', 'Majoration LCR - au-delà du seuil haut', cr.majoration_lcr.majoration_au_dessus, 'pourcentage'),
+      constante('controle_ratio_prets_cdc_min.valeur', 'Ratio minimum de prêts CDC', cr.controle_ratio_prets_cdc_min.valeur, 'pourcentage'),
+      constante('tfpb.montant_par_logement_eur', 'TFPB par logement (€/an)', cr.tfpb.montant_par_logement_eur, 'montant'),
+      constante('tfpb.duree_exoneration_defaut_ans', "Durée d'exonération TFPB par défaut (ans)", cr.tfpb.duree_exoneration_defaut_ans, 'nombre'),
+      constante('ssf.seuil_participation_collectivites', 'SSF - seuil de participation des collectivités', cr.ssf.seuil_participation_collectivites, 'pourcentage'),
+      constante('ssf.part_max_depassement', 'SSF - part maximale du dépassement', cr.ssf.part_max_depassement, 'pourcentage'),
+    ],
+  );
+
+  // --- Fonds propres ---
+  const fp = b.fonds_propres;
+  const grilleFP = groupe(
+    'Fonds propres',
+    'Valeurs par défaut des deux options de la tranche : rémunération annuelle et durée de reconstitution.',
+    ['Paramètre', 'Référentiel', 'Valeur appliquée'],
+    [
+      ligne('Taux de rémunération', [
+        `<td class="num discret">${pct(fp.taux_remuneration_defaut, 2)}</td>`,
+        celluleParametre('baremes.fonds_propres.taux_remuneration_defaut', fp.taux_remuneration_defaut, surchargeDe('baremes.fonds_propres.taux_remuneration_defaut'), 'pourcentage'),
+      ]),
+      ligne('Durée de reconstitution (ans)', [
+        `<td class="num discret">${nb(fp.duree_reconstitution_defaut_ans)}</td>`,
+        celluleParametre('baremes.fonds_propres.duree_reconstitution_defaut_ans', fp.duree_reconstitution_defaut_ans, surchargeDe('baremes.fonds_propres.duree_reconstitution_defaut_ans'), 'nombre'),
+      ]),
+    ],
+  );
+
+  // --- Quotites de charge fonciere forfaitaire (VEFA / acquisition-amelioration) ---
+  const qf = b.quotites_foncier_vefa;
+  const grilleQuotites = groupe(
+    'Quotités de charge foncière forfaitaire',
+    'Part du prix de revient réputée foncière en VEFA et en acquisition-amélioration, par zone. ' +
+      'Elle détermine le droit à prêt foncier.',
+    ['Ligne', ...qf.zones],
+    ['terrain_vefa', 'terrain_acq_amelioration', 'valeur_comptable_terrain_vefa', 'ssf_pge_acq_amelioration'].map((k) =>
+      ligne(
+        k.replace(/_/g, ' '),
+        qf.zones.map((z, i) => {
+          const chemin = `baremes.quotites_foncier_vefa.${k}.${i}`;
+          return celluleParametre(chemin, qf[k][i], surchargeDe(chemin), 'pourcentage');
+        }),
+      ),
+    ),
+  );
+
+  // --- Taxe d'amenagement ---
+  const ta = b.taxe_amenagement;
+  const grilleTA = groupe(
+    "Taxe d'aménagement",
+    'Valeurs forfaitaires au m² de surface taxable, et abattement du logement social.',
+    ['Paramètre', 'Référentiel', 'Valeur appliquée'],
+    [
+      ligne('Valeur forfaitaire hors Île-de-France (€/m²)', [
+        `<td class="num discret">${nb(ta.hors_idf)}</td>`,
+        celluleParametre('baremes.taxe_amenagement.hors_idf', ta.hors_idf, surchargeDe('baremes.taxe_amenagement.hors_idf'), 'montant'),
+      ]),
+      ligne('Valeur forfaitaire Île-de-France (€/m²)', [
+        `<td class="num discret">${nb(ta.idf)}</td>`,
+        celluleParametre('baremes.taxe_amenagement.idf', ta.idf, surchargeDe('baremes.taxe_amenagement.idf'), 'montant'),
+      ]),
+      ligne('Abattement logement social', [
+        `<td class="num discret">${pct(ta.abattement_logement_social, 0)}</td>`,
+        celluleParametre('baremes.taxe_amenagement.abattement_logement_social', ta.abattement_logement_social, surchargeDe('baremes.taxe_amenagement.abattement_logement_social'), 'pourcentage'),
+      ]),
+    ],
+  );
+
+  // --- Trajectoires macro, annee par annee ---
+  const lignesTraj = t.trajectoires;
+  const visibles = trajectoireDepliee ? lignesTraj : lignesTraj.slice(0, ANNEES_TRAJECTOIRE_VISIBLES);
+  const grilleTraj = `
     <section class="bloc para-groupe">
-      <h3>Marges des prêts CDC
-        <button type="button" class="bouton--discret" id="reinitialiser-marges"
-          ${nbSurchargees ? '' : 'disabled'} title="Revenir aux marges du référentiel">↺ référentiel</button>
+      <h3>Trajectoires macro
+        <button type="button" class="bouton--discret" id="deplier-trajectoire">
+          ${trajectoireDepliee ? `Replier` : `Tout afficher (${lignesTraj.length} années)`}</button>
       </h3>
-      <p class="para-source">${att(b.prets_cdc?.source ?? '')}</p>
+      <p class="para-source">Profil ${att(t.profil)}, de ${lignesTraj[0].annee} à ${lignesTraj.at(-1).annee}.
+        Au-delà de la dernière année connue, la dernière valeur est reconduite.</p>
       <div class="table-defilante"><table class="tableau">
-        <thead><tr>
-          <th>Produit</th><th class="num">Référentiel</th><th class="num">Marge appliquée (%)</th>
-          <th class="num">Taux résultant</th><th>Source</th>
-        </tr></thead>
-        <tbody>${Object.entries(marges)
-          .map(([cle, m]) => {
-            const surcharge = surcharges[cle];
-            const valeur = nul(surcharge) ? m.valeur : surcharge;
-            return `<tr>
-            <td>${att(m.libelle ?? cle)}</td>
-            <td class="num discret">${pct(m.valeur, 2)}</td>
-            <!-- Pas de data-structure : reconstruire l'ecran a chaque frappe
-                 couterait le focus des la premiere decimale. Les cellules qui en
-                 dependent sont rafraichies par remplirCalculs. -->
-            <td class="cellule-valeur"><input type="number" step="0.01"
-              data-champ="parametrage.marges_prets.${cle}" data-type="pourcentage"
-              placeholder="${enPourcent(m.valeur)}" value="${valNum(enPourcent(surcharge))}" />
-              <span class="unite">%</span></td>
-            <td class="num" data-taux-marge="${cle}">${nul(la) ? '-' : pct(la + valeur, 2)}</td>
-            <td class="discret">${att(m.source ?? '')}</td>
-          </tr>`;
-          })
+        <thead><tr><th>Année</th>${POSTES_TRAJECTOIRE.map((p) => `<th class="num">${p.libelle}</th>`).join('')}</tr></thead>
+        <tbody>${visibles
+          .map(
+            (l) => `<tr><td class="num-poste">${l.annee}</td>${POSTES_TRAJECTOIRE.map((p) => {
+              const chemin = `trajectoires.par_annee.${l.annee}.${p.cle}`;
+              return celluleParametre(chemin, l[p.cle], surchargeDe(chemin), 'pourcentage');
+            }).join('')}</tr>`,
+          )
           .join('')}</tbody>
-        <tfoot><tr>
-          <td colspan="5" class="aide">Livret A de référence : ${nul(la) ? '-' : pct(la, 2)}
-          (trajectoire ${att(t.profil)}). Le taux d'un prêt CDC vaut Livret A + marge ;
-          chaque prêt peut en outre porter sa propre marge, saisie sur sa ligne.</td>
-        </tr></tfoot>
       </table></div>
     </section>`;
 
   $('#contenu-parametres').innerHTML = [
+    barre,
     grilleCDC,
-    tableau('Loyers plafonds par zone 1/2/3 (€/m² SU/mois)', lm123.source, ['Produit', ...lm123.zones],
-      ['PLUS', 'PLAI', 'LIBRE'].map((p) => [p, ...lm123[p].map((v) => nb(v))])),
-    tableau('Loyers plafonds par zone A/B/C (€/m² SU/mois)', lmABC.source, ['Produit', ...lmABC.zones],
-      ['PLS', 'PLI'].map((p) => [p, ...lmABC[p].map((v) => nb(v))])),
-    tableau('Prêts CDC par défaut', 'R-AMT-1 ; les marges viennent de la grille ci-dessus, les durées du dictionnaire',
+    bareme('loyers_max_zone_123', 'Loyers plafonds par zone 1/2/3 (€/m² SU/mois)', ['PLUS', 'PLAI', 'LIBRE']),
+    bareme('loyers_max_zone_ABC', 'Loyers plafonds par zone A/B/C (€/m² SU/mois)', ['PLS', 'PLI']),
+    grilleTVA,
+    grilleTraj,
+    grilleConstantes,
+    grilleFP,
+    grilleQuotites,
+    grilleTA,
+    // Lecture seule : les durees et revisabilites ne sont pas des donnees de
+    // bareme mais des regles de produit (R-AMT-1), qui suivent le zonage.
+    groupe(
+      'Prêts CDC par défaut',
+      'Rappel des caractéristiques que chaque tranche applique sans saisie. Les marges se règlent ci-dessus, ' +
+        'les durées suivent le zonage et ne se paramètrent pas.',
       ['Produit', 'Nature', 'Marge', 'Durée', 'Révisabilité'],
       produitsOrdonnes().flatMap((p) =>
         p.prets_defaut.map((d) => {
-          const v = surcharges[d.cle_marge] ?? marges[d.cle_marge]?.valeur;
-          return [p.libelle, d.nature, `${d.cle_marge} (${pct(v, 2)})`, d.duree_ref, d.revisabilite];
-        }))),
-    tableau('Taux de livraison à soi-même', b.tva.source, ['Clé', 'Taux'],
-      Object.entries(b.tva.lasm_par_produit).filter(([, v]) => typeof v === 'number').map(([k, v]) => [k, pct(v, 1)])),
-    // La variante DOM n'est plus implementee (hors perimetre) : elle ne figure
-    // donc plus ici. N'afficher que des parametres reellement lus par le moteur.
-    tableau('Coefficient de structure', cs.source, ['Cas', 'Base', 'Facteur logements'], [
-      ['Métropole habitat', nb(cs.metropole_habitat.base), nb(cs.metropole_habitat.facteur_nl)],
-      ['Foyers', nb(cs.metropole_habitat.base), nb(cs.foyers.facteur_nl)],
-    ]),
-    tableau('Trajectoires macro',
-      `${t.source} - ${t.trajectoires.length} années, de ${t.trajectoires[0].annee} à ${t.trajectoires.at(-1).annee}. ` +
-        `Au-delà, la dernière valeur connue est reconduite.`,
-      ['Année', 'Loyers / IRL', 'Gros entretien', 'Gestion', 'TFPB', 'Livret A'],
-      t.trajectoires.slice(0, 15).map((l) => [l.annee, pct(l.loyers_irl), pct(l.gros_entretien), pct(l.gestion), pct(l.tfpb), pct(l.livret_a)])),
+          const s = surchargeDe(`baremes.prets_cdc.marges.${d.cle_marge}.valeur`);
+          const v = nul(s) ? marges[d.cle_marge]?.valeur : s;
+          return `<tr><td>${att(p.libelle)}</td><td class="num">${d.nature}</td>
+            <td class="num">${pct(v, 2)}</td><td class="num">${att(d.duree_ref)}</td>
+            <td class="num">${att(d.revisabilite)}</td></tr>`;
+        }),
+      ),
+    ),
   ].join('');
 }
+
 
 // ---------------------------------------------------------------- boucle de calcul
 
@@ -2368,6 +2662,10 @@ function recalculer() {
     // En mode « CDC theoriques », l'absence de pret saisi declenche le calcul
     // theorique (R-FIN-4).
     const entrees = structuredClone(etat);
+    // R-PARAM - Le moteur ne connait pas les profils, seulement LE parametrage
+    // a appliquer. Les resoudre ici garde le moteur ignorant d'une notion qui
+    // ne le regarde pas, et l'export JSON conserve la liste complete.
+    entrees.parametrage = structuredClone(parametrageActif());
     if (etat.mode_prets === 'theoriques') entrees.prets = [];
     // Un poste sans montant vaut « non utilise » : il ne doit pas entrer dans le
     // bilan, sinon la nomenclature entiere y figurerait a zero.
@@ -2488,6 +2786,21 @@ document.addEventListener('input', (ev) => {
     valeur = el.value === '' ? null : el.value;
   }
 
+  // R-PARAM - Une surcharge de bareme ou de trajectoire ne va pas dans l'etat de
+  // l'operation mais dans le PROFIL actif. Si c'est le referentiel qui est
+  // actif, `profilModifiable` en derive d'abord une copie : la reference ne se
+  // perd pas par une frappe.
+  if (chemin.startsWith('baremes.') || chemin.startsWith('trajectoires.')) {
+    const avant = profilActif().id;
+    const profil = profilModifiable();
+    ecrireChemin(profil.parametrage, chemin, valeur);
+    // La derivation change le profil courant, donc la barre de profils et les
+    // marqueurs de cellule modifiee : il faut reconstruire, une fois.
+    if (avant !== profil.id) rafraichirTout();
+    else recalculer();
+    return;
+  }
+
   ecrireChemin(etat, chemin, valeur);
 
   // Saisir un montant de pret le FIGE : il sort du calcul d'equilibre. La ligne
@@ -2522,6 +2835,11 @@ document.addEventListener(
 document.addEventListener('change', (ev) => {
   // L'interrupteur de masquage change la STRUCTURE de la table, pas l'etat.
   const id = /** @type {HTMLElement} */ (ev.target).id;
+  if (id === 'select-profil') {
+    etat.profil_actif = /** @type {HTMLSelectElement} */ (ev.target).value;
+    rafraichirTout();
+    return;
+  }
   if (id === 'afficher-tva') tvaVisible = /** @type {HTMLInputElement} */ (ev.target).checked;
   if (id === 'masquer-vides' || id === 'afficher-tva') rafraichirTout();
 });
@@ -2560,8 +2878,38 @@ document.addEventListener('click', (ev) => {
     return;
   }
 
-  if (el.closest('#reinitialiser-marges')) {
-    etat.parametrage = { ...etat.parametrage, marges_prets: {} };
+  if (el.closest('#deplier-trajectoire')) {
+    trajectoireDepliee = !trajectoireDepliee;
+    rendreParametres();
+    if (dernierResultat) rendreValeurs(dernierResultat);
+    return;
+  }
+
+  // --- Profils de parametres ---
+  const actionProfil = el.closest('[data-profil]');
+  if (actionProfil) {
+    const action = /** @type {HTMLElement} */ (actionProfil).dataset.profil;
+    const p = profilActif();
+    if (action === 'dupliquer') {
+      const copie = {
+        id: idProfil(),
+        nom: `${p.nom} (copie)`,
+        parametrage: structuredClone(p.parametrage ?? {}),
+      };
+      etat.profils.push(copie);
+      etat.profil_actif = copie.id;
+    } else if (action === 'renommer') {
+      const nom = prompt('Nom du profil', p.nom);
+      if (!nom) return;
+      p.nom = nom;
+    } else if (action === 'reinitialiser') {
+      if (!confirm(`Rendre au profil « ${p.nom} » toutes les valeurs du référentiel ?`)) return;
+      p.parametrage = { baremes: {}, trajectoires: { par_annee: {} } };
+    } else if (action === 'supprimer') {
+      if (!confirm(`Supprimer le profil « ${p.nom} » ?`)) return;
+      etat.profils = etat.profils.filter((x) => x.id !== p.id);
+      etat.profil_actif = PROFIL_REFERENTIEL;
+    }
     rafraichirTout();
     return;
   }

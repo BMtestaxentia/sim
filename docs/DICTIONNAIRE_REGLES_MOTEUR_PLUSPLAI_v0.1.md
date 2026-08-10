@@ -24,6 +24,8 @@ Reconstruit depuis ParaPLUS, SimPLUS!A8:A42, ParaGLOB, validé par l'onglet IN d
 
 ## 2. Référentiels versionnés (fichier `referentiels/baremes_2025.json` + `trajectoires_axentia_2026.json`)
 
+- **R-PARAM - Surcharge par simulation (07/08/2026).** Les fichiers du dépôt font foi, mais une simulation peut les surcharger : `entrees.parametrage.baremes` calque la structure de `baremes_2025.json` et vient par-dessus (fusion en profondeur, tableaux **par index**, valeur vide = valeur du dépôt), et `entrees.parametrage.trajectoires.par_annee` est une table creuse `{année: {poste: taux}}`. La fusion a lieu une seule fois, en tête de `calculer`, et tous les modules travaillent ensuite sur le barème effectif. Rationale : un barème réglementaire change plusieurs fois par an ; attendre une livraison du moteur n'est pas tenable, et modifier le fichier du dépôt rendrait toutes les simulations antérieures irreproductibles d'un coup. La surcharge voyageant **avec la simulation**, le moteur reste pur et le même dossier rejoué ailleurs redonne les mêmes nombres. `resultats.parametrage.baremes_ecarts` liste chemin par chemin ce qui a été chiffré hors référentiel. Côté écran, un **profil** est un jeu nommé de surcharges ; le profil « Référentiel du dépôt » est vide et non modifiable, et éditer un paramètre alors qu'il est actif en dérive automatiquement une copie.
+
 - **Loyers max €/m² SU/mois** (ParaGEN!D22:G24) : PLUS 7,32/6,42/5,95/7,77 (zones 1/2/3/1bis) ; PLAI 6,50/5,71/5,28/6,93 ; LIBRE 15/11/8/18. DOM : valeurs par département (branchement présent, hors V1).
 - **Valeurs de base VB €/m²** (ParaGEN!D36:G41) : Neuf Coll 1767/1473/1473/1767, Ind 1767/1619/1619/1767 ; Acquisition Coll 1767/1382/1382/1767, Ind 1767/1473/1473/1767.
 - **Taxe d'aménagement €/m²** (ParaGEN!B31:B32) : 930 hors IdF, 1054 IdF.
@@ -47,6 +49,7 @@ Reconstruit depuis ParaPLUS, SimPLUS!A8:A42, ParaGLOB, validé par l'onglet IN d
 - **R-LOYER-6** 🔶 Annexe importante : si loyer des annexes intégrées > seuil (facteur 1,18 si marge ≤ 12 %, 1,25 sinon), part excédentaire retirée et loyer recalculé « après annexe importante ». Transcription fine à faire avec cas de test dédié (calculs!D120:D156).
 - **R-LOYER-7** ✅ Loyers annexes séparées : NL × loyer_unitaire × 12, sans passer par le CS (FinPLUS!S60:U64).
 - **R-LOYER-8** ✅ Contrôles : alerte dépassement loyer max ; alerte loyer plafond dépassé.
+- **R-LOYER-9** ✅ Millésime du barème de loyers (07/08/2026). Les plafonds sont revalorisés au 1er janvier : le barème porte donc une `annee_reference`, saisissable. Si elle est antérieure à la mise en location, le moteur **ne revalorise pas** - aucune source ne dit que LEON le fasse, et l'inventer déplacerait les golden tests - mais il alerte et **chiffre l'écart** : nombre d'années, pourcentage de revalorisation aux trajectoires du profil, et euros de loyers annuels manquants. Reste ouvert : LEON revalorise-t-il ses plafonds entre le millésime du barème et la mise en location ?
 
 ## 5. R-TVA - Prix de revient et TVA (LASM)
 

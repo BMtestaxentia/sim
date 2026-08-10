@@ -1063,6 +1063,8 @@ describe('R-FIN-8 - la scission PLS ne cree jamais de pret negatif', () => {
 describe('R-AMT-1 - marges CDC : referentiel versionne et surcharge par simulation', () => {
   // Le Livret A de reference du referentiel AXENTIA vaut 1,70 %.
   const LA = 0.017;
+  /** Surcharge de la marge PLS, a l'endroit ou elle vit dans le bareme. */
+  const SURCHARGE_PLS = (v) => ({ baremes: { prets_cdc: { marges: { PLS: { valeur: v } } } } });
   const cdcDe = (r, nature) =>
     r.financement.prets_resolus.find((p) => p.produit === 'PLS' && p.nature === nature);
 
@@ -1077,15 +1079,20 @@ describe('R-AMT-1 - marges CDC : referentiel versionne et surcharge par simulati
 
   it('une marge surchargee par la simulation deplace le taux des prets CDC', () => {
     const r = calculer(
-      { ...BASE, prets: [], parametrage: { marges_prets: { PLS: 0.02 } } },
+      { ...BASE, prets: [], parametrage: SURCHARGE_PLS(0.02) },
       REFERENTIELS,
     );
     expect(cdcDe(r, 'construction').taux).toBeCloseTo(LA + 0.02, 10);
     expect(r.financement.marges_prets.PLS.valeur).toBe(0.02);
-    expect(r.financement.marges_prets.PLS.surchargee).toBe(true);
-    // Les autres marges restent celles du referentiel, avec leur tracabilite.
+    // La surcharge ne remplace PAS l'entree du bareme : elle en change la seule
+    // valeur, le libelle et la source restant disponibles pour la restitution.
+    expect(r.financement.marges_prets.PLS.source).toBe('Taux!C13');
+    // Les autres marges restent celles du referentiel.
     expect(r.financement.marges_prets.PLUS.valeur).toBe(0.006);
-    expect(r.financement.marges_prets.PLUS.surchargee).toBeUndefined();
+    // Et l'ecart est trace, chemin par chemin.
+    expect(r.parametrage.baremes_ecarts).toEqual([
+      { chemin: 'prets_cdc.marges.PLS.valeur', referentiel: 0.0111, applique: 0.02 },
+    ]);
   });
 
   it('ne laisse pas une surcharge vide effacer la marge du referentiel', () => {
@@ -1093,7 +1100,7 @@ describe('R-AMT-1 - marges CDC : referentiel versionne et surcharge par simulati
     // referentiel, pas rendre le pret inamortissable.
     for (const vide of [null, undefined, '', NaN]) {
       const r = calculer(
-        { ...BASE, prets: [], parametrage: { marges_prets: { PLS: vide } } },
+        { ...BASE, prets: [], parametrage: SURCHARGE_PLS(vide) },
         REFERENTIELS,
       );
       expect(cdcDe(r, 'construction').taux, `surcharge ${String(vide)}`)

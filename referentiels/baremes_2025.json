@@ -5,6 +5,8 @@
 
   "loyers_max_zone_123": {
     "unite": "EUR/m2 SU/mois",
+    "annee_reference": 2025,
+    "note_annee": "Millesime du bareme. Les plafonds sont revalorises au 1er janvier : simuler une mise en location posterieure avec ce millesime sous-estime les loyers, et le moteur le signale (R-LOYER-9).",
     "source": "ParaGEN!D22:G24 (plage LMZone_Neuf)",
     "zones": ["zone_1", "zone_2", "zone_3", "zone_1bis"],
     "PLUS":  [7.32, 6.42, 5.95, 7.77],
@@ -14,6 +16,7 @@
 
   "loyers_max_zone_ABC": {
     "unite": "EUR/m2 SU/mois",
+    "annee_reference": 2025,
     "source": "ParaGEN!D56:H59",
     "zones": ["A", "A_bis", "B1", "B2", "C"],
     "PLS":  [11.68, 15.16, 10.07, 9.64, 8.94],
@@ -60,7 +63,7 @@
     "date_valeur": "2026-06-01",
     "source": "Calculette-production-LS-juin 2026.xlsx, feuille « Taux » (C11:C15)",
     "usage": "Grille tarifaire des prets sur fonds d'epargne. Le taux d'un pret CDC vaut Livret A + marge : seule la MARGE (le spread) est propre au produit, le Livret A est commun a toute l'operation.",
-    "note": "Le Livret A retenu par le moteur est celui de la trajectoire (`taux_reference_livret_a`), pas le 1,50 % au 01/02/2026 de la calculette : deux simulations doivent pouvoir tourner sur des trajectoires differentes sans toucher a cette grille. Ces marges sont surchargeables par simulation via `entrees.parametrage.marges_prets` (ecran Parametres).",
+    "note": "Le Livret A retenu par le moteur est celui de la trajectoire (`taux_reference_livret_a`), pas le 1,50 % au 01/02/2026 de la calculette : deux simulations doivent pouvoir tourner sur des trajectoires differentes sans toucher a cette grille. Comme toute valeur de ce fichier, ces marges se surchargent par simulation via `entrees.parametrage.baremes` (R-PARAM, ecran Parametres).",
     "marges": {
       "PLAI": { "valeur": -0.0020, "libelle": "PLAI", "source": "Taux!C11" },
       "PLUS": { "valeur": 0.0060, "libelle": "PLUS", "source": "Taux!C12" },

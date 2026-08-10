@@ -1184,6 +1184,9 @@ span.ressource__libelle {
 .para-tete__recherche input { width: 240px; padding-left: 26px; }
 
 .para-corps { display: grid; grid-template-columns: 232px 1fr; gap: 16px; align-items: start; }
+/* Deux panneaux dans la meme colonne : le statique et le genere. `min-width: 0`
+   sans quoi une table large pousserait la colonne au-dela de la grille. */
+.para-panneaux { min-width: 0; }
 .para-rail { display: flex; flex-direction: column; gap: 3px; position: sticky; top: 128px; }
 .para-rail__item {
   display: grid; grid-template-columns: 1fr auto; gap: 2px 8px;
@@ -1191,6 +1194,15 @@ span.ressource__libelle {
   background: transparent; border: 1px solid transparent; cursor: pointer;
   font-family: inherit; color: var(--text-secondary);
 }
+/* Intitule de rubrique : il separe les hypotheses de la simulation des regles
+   de l'organisme. Discret - c'est un reperage, pas un niveau de navigation de
+   plus - mais assez marque pour qu'on ne prenne pas les deux lots pour un. */
+.para-rail__rubrique {
+  margin: 14px 0 4px; padding: 0 10px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-tertiary);
+}
+.para-rail__rubrique:first-child { margin-top: 0; }
 .para-rail__item:hover { background: var(--bg-secondary); }
 .para-rail__item--actif {
   background: var(--info-bg); border-color: var(--info-accent); color: var(--info-text);
@@ -1488,47 +1500,6 @@ span.ressource__libelle {
           </p>
         </section>
       </div>
-
-      <section class="bloc">
-        <h2 class="bloc__titre">Hypothèses d'exploitation</h2>
-        <div class="champs">
-          <label class="champ">
-            <span>Frais de gestion (% des loyers)</span>
-            <input type="number" step="0.1" min="0" data-champ="exploitation.frais_gestion_pct_loyers" data-type="pourcentage" />
-          </label>
-          <label class="champ">
-            <span>Vacance et impayés (%)</span>
-            <input type="number" step="0.1" min="0" data-champ="exploitation.taux_vacance_impayes" data-type="pourcentage" />
-          </label>
-          <label class="champ">
-            <span>Gros entretien (€/m² SHAB/an)</span>
-            <input type="number" step="0.1" min="0" data-champ="exploitation.gros_entretien_eur_m2" data-type="nombre" />
-          </label>
-        </div>
-        <p class="aide">
-          ⚙ Ces trois hypothèses pilotent le compte d'exploitation, donc l'année de
-          reconstitution des fonds propres. L'indexation annuelle vient du profil du référentiel,
-          pas de ces champs.
-        </p>
-
-        <h3 class="sous-titre">Cotisations et charges diverses</h3>
-        <div class="table-defilante">
-          <table class="tableau" id="table-charges-diverses">
-            <thead>
-              <tr>
-                <th>Actif</th><th>Poste</th><th>Assiette</th>
-                <th class="num">Valeur</th><th>Indexation</th><th class="num">Année 1</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <p class="aide">
-          ⚙ Ces postes viennent du référentiel : cocher suffit à les intégrer au compte.
-          Aucun n'est actif par défaut, pour qu'une simulation ne change jamais de résultat
-          sans qu'on l'ait décidé.
-        </p>
-      </section>
 
       <section class="bloc">
         <h2 class="bloc__titre">
@@ -1899,7 +1870,58 @@ span.ressource__libelle {
       </div>
       <div class="para-corps">
         <nav class="para-rail" id="para-rail" aria-label="Sections de paramétrage"></nav>
-        <div id="contenu-parametres"></div>
+        <div class="para-panneaux">
+          <!-- Les hypotheses d'exploitation sont du MARKUP STATIQUE, a part du
+               reste de l'ecran qui est genere depuis le referentiel. Ce ne sont
+               pas des baremes mais des entrees de la simulation : elles vivent
+               dans la saisie, pas dans le profil, et ne passent donc pas par le
+               meme moule. Les melanger aurait fait croire qu'un profil les
+               emporte avec lui. -->
+          <div id="para-hypotheses" hidden>
+            <section class="bloc para-section">
+              <h3>Hypothèses d'exploitation</h3>
+              <p class="para-source">
+                Ces trois hypothèses pilotent le compte d'exploitation, donc l'année de
+                reconstitution des fonds propres. Elles appartiennent à la simulation, pas au
+                profil : changer de profil ne les emporte pas. L'indexation annuelle, elle,
+                vient bien du profil.
+              </p>
+              <div class="champs">
+                <label class="champ">
+                  <span>Frais de gestion (% des loyers)</span>
+                  <input type="number" step="0.1" min="0" data-champ="exploitation.frais_gestion_pct_loyers" data-type="pourcentage" />
+                </label>
+                <label class="champ">
+                  <span>Vacance et impayés (%)</span>
+                  <input type="number" step="0.1" min="0" data-champ="exploitation.taux_vacance_impayes" data-type="pourcentage" />
+                </label>
+                <label class="champ">
+                  <span>Gros entretien (€/m² SHAB/an)</span>
+                  <input type="number" step="0.1" min="0" data-champ="exploitation.gros_entretien_eur_m2" data-type="nombre" />
+                </label>
+              </div>
+
+              <h4 class="sous-titre">Cotisations et charges diverses</h4>
+              <div class="table-defilante">
+                <table class="tableau" id="table-charges-diverses">
+                  <thead>
+                    <tr>
+                      <th>Actif</th><th>Poste</th><th>Assiette</th>
+                      <th class="num">Valeur</th><th>Indexation</th><th class="num">Année 1</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <p class="aide">
+                ⚙ Ces postes viennent du référentiel : cocher suffit à les intégrer au compte.
+                Aucun n'est actif par défaut, pour qu'une simulation ne change jamais de résultat
+                sans qu'on l'ait décidé.
+              </p>
+            </section>
+          </div>
+          <div id="contenu-parametres"></div>
+        </div>
       </div>
     </main>
 
@@ -9428,6 +9450,16 @@ function modeleParametres() {
 
   return [
     {
+      // Section FANTOME : elle n'a ni champs ni matrices, son contenu est du
+      // markup statique dans la page. Elle n'existe ici que pour tenir sa place
+      // au rail, avec le meme libelle et le meme resume que les autres.
+      id: 'hypotheses',
+      rubrique: 'exploitation',
+      titre: 'Compte d’exploitation',
+      resume: 'Gestion, vacance, gros entretien, cotisations',
+      aide: '',
+    },
+    {
       id: 'prets',
       titre: 'Prêts CDC',
       resume: 'Marges sur Livret A',
@@ -9814,17 +9846,30 @@ function rendreParametres() {
   // section. Le compteur de resultats prend sa place.
   const enRecherche = rechercheParametre.trim().length > 0;
 
-  $('#para-rail').innerHTML = sections
-    .map((s) => {
-      const n = nbModifies(s);
-      return `<button type="button" class="para-rail__item ${s.id === sectionParametres && !enRecherche ? 'para-rail__item--actif' : ''}"
-        data-section="${s.id}">
-        <span class="para-rail__titre">${att(s.titre)}</span>
-        <span class="para-rail__resume">${att(s.resume)}</span>
-        ${n ? `<span class="para-rail__compteur">${n}</span>` : ''}
-      </button>`;
-    })
-    .join('');
+  // Le rail est groupe en RUBRIQUES : d'un cote les hypotheses de la
+  // simulation, de l'autre les baremes et regles de l'organisme. Les deux se
+  // reglaient au meme endroit sans rien qui les distingue, alors qu'ils n'ont
+  // ni la meme portee - l'une suit l'operation, l'autre le profil - ni le meme
+  // public.
+  const item = (s) => {
+    const n = nbModifies(s);
+    const actif = s.id === sectionParametres && !enRecherche;
+    return `<button type="button" class="para-rail__item ${actif ? 'para-rail__item--actif' : ''}"
+      data-section="${s.id}">
+      <span class="para-rail__titre">${att(s.titre)}</span>
+      <span class="para-rail__resume">${att(s.resume)}</span>
+      ${n ? `<span class="para-rail__compteur">${n}</span>` : ''}
+    </button>`;
+  };
+  const rubrique = (titre, lot) =>
+    lot.length
+      ? `<p class="para-rail__rubrique">${att(titre)}</p>${lot.map(item).join('')}`
+      : '';
+  $('#para-rail').innerHTML =
+    rubrique(
+      "Hypothèses d'exploitation",
+      sections.filter((s) => s.rubrique === 'exploitation'),
+    ) + rubrique('Admin', sections.filter((s) => s.rubrique !== 'exploitation'));
 
   const bloc = (s) => {
     const champs = (s.champs ?? []).filter(correspond);
@@ -9841,12 +9886,25 @@ function rendreParametres() {
       </section>`;
   };
 
-  const affichees = enRecherche ? sections : sections.filter((s) => s.id === sectionParametres);
+  // Les hypotheses sont du markup statique : on les MONTRE, on ne les regenere
+  // pas. En recherche, elles paraissent si l'un de leurs intitules repond -
+  // les exclure aurait fait mentir le « aucun resultat » affiche a cote.
+  const panneauHypotheses = document.getElementById('para-hypotheses');
+  const hypothesesVisees = enRecherche
+    ? [...panneauHypotheses.querySelectorAll('.champ > span, h3, h4')].some((e) =>
+        correspond({ libelle: e.textContent ?? '' }),
+      )
+    : sectionParametres === 'hypotheses';
+  panneauHypotheses.hidden = !hypothesesVisees;
+
+  const affichees = (enRecherche ? sections : sections.filter((s) => s.id === sectionParametres))
+    .filter((s) => s.id !== 'hypotheses');
   const html = affichees.map(bloc).filter(Boolean).join('');
 
   $('#contenu-parametres').innerHTML =
-    html ||
-    `<section class="bloc"><p class="vide">Aucun paramètre ne correspond à « ${att(rechercheParametre)} ».</p></section>`;
+    html || hypothesesVisees
+      ? html
+      : `<section class="bloc"><p class="vide">Aucun paramètre ne correspond à « ${att(rechercheParametre)} ».</p></section>`;
   remplirTauxMarges(dernierResultat);
 }
 

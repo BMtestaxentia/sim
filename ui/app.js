@@ -2897,6 +2897,16 @@ function modeleParametres() {
 
   return [
     {
+      // Section FANTOME : elle n'a ni champs ni matrices, son contenu est du
+      // markup statique dans la page. Elle n'existe ici que pour tenir sa place
+      // au rail, avec le meme libelle et le meme resume que les autres.
+      id: 'hypotheses',
+      rubrique: 'exploitation',
+      titre: 'Compte d’exploitation',
+      resume: 'Gestion, vacance, gros entretien, cotisations',
+      aide: '',
+    },
+    {
       id: 'prets',
       titre: 'Prêts CDC',
       resume: 'Marges sur Livret A',
@@ -3283,17 +3293,30 @@ function rendreParametres() {
   // section. Le compteur de resultats prend sa place.
   const enRecherche = rechercheParametre.trim().length > 0;
 
-  $('#para-rail').innerHTML = sections
-    .map((s) => {
-      const n = nbModifies(s);
-      return `<button type="button" class="para-rail__item ${s.id === sectionParametres && !enRecherche ? 'para-rail__item--actif' : ''}"
-        data-section="${s.id}">
-        <span class="para-rail__titre">${att(s.titre)}</span>
-        <span class="para-rail__resume">${att(s.resume)}</span>
-        ${n ? `<span class="para-rail__compteur">${n}</span>` : ''}
-      </button>`;
-    })
-    .join('');
+  // Le rail est groupe en RUBRIQUES : d'un cote les hypotheses de la
+  // simulation, de l'autre les baremes et regles de l'organisme. Les deux se
+  // reglaient au meme endroit sans rien qui les distingue, alors qu'ils n'ont
+  // ni la meme portee - l'une suit l'operation, l'autre le profil - ni le meme
+  // public.
+  const item = (s) => {
+    const n = nbModifies(s);
+    const actif = s.id === sectionParametres && !enRecherche;
+    return `<button type="button" class="para-rail__item ${actif ? 'para-rail__item--actif' : ''}"
+      data-section="${s.id}">
+      <span class="para-rail__titre">${att(s.titre)}</span>
+      <span class="para-rail__resume">${att(s.resume)}</span>
+      ${n ? `<span class="para-rail__compteur">${n}</span>` : ''}
+    </button>`;
+  };
+  const rubrique = (titre, lot) =>
+    lot.length
+      ? `<p class="para-rail__rubrique">${att(titre)}</p>${lot.map(item).join('')}`
+      : '';
+  $('#para-rail').innerHTML =
+    rubrique(
+      "Hypothèses d'exploitation",
+      sections.filter((s) => s.rubrique === 'exploitation'),
+    ) + rubrique('Admin', sections.filter((s) => s.rubrique !== 'exploitation'));
 
   const bloc = (s) => {
     const champs = (s.champs ?? []).filter(correspond);
@@ -3310,12 +3333,25 @@ function rendreParametres() {
       </section>`;
   };
 
-  const affichees = enRecherche ? sections : sections.filter((s) => s.id === sectionParametres);
+  // Les hypotheses sont du markup statique : on les MONTRE, on ne les regenere
+  // pas. En recherche, elles paraissent si l'un de leurs intitules repond -
+  // les exclure aurait fait mentir le « aucun resultat » affiche a cote.
+  const panneauHypotheses = document.getElementById('para-hypotheses');
+  const hypothesesVisees = enRecherche
+    ? [...panneauHypotheses.querySelectorAll('.champ > span, h3, h4')].some((e) =>
+        correspond({ libelle: e.textContent ?? '' }),
+      )
+    : sectionParametres === 'hypotheses';
+  panneauHypotheses.hidden = !hypothesesVisees;
+
+  const affichees = (enRecherche ? sections : sections.filter((s) => s.id === sectionParametres))
+    .filter((s) => s.id !== 'hypotheses');
   const html = affichees.map(bloc).filter(Boolean).join('');
 
   $('#contenu-parametres').innerHTML =
-    html ||
-    `<section class="bloc"><p class="vide">Aucun paramètre ne correspond à « ${att(rechercheParametre)} ».</p></section>`;
+    html || hypothesesVisees
+      ? html
+      : `<section class="bloc"><p class="vide">Aucun paramètre ne correspond à « ${att(rechercheParametre)} ».</p></section>`;
   remplirTauxMarges(dernierResultat);
 }
 

@@ -150,47 +150,6 @@
       </div>
 
       <section class="bloc">
-        <h2 class="bloc__titre">Hypothèses d'exploitation</h2>
-        <div class="champs">
-          <label class="champ">
-            <span>Frais de gestion (% des loyers)</span>
-            <input type="number" step="0.1" min="0" data-champ="exploitation.frais_gestion_pct_loyers" data-type="pourcentage" />
-          </label>
-          <label class="champ">
-            <span>Vacance et impayés (%)</span>
-            <input type="number" step="0.1" min="0" data-champ="exploitation.taux_vacance_impayes" data-type="pourcentage" />
-          </label>
-          <label class="champ">
-            <span>Gros entretien (€/m² SHAB/an)</span>
-            <input type="number" step="0.1" min="0" data-champ="exploitation.gros_entretien_eur_m2" data-type="nombre" />
-          </label>
-        </div>
-        <p class="aide">
-          ⚙ Ces trois hypothèses pilotent le compte d'exploitation, donc l'année de
-          reconstitution des fonds propres. L'indexation annuelle vient du profil du référentiel,
-          pas de ces champs.
-        </p>
-
-        <h3 class="sous-titre">Cotisations et charges diverses</h3>
-        <div class="table-defilante">
-          <table class="tableau" id="table-charges-diverses">
-            <thead>
-              <tr>
-                <th>Actif</th><th>Poste</th><th>Assiette</th>
-                <th class="num">Valeur</th><th>Indexation</th><th class="num">Année 1</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <p class="aide">
-          ⚙ Ces postes viennent du référentiel : cocher suffit à les intégrer au compte.
-          Aucun n'est actif par défaut, pour qu'une simulation ne change jamais de résultat
-          sans qu'on l'ait décidé.
-        </p>
-      </section>
-
-      <section class="bloc">
         <h2 class="bloc__titre">
           Mode foyer (redevance)
           <span class="bloc__outils" id="bascule-redevance" hidden>
@@ -559,7 +518,58 @@
       </div>
       <div class="para-corps">
         <nav class="para-rail" id="para-rail" aria-label="Sections de paramétrage"></nav>
-        <div id="contenu-parametres"></div>
+        <div class="para-panneaux">
+          <!-- Les hypotheses d'exploitation sont du MARKUP STATIQUE, a part du
+               reste de l'ecran qui est genere depuis le referentiel. Ce ne sont
+               pas des baremes mais des entrees de la simulation : elles vivent
+               dans la saisie, pas dans le profil, et ne passent donc pas par le
+               meme moule. Les melanger aurait fait croire qu'un profil les
+               emporte avec lui. -->
+          <div id="para-hypotheses" hidden>
+            <section class="bloc para-section">
+              <h3>Hypothèses d'exploitation</h3>
+              <p class="para-source">
+                Ces trois hypothèses pilotent le compte d'exploitation, donc l'année de
+                reconstitution des fonds propres. Elles appartiennent à la simulation, pas au
+                profil : changer de profil ne les emporte pas. L'indexation annuelle, elle,
+                vient bien du profil.
+              </p>
+              <div class="champs">
+                <label class="champ">
+                  <span>Frais de gestion (% des loyers)</span>
+                  <input type="number" step="0.1" min="0" data-champ="exploitation.frais_gestion_pct_loyers" data-type="pourcentage" />
+                </label>
+                <label class="champ">
+                  <span>Vacance et impayés (%)</span>
+                  <input type="number" step="0.1" min="0" data-champ="exploitation.taux_vacance_impayes" data-type="pourcentage" />
+                </label>
+                <label class="champ">
+                  <span>Gros entretien (€/m² SHAB/an)</span>
+                  <input type="number" step="0.1" min="0" data-champ="exploitation.gros_entretien_eur_m2" data-type="nombre" />
+                </label>
+              </div>
+
+              <h4 class="sous-titre">Cotisations et charges diverses</h4>
+              <div class="table-defilante">
+                <table class="tableau" id="table-charges-diverses">
+                  <thead>
+                    <tr>
+                      <th>Actif</th><th>Poste</th><th>Assiette</th>
+                      <th class="num">Valeur</th><th>Indexation</th><th class="num">Année 1</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <p class="aide">
+                ⚙ Ces postes viennent du référentiel : cocher suffit à les intégrer au compte.
+                Aucun n'est actif par défaut, pour qu'une simulation ne change jamais de résultat
+                sans qu'on l'ait décidé.
+              </p>
+            </section>
+          </div>
+          <div id="contenu-parametres"></div>
+        </div>
       </div>
     </main>
 

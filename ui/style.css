@@ -1170,6 +1170,9 @@ span.ressource__libelle {
 .para-tete__recherche input { width: 240px; padding-left: 26px; }
 
 .para-corps { display: grid; grid-template-columns: 232px 1fr; gap: 16px; align-items: start; }
+/* Deux panneaux dans la meme colonne : le statique et le genere. `min-width: 0`
+   sans quoi une table large pousserait la colonne au-dela de la grille. */
+.para-panneaux { min-width: 0; }
 .para-rail { display: flex; flex-direction: column; gap: 3px; position: sticky; top: 128px; }
 .para-rail__item {
   display: grid; grid-template-columns: 1fr auto; gap: 2px 8px;
@@ -1177,6 +1180,15 @@ span.ressource__libelle {
   background: transparent; border: 1px solid transparent; cursor: pointer;
   font-family: inherit; color: var(--text-secondary);
 }
+/* Intitule de rubrique : il separe les hypotheses de la simulation des regles
+   de l'organisme. Discret - c'est un reperage, pas un niveau de navigation de
+   plus - mais assez marque pour qu'on ne prenne pas les deux lots pour un. */
+.para-rail__rubrique {
+  margin: 14px 0 4px; padding: 0 10px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-tertiary);
+}
+.para-rail__rubrique:first-child { margin-top: 0; }
 .para-rail__item:hover { background: var(--bg-secondary); }
 .para-rail__item--actif {
   background: var(--info-bg); border-color: var(--info-accent); color: var(--info-text);

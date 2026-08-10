@@ -617,6 +617,40 @@ td.calc { text-align: right; }
   text-align: right; font-variant-numeric: tabular-nums;
 }
 
+/* ---------- Ou se saisit un montant ----------
+   Le prix de revient a deux modes, et le montant HT ne se saisit pas au meme
+   endroit dans l'un et dans l'autre : au total quand la ligne est regroupee,
+   dans chaque tranche quand elle est ventilee. Rien ne le disait - un champ
+   sans chrome et une valeur calculee se ressemblent trop. La cellule ou la
+   saisie fait foi porte donc un fond tenu et un liseré a gauche ; les autres
+   restent en gris de valeur calculee. C'est la meme information que le bouton
+   de ventilation, mais lue la ou l'oeil se pose : sur le chiffre. */
+#table-postes td:has(> input[data-type='montant']) {
+  background: color-mix(in srgb, var(--info-accent) 7%, transparent);
+  box-shadow: inset 2px 0 0 -1px color-mix(in srgb, var(--info-accent) 45%, transparent);
+}
+#table-postes td:has(> input[data-type='montant']) > input:hover {
+  background: color-mix(in srgb, var(--info-accent) 10%, transparent);
+}
+/* La ligne vide ne reclame rien : elle n'est pas encore saisie, la souligner
+   en ferait quinze appels a l'action pour un poste qu'on ne remplira pas. */
+#table-postes tr.poste--vide td:has(> input[data-type='montant']) {
+  background: none; box-shadow: none;
+}
+#table-postes tr.poste--vide:hover td:has(> input[data-type='montant']) {
+  background: color-mix(in srgb, var(--info-accent) 5%, transparent);
+}
+.legende-saisie {
+  display: flex; align-items: center; gap: 7px;
+  margin: 8px 0 0; font-size: 10.5px; color: var(--text-tertiary);
+}
+.legende-saisie__puce {
+  flex: none; width: 22px; height: 12px; border-radius: 2px;
+  background: color-mix(in srgb, var(--info-accent) 7%, var(--bg-primary));
+  box-shadow: inset 2px 0 0 -1px color-mix(in srgb, var(--info-accent) 45%, transparent),
+              inset 0 0 0 1px var(--border-color);
+}
+
 /* Table des LOTS : intitules et valeurs centres, les uns au-dessus des autres.
    Ses colonnes sont larges et ses valeurs courtes - un « A », un T2, 66,67 m2 -
    si bien qu'un calage sur les bords eloignait chaque donnee de son intitule.
@@ -1117,6 +1151,24 @@ span.ressource__libelle {
   outline: 2px solid var(--info-accent); outline-offset: -2px;
   background: var(--bg-primary); position: relative; z-index: 1;
 }
+/* Le coin de la table : la seule case qui ne designe ni une ligne ni une
+   colonne, donc la seule qui puisse qualifier la table entiere. Le millesime
+   d'un bareme s'y lit a cote des valeurs qu'il date, plutot que dans un encart
+   a part. Discret par defaut, il se revele au survol et a la frappe. */
+.grille thead th.grille__coin { padding: 0; }
+.grille__coin-champ {
+  width: 100%; border: none; border-radius: 0; background: transparent;
+  padding: 3px 8px; text-align: center; font-variant-numeric: tabular-nums;
+  font-size: 11px; font-weight: 700; color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+}
+.grille__coin-champ:hover { background: var(--bg-secondary); color: var(--text-secondary); }
+.grille__coin-champ:focus {
+  outline: 2px solid var(--info-accent); outline-offset: -2px;
+  background: var(--bg-primary); color: var(--text-primary);
+}
+.grille th.surchargee { background: var(--warning-bg); }
+.grille th.surchargee > .grille__coin-champ { color: var(--warning-text); }
 .grille td.surchargee { background: var(--warning-bg); }
 .grille td.surchargee > input { color: var(--warning-text); font-weight: 650; }
 .grille__aide { margin-top: 5px; font-size: 10px; color: var(--text-tertiary); }

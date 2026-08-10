@@ -2645,10 +2645,19 @@ function modeleParametres() {
     chemin, libelle, valeur, type, detail,
   });
 
-  /** Matrice « une ligne par grandeur, une colonne par zone ». */
-  const matrice = (racine, titre, zones, lignes, type) => ({
+  /**
+   * Matrice « une ligne par grandeur, une colonne par zone ».
+   *
+   * `coin` place un champ dans la cellule vide en haut a gauche - la seule case
+   * de la table qui ne designe ni une ligne ni une colonne, et donc la seule
+   * qui puisse qualifier la table entiere. Le millesime d'un bareme y a sa
+   * place naturelle : il vaut pour toutes les valeurs en dessous, et le lire
+   * a cote d'elles evite d'aller le chercher dans un encart separe.
+   */
+  const matrice = (racine, titre, zones, lignes, type, coin) => ({
     titre,
     zones,
+    coin,
     lignes: lignes.map(([cle, libelle]) => ({
       libelle,
       cellules: zones.map((z, i) => ({
@@ -2680,14 +2689,9 @@ function modeleParametres() {
       titre: 'Loyers plafonds',
       resume: 'Barèmes par zone, et leur millésime',
       aide:
-        "Le millésime est celui des valeurs ci-dessous, il ne suit pas la simulation : sans lui, " +
-        "le barème 2025 se ferait passer pour celui de l'année de livraison. Le moteur rattrape " +
-        "l'écart de lui-même en indexant les plafonds à l'IRL de la trajectoire, du millésime à " +
-        'la mise en location. La marge locale, saisie en euros du jour, reste intacte.',
-      champs: [
-        ch('baremes.loyers_max_zone_123.annee_reference', 'Millésime du barème 1/2/3', b.loyers_max_zone_123.annee_reference, 'annee'),
-        ch('baremes.loyers_max_zone_ABC.annee_reference', 'Millésime du barème A/B/C', b.loyers_max_zone_ABC.annee_reference, 'annee'),
-      ],
+        "Le millésime, en haut à gauche de chaque table, est celui des valeurs qu'elle contient. " +
+        "Le moteur rattrape l'écart jusqu'à la mise en location en indexant les plafonds à l'IRL " +
+        'de la trajectoire. La marge locale, saisie en euros du jour, reste intacte.',
       matrices: [
         matrice(
           'baremes.loyers_max_zone_123',
@@ -2695,6 +2699,12 @@ function modeleParametres() {
           b.loyers_max_zone_123.zones.map((z) => z.replace('zone_', '')),
           [['PLUS', 'PLUS'], ['PLAI', 'PLAI'], ['LIBRE', 'Libre']],
           'nombre',
+          ch(
+            'baremes.loyers_max_zone_123.annee_reference',
+            'Millésime du barème 1/2/3',
+            b.loyers_max_zone_123.annee_reference,
+            'annee',
+          ),
         ),
         matrice(
           'baremes.loyers_max_zone_ABC',
@@ -2702,6 +2712,12 @@ function modeleParametres() {
           b.loyers_max_zone_ABC.zones,
           [['PLS', 'PLS'], ['PLI', 'PLI / LLI']],
           'nombre',
+          ch(
+            'baremes.loyers_max_zone_ABC.annee_reference',
+            'Millésime du barème A/B/C',
+            b.loyers_max_zone_ABC.annee_reference,
+            'annee',
+          ),
         ),
       ],
     },
@@ -2809,7 +2825,13 @@ function modeleParametres() {
 
 /** Tous les champs d'une section, matrices comprises : sert au comptage et a la recherche. */
 function champsDeSection(s) {
-  return [...(s.champs ?? []), ...(s.matrices ?? []).flatMap((m) => m.lignes.flatMap((l) => l.cellules))];
+  return [
+    ...(s.champs ?? []),
+    ...(s.matrices ?? []).flatMap((m) => [
+      ...(m.coin ? [m.coin] : []),
+      ...m.lignes.flatMap((l) => l.cellules),
+    ]),
+  ];
 }
 
 /** Nombre de champs surcharges dans une section. */
@@ -2898,6 +2920,27 @@ function celluleGrille(chemin, valeurRef, type, l, c) {
       placeholder="${att(String(aff(valeurRef)))}" value="${valNum(aff(s))}" /></td>`;
 }
 
+/**
+ * Coin haut-gauche d'une matrice : la seule case qui ne designe ni une ligne ni
+ * une colonne, donc la seule qui puisse qualifier la table entiere. Le millesime
+ * d'un bareme s'y lit a cote des valeurs qu'il date.
+ *
+ * Meme convention que `celluleGrille` : la valeur du referentiel est un
+ * PLACEHOLDER, seule une surcharge est une valeur. Sans cela, le champ afficherait
+ * le referentiel comme s'il avait ete saisi, et le vider ne voudrait plus rien
+ * dire. Le coin reste hors de la navigation au clavier, qui n'adresse que les
+ * valeurs de la grille.
+ */
+function coinGrille(coin) {
+  if (!coin) return '<th class="grille__coin"></th>';
+  const s = surchargeDe(coin.chemin);
+  return `<th class="grille__coin ${nul(s) ? '' : 'surchargee'}">
+    <input type="text" inputmode="numeric" class="grille__coin-champ"
+      data-champ="${coin.chemin}" data-type="nombre"
+      title="${att(coin.libelle)}" aria-label="${att(coin.libelle)}"
+      placeholder="${att(String(coin.valeur ?? ''))}" value="${valNum(s)}" /></th>`;
+}
+
 /** Rappel des gestes disponibles, une fois par grille. */
 const AIDE_GRILLE =
   '⌨ Flèches pour se déplacer, Entrée pour descendre, Tab pour avancer. ' +
@@ -2910,7 +2953,10 @@ function tableMatrice(m) {
     <div class="para-matrice">
       <h4>${att(m.titre)}</h4>
       <div class="table-defilante"><table class="grille" data-grille>
-        <thead><tr><th></th>${m.zones.map((z) => `<th>${att(z)}</th>`).join('')}</tr></thead>
+        <thead><tr>
+          ${coinGrille(m.coin)}
+          ${m.zones.map((z) => `<th>${att(z)}</th>`).join('')}
+        </tr></thead>
         <tbody>${lignes
           .map(
             (l, il) =>
@@ -3084,6 +3130,13 @@ function recalculer() {
   const pastille = $('#etat-calcul');
   const erreur = $('#erreur');
 
+  // Unique point de passage pour la memorisation : TOUT ce qui touche a l'etat
+  // finit par recalculer, y compris les gestes qui ne sont pas des frappes -
+  // bascule de ventilation, ajout de pret, changement de profil. L'accrocher
+  // aux seuls evenements de saisie en aurait laisse la moitie de cote. La
+  // saisie se memorise meme incomplete : c'est un brouillon, pas un depot.
+  memoriserSaisie();
+
   // Le zonage se deduit de la commune, qui se saisit lettre par lettre : il doit
   // etre reevalue a chaque frappe, et non au seul rendu de structure. Il doit
   // aussi l'etre AVANT le calcul, puisqu'il en change les loyers plafonds.
@@ -3207,6 +3260,96 @@ function themeInitial() {
     /* voir appliquerTheme */
   }
   return matchMedia('(prefers-color-scheme: light)').matches ? 'clair' : 'sombre';
+}
+
+// ------------------------------------------------------------- persistance
+
+/**
+ * Memorisation de la saisie d'une ouverture a l'autre.
+ *
+ * Le moteur reste pur : rien n'est stocke de son cote, on ne persiste que la
+ * SAISIE - l'operation et les profils de parametres. Les resultats se
+ * recalculent a l'ouverture, ce qui garantit qu'une saisie memorisee hier ne
+ * ressort pas avec les chiffres d'hier si le moteur a change depuis.
+ *
+ * La cle porte une VERSION. Une saisie memorisee decrit une structure ; quand
+ * celle-ci evolue - un poste ajoute a la nomenclature, une entree renommee -
+ * la relire telle quelle ferait revivre l'ancienne structure par-dessus la
+ * nouvelle, en silence. On prefere repartir de l'operation de demonstration :
+ * bumper cette version est le geste qui accompagne un changement de structure.
+ */
+const CLE_SAISIE = 'moteur-sim.saisie.v1';
+
+/** Les seules racines memorisees : ce que l'utilisateur a saisi, rien d'autre. */
+const RACINES_PERSISTEES = [
+  'identite', 'dates', 'lots', 'postes_bilan', 'loyers_par_produit', 'subventions',
+  'fonds_propres_par_produit', 'remuneration_fonds_propres', 'mode_prets', 'prets',
+  'exploitation', 'profils', 'profil_actif', 'options',
+];
+
+let sauvegardeEnAttente = null;
+
+/**
+ * Ecrit la saisie, une fois les frappes retombees. Sauver a chaque caractere
+ * serait un acces disque par touche pour un etat qui n'aura de sens qu'une fois
+ * le nombre entier.
+ */
+function memoriserSaisie() {
+  clearTimeout(sauvegardeEnAttente);
+  sauvegardeEnAttente = setTimeout(() => {
+    try {
+      const aGarder = Object.fromEntries(RACINES_PERSISTEES.map((c) => [c, etat[c]]));
+      localStorage.setItem(CLE_SAISIE, JSON.stringify(aGarder));
+    } catch {
+      // Stockage indisponible ou plein : la session continue normalement, seule
+      // la memoire d'une ouverture a l'autre est perdue. Ce n'est pas une raison
+      // d'interrompre une saisie en cours.
+    }
+  }, 400);
+}
+
+/**
+ * Relit la saisie memorisee et la pose sur l'etat de depart. Les racines sont
+ * REMPLACEES et non fusionnees : une liste de prets memorisee doit rester celle
+ * qui a ete saisie, pas se melanger a celle de la demonstration.
+ */
+function restaurerSaisie() {
+  let brut;
+  try {
+    brut = localStorage.getItem(CLE_SAISIE);
+  } catch {
+    return false;
+  }
+  if (!brut) return false;
+  try {
+    const lu = JSON.parse(brut);
+    // Une saisie sans identite n'en est pas une : plutot que de restaurer un
+    // objet a moitie forme, on repart proprement de la demonstration.
+    if (!lu || typeof lu !== 'object' || !lu.identite) return false;
+    for (const cle of RACINES_PERSISTEES) {
+      if (lu[cle] !== undefined) etat[cle] = lu[cle];
+    }
+    // Un profil actif qui ne designe plus rien laisserait l'ecran sans
+    // parametres : on retombe sur le premier profil connu.
+    if (!etat.profils?.some((p) => p.id === etat.profil_actif)) {
+      etat.profil_actif = etat.profils?.[0]?.id ?? 'referentiel';
+    }
+    return true;
+  } catch {
+    // Contenu illisible (ecriture interrompue, cle ecrasee par un autre outil).
+    return false;
+  }
+}
+
+/** Efface la memoire et recharge : le plus sur moyen de revenir a l'origine. */
+function reinitialiserSaisie() {
+  if (!confirm('Effacer la saisie mémorisée et repartir de l’opération de démonstration ?')) return;
+  try {
+    localStorage.removeItem(CLE_SAISIE);
+  } catch {
+    /* voir memoriserSaisie */
+  }
+  location.reload();
 }
 
 // ---------------------------------------------------------------- evenements
@@ -3494,6 +3637,11 @@ document.addEventListener('change', (ev) => {
 
 document.addEventListener('click', (ev) => {
   const el = /** @type {HTMLElement} */ (ev.target);
+
+  if (el.closest('#btn-reinitialiser')) {
+    reinitialiserSaisie();
+    return;
+  }
 
   if (el.closest('#btn-theme')) {
     appliquerTheme(document.documentElement.dataset.theme === 'clair' ? 'sombre' : 'clair');
@@ -3802,5 +3950,14 @@ document.addEventListener('click', (ev) => {
 // ---------------------------------------------------------------- demarrage
 
 appliquerTheme(themeInitial());
+// La saisie memorisee se pose AVANT le premier rendu : la reposer apres
+// ferait clignoter l'operation de demonstration a chaque ouverture.
+const saisieRestauree = restaurerSaisie();
 rendreChampsStatiques();
 rafraichirTout();
+// Dire ce qui est a l'ecran. Une saisie qui reapparait sans un mot laisse
+// croire a une operation de demonstration bizarrement remplie.
+if (saisieRestauree) {
+  const p = document.getElementById('etat-calcul');
+  if (p) p.title = 'Saisie restaurée depuis la dernière session';
+}

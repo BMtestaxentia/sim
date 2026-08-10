@@ -51,6 +51,11 @@
 
       <div class="entete__actions">
         <span id="etat-calcul" class="pastille pastille--ok">à jour</span>
+        <!-- La saisie survit au rechargement : il faut donc un moyen de revenir
+             a l'operation de depart, sans quoi une simulation abandonnee
+             resterait en travers du chemin a chaque ouverture. -->
+        <button type="button" id="btn-reinitialiser" class="bouton bouton--discret"
+                title="Effacer la saisie mémorisée et repartir de l'opération de démonstration">Réinitialiser</button>
         <button type="button" id="btn-theme" class="bouton bouton--icone" aria-label="Changer de thème">☀</button>
         <button type="button" id="btn-json" class="bouton bouton--discret">JSON</button>
       </div>
@@ -341,6 +346,12 @@
             <tfoot></tfoot>
           </table>
         </div>
+        <p class="legende-saisie">
+          <span class="legende-saisie__puce"></span>
+          Fond bleuté : la cellule où le montant HT se saisit. Une ligne regroupée
+          se saisit au total et se répartit à la surface utile ; une ligne ventilée
+          se saisit tranche par tranche, et son total en découle.
+        </p>
       </section>
 
       <section class="bloc" id="bloc-ventilation-pdr">

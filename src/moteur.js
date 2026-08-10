@@ -133,6 +133,33 @@ export function calculer(entrees, referentiels) {
   // emplacement officiel. Les valeurs portees par un lot restent acceptees en
   // repli (fixtures et anciens appels), premiere valeur renseignee retenue.
   const parametresLoyer = entrees.loyers_par_produit ?? {};
+
+  // R-LOYER-9 - Millesime du bareme de loyers. Les plafonds sont revalorises au
+  // 1er janvier : les appliquer tels quels a une mise en location posterieure
+  // sous-estime les recettes de toute la simulation.
+  //
+  // La revalorisation est une OPTION, par defaut inactive. Aucune source ne dit
+  // que LEON la pratique, et l'imposer deplacerait les golden tests, donc le
+  // contrat de reproduction. Active, elle applique au plafond de zone le cumul
+  // des IRL de la trajectoire entre le millesime et la mise en location ; la
+  // marge locale n'est pas touchee, c'est une saisie en euros du jour.
+  // Inactive, le moteur alerte tout de meme et chiffre ce que l'ecart coute :
+  // un plafond perime doit etre un choix, jamais un oubli.
+  const millesimeBareme = (() => {
+    const a = [
+      baremes.loyers_max_zone_123?.annee_reference,
+      baremes.loyers_max_zone_ABC?.annee_reference,
+    ].filter((x) => Number.isFinite(x));
+    return a.length ? Math.min(...a) : null;
+  })();
+  const anneesARattraper = millesimeBareme === null ? 0 : Math.max(0, anneeMEL - millesimeBareme);
+  let cumulIRL = 1;
+  for (let a = millesimeBareme + 1; a <= anneeMEL && anneesARattraper > 0; a++) {
+    cumulIRL *= 1 + (trajectoires.par_poste?.loyers_irl?.[a] ?? 0);
+  }
+  const revaloriser = options.revaloriser_loyers_plafonds === true && anneesARattraper > 0;
+  const coefficientMillesime = revaloriser ? cumulIRL : 1;
+
   const loyers = codesPresents.map((code) => {
     const t = tranches[code];
     const params = parametresLoyer[code] ?? {};
@@ -148,6 +175,7 @@ export function calculer(entrees, referentiels) {
         marge_majoration: params.marge_majoration ?? premiere?.marge_majoration,
         loyer_sortie_force: params.loyer_sortie_force ?? forcee?.loyer_sortie_force,
         foyer: identite.foyer,
+        coefficient_millesime: coefficientMillesime,
       },
       baremes,
     );
@@ -161,35 +189,22 @@ export function calculer(entrees, referentiels) {
     };
   });
 
-  // R-LOYER-9 - Millesime du bareme de loyers. Les plafonds sont revalorises au
-  // 1er janvier : les appliquer tels quels a une mise en location posterieure
-  // sous-estime les recettes de toute la simulation. Le moteur ne les revalorise
-  // PAS de lui-meme - aucune source ne dit que LEON le fait, et l'inventer
-  // fausserait les golden tests - mais il refuse de laisser l'ecart passer
-  // inapercu, et chiffre ce qu'il coute.
-  {
-    const anneesBareme = [
-      baremes.loyers_max_zone_123?.annee_reference,
-      baremes.loyers_max_zone_ABC?.annee_reference,
-    ].filter((a) => Number.isFinite(a));
-    const millesime = anneesBareme.length ? Math.min(...anneesBareme) : null;
-    const ecartAns = millesime === null ? 0 : anneeMEL - millesime;
-    if (ecartAns > 0 && loyers.length) {
-      let cumul = 1;
-      for (let a = millesime + 1; a <= anneeMEL; a++) {
-        cumul *= 1 + (trajectoires.par_poste?.loyers_irl?.[a] ?? 0);
-      }
-      const manque = arrondiEuro(
-        loyers.reduce((s, l) => s + l.loyer_annuel_eur, 0) * (cumul - 1),
-      );
-      alertes.push(
-        `Bareme de loyers ${millesime} applique a une mise en location ${anneeMEL}, ` +
-          `soit ${ecartAns} an${ecartAns > 1 ? 's' : ''} de revalorisation non pris en compte. ` +
-          `Aux trajectoires du profil, les plafonds vaudraient ${((cumul - 1) * 100).toFixed(1)} % ` +
-          `de plus, soit ${manque} EUR de loyers annuels. Saisir le bareme du millesime attendu ` +
-          "a l'ecran Parametres, ou assumer l'ecart.",
-      );
-    }
+  // Suite de R-LOYER-9 : dire ce que le millesime change, dans les deux sens.
+  if (anneesARattraper > 0 && loyers.length) {
+    const ecartPct = ((cumulIRL - 1) * 100).toFixed(1);
+    const total = loyers.reduce((s, l) => s + l.loyer_annuel_eur, 0);
+    alertes.push(
+      revaloriser
+        ? `Loyers plafonds revalorises du millesime ${millesimeBareme} a la mise en location ` +
+            `${anneeMEL}, soit +${ecartPct} % aux IRL de la trajectoire. Ecart assume avec LEON, ` +
+            "qui applique le bareme tel quel (option a l'ecran Parametres)."
+        : `Bareme de loyers ${millesimeBareme} applique a une mise en location ${anneeMEL}, ` +
+            `soit ${anneesARattraper} an${anneesARattraper > 1 ? 's' : ''} de revalorisation non ` +
+            `pris en compte. Aux trajectoires du profil, les plafonds vaudraient ${ecartPct} % de ` +
+            `plus, soit ${arrondiEuro(total * (cumulIRL - 1))} EUR de loyers annuels. Activer la ` +
+            "revalorisation a l'ecran Parametres, saisir le bareme du millesime attendu, ou " +
+            "assumer l'ecart.",
+    );
   }
 
   const loyersLogementsAnnuels = arrondiEuro(

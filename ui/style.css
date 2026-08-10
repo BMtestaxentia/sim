@@ -351,9 +351,14 @@ td.calc { text-align: right; }
 
 /* Saisie suivie de son unite, sur une seule ligne : un champ de table occupe
    toute la largeur de sa cellule, l'unite passerait sinon a la ligne. */
-.cellule-valeur { display: flex; align-items: center; gap: 5px; }
-.cellule-valeur > input { flex: 1; min-width: 0; }
-.unite { flex: none; font-size: 11px; color: var(--text-tertiary); }
+/* PAS de `display: flex` sur une cellule de tableau : elle cesse alors d'etre
+   une cellule, et deux cellules voisines se font absorber dans une meme cellule
+   anonyme - les quatre zones d'un bareme s'empilaient les unes sous les autres.
+   La mise en page interne passe donc par la boite de la cellule elle-meme. */
+.cellule-valeur { white-space: nowrap; }
+.cellule-valeur > input { width: 100%; min-width: 0; }
+.cellule-valeur:has(> .unite) > input { width: calc(100% - 20px); }
+.unite { display: inline-block; width: 16px; margin-left: 4px; font-size: 11px; color: var(--text-tertiary); }
 .discret { color: var(--text-tertiary); font-size: 11px; }
 
 /* ============================================================ BOUTONS */
@@ -970,6 +975,18 @@ span.ressource__libelle {
 }
 .para-carte__annuler:hover { color: var(--text-primary); }
 
+/* Une option qui ECARTE de LEON se distingue d'un simple reglage : elle porte
+   sa consequence en clair, pas seulement son intitule. */
+.para-interrupteur {
+  display: flex; gap: 9px; align-items: flex-start; cursor: pointer;
+  padding: 9px 11px; margin: 0 0 12px;
+  border: 1px solid var(--border-color); border-left: 3px solid var(--info-accent);
+  border-radius: var(--radius-sm); background: var(--bg-secondary);
+  font-size: 11px; color: var(--text-tertiary); line-height: 1.45;
+}
+.para-interrupteur input { width: auto; margin-top: 2px; flex: none; }
+.para-interrupteur b { color: var(--text-primary); font-size: 12px; font-weight: 650; }
+
 .para-matrice { margin-top: 16px; }
 .para-matrice h4 {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -977,6 +994,35 @@ span.ressource__libelle {
   letter-spacing: 0.04em; color: var(--text-tertiary);
 }
 .para-matrice h4 .bouton--discret { text-transform: none; letter-spacing: 0; font-size: 11px; padding: 3px 9px; }
+/* ---------- Grille de saisie facon tableur ----------
+   Un barème se recopie depuis un tableur : la grille en prend les usages -
+   cellules jointives, deplacement aux fleches, Entree pour descendre, Tab pour
+   avancer, et collage d'un bloc entier. Le champ occupe toute la cellule, sans
+   chrome propre : ce qu'on voit est une grille, pas une pile de formulaires. */
+.grille { border-collapse: collapse; width: auto; }
+.grille th, .grille td { padding: 0; border: 1px solid var(--border-color); }
+.grille thead th {
+  padding: 3px 8px; text-align: center; background: var(--bg-tertiary);
+  border-bottom-width: 2px;
+}
+.grille tbody th, .grille td.grille__entete {
+  padding: 3px 10px; text-align: left; font-weight: 600; font-size: 11.5px;
+  color: var(--text-secondary); background: var(--bg-tertiary); white-space: nowrap;
+}
+.grille td.cellule-valeur { white-space: normal; }
+.grille input {
+  width: 92px; border: none; border-radius: 0; background: transparent;
+  padding: 3px 8px; text-align: right; font-variant-numeric: tabular-nums;
+}
+.grille input::placeholder { color: var(--text-tertiary); opacity: 0.7; }
+.grille input:focus {
+  outline: 2px solid var(--info-accent); outline-offset: -2px;
+  background: var(--bg-primary); position: relative; z-index: 1;
+}
+.grille td.surchargee { background: var(--warning-bg); }
+.grille td.surchargee > input { color: var(--warning-text); font-weight: 650; }
+.grille__aide { margin-top: 5px; font-size: 10px; color: var(--text-tertiary); }
+
 .tableau--serre td, .tableau--serre th { padding: 3px 6px; }
 .tableau--serre .cellule-valeur input { text-align: right; }
 /* « tout » applique une valeur a l'ensemble des annees : poser cinquante et un

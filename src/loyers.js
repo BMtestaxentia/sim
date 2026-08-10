@@ -115,12 +115,20 @@ export function loyerMaxZone(code_produit, zones, baremes) {
  * @param {string} p.code_produit
  * @param {{zone_123?: string|number, zone_ABC?: string}} p.zones
  * @param {number} [p.marge_locale_eur_m2]
+ * @param {number} [p.coefficient_millesime] R-LOYER-9 : revalorisation du PLAFOND
+ *   entre le millesime du bareme et la mise en location. Ne porte que sur le
+ *   plafond de zone : la marge locale est une saisie en euros du jour, elle n'a
+ *   pas de millesime a rattraper.
  * @param {any} referentiels
  * @returns {number} EUR/m2 SU/mois
  */
-export function loyerDeBase({ code_produit, zones, marge_locale_eur_m2 = 0 }, referentiels) {
+export function loyerDeBase(
+  { code_produit, zones, marge_locale_eur_m2 = 0, coefficient_millesime = 1 },
+  referentiels,
+) {
   const def = produit(/** @type {any} */ (code_produit));
-  let loyer = loyerMaxZone(code_produit, zones, referentiels) + marge_locale_eur_m2;
+  let loyer =
+    loyerMaxZone(code_produit, zones, referentiels) * coefficient_millesime + marge_locale_eur_m2;
   if (def.majoration_loyer) {
     const maj = referentiels.constantes_reglementaires[def.majoration_loyer];
     loyer *= 1 + (typeof maj === 'object' ? maj.valeur : maj);
@@ -184,6 +192,7 @@ export function loyerProduit(
     marge_majoration = 0,
     loyer_sortie_force,
     foyer = false,
+    coefficient_millesime = 1,
   },
   referentiels,
 ) {
@@ -192,7 +201,10 @@ export function loyerProduit(
     ? coefficientStructure({ nb_logements, su_m2, foyer }, referentiels)
     : 1;
 
-  const loyerBase = loyerDeBase({ code_produit, zones, marge_locale_eur_m2 }, referentiels);
+  const loyerBase = loyerDeBase(
+    { code_produit, zones, marge_locale_eur_m2, coefficient_millesime },
+    referentiels,
+  );
   const loyerMaxBase = arrondiLoyer(cs * loyerBase);
 
   const force = loyer_sortie_force !== undefined && loyer_sortie_force !== null;

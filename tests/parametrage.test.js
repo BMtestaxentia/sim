@@ -173,6 +173,28 @@ describe('R-LOYER-9 - millesime du bareme de loyers', () => {
     expect(a).toMatch(/EUR de loyers annuels/);
   });
 
+  it('revalorise les plafonds sur option, et le dit', () => {
+    const sans = calculer(BASE, REFERENTIELS);
+    const avec = calculer({ ...BASE, options: { revaloriser_loyers_plafonds: true } }, REFERENTIELS);
+    // Bareme 2025 -> mise en location 2028 : trois annees d'IRL a rattraper.
+    const t = normaliserTrajectoires(fichierTrajectoires).par_poste.loyers_irl;
+    const cumul = [2026, 2027, 2028].reduce((c, a) => c * (1 + (t[a] ?? 0)), 1);
+    expect(avec.loyers[0].loyer_base_eur_m2).toBeCloseTo(
+      Math.round(sans.loyers[0].loyer_base_eur_m2 * cumul * 100) / 100,
+      2,
+    );
+    expect(avec.indicateurs.loyers_annuels_eur).toBeGreaterThan(sans.indicateurs.loyers_annuels_eur);
+    expect(avec.alertes.some((a) => /revalorises du millesime 2025/.test(a))).toBe(true);
+    // L'ecart avec LEON est nomme : la revalorisation n'est pas son comportement.
+    expect(avec.alertes.some((a) => /Ecart assume avec LEON/.test(a))).toBe(true);
+  });
+
+  it('ne revalorise pas par defaut : le contrat est de reproduire LEON', () => {
+    const r = calculer(BASE, REFERENTIELS);
+    // Le plafond PLS zone B1 du bareme, inchange.
+    expect(r.loyers[0].loyer_base_eur_m2).toBe(10.07);
+  });
+
   it('se tait quand le bareme est au millesime de la mise en location', () => {
     const r = calculer(
       {

@@ -2344,8 +2344,17 @@ function modeleParametres() {
       titre: 'Loyers plafonds',
       resume: 'Barèmes par zone, et leur millésime',
       aide:
-        'Les plafonds sont revalorisés au 1er janvier. Un millésime antérieur à la mise en ' +
-        "location sous-estime les recettes : le moteur le signale et chiffre l'écart.",
+        'Les plafonds sont revalorisés au 1er janvier. Le millésime est celui des valeurs ' +
+        "ci-dessous : il ne suit pas la simulation, sans quoi le barème 2025 se ferait passer " +
+        "pour celui de l'année de livraison. C'est la revalorisation ci-dessous qui rattrape " +
+        "l'écart, à l'IRL de la trajectoire, année par année.",
+      interrupteur: {
+        chemin: 'options.revaloriser_loyers_plafonds',
+        libelle: 'Revaloriser les plafonds du millésime à la mise en location',
+        aide:
+          'LEON applique le barème tel quel. Activer cette option en écarte volontairement : ' +
+          "les plafonds sont indexés à l'IRL entre le millésime et l'année de mise en location.",
+      },
       champs: [
         ch('baremes.loyers_max_zone_123.annee_reference', 'Millésime du barème 1/2/3', b.loyers_max_zone_123.annee_reference, 'annee'),
         ch('baremes.loyers_max_zone_ABC.annee_reference', 'Millésime du barème A/B/C', b.loyers_max_zone_ABC.annee_reference, 'annee'),
@@ -2520,48 +2529,65 @@ function carteParametre(c) {
 }
 
 /** Matrice zone x grandeur : la table est ici la bonne forme, une carte par cellule ne l'est pas. */
+/**
+ * Cellule d'une grille de saisie. Les coordonnees `data-l` / `data-c` sont ce
+ * qui permet a la navigation clavier et au collage de se reperer : sans elles,
+ * il faudrait redecouvrir la geometrie du tableau a chaque touche.
+ */
+function celluleGrille(chemin, valeurRef, type, l, c) {
+  const s = surchargeDe(chemin);
+  const enPct = type === 'pourcentage';
+  const aff = (v) => (nul(v) ? '' : enPct ? enPourcent(v) : v);
+  // Cellule en TEXTE et non en `number` : sur un champ numerique, le navigateur
+  // refuse de dire ou se trouve le curseur (`selectionStart` vaut null), et les
+  // fleches horizontales ne peuvent alors plus distinguer « je corrige un
+  // chiffre » de « je change de cellule ». En texte, la distinction se fait.
+  return `<td class="cellule-valeur ${nul(s) ? '' : 'surchargee'}">
+    <input type="text" inputmode="decimal" data-champ="${chemin}"
+      data-type="${enPct ? 'pourcentage' : 'nombre'}" data-l="${l}" data-c="${c}"
+      placeholder="${att(String(aff(valeurRef)))}" value="${valNum(aff(s))}" /></td>`;
+}
+
+/** Rappel des gestes disponibles, une fois par grille. */
+const AIDE_GRILLE =
+  '⌨ Flèches pour se déplacer, Entrée pour descendre, Tab pour avancer. ' +
+  'Un bloc copié depuis un tableur se colle tel quel à partir de la cellule sélectionnée.';
+
 function tableMatrice(m) {
   const lignes = m.lignes.filter((l) => l.cellules.some(correspond));
   if (!lignes.length) return '';
   return `
     <div class="para-matrice">
       <h4>${att(m.titre)}</h4>
-      <div class="table-defilante"><table class="tableau tableau--serre">
-        <thead><tr><th></th>${m.zones.map((z) => `<th class="num">${att(z)}</th>`).join('')}</tr></thead>
+      <div class="table-defilante"><table class="grille" data-grille>
+        <thead><tr><th></th>${m.zones.map((z) => `<th>${att(z)}</th>`).join('')}</tr></thead>
         <tbody>${lignes
           .map(
-            (l) => `<tr><td>${att(l.libelle)}</td>${l.cellules
-              .map((c) => {
-                const s = surchargeDe(c.chemin);
-                const enPct = c.type === 'pourcentage';
-                return `<td class="cellule-valeur ${nul(s) ? '' : 'surchargee'}">
-                  <input type="number" step="${enPct ? '0.01' : 'any'}" data-champ="${c.chemin}"
-                    data-type="${enPct ? 'pourcentage' : 'nombre'}"
-                    placeholder="${att(String(enPct ? enPourcent(c.valeur) : c.valeur))}"
-                    value="${valNum(enPct ? enPourcent(s) : s)}" /></td>`;
-              })
-              .join('')}</tr>`,
+            (l, il) =>
+              `<tr><td class="grille__entete">${att(l.libelle)}</td>` +
+              l.cellules.map((c, ic) => celluleGrille(c.chemin, c.valeur, c.type, il, ic)).join('') +
+              `</tr>`,
           )
           .join('')}</tbody>
       </table></div>
+      <p class="grille__aide">${AIDE_GRILLE}</p>
     </div>`;
 }
 
 /**
  * Trajectoires : cinquante et une annees x cinq postes, soit deux cent
- * cinquante cases. On ne les saisit pas une a une - on pose un taux et on
- * l'applique a toutes les annees. La table reste dessous pour corriger les
- * exceptions, repliee par defaut.
+ * cinquante cases. On ne les saisit pas une a une - chaque colonne porte un
+ * « tout » qui applique une valeur a l'ensemble des annees, et la grille reste
+ * dessous pour les exceptions, repliee par defaut.
  */
 let trajectoireDepliee = false;
 function sectionTrajectoires() {
   const lignes = referentiels.trajectoires.trajectoires;
   const surcharges = parametrageActif().trajectoires?.par_annee ?? {};
-  const modifiee = (annee, cle) => !nul(surcharges[annee]?.[cle]);
-  const visibles = trajectoireDepliee ? lignes : lignes.slice(0, 8);
+  const visibles = trajectoireDepliee ? lignes : lignes.slice(0, 10);
 
   const enTete = POSTES_TRAJECTOIRE.map(
-    (p) => `<th class="num">${p.libelle}
+    (p) => `<th>${p.libelle}
       <button type="button" class="para-tout" data-appliquer-poste="${p.cle}"
         title="Appliquer une même valeur à toutes les années">tout</button></th>`,
   ).join('');
@@ -2572,20 +2598,20 @@ function sectionTrajectoires() {
         <button type="button" class="bouton--discret" id="deplier-trajectoire">
           ${trajectoireDepliee ? 'Replier' : `Tout afficher (${lignes.length} années)`}</button>
       </h4>
-      <div class="table-defilante"><table class="tableau tableau--serre">
+      <div class="table-defilante"><table class="grille" data-grille>
         <thead><tr><th>Année</th>${enTete}</tr></thead>
         <tbody>${visibles
           .map(
-            (l) => `<tr><td class="num-poste">${l.annee}</td>${POSTES_TRAJECTOIRE.map((p) => {
-              const chemin = `trajectoires.par_annee.${l.annee}.${p.cle}`;
-              return `<td class="cellule-valeur ${modifiee(l.annee, p.cle) ? 'surchargee' : ''}">
-                <input type="number" step="0.01" data-champ="${chemin}" data-type="pourcentage"
-                  placeholder="${enPourcent(l[p.cle])}"
-                  value="${valNum(enPourcent(surcharges[l.annee]?.[p.cle]))}" /></td>`;
-            }).join('')}</tr>`,
+            (l, il) =>
+              `<tr><td class="grille__entete">${l.annee}</td>` +
+              POSTES_TRAJECTOIRE.map((p, ic) =>
+                celluleGrille(`trajectoires.par_annee.${l.annee}.${p.cle}`, l[p.cle], 'pourcentage', il, ic),
+              ).join('') +
+              `</tr>`,
           )
           .join('')}</tbody>
       </table></div>
+      <p class="grille__aide">${AIDE_GRILLE}</p>
     </div>`;
 }
 
@@ -2656,6 +2682,15 @@ function rendreParametres() {
       <section class="bloc para-section">
         <h3>${att(s.titre)}</h3>
         <p class="para-source">${att(s.aide)}</p>
+        ${
+          s.interrupteur && !enRecherche
+            ? `<label class="para-interrupteur">
+                <input type="checkbox" data-champ="${s.interrupteur.chemin}" data-type="booleen"
+                  ${lireChemin(etat, s.interrupteur.chemin) ? 'checked' : ''} />
+                <span><b>${att(s.interrupteur.libelle)}</b><br />${att(s.interrupteur.aide)}</span>
+              </label>`
+            : ''
+        }
         ${champs.length ? `<div class="para-grille">${champs.map(carteParametre).join('')}</div>` : ''}
         ${matrices.join('')}
         ${traj}
@@ -2848,12 +2883,11 @@ document.addEventListener('input', (ev) => {
     // interpretee comme un effacement et le chiffre deja saisi serait perdu.
     if (el.validity?.badInput) return;
     // Un champ reellement vide reste vide : il ne devient jamais zero silencieusement.
-    if (el.value === '') valeur = null;
-    else {
-      const n = Number(el.value);
-      if (Number.isNaN(n)) return;
-      valeur = el.dataset.type === 'pourcentage' ? n / 100 : n;
-    }
+    // La lecture est celle des montants : virgule decimale et espaces de
+    // groupement acceptes, ce qu'un collage depuis un tableur francais produit.
+    const n = lireMontant(el.value);
+    if (n === undefined) return;
+    valeur = n === null ? null : el.dataset.type === 'pourcentage' ? n / 100 : n;
   } else if (el.dataset.type === 'mode-redevance') {
     valeur = el.checked ? 'redevance' : 'loyers';
   } else if (el.dataset.type === 'booleen') {
@@ -2862,22 +2896,16 @@ document.addEventListener('input', (ev) => {
     valeur = el.value === '' ? null : el.value;
   }
 
-  // R-PARAM - Une surcharge de bareme ou de trajectoire ne va pas dans l'etat de
-  // l'operation mais dans le PROFIL actif. Si c'est le referentiel qui est
-  // actif, `profilModifiable` en derive d'abord une copie : la reference ne se
-  // perd pas par une frappe.
-  if (chemin.startsWith('baremes.') || chemin.startsWith('trajectoires.')) {
-    const avant = profilActif().id;
-    const profil = profilModifiable();
-    ecrireChemin(profil.parametrage, chemin, valeur);
-    // La derivation change le profil courant, donc la barre de profils et les
-    // marqueurs de cellule modifiee : il faut reconstruire, une fois.
-    if (avant !== profil.id) rafraichirTout();
-    else recalculer();
+  if (ecrireSaisie(chemin, valeur)) {
+    // La derivation d'un profil change la barre de profils et les marques de
+    // cellule modifiee : il faut reconstruire, une fois.
+    rafraichirTout();
     return;
   }
-
-  ecrireChemin(etat, chemin, valeur);
+  if (chemin.startsWith('baremes.') || chemin.startsWith('trajectoires.')) {
+    recalculer();
+    return;
+  }
 
   // Saisir un montant de pret le FIGE : il sort du calcul d'equilibre. La ligne
   // perd sa classe et le bouton de retour au calcul apparait, sans reconstruire
@@ -2907,6 +2935,135 @@ document.addEventListener(
   },
   true,
 );
+
+// ---------------------------------------------------------------- grilles de saisie
+
+/**
+ * Range une valeur saisie a sa place. R-PARAM : une surcharge de bareme ou de
+ * trajectoire ne va pas dans l'etat de l'operation mais dans le PROFIL actif,
+ * et si c'est le referentiel qui est actif, elle en derive d'abord une copie -
+ * la reference ne se perd pas par une frappe.
+ * @returns {boolean} vrai si un profil vient d'etre derive, l'ecran est alors
+ *   a reconstruire.
+ */
+function ecrireSaisie(chemin, valeur) {
+  if (!chemin.startsWith('baremes.') && !chemin.startsWith('trajectoires.')) {
+    ecrireChemin(etat, chemin, valeur);
+    return false;
+  }
+  const avant = profilActif().id;
+  const profil = profilModifiable();
+  ecrireChemin(profil.parametrage, chemin, valeur);
+  return avant !== profil.id;
+}
+
+/** Champ d'une grille a des coordonnees donnees, ou null s'il n'existe pas. */
+function celluleDeGrille(grille, l, c) {
+  return /** @type {HTMLInputElement|null} */ (
+    grille.querySelector(`input[data-l="${l}"][data-c="${c}"]`)
+  );
+}
+
+/** Deplace le curseur d'une cellule a l'autre, en selectionnant son contenu. */
+function allerEnGrille(grille, l, c) {
+  const cible = celluleDeGrille(grille, l, c);
+  if (!cible) return false;
+  cible.focus();
+  cible.select();
+  return true;
+}
+
+/**
+ * Deplacement au clavier dans une grille, aux usages du tableur.
+ *
+ * Les fleches HORIZONTALES ne changent de cellule que si le curseur est deja au
+ * bord du texte : au milieu d'un nombre, elles doivent continuer a deplacer le
+ * curseur, sinon on ne peut plus corriger un chiffre.
+ * Les fleches VERTICALES, elles, sont interceptees dans tous les cas - sur un
+ * champ numerique elles incrementeraient la valeur, ce que personne n'attend
+ * d'une fleche dans un tableau.
+ */
+document.addEventListener('keydown', (ev) => {
+  const el = /** @type {HTMLInputElement} */ (ev.target);
+  const grille = el?.closest?.('[data-grille]');
+  if (!grille || el.dataset.l === undefined) return;
+
+  const l = Number(el.dataset.l);
+  const c = Number(el.dataset.c);
+  const auDebut = el.selectionStart === 0 && el.selectionEnd === 0;
+  const aLaFin = el.selectionStart === el.value.length && el.selectionEnd === el.value.length;
+
+  let cible = null;
+  if (ev.key === 'ArrowDown' || (ev.key === 'Enter' && !ev.shiftKey)) cible = [l + 1, c];
+  else if (ev.key === 'ArrowUp' || (ev.key === 'Enter' && ev.shiftKey)) cible = [l - 1, c];
+  else if (ev.key === 'ArrowLeft' && auDebut) cible = [l, c - 1];
+  else if (ev.key === 'ArrowRight' && aLaFin) cible = [l, c + 1];
+  else if (ev.key === 'Tab') cible = ev.shiftKey ? [l, c - 1] : [l, c + 1];
+  if (!cible) return;
+
+  // Tab en bout de ligne rend la main au navigateur : sortir de la grille par
+  // la tabulation reste possible.
+  if (allerEnGrille(grille, cible[0], cible[1])) ev.preventDefault();
+  else if (ev.key !== 'Tab') ev.preventDefault();
+});
+
+/**
+ * Collage d'un bloc venu d'un tableur. Un bareme se recopie depuis Excel : le
+ * bloc arrive en colonnes separees par des tabulations et lignes separees par
+ * des retours, et se pose a partir de la cellule selectionnee.
+ *
+ * Les valeurs sont relues a la francaise (virgule decimale, espaces de
+ * groupement) : un copier-coller depuis un tableur francais ne doit pas obliger
+ * a reformater quoi que ce soit.
+ */
+document.addEventListener('paste', (ev) => {
+  const el = /** @type {HTMLInputElement} */ (ev.target);
+  const grille = el?.closest?.('[data-grille]');
+  if (!grille || el.dataset.l === undefined) return;
+
+  const texte = ev.clipboardData?.getData('text/plain') ?? '';
+  if (!/[\t\n\r]/.test(texte.trim())) return; // une seule valeur : collage normal
+
+  ev.preventDefault();
+  const l0 = Number(el.dataset.l);
+  const c0 = Number(el.dataset.c);
+  const bloc = texte.replace(/\r\n?/g, '\n').replace(/\n+$/, '').split('\n').map((r) => r.split('\t'));
+
+  // On ecrit DIRECTEMENT, sans simuler d'evenements de saisie : la premiere
+  // cellule ecrite peut deriver un profil, ce qui reconstruit l'ecran - les
+  // cellules suivantes recevraient alors leurs evenements sur des noeuds
+  // detaches, et sept valeurs sur huit se perdraient en silence.
+  let posees = 0;
+  let hors = 0;
+  for (let i = 0; i < bloc.length; i++) {
+    for (let j = 0; j < bloc[i].length; j++) {
+      const cible = celluleDeGrille(grille, l0 + i, c0 + j);
+      if (!cible) { hors++; continue; }
+      const v = lireMontant(bloc[i][j].trim().replace('%', ''));
+      if (v === undefined) continue;
+      ecrireSaisie(
+        cible.dataset.champ,
+        v === null ? null : cible.dataset.type === 'pourcentage' ? v / 100 : v,
+      );
+      posees++;
+    }
+  }
+  recalculer();
+  // Une seule reconstruction en fin de collage : les compteurs de modification
+  // et les marques de cellule ne suivent pas la frappe, seulement le rendu.
+  // Le curseur revient ou il etait, sinon coller ferait perdre sa place.
+  rendreParametres();
+  rendreBarreProfil();
+  celluleDeGrille(document.querySelector('[data-grille]'), l0, c0)?.focus();
+
+  if (hors) {
+    alert(
+      `${posees} valeur${posees > 1 ? 's' : ''} collée${posees > 1 ? 's' : ''}. ` +
+        `${hors} valeur${hors > 1 ? 's' : ''} débordai${hors > 1 ? 'ent' : 't'} de la grille, ` +
+        `${hors > 1 ? 'elles ont' : 'elle a'} été ignorée${hors > 1 ? 's' : ''}.`,
+    );
+  }
+});
 
 document.addEventListener('change', (ev) => {
   // L'interrupteur de masquage change la STRUCTURE de la table, pas l'etat.

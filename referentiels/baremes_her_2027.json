@@ -199,6 +199,14 @@
         "libelle": "PAM (rehabilitation)",
         "source": "Marge de reference des prets a l amelioration, alignee sur le PLUS. A confirmer par le metier (Q-37)."
       }
+    },
+    "defauts": {
+      "progressivite": -0.005,
+      "revisabilite": "DOUBLE",
+      "profil_amortissement": "echeances_interets_prioritaires",
+      "note_progressivite": "Progressivite des echeances a -0,5 % : l annuite decroit d un demi-point par an avant revision. Valeur AXENTIA par defaut, ecrasable pret par pret.",
+      "note_revisabilite": "Double revisabilite sur PLAI, PLUS et PLS : le taux ET la progression de l annuite suivent le Livret A.",
+      "note_profil": "Echeances et interets prioritaires : l echeance sert d abord les interets de l exercice, le solde amortit le capital. C est deja la mecanique du moteur (interets = taux x CRD, amortissement = annuite - interets) ; le parametre l explicite et documente le choix, il ne declenche pas un autre calcul."
     }
   },
   "tva": {
@@ -330,9 +338,16 @@
   },
   "fonds_propres": {
     "note": "R-FIN-7. REMUNERATION et RECONSTITUTION sont deux options INDEPENDANTES, et les quatre combinaisons se rencontrent : remuneres sans etre reconstitues (l'operation sert l'interet mais ne rend jamais le capital), reconstitues sans etre remuneres (le capital est rendu par parts egales), les deux (annuite d'amortissement classique, qui s'arrete au terme), ou ni l'un ni l'autre (reconstitution sur le seul autofinancement). Ces valeurs sont des HYPOTHESES d'organisme, pas des baremes reglementaires : elles se surchargent tranche par tranche.",
-    "source": "Annexe LEON MULHOUSE 3308, `plan_financement.fonds_propres`. Elle porte les QUATRE combinaisons dans une seule operation : PLS et LOC1 a 2,5 % sur 30 ans, CD a 2,5 % sans duree, LIB sans taux sur 30 ans, PLI sans taux sur 35 ans, REH a 1,5 % sur 25 ans, PLUS et PLAI ni l'un ni l'autre.",
+    "source": "Annexe LEON MULHOUSE 3308, plan_financement.fonds_propres, et regle de montage AXENTIA confirmee par Bastien le 10/08/2026 pour les taux d apport.",
     "taux_remuneration_defaut": 0.025,
-    "duree_reconstitution_defaut_ans": 30
+    "duree_reconstitution_defaut_ans": 30,
+    "apport": {
+      "usage": "Apport par defaut d une tranche, en part de son prix de revient TTC. La saisie l ecrase.",
+      "taux_defaut": 0.05,
+      "taux_redevance_transparence": 0.02,
+      "remuneres_par_defaut": true,
+      "note": "En redevance transparente, l apport prend la forme d une avance de tresorerie remuneree et se limite a 2 % : le gestionnaire refacture les charges, l operation n a pas a immobiliser davantage. Hors transparence - redevance forfaitaire ou loyers - l apport est de 5 %."
+    }
   },
   "charges_exploitation": {
     "note": "Postes de charge du compte d'exploitation autres que les annuites, les frais de gestion, la TFPB et le gros entretien, qui ont leur propre entree. Reponse a la question Q-16. Chaque poste est une DONNEE : son assiette, sa valeur et sa trajectoire d'indexation se lisent ici, aucun n'est cable dans le code (lecon I-2). AUCUN n'est actif par defaut : c'est la saisie qui les active, sans quoi les fixtures existantes changeraient de resultat en silence.",

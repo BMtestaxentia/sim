@@ -530,7 +530,11 @@ export function calculer(entrees, referentiels) {
             zone_ABC: identite.zone_ABC,
             livret_a_reference: surcharges.livret_a_origine ?? laOrigine,
             marges: margesPrets,
-            progressivite: surcharges.progressivite ?? 0,
+            // La progressivite des echeances est une regle de MONTAGE, pas une
+            // propriete du produit : elle vient du referentiel, ou une surcharge
+            // de simulation peut la remplacer.
+            progressivite:
+              surcharges.progressivite ?? baremes.prets_cdc?.defauts?.progressivite ?? 0,
           }).map((d) => [d.nature, d]),
         );
       } catch (e) {

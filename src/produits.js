@@ -91,10 +91,13 @@ export const PRODUITS = {
       // 2,40 % (ParaGEN!DD20), soit LA + 1,11 %. Confirme independamment par la
       // maquette LEON REWORK (ADMIN!C45 « Spread PLS » = 0,0111), qui donne aussi
       // PLAI -0,20 % et PLUS +0,60 %, conformes a R-AMT-1.
-      // Revisabilite SIMPLE (SimPLS!AM19) : le taux suit le Livret A, la
-      // progression de l'annuite reste a p.
-      { nature: 'construction', cle_marge: 'PLS', duree_ref: '40', revisabilite: 'SIMPLE' },
-      { nature: 'foncier', cle_marge: 'PLS', duree_ref: 'zone_abc:B2|C->50,sinon->60', revisabilite: 'SIMPLE' },
+      //
+      // Revisabilite DOUBLE, sur decision du metier (Bastien, 10/08/2026) : les
+      // trois produits CDC sont montes en double revisabilite. La matrice
+      // BERGERAC portait SIMPLE (SimPLS!AM19), ce qui reflete un montage
+      // particulier et non la regle - l'ecart est trace dans ECARTS_LEON.
+      { nature: 'construction', cle_marge: 'PLS', duree_ref: '40', revisabilite: 'DOUBLE' },
+      { nature: 'foncier', cle_marge: 'PLS', duree_ref: 'zone_abc:B2|C->50,sinon->60', revisabilite: 'DOUBLE' },
     ],
     v1: true,
   },

@@ -183,7 +183,11 @@ const etat = {
     PLS: { marge_majoration: 0, marge_locale_eur_m2: 0, loyer_sortie_force: null },
   },
   subventions: [{ libelle: 'Ville', montant_eur: 20000, affectation: 'PLS' }],
-  fonds_propres_par_produit: { PLS: 50000 },
+  // Aucun apport fige : il se preremplit a la part du referentiel (5 % du prix
+  // de revient, 2 % en redevance transparente). Un montant en dur ici aurait
+  // masque cette regle dans l'operation de demonstration, qui est justement ce
+  // qu'on ouvre pour la decouvrir.
+  fonds_propres_par_produit: {},
   // R-FIN-7 : regime des fonds propres, tranche par tranche.
   remuneration_fonds_propres: {},
   mode_prets: 'saisis',
@@ -684,13 +688,17 @@ function pretsCDCParDefaut(codes) {
 function rendreStructureTranches() {
   const codes = tranchesActives();
   const defautFP = referentiels.baremes.fonds_propres ?? {};
+  amorcerApportsFondsPropres(codes);
   for (const code of codes) {
     etat.loyers_par_produit[code] ??= { marge_majoration: 0, loyer_sortie_force: null };
     // R-FIN-7 : non remuneres par defaut. Les valeurs de taux et de duree sont
     // preremplies depuis le referentiel pour que cocher la case suffise, sans
     // etre appliquees tant que la case ne l'est pas.
     etat.remuneration_fonds_propres[code] ??= {
-      remuneres: false,
+      // L'apport par defaut prend la forme d'une avance de tresorerie
+      // REMUNEREE : c'est la regle de montage, et elle vaut dans les deux
+      // regimes. La reconstitution, elle, reste un choix.
+      remuneres: defautFP.apport?.remuneres_par_defaut ?? false,
       reconstitues: false,
       taux: defautFP.taux_remuneration_defaut ?? 0,
       duree_reconstitution_ans: defautFP.duree_reconstitution_defaut_ans ?? 30,
@@ -861,6 +869,72 @@ function rendreStructureTranches() {
 }
 
 /**
+ * R-FIN-7 - Taux d'apport en fonds propres applicable au montage courant.
+ *
+ * En redevance TRANSPARENTE, l'apport prend la forme d'une avance de tresorerie
+ * remuneree et se limite a 2 % : le gestionnaire refacture les charges, il n'y a
+ * pas lieu d'immobiliser davantage. Hors transparence - redevance forfaitaire ou
+ * loyers ordinaires - il est de 5 %.
+ */
+function tauxApportFP() {
+  const a = referentiels.baremes.fonds_propres?.apport ?? {};
+  const transparence =
+    etat.exploitation?.mode === 'redevance' && etat.exploitation?.mode_redevance === 'transparence';
+  return (transparence ? a.taux_redevance_transparence : a.taux_defaut) ?? 0;
+}
+
+/** Apport theorique d'une tranche : taux du montage x son prix de revient TTC. */
+function apportTheoriqueFP(code) {
+  const ttc = dernierResultat?.bilan?.par_tranche?.[code]?.total_ttc_eur;
+  return ttc > 0 ? Math.round(ttc * tauxApportFP()) : null;
+}
+
+/**
+ * Preremplit l'apport des tranches qui n'en ont pas encore.
+ *
+ * `??=` et non une affectation : une valeur saisie ne se fait jamais ecraser par
+ * un defaut. Une tranche dont l'apport a ete mis a zero volontairement garde son
+ * zero - c'est une saisie, pas une absence.
+ */
+function amorcerApportsFondsPropres(codes) {
+  for (const code of codes) {
+    if (etat.fonds_propres_par_produit[code] !== undefined) continue;
+    const a = apportTheoriqueFP(code);
+    if (a !== null) etat.fonds_propres_par_produit[code] = a;
+  }
+}
+
+/**
+ * Changement de regime : la part d'apport passe de 5 % a 2 % ou l'inverse.
+ *
+ * On ne recalcule PAS en silence - l'apport est une saisie, et la voir bouger
+ * seule apres avoir touche a un tout autre reglage serait incomprehensible. On
+ * propose, en donnant les deux montants, et on ne touche a rien sur un refus.
+ */
+function proposerReajustementApports(ancienTaux) {
+  const nouveauTaux = tauxApportFP();
+  if (nouveauTaux === ancienTaux) return;
+  const codes = Object.keys(etat.fonds_propres_par_produit).filter(
+    (c) => apportTheoriqueFP(c) !== null,
+  );
+  if (!codes.length) return;
+  const total = (t) =>
+    codes.reduce(
+      (s, c) => s + Math.round((dernierResultat.bilan.par_tranche[c].total_ttc_eur ?? 0) * t),
+      0,
+    );
+  const ok = confirm(
+    `Le changement de mode fait passer l’apport en fonds propres de ` +
+      `${pct(ancienTaux, 1)} à ${pct(nouveauTaux, 1)} du prix de revient, ` +
+      `soit ${eur(total(ancienTaux))} au lieu de ${eur(total(nouveauTaux))}.\n\n` +
+      `Réajuster les apports des ${codes.length} tranche(s) ? ` +
+      `Annuler les laisse tels quels.`,
+  );
+  if (!ok) return;
+  for (const c of codes) etat.fonds_propres_par_produit[c] = apportTheoriqueFP(c);
+}
+
+/**
  * Prets deplies. Etat purement visuel : il vit ici et non dans `etat`, qui est
  * clone tel quel pour alimenter le moteur et l'export JSON.
  * @type {Set<number>}
@@ -895,7 +969,10 @@ function gabaritPret(p, i) {
     jeton('durée', '-', 'duree'),
     jeton('1re éch.', '-', 'echeance'),
     jeton('révis.', '-', 'revisabilite'),
-    ...(p.progressivite ? [jeton('progr.', pct(p.progressivite, 2))] : []),
+    // La progressivite se lit comme le taux et la duree : depuis le RESULTAT,
+    // car un pret CDC non saisi la tient du referentiel. La conditionner a la
+    // saisie masquait les -0,5 % par defaut, qui pilotent pourtant l'annuite.
+    jeton('progr.', '-', 'progressivite'),
     ...(p.differe_ans ? [jeton('différé', `${p.differe_ans} ans · type ${p.differe_type ?? 2}`)] : []),
   ].join('');
 
@@ -1675,6 +1752,8 @@ function rendreValeurs(r) {
     poser('duree', nul(a?.duree_ans) ? '-' : `${a.duree_ans} ans`);
     poser('echeance', amorti?.annee_premiere_echeance ?? p?.annee_premiere_echeance ?? '-');
     poser('revisabilite', a?.revisabilite ?? p?.revisabilite ?? '-');
+    const progr = a?.progressivite ?? p?.progressivite;
+    poser('progressivite', nul(progr) ? '-' : pct(progr, 2));
 
     // Le detail replie n'existe pas dans le DOM : ces champs ne sont a remplir
     // que quand il est ouvert.
@@ -3527,6 +3606,17 @@ document.addEventListener('input', (ev) => {
     valeur = el.value === '' ? null : el.value;
   }
 
+  // Passer de loyers a redevance, ou l'inverse, peut changer la part d'apport
+  // en fonds propres au meme titre que le regime de redevance. Meme traitement :
+  // on releve le taux avant, on propose apres.
+  if (el.dataset.type === 'mode-redevance') {
+    const avant = tauxApportFP();
+    ecrireSaisie(chemin, valeur);
+    proposerReajustementApports(avant);
+    rafraichirTout();
+    return;
+  }
+
   // Selection multiple : la valeur frappee sur une ligne selectionnee se pose
   // sur toutes les autres. On reconstruit alors la table, pour que les lignes
   // touchees affichent leur nouvelle valeur - et on rend le focus au champ en
@@ -3960,7 +4050,12 @@ document.addEventListener('click', (ev) => {
 
   const modeRedev = el.closest('[data-mode-redevance]');
   if (modeRedev) {
+    // Le regime de redevance commande la part d'apport en fonds propres (2 % en
+    // transparence, 5 % sinon). On releve le taux AVANT de basculer, pour savoir
+    // ensuite s'il a change et ne demander qu'alors.
+    const avant = tauxApportFP();
     etat.exploitation.mode_redevance = /** @type {HTMLElement} */ (modeRedev).dataset.modeRedevance;
+    proposerReajustementApports(avant);
     rafraichirTout();
     return;
   }

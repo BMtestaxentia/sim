@@ -2045,7 +2045,7 @@ function rendreFinancement(r) {
           s.ventilee
             ? `<span class="sub__origine">ventilée · ${eur(s.montant_total_eur)} au total</span>`
             : s.affectation
-              ? `<span class="sub__origine">fléchée ${att(libelleProduit(s.affectation))}</span>`
+              ? `<span class="sub__origine">${att(libelleProduit(s.affectation))}</span>`
               : ''
         }
       </div>`,

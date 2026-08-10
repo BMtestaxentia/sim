@@ -2722,6 +2722,45 @@ function grapheExploitation(lignes, evenements) {
     </svg>`;
 }
 
+/**
+ * Nature d'un evenement du compte, en deux mots. Le `code` vient du moteur ; le
+ * libelle du badge, lui, appartient a l'ecran - c'est un raccourci de lecture,
+ * pas une donnee. Un code inconnu retombe sur son propre nom plutot que de
+ * disparaitre : mieux vaut un badge etrange qu'une rupture invisible.
+ */
+const NATURES_EVENEMENT = {
+  pret: { court: 'PRÊT', pluriel: 'PRÊTS' },
+  tfpb: { court: 'TFPB', pluriel: 'TFPB' },
+};
+
+/**
+ * Badges de rupture d'une ligne du compte, un par NATURE. Chacun annonce ce
+ * dont il s'agit et combien, et porte le detail en infobulle. Leur hauteur ne
+ * depend pas du nombre d'evenements : c'est tout l'objet du regroupement.
+ * @param {Array<{code?: string, libelle: string}>} evenements
+ */
+function badgesEvenements(evenements = []) {
+  const parNature = new Map();
+  for (const brut of evenements) {
+    // La vue JALONS reçoit des libelles nus (`jalonsExploitation` les aplatit),
+    // la vue annuelle des evenements entiers. On accepte les deux plutot que de
+    // changer une sortie du moteur pour un besoin d'affichage.
+    const e = typeof brut === 'string' ? { libelle: brut } : brut;
+    const code = e.code ?? (/échéance/i.test(e.libelle) ? 'pret' : 'tfpb');
+    if (!parNature.has(code)) parNature.set(code, []);
+    parNature.get(code).push(e.libelle);
+  }
+  return [...parNature.entries()]
+    .map(([code, libelles]) => {
+      const n = NATURES_EVENEMENT[code] ?? { court: code, pluriel: code };
+      // Le compte n'apparait qu'a partir de deux : « prêt 1 » se lirait comme
+      // le nom d'un pret, alors qu'il n'y en a qu'un et qu'on le nomme au survol.
+      const texte = libelles.length > 1 ? `${n.pluriel} ${libelles.length}` : n.court;
+      return `<span class="evenement evenement--${att(code)}" title="${att(libelles.join(' · '))}">${att(texte)}</span>`;
+    })
+    .join('');
+}
+
 function rendreExploitation(r) {
   const e = r.exploitation;
   const ind = e.indicateurs;
@@ -2829,22 +2868,22 @@ function rendreExploitation(r) {
           type: 'annee',
           libelle: String(l.annee),
           ...l,
-          evenements: e.evenements.filter((x) => x.annee === l.annee).map((x) => x.libelle),
+          // L'evenement entier et non son seul libelle : son `code` sert a le
+          // ranger par nature, ce qu'une chaine de texte ne permet qu'a coups
+          // d'expressions regulieres sur des libelles faits pour etre lus.
+          evenements: e.evenements.filter((x) => x.annee === l.annee),
         }));
 
   const montant = (v) => `<td class="num ${v < 0 ? 'montant--negatif' : ''}">${eur(v)}</td>`;
   $('#table-exploitation').querySelector('tbody').innerHTML = rangs
     .map((j) => {
       const autresCharges = j.total_charges_eur - j.annuites_eur;
-      // Une PASTILLE et non les libelles en clair. Cinq echeances la meme annee
-      // faisaient cinq etiquettes empilees dans la cellule, et cette ligne-la
-      // devenait dix fois plus haute que ses voisines : la colonne des annees
-      // n'etait plus une colonne, et l'oeil perdait l'alignement des chiffres.
-      // Le detail se lit au survol, et en toutes lettres sous le graphe.
-      const ev = j.evenements ?? [];
-      const marques = ev.length
-        ? `<span class="evenement" title="${att(ev.join(' · '))}">${ev.length > 1 ? ev.length : '●'}</span>`
-        : '';
+      // Un badge PAR NATURE d'evenement, et non un par evenement : cinq
+      // echeances la meme annee faisaient cinq etiquettes empilees, et la ligne
+      // enflait a proportion. Un badge dit ce dont il s'agit et combien il y en
+      // a - « prêts 5 », « TFPB » - le detail se lit au survol. Sa hauteur est
+      // fixe : la colonne des annees reste une colonne.
+      const marques = badgesEvenements(j.evenements);
       const classe = j.type === 'moyenne' ? 'ligne--moyenne' : marques ? 'ligne--rupture' : '';
       // Vue TRESORERIE a gauche, vue COMPTABLE dans son bloc a droite.
       const comptable = (v) =>

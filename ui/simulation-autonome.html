@@ -444,11 +444,16 @@ td.calc { text-align: right; }
 #table-exploitation th:nth-child(7), #table-exploitation td:nth-child(7) {
   white-space: nowrap;
 }
-/* La colonne de PERIODE ne porte qu'une annee : sans bride, c'est elle qui
-   absorbait tout le jeu de la table et ouvrait un vide de plusieurs centaines
-   de pixels avant le premier montant. Bornee, le jeu se repartit entre les
-   colonnes de chiffres, qui en ont l'usage. */
-#table-exploitation th:first-child, #table-exploitation td:first-child { width: 88px; }
+/* La colonne de PERIODE prend EXACTEMENT sa place, pas un pixel de plus :
+   `width: 1%` avec `nowrap` la reduit a la largeur de son contenu, badge
+   compris. Sans bride, c'est elle qui absorbait tout le jeu de la table et
+   ouvrait un vide de plusieurs centaines de pixels avant le premier montant ;
+   bornee a une largeur fixe, le badge passait a la ligne des qu'il portait un
+   compte, et la ligne enflait - exactement ce qu'on voulait eviter. Le jeu se
+   repartit desormais entre les colonnes de chiffres, qui en ont l'usage. */
+#table-exploitation th:first-child, #table-exploitation td:first-child {
+  width: 1%; white-space: nowrap;
+}
 
 /* ---------- Intitules figes ----------
    Un compte de soixante lignes se lit en faisant defiler la page, et l'on perd
@@ -1196,13 +1201,16 @@ span.ressource__libelle {
    hauteur ne bouge pas, quel que soit le nombre d'evenements ; le detail se lit
    au survol, et en toutes lettres sous le graphe. */
 .evenement {
-  display: inline-flex; align-items: center; justify-content: center;
-  margin-left: 7px; width: 16px; height: 16px; vertical-align: middle;
-  font-size: 9.5px; font-weight: 700; line-height: 1;
+  display: inline-flex; align-items: center; vertical-align: middle;
+  margin-left: 6px; height: 15px; padding: 0 6px; white-space: nowrap;
+  font-size: 9px; font-weight: 700; line-height: 1; letter-spacing: 0.02em;
   border-radius: var(--radius-pill);
-  background: var(--warning-accent); color: var(--bg-primary);
+  background: var(--warning-bg); color: var(--warning-text);
   cursor: help;
 }
+/* La fin d'exoneration n'est pas une echeance : elle alourdit le compte au lieu
+   de l'alleger, et se distingue donc de la couleur qui annonce un pret solde. */
+.evenement--tfpb { background: var(--coral-bg); color: var(--coral-text); }
 .ligne--rupture td { background: color-mix(in srgb, var(--warning-accent) 8%, transparent); }
 .ligne--moyenne td { color: var(--text-tertiary); font-style: italic; }
 
@@ -9349,6 +9357,45 @@ function grapheExploitation(lignes, evenements) {
     </svg>`;
 }
 
+/**
+ * Nature d'un evenement du compte, en deux mots. Le `code` vient du moteur ; le
+ * libelle du badge, lui, appartient a l'ecran - c'est un raccourci de lecture,
+ * pas une donnee. Un code inconnu retombe sur son propre nom plutot que de
+ * disparaitre : mieux vaut un badge etrange qu'une rupture invisible.
+ */
+const NATURES_EVENEMENT = {
+  pret: { court: 'PRÊT', pluriel: 'PRÊTS' },
+  tfpb: { court: 'TFPB', pluriel: 'TFPB' },
+};
+
+/**
+ * Badges de rupture d'une ligne du compte, un par NATURE. Chacun annonce ce
+ * dont il s'agit et combien, et porte le detail en infobulle. Leur hauteur ne
+ * depend pas du nombre d'evenements : c'est tout l'objet du regroupement.
+ * @param {Array<{code?: string, libelle: string}>} evenements
+ */
+function badgesEvenements(evenements = []) {
+  const parNature = new Map();
+  for (const brut of evenements) {
+    // La vue JALONS reçoit des libelles nus (`jalonsExploitation` les aplatit),
+    // la vue annuelle des evenements entiers. On accepte les deux plutot que de
+    // changer une sortie du moteur pour un besoin d'affichage.
+    const e = typeof brut === 'string' ? { libelle: brut } : brut;
+    const code = e.code ?? (/échéance/i.test(e.libelle) ? 'pret' : 'tfpb');
+    if (!parNature.has(code)) parNature.set(code, []);
+    parNature.get(code).push(e.libelle);
+  }
+  return [...parNature.entries()]
+    .map(([code, libelles]) => {
+      const n = NATURES_EVENEMENT[code] ?? { court: code, pluriel: code };
+      // Le compte n'apparait qu'a partir de deux : « prêt 1 » se lirait comme
+      // le nom d'un pret, alors qu'il n'y en a qu'un et qu'on le nomme au survol.
+      const texte = libelles.length > 1 ? `${n.pluriel} ${libelles.length}` : n.court;
+      return `<span class="evenement evenement--${att(code)}" title="${att(libelles.join(' · '))}">${att(texte)}</span>`;
+    })
+    .join('');
+}
+
 function rendreExploitation(r) {
   const e = r.exploitation;
   const ind = e.indicateurs;
@@ -9456,22 +9503,22 @@ function rendreExploitation(r) {
           type: 'annee',
           libelle: String(l.annee),
           ...l,
-          evenements: e.evenements.filter((x) => x.annee === l.annee).map((x) => x.libelle),
+          // L'evenement entier et non son seul libelle : son `code` sert a le
+          // ranger par nature, ce qu'une chaine de texte ne permet qu'a coups
+          // d'expressions regulieres sur des libelles faits pour etre lus.
+          evenements: e.evenements.filter((x) => x.annee === l.annee),
         }));
 
   const montant = (v) => `<td class="num ${v < 0 ? 'montant--negatif' : ''}">${eur(v)}</td>`;
   $('#table-exploitation').querySelector('tbody').innerHTML = rangs
     .map((j) => {
       const autresCharges = j.total_charges_eur - j.annuites_eur;
-      // Une PASTILLE et non les libelles en clair. Cinq echeances la meme annee
-      // faisaient cinq etiquettes empilees dans la cellule, et cette ligne-la
-      // devenait dix fois plus haute que ses voisines : la colonne des annees
-      // n'etait plus une colonne, et l'oeil perdait l'alignement des chiffres.
-      // Le detail se lit au survol, et en toutes lettres sous le graphe.
-      const ev = j.evenements ?? [];
-      const marques = ev.length
-        ? `<span class="evenement" title="${att(ev.join(' · '))}">${ev.length > 1 ? ev.length : '●'}</span>`
-        : '';
+      // Un badge PAR NATURE d'evenement, et non un par evenement : cinq
+      // echeances la meme annee faisaient cinq etiquettes empilees, et la ligne
+      // enflait a proportion. Un badge dit ce dont il s'agit et combien il y en
+      // a - « prêts 5 », « TFPB » - le detail se lit au survol. Sa hauteur est
+      // fixe : la colonne des annees reste une colonne.
+      const marques = badgesEvenements(j.evenements);
       const classe = j.type === 'moyenne' ? 'ligne--moyenne' : marques ? 'ligne--rupture' : '';
       // Vue TRESORERIE a gauche, vue COMPTABLE dans son bloc a droite.
       const comptable = (v) =>

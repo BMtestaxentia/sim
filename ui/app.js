@@ -2505,10 +2505,10 @@ function rendreExploitation(r) {
       return `<tr class="${classe}">
         <td>${att(j.libelle)}${marques}</td>
         ${montant(j.total_produits_eur)}${montant(j.annuites_eur)}
-        <td class="num discret">${nul(j.interets_eur) ? '-' : eur(j.interets_eur)}</td>
+        <td class="num num--second">${nul(j.interets_eur) ? '-' : eur(j.interets_eur)}</td>
         ${montant(autresCharges)}
         ${montant(j.autofinancement_eur)}${montant(j.cumul_autofinancement_eur)}
-        <td class="num discret">${nul(j.dotation_amortissements_eur) ? '-' : eur(j.dotation_amortissements_eur)}</td>
+        <td class="num num--second">${nul(j.dotation_amortissements_eur) ? '-' : eur(j.dotation_amortissements_eur)}</td>
         ${nul(j.resultat_comptable_eur) ? '<td class="num">-</td>' : montant(j.resultat_comptable_eur)}
         <td class="num">${pct(j.taux_marge, 1)}</td>
       </tr>`;
@@ -2519,10 +2519,10 @@ function rendreExploitation(r) {
   $('#table-exploitation').querySelector('tfoot').innerHTML = `<tr>
       <td class="libelle">Cumul sur ${e.lignes.length} ans</td>
       ${montant(t.produits_eur)}${montant(t.annuites_eur)}
-      <td class="num discret">${eur(t.interets_eur)}</td>
+      <td class="num num--second">${eur(t.interets_eur)}</td>
       ${montant(t.charges_eur - t.annuites_eur)}${montant(t.autofinancement_eur)}
       <td></td>
-      <td class="num discret">${nul(t.dotation_amortissements_eur) ? '-' : eur(t.dotation_amortissements_eur)}</td>
+      <td class="num num--second">${nul(t.dotation_amortissements_eur) ? '-' : eur(t.dotation_amortissements_eur)}</td>
       ${nul(t.resultat_comptable_eur) ? '<td class="num">-</td>' : montant(t.resultat_comptable_eur)}
       <td></td></tr>`;
 

@@ -360,6 +360,11 @@ td.calc { text-align: right; }
 .cellule-valeur:has(> .unite) > input { width: calc(100% - 20px); }
 .unite { display: inline-block; width: 16px; margin-left: 4px; font-size: 11px; color: var(--text-tertiary); }
 .discret { color: var(--text-tertiary); font-size: 11px; }
+/* Colonne de chiffres SECONDAIRE : elle s'efface par la couleur, jamais par la
+   taille. Reduire le corps d'une seule colonne casse l'alignement des chiffres
+   d'une ligne a l'autre, et c'est cet alignement qui rend une colonne de
+   montants comparable d'un coup d'oeil. */
+.tableau td.num--second { color: var(--text-tertiary); }
 
 /* ============================================================ BOUTONS */
 

@@ -1086,22 +1086,27 @@ function rendreStructure() {
   $('#table-lots').querySelector('tbody').innerHTML = etat.lots.length
     ? lotsAffiches
         .map(
-          ({ lot, i }) => `<tr data-lot="${i}">
+          // `l` est le rang AFFICHE et non l'index du lot : la grille se
+          // parcourt telle qu'elle est vue, tri compris, alors que les liaisons
+          // de saisie continuent de pointer le lot reel.
+          ({ lot, i }, l) => `<tr data-lot="${i}">
         <td class="num num-poste">${i + 1}</td>
         <!-- L'ID est la reference du lot au plan de vente ou a l'EDD. Le N° a
              gauche, lui, n'est qu'un rang de saisie : il bouge des qu'on
              supprime une ligne, l'ID non. -->
         <td><input type="text" class="lot__id" data-champ="lots.${i}.identifiant"
-          value="${att(lot.identifiant)}" placeholder="-" /></td>
-        <td><input type="text" data-champ="lots.${i}.batiment" value="${att(lot.batiment)}" /></td>
-        <td><input type="text" data-champ="lots.${i}.etage" value="${att(lot.etage)}" /></td>
-        <td><select data-champ="lots.${i}.typologie">
+          data-l="${l}" data-c="0" value="${att(lot.identifiant)}" placeholder="-" /></td>
+        <td><input type="text" data-champ="lots.${i}.batiment" data-l="${l}" data-c="1" value="${att(lot.batiment)}" /></td>
+        <td><input type="text" data-champ="lots.${i}.etage" data-l="${l}" data-c="2" value="${att(lot.etage)}" /></td>
+        <td><select data-champ="lots.${i}.typologie" data-l="${l}" data-c="3">
           <option value=""></option>
           ${TYPOLOGIES.map((t) => `<option value="${t}" ${t === lot.typologie ? 'selected' : ''}>${t}</option>`).join('')}
         </select></td>
-        <td><select data-champ="lots.${i}.code_produit" data-structure="1">${optionsProduit(lot.code_produit)}</select></td>
-        <td><input type="number" step="0.01" min="0" data-champ="lots.${i}.shab_m2" data-type="nombre" value="${valNum(lot.shab_m2)}" /></td>
-        <td><input type="number" step="0.01" min="0" data-champ="lots.${i}.surfaces_annexes_m2" data-type="nombre" value="${valNum(lot.surfaces_annexes_m2)}" /></td>
+        <td><select data-champ="lots.${i}.code_produit" data-structure="1" data-l="${l}" data-c="4">${optionsProduit(lot.code_produit)}</select></td>
+        <td><input type="text" inputmode="decimal" data-champ="lots.${i}.shab_m2" data-type="nombre"
+          data-l="${l}" data-c="5" value="${valNum(lot.shab_m2)}" /></td>
+        <td><input type="text" inputmode="decimal" data-champ="lots.${i}.surfaces_annexes_m2" data-type="nombre"
+          data-l="${l}" data-c="6" value="${valNum(lot.surfaces_annexes_m2)}" /></td>
         <td class="calc" data-calc="su"></td>
         <td class="calc" data-calc="loyer"></td>
         <td><button type="button" class="bouton--supprimer" data-supprimer="lots" data-index="${i}" title="Supprimer">×</button></td>
@@ -1195,18 +1200,27 @@ function rendreTablePrixRevient() {
   const nbCols =
     4 + (tva ? 1 : 0) + (parTranche ? codes.length * (tva ? 2 : 1) : 0) + 2;
 
-  // Le bouton « ventiler tout » n'a de sens qu'a partir de deux tranches, et son
-  // libelle dit ce qu'il va faire, pas l'etat courant.
+  // La bascule n'a de sens qu'a partir de deux tranches. Son libelle nomme le
+  // TRAJET - d'ou l'on part, vers ou l'on va - plutot que l'action : « ventiler »
+  // et « regrouper » demandaient de savoir dans quel etat on se trouvait pour
+  // deviner ce que le bouton allait faire.
   const btnTout = /** @type {HTMLButtonElement} */ (document.getElementById('btn-ventiler-tout'));
   if (btnTout) {
     const remplies = etat.postes_bilan.filter((p) => !nul(totalPoste(p)));
     const toutVentile = remplies.length > 0 && remplies.every(estVentile);
     btnTout.hidden = !parTranche;
-    btnTout.textContent = toutVentile ? '↤ Tout regrouper' : '⇥ Ventiler tout';
+    btnTout.textContent = toutVentile ? '↤ Tranche vers global' : '⇥ Global vers tranche';
+    btnTout.title = toutVentile
+      ? 'Regrouper chaque poste en un montant unique, réparti à la surface utile'
+      : 'Éclater chaque montant global sur les tranches, au prorata de la surface utile';
     btnTout.dataset.action = toutVentile ? 'regrouper' : 'ventiler';
   }
 
   // --- Corps, groupe par chapitre ---
+  // Rang de grille : il compte les lignes de POSTE, en sautant les en-tetes de
+  // chapitre et les sous-totaux, qui ne se saisissent pas. Le clavier parcourt
+  // ainsi la saisie sans buter sur les lignes de structure.
+  let rangGrille = 0;
   const lignes = [];
   for (const ch of referentiels.nomenclature_pdr.chapitres) {
     const indices = etat.postes_bilan
@@ -1218,10 +1232,25 @@ function rendreTablePrixRevient() {
     if (!visibles.length) continue;
 
     lignes.push(
-      `<tr class="chapitre-entete"><td colspan="${nbCols}">${ch.numero} - ${att(ch.libelle)}</td></tr>`,
+      // L'en-tete de chapitre porte de VRAIES cellules de tranche plutot qu'une
+      // seule cellule traversante : un bloc de colonnes se ferme par un filet
+      // continu, qu'une ligne traversante interrompait a chaque chapitre.
+      `<tr class="chapitre-entete">` +
+        `<td colspan="${4 + (tva ? 1 : 0)}">${ch.numero} - ${att(ch.libelle)}</td>` +
+        (parTranche
+          ? codes
+              .map(
+                (c) =>
+                  `<td class="col-tranche col-tranche--debut${tva ? '' : finBloc(c)}" style="--cat:${catProduit(c)}"></td>` +
+                  (tva ? `<td class="col-tranche${finBloc(c)}" style="--cat:${catProduit(c)}"></td>` : ''),
+              )
+              .join('')
+          : '') +
+        `<td></td><td></td></tr>`,
     );
 
     for (const { p, i } of visibles) {
+      const l = rangGrille++;
       const ventile = estVentile(p);
       const vide = nul(totalPoste(p));
 
@@ -1230,17 +1259,19 @@ function rendreTablePrixRevient() {
       const celluleTotal = ventile
         ? `<td class="num calc" data-calc="total" title="Somme des tranches">-</td>`
         : `<td><input type="text" inputmode="decimal" data-champ="postes_bilan.${i}.montant_ht_eur"
-             data-type="montant" value="${valMontant(p.montant_ht_eur)}" /></td>`;
+             data-type="montant" data-l="${l}" data-c="0" value="${valMontant(p.montant_ht_eur)}" /></td>`;
 
-      const selectTVA = (chemin, valeur) =>
-        `<select data-champ="${chemin}" data-type="nombre">
+      const selectTVA = (chemin, valeur, col) =>
+        `<select data-champ="${chemin}" data-type="nombre"${col === undefined ? '' : ` data-l="${l}" data-c="${col}"`}>
           ${TAUX_TVA.map((v) => `<option value="${v}" ${v === valeur ? 'selected' : ''}>${(v * 100).toFixed(1)} %</option>`).join('')}
         </select>`;
 
       const cellulesTranches = parTranche
         ? codes
-            .map((c) => {
+            .map((c, ic) => {
               const style = `style="--cat:${catProduit(c)}"`;
+              // Colonne 0 = le total ; les tranches suivent, HT puis TVA.
+              const col = 1 + ic * (tva ? 2 : 1);
               // `--debut` porte le filet colore : il ouvre le bloc de la
               // tranche, il ne separe pas HT de sa TVA.
               const deb = `col-tranche col-tranche--debut${tva ? '' : finBloc(c)}`;
@@ -1255,11 +1286,13 @@ function rendreTablePrixRevient() {
               return (
                 `<td class="${deb}" ${style}><input type="text" inputmode="decimal"
                    data-champ="postes_bilan.${i}.montants_ht_par_produit.${c}" data-type="montant"
+                   data-l="${l}" data-c="${col}"
                    value="${valMontant(p.montants_ht_par_produit?.[c])}" /></td>` +
                 (tva
                   ? `<td class="col-tranche${finBloc(c)}" ${style}>${selectTVA(
                       `postes_bilan.${i}.taux_tva_par_produit.${c}`,
                       p.taux_tva_par_produit?.[c] ?? p.taux_tva,
+                      col + 1,
                     )}</td>`
                   : '')
               );
@@ -1707,16 +1740,43 @@ function rendreValeurs(r) {
     </tr>
     <tr>
       <td></td><td class="libelle">Base finançable (TTC)</td>
-      <td colspan="${nbCols - 3}"></td>
+      <td colspan="${2 + (tvaVisible ? 1 : 0)}"></td>
+      ${
+        parTr
+          ? codesTr
+              .map(
+                (c) =>
+                  `<td class="col-tranche col-tranche--debut${tvaVisible ? '' : finTr(c)}" style="--cat:${catProduit(c)}"></td>` +
+                  (tvaVisible ? `<td class="col-tranche${finTr(c)}" style="--cat:${catProduit(c)}"></td>` : ''),
+              )
+              .join('')
+          : ''
+      }
+      <td></td>
       <td class="num">${eur(b.total_ttc_module_eur)}</td>
     </tr>
     <tr>
-      <td></td><td colspan="${nbCols - 1}" style="font-weight:400;color:var(--text-tertiary);border-top:none">
+      <td></td><td colspan="${3 + (tvaVisible ? 1 : 0)}" style="font-weight:400;color:var(--text-tertiary);border-top:none">
         ${renseignes} poste${renseignes > 1 ? 's' : ''} renseigné${renseignes > 1 ? 's' : ''}
         sur ${etat.postes_bilan.length} de la nomenclature${
           ventiles ? ` · ${ventiles} ventilé${ventiles > 1 ? 's' : ''} à la main` : ''
         }
       </td>
+      ${
+        // Meme la ligne de resume porte ses cellules de tranche : le filet du
+        // bloc doit descendre jusqu'a la derniere ligne du tableau, sinon il
+        // s'arrete en l'air.
+        parTr
+          ? codesTr
+              .map(
+                (c) =>
+                  `<td class="col-tranche col-tranche--debut${tvaVisible ? '' : finTr(c)}" style="--cat:${catProduit(c)};border-top:none"></td>` +
+                  (tvaVisible ? `<td class="col-tranche${finTr(c)}" style="--cat:${catProduit(c)};border-top:none"></td>` : ''),
+              )
+              .join('')
+          : ''
+      }
+      <td style="border-top:none"></td><td style="border-top:none"></td>
     </tr>`;
   // --- Repartition du prix de revient, sur l'ecran Prix de revient ---
   const vent = r.bilan.ventilation;
@@ -2943,18 +3003,42 @@ function ecrireSaisie(chemin, valeur) {
 
 /** Champ d'une grille a des coordonnees donnees, ou null s'il n'existe pas. */
 function celluleDeGrille(grille, l, c) {
-  return /** @type {HTMLInputElement|null} */ (
-    grille.querySelector(`input[data-l="${l}"][data-c="${c}"]`)
+  return /** @type {HTMLInputElement|HTMLSelectElement|null} */ (
+    grille.querySelector(`[data-l="${l}"][data-c="${c}"]`)
   );
 }
 
-/** Deplace le curseur d'une cellule a l'autre, en selectionnant son contenu. */
-function allerEnGrille(grille, l, c) {
-  const cible = celluleDeGrille(grille, l, c);
-  if (!cible) return false;
-  cible.focus();
-  cible.select();
-  return true;
+/**
+ * Deplace le curseur d'une cellule a l'autre, en SAUTANT les trous.
+ *
+ * Une grille de saisie n'est pas toujours pleine : dans le prix de revient, une
+ * ligne ventilee n'a pas de cellule de total, et une ligne qui ne l'est pas n'a
+ * pas de cellules par tranche. S'arreter net sur un trou rendrait la moitie du
+ * tableau inatteignable au clavier.
+ *
+ * @param {Element} grille
+ * @param {number} l départ
+ * @param {number} c départ
+ * @param {number} dl pas vertical
+ * @param {number} dc pas horizontal
+ * @returns {boolean} vrai si une cellule a ete atteinte
+ */
+function allerEnGrille(grille, l, c, dl = 0, dc = 0) {
+  // Le pas nul (positionnement direct) ne cherche pas plus loin que la case visee.
+  const limite = dl === 0 && dc === 0 ? 1 : 200;
+  for (let n = 0; n < limite; n++) {
+    const cible = celluleDeGrille(grille, l + dl * n, c + dc * n);
+    if (cible) {
+      cible.focus();
+      if (typeof (/** @type {HTMLInputElement} */ (cible).select) === 'function') {
+        /** @type {HTMLInputElement} */ (cible).select();
+      }
+      return true;
+    }
+    // Hors du tableau : inutile de continuer a chercher.
+    if (l + dl * n < -1 || c + dc * n < -1) return false;
+  }
+  return false;
 }
 
 /**
@@ -2974,22 +3058,54 @@ document.addEventListener('keydown', (ev) => {
 
   const l = Number(el.dataset.l);
   const c = Number(el.dataset.c);
-  const auDebut = el.selectionStart === 0 && el.selectionEnd === 0;
-  const aLaFin = el.selectionStart === el.value.length && el.selectionEnd === el.value.length;
+  // Une liste deroulante n'a pas de curseur de texte : les fleches VERTICALES y
+  // gardent leur role natif, qui est de changer la valeur. Y substituer un
+  // deplacement rendrait la liste inutilisable au clavier.
+  const liste = el.tagName === 'SELECT';
+  const auDebut = liste || (el.selectionStart === 0 && el.selectionEnd === 0);
+  const aLaFin = liste || (el.selectionStart === el.value.length && el.selectionEnd === el.value.length);
 
-  let cible = null;
-  if (ev.key === 'ArrowDown' || (ev.key === 'Enter' && !ev.shiftKey)) cible = [l + 1, c];
-  else if (ev.key === 'ArrowUp' || (ev.key === 'Enter' && ev.shiftKey)) cible = [l - 1, c];
-  else if (ev.key === 'ArrowLeft' && auDebut) cible = [l, c - 1];
-  else if (ev.key === 'ArrowRight' && aLaFin) cible = [l, c + 1];
-  else if (ev.key === 'Tab') cible = ev.shiftKey ? [l, c - 1] : [l, c + 1];
-  if (!cible) return;
+  let pas = null;
+  if ((ev.key === 'ArrowDown' && !liste) || (ev.key === 'Enter' && !ev.shiftKey)) pas = [1, 0];
+  else if ((ev.key === 'ArrowUp' && !liste) || (ev.key === 'Enter' && ev.shiftKey)) pas = [-1, 0];
+  else if (ev.key === 'ArrowLeft' && auDebut) pas = [0, -1];
+  else if (ev.key === 'ArrowRight' && aLaFin) pas = [0, 1];
+  else if (ev.key === 'Tab') pas = [0, ev.shiftKey ? -1 : 1];
+  if (!pas) return;
 
-  // Tab en bout de ligne rend la main au navigateur : sortir de la grille par
-  // la tabulation reste possible.
-  if (allerEnGrille(grille, cible[0], cible[1])) ev.preventDefault();
-  else if (ev.key !== 'Tab') ev.preventDefault();
+  const atteint = allerEnGrille(grille, l + pas[0], c + pas[1], pas[0], pas[1]);
+  // Tab en bout de grille rend la main au navigateur : en sortir par la
+  // tabulation reste possible.
+  if (atteint || ev.key !== 'Tab') ev.preventDefault();
 });
+
+/**
+ * Interprete une valeur collee SELON LA CELLULE qui la recoit. Une grille de
+ * programme melange du texte, des nombres et des listes deroulantes : coller un
+ * bloc de tableur n'a de sens que si chaque colonne lit ce qui la concerne.
+ *
+ * @param {HTMLInputElement|HTMLSelectElement} cible
+ * @param {string} texte
+ * @returns {any} la valeur a ecrire, ou `undefined` si elle n'est pas exploitable
+ */
+function valeurCollee(cible, texte) {
+  if (cible.tagName === 'SELECT') {
+    // On accepte le code (« PLS ») comme le libelle affiche (« LLI (LOC) ») :
+    // un tableur exporte l'un ou l'autre selon qui l'a rempli.
+    const norme = sansAccent(texte);
+    const opt = [.../** @type {HTMLSelectElement} */ (cible).options].find(
+      (o) => sansAccent(o.value) === norme || sansAccent(o.textContent ?? '') === norme,
+    );
+    return opt ? opt.value : undefined;
+  }
+  const type = cible.dataset.type;
+  if (type === 'nombre' || type === 'pourcentage' || type === 'montant') {
+    const v = lireMontant(texte.replace('%', ''));
+    if (v === undefined) return undefined;
+    return v === null ? null : type === 'pourcentage' ? v / 100 : v;
+  }
+  return texte === '' ? null : texte;
+}
 
 /**
  * Collage d'un bloc venu d'un tableur. Un bareme se recopie depuis Excel : le
@@ -3014,31 +3130,34 @@ document.addEventListener('paste', (ev) => {
   const bloc = texte.replace(/\r\n?/g, '\n').replace(/\n+$/, '').split('\n').map((r) => r.split('\t'));
 
   // On ecrit DIRECTEMENT, sans simuler d'evenements de saisie : la premiere
-  // cellule ecrite peut deriver un profil, ce qui reconstruit l'ecran - les
-  // cellules suivantes recevraient alors leurs evenements sur des noeuds
-  // detaches, et sept valeurs sur huit se perdraient en silence.
+  // cellule ecrite peut deriver un profil ou reordonner une table, ce qui
+  // reconstruit l'ecran - les cellules suivantes recevraient alors leurs
+  // evenements sur des noeuds detaches, et sept valeurs sur huit se perdraient
+  // en silence.
+  const idGrille = grille.id;
   let posees = 0;
   let hors = 0;
   for (let i = 0; i < bloc.length; i++) {
     for (let j = 0; j < bloc[i].length; j++) {
       const cible = celluleDeGrille(grille, l0 + i, c0 + j);
       if (!cible) { hors++; continue; }
-      const v = lireMontant(bloc[i][j].trim().replace('%', ''));
+      const v = valeurCollee(cible, bloc[i][j].trim());
       if (v === undefined) continue;
-      ecrireSaisie(
-        cible.dataset.champ,
-        v === null ? null : cible.dataset.type === 'pourcentage' ? v / 100 : v,
-      );
+      ecrireSaisie(cible.dataset.champ, v);
       posees++;
     }
   }
-  recalculer();
-  // Une seule reconstruction en fin de collage : les compteurs de modification
-  // et les marques de cellule ne suivent pas la frappe, seulement le rendu.
+
+  // Une seule reconstruction en fin de collage, et COMPLETE : un champ affiche
+  // l etat, pas ce qu on vient d y taper. Sans elle les valeurs etaient bien
+  // enregistrees mais les cases montraient encore les anciennes - le collage
+  // avait l air de n avoir rien fait.
   // Le curseur revient ou il etait, sinon coller ferait perdre sa place.
-  rendreParametres();
-  rendreBarreProfil();
-  celluleDeGrille(document.querySelector('[data-grille]'), l0, c0)?.focus();
+  rafraichirTout();
+  const reconstruite = idGrille
+    ? document.getElementById(idGrille)
+    : document.querySelector('[data-grille]');
+  if (reconstruite) allerEnGrille(reconstruite, l0, c0);
 
   if (hors) {
     alert(

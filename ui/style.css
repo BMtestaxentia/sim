@@ -527,6 +527,28 @@ td.calc { text-align: right; }
 .tableau--saisie th { padding: 4px 5px 6px; }
 .tableau--saisie input, .tableau--saisie select { padding: 4px 6px; font-size: 12.5px; }
 
+/* ---------- Tables de saisie en mode tableur ----------
+   Meme grammaire que les grilles de parametrage : la cellule EST le champ, sans
+   chrome propre, et le quadrillage vient du tableau. Une table de saisie ou
+   chaque case porte sa propre bordure arrondie se lit comme une pile de
+   formulaires, pas comme un tableau ou l'on compare une colonne. */
+.grille--saisie td { border-right: 1px solid var(--border-color); }
+.grille--saisie td:last-child { border-right: none; }
+.grille--saisie input:not([type='checkbox']), .grille--saisie select {
+  width: 100%; border-color: transparent; border-radius: 0;
+  background: transparent; padding: 4px 7px;
+}
+.grille--saisie input:hover, .grille--saisie select:hover { background: var(--bg-secondary); }
+.grille--saisie input:focus, .grille--saisie select:focus {
+  outline: 2px solid var(--info-accent); outline-offset: -2px;
+  background: var(--bg-primary); position: relative; z-index: 1;
+}
+/* Les montants restent cales a droite, comme partout : c'est ce qui permet de
+   comparer une colonne de chiffres d'un coup d'oeil. */
+.grille--saisie input[data-type='montant'], .grille--saisie input[data-type='nombre'] {
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+
 .num-poste { color: var(--text-tertiary); font-variant-numeric: tabular-nums; width: 1%; }
 .libelle-poste { color: var(--text-secondary); }
 /* La colonne des libelles absorbe toute la largeur restante d'une table large :
@@ -559,8 +581,13 @@ td.calc { text-align: right; }
 .col-tranche { background: color-mix(in srgb, var(--cat, var(--cat-6)) 9%, transparent); }
 .col-tranche--debut { border-left: 2px solid var(--cat, var(--cat-6)); }
 /* Le bloc se ferme comme il s'ouvre : sans ce filet, la derniere tranche coulait
-   dans les colonnes de total qui la suivent. */
-.col-tranche--fin { border-right: 2px solid var(--cat, var(--cat-6)); }
+   dans les colonnes de total qui la suivent. Selecteurs qualifies par `td`/`th`
+   pour passer devant le quadrillage des grilles de saisie, sans quoi le filet du
+   bloc retombait a un pixel de bordure ordinaire. */
+.col-tranche--fin,
+td.col-tranche--fin,
+th.col-tranche--fin { border-right: 2px solid var(--cat, var(--cat-6)); }
+td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat, var(--cat-6)); }
 /* Le survol de ligne ne doit pas effacer l'appartenance a une tranche. */
 .tableau tbody tr:hover td.col-tranche {
   background: color-mix(in srgb, var(--cat, var(--cat-6)) 16%, var(--bg-secondary));

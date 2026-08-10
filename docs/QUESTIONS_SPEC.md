@@ -52,6 +52,14 @@ Le compte d'exploitation calculé par LEON pour Bergerac a été retrouvé et d�
 | Q-21 | R-EXP | LEON produit le compte en **euros courants ET en euros constants** (colonnes DZ, EA, EC), donc avec une déflation. Le moteur ne produit que des euros courants. Faut-il ajouter la vue en euros constants, et avec quel indice de déflation ? | ouverte | - |
 | Q-17 bis | R-EXP | Élément de réponse à Q-17 : à partir de la deuxième année, `SimPLS!DR16` calcule les frais de gestion à partir des **recettes** de l'année (`DY16 × $A$34`), et non du prix de revient. L'assiette « % des loyers » est donc confirmée pour le PLS habitat. Reste à vérifier si elle vaut pour tous les produits, et ce que recouvre le second terme de la formule. | partielle | `SimPLS!DR15:DR16` |
 
+## Chantiers demandés, en attente de la matrice (08/08/2026)
+
+Demandés par Bastien, à traiter **quand la matrice complète sera fournie**. Rien n a été implémenté : ces lignes existent pour que la demande ne se perde pas.
+
+| # | Sujet | Demande |
+|---|---|---|
+| C-1 | **PGE = PCRC** | La provision pour gros entretien et la PCRC sont **la même chose** : une charge d exploitation annuelle. Le moteur sait déjà consommer une table annuelle de gros entretien (`gros_entretien_par_annee`, cf. Q-19) mais aucune règle ne la construit pour une opération neuve - c est l arbitrage n° 2 ci-dessous, poste majeur (~2,5 M€ cumulés à 400 €/lot/an sur 85 lots). Reprendre les règles sur la matrice à venir. |
+| C-2 | **Audit du prix de revient** | Audit complet à mener sur la matrice. Deux besoins nommés : (a) **aide à la saisie** - beaucoup de postes se remplissent automatiquement à partir d une **seule** donnée, typiquement un prix au m² (exemple cité : les frais de notaire) ; (b) certains postes doivent pouvoir se saisir **en pourcentage** d une autre grandeur - le coût des travaux notamment - et en ressortir un montant. Les règles sont dans les matrices de calcul : les relever formule par formule, comme pour la calculette CDC, plutôt que de reconstituer une mécanique plausible. |
 ### Arbitrages déjà posés par Bastien dans la maquette
 
 Ces quatre points sont **en attente de décision** dans l'onglet ARBITRAGES et recoupent Q-11 et Q-16. Ils ne sont pas des questions techniques mais des choix d'hypothèses, à trancher par le métier :

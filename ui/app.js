@@ -2340,8 +2340,8 @@ function grapheExploitation(lignes, evenements) {
   const largeurTrace = L - marge.gauche - marge.droite;
   const hauteurTrace = H - marge.haut - marge.bas;
 
-  const resultats = lignes.map((l) => l.resultat_eur);
-  const cumuls = lignes.map((l) => l.cumul_eur);
+  const resultats = lignes.map((l) => l.autofinancement_eur);
+  const cumuls = lignes.map((l) => l.cumul_autofinancement_eur);
   const maxRes = Math.max(...resultats, 0);
   const minRes = Math.min(...resultats, 0);
   const etendueRes = maxRes - minRes || 1;
@@ -2358,14 +2358,14 @@ function grapheExploitation(lignes, evenements) {
   const barres = lignes
     .map((l, i) => {
       const y0 = yRes(0);
-      const y1 = yRes(l.resultat_eur);
+      const y1 = yRes(l.autofinancement_eur);
       const haut = Math.max(1, Math.abs(y1 - y0));
-      const classe = l.resultat_eur < 0 ? 'negatif' : 'positif';
-      return `<rect class="graphe__barre--${classe}" x="${(xCentre(i) - largeurBarre / 2).toFixed(1)}" y="${Math.min(y0, y1).toFixed(1)}" width="${largeurBarre.toFixed(1)}" height="${haut.toFixed(1)}"><title>${l.annee} : résultat ${eur(l.resultat_eur)}, cumul ${eur(l.cumul_eur)}</title></rect>`;
+      const classe = l.autofinancement_eur < 0 ? 'negatif' : 'positif';
+      return `<rect class="graphe__barre--${classe}" x="${(xCentre(i) - largeurBarre / 2).toFixed(1)}" y="${Math.min(y0, y1).toFixed(1)}" width="${largeurBarre.toFixed(1)}" height="${haut.toFixed(1)}"><title>${l.annee} : résultat ${eur(l.autofinancement_eur)}, cumul ${eur(l.cumul_autofinancement_eur)}</title></rect>`;
     })
     .join('');
 
-  const trace = lignes.map((l, i) => `${xCentre(i).toFixed(1)},${yCum(l.cumul_eur).toFixed(1)}`).join(' ');
+  const trace = lignes.map((l, i) => `${xCentre(i).toFixed(1)},${yCum(l.cumul_autofinancement_eur).toFixed(1)}`).join(' ');
 
   const reperes = evenements
     .map((e) => {
@@ -2433,9 +2433,18 @@ function rendreExploitation(r) {
   // --- Tuiles ---
   $('#tuiles-exploitation').innerHTML = [
     {
-      l: 'Résultat cumulé en fin de simulation',
+      l: 'Autofinancement cumulé',
       v: eur(ind.resultat_cumule_final_eur),
-      d: `sur ${e.lignes.length} ans`,
+      d: `sur ${e.lignes.length} ans, annuités payées`,
+    },
+    {
+      // Le TRI mesure ce que rapporte l'argent immobilise : mise de depart
+      // egale au prix de revient, puis les autofinancements annuels.
+      l: 'TRI de l’opération',
+      v: nul(ind.tri) ? 'non défini' : pct(ind.tri, 2),
+      d: nul(ind.tri)
+        ? 'les flux ne remboursent jamais la mise'
+        : 'prix de revient, puis autofinancements',
     },
     {
       l: 'Creux du cumul',
@@ -2495,8 +2504,12 @@ function rendreExploitation(r) {
       const classe = j.type === 'moyenne' ? 'ligne--moyenne' : marques ? 'ligne--rupture' : '';
       return `<tr class="${classe}">
         <td>${att(j.libelle)}${marques}</td>
-        ${montant(j.total_produits_eur)}${montant(j.annuites_eur)}${montant(autresCharges)}
-        ${montant(j.resultat_eur)}${montant(j.cumul_eur)}
+        ${montant(j.total_produits_eur)}${montant(j.annuites_eur)}
+        <td class="num discret">${nul(j.interets_eur) ? '-' : eur(j.interets_eur)}</td>
+        ${montant(autresCharges)}
+        ${montant(j.autofinancement_eur)}${montant(j.cumul_autofinancement_eur)}
+        <td class="num discret">${nul(j.dotation_amortissements_eur) ? '-' : eur(j.dotation_amortissements_eur)}</td>
+        ${nul(j.resultat_comptable_eur) ? '<td class="num">-</td>' : montant(j.resultat_comptable_eur)}
         <td class="num">${pct(j.taux_marge, 1)}</td>
       </tr>`;
     })
@@ -2506,8 +2519,12 @@ function rendreExploitation(r) {
   $('#table-exploitation').querySelector('tfoot').innerHTML = `<tr>
       <td class="libelle">Cumul sur ${e.lignes.length} ans</td>
       ${montant(t.produits_eur)}${montant(t.annuites_eur)}
-      ${montant(t.charges_eur - t.annuites_eur)}${montant(t.resultat_eur)}
-      <td colspan="2"></td></tr>`;
+      <td class="num discret">${eur(t.interets_eur)}</td>
+      ${montant(t.charges_eur - t.annuites_eur)}${montant(t.autofinancement_eur)}
+      <td></td>
+      <td class="num discret">${nul(t.dotation_amortissements_eur) ? '-' : eur(t.dotation_amortissements_eur)}</td>
+      ${nul(t.resultat_comptable_eur) ? '<td class="num">-</td>' : montant(t.resultat_comptable_eur)}
+      <td></td></tr>`;
 
   $('#aide-exploitation').textContent =
     vueExploitation === 'jalons'

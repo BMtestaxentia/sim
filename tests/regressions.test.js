@@ -624,7 +624,7 @@ describe('Q-27 - la vacance en transparence est signalee, pas subie en silence',
     const r = foyer({ annuite_fonds_propres_eur: 4000 });
     for (const l of r.exploitation.lignes) {
       expect(l.redevance_eur, `année ${l.annee}`).toBe(l.total_charges_eur);
-      expect(l.resultat_eur, `année ${l.annee}`).toBe(0);
+      expect(l.autofinancement_eur, `année ${l.annee}`).toBe(0);
     }
     expect(r.alertes.some((a) => /transparence/.test(a))).toBe(false);
   });
@@ -633,8 +633,8 @@ describe('Q-27 - la vacance en transparence est signalee, pas subie en silence',
     const r = foyer({ annuite_fonds_propres_eur: 4000, taux_vacance_impayes: 0.02 });
     // Le deficit vaut exactement le taux de vacance applique a la redevance.
     const l = r.exploitation.lignes[0];
-    expect(l.resultat_eur).toBeLessThan(0);
-    expect(Math.abs(l.resultat_eur)).toBe(Math.round(l.redevance_eur * 0.02));
+    expect(l.autofinancement_eur).toBeLessThan(0);
+    expect(Math.abs(l.autofinancement_eur)).toBe(Math.round(l.redevance_eur * 0.02));
     expect(r.alertes.some((a) => /transparence/.test(a) && /vacance/.test(a))).toBe(true);
   });
 
@@ -881,7 +881,7 @@ describe('R-FIN-7 - remuneration et reconstitution des fonds propres', () => {
   it('la charge pese sur le resultat sans toucher au plan de financement', () => {
     const sans = calc({});
     const avec = calc({ remuneres: true, taux: 0.025, reconstitues: true, duree_reconstitution_ans: 30 });
-    expect(sans.exploitation.lignes[0].resultat_eur - avec.exploitation.lignes[0].resultat_eur)
+    expect(sans.exploitation.lignes[0].autofinancement_eur - avec.exploitation.lignes[0].autofinancement_eur)
       .toBe(charge(avec, 2028));
     expect(avec.financement.equilibre.ressources_eur).toBe(sans.financement.equilibre.ressources_eur);
     expect(avec.amortissements.map((a) => a.montant_eur)).toEqual(

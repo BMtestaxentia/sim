@@ -29,6 +29,7 @@ import { agregerSubventions, surchargeFonciere } from './subventions.js';
 import {
   soldeAFinancer,
   foncierFinancable,
+  quotiteFoncier,
   annuiteFondsPropres,
   scinderPLS,
   plafondPretsLLI,
@@ -875,9 +876,47 @@ export function calculer(entrees, referentiels) {
     );
     return arrondiEuro(Math.max(0, total - deductions));
   })();
+
+  // Le plafond de PGE est un CONTROLE, pas un ecretement : l'annexe le porte a
+  // cote du taux (« PLAFOND PGERC »), et le depasser est une decision de
+  // montage. Le moteur le dit et laisse passer, comme pour le plancher du PLS.
+  const tauxPGERetenu = exp.pge_taux ?? cfgPGE.taux_defaut ?? 0;
+  if (cfgPGE.taux_plafond > 0 && tauxPGERetenu > cfgPGE.taux_plafond) {
+    alertes.push(
+      `Provision pour gros entretien a ${(tauxPGERetenu * 100).toFixed(2)} % du prix de revient, ` +
+        `au-dela du plafond de ${(cfgPGE.taux_plafond * 100).toFixed(2)} %.`,
+    );
+  }
   const annuitesAplaties = amortissements.flatMap((a) =>
     a.tableau.map((l) => ({ annee: l.annee, annuite_eur: l.annuite_eur })),
   );
+  // R-EXP-2 - Les INTERETS, pour la vue comptable. Ils sont deja dans les
+  // tableaux d'amortissement : le compte de resultat ne fait que les y lire,
+  // plutot que de les recalculer et risquer d'en donner une seconde version.
+  const interetsAplatis = amortissements.flatMap((a) =>
+    a.tableau.map((l) => ({ annee: l.annee, montant_eur: l.interets_eur })),
+  );
+
+  // R-EXP-2 - Dotation aux amortissements comptables. La base est le prix de
+  // revient diminue de la valeur comptable du terrain, qui ne s'amortit pas ;
+  // l'etalement est lineaire sur la duree du referentiel.
+  //
+  // Attention : LEON amortit PAR COMPOSANTS (structure, clos-couvert,
+  // equipements...), chacun sur sa duree, et sa dotation arrive dans l'annexe
+  // comme une donnee deja calculee ailleurs. L'etalement lineaire unique est
+  // donc une SIMPLIFICATION, signalee comme telle - elle donne le bon ordre de
+  // grandeur et la bonne mecanique, pas le chiffre de LEON a l'euro.
+  const cfgAmort = baremes.amortissement_comptable ?? {};
+  const dotationAnnuelle = (() => {
+    if (exp.dotation_amortissements_eur !== undefined) return exp.dotation_amortissements_eur;
+    const duree = exp.duree_amortissement_ans ?? cfgAmort.duree_defaut_ans;
+    if (!(duree > 0)) return 0;
+    const quotiteTerrain =
+      exp.quotite_terrain_non_amortissable ??
+      quotiteFoncier(identite.zone_ABC, baremes, 'valeur_comptable_terrain_vefa');
+    const terrain = (bilan.chapitres.charge_fonciere?.ttc_lasm_eur ?? 0) * quotiteTerrain;
+    return arrondiEuro(Math.max(0, bilan.total_ttc_module_eur - terrain) / duree);
+  })();
   const nbLogements = lots.reduce((s, l) => s + (l.nb_logements ?? 0), 0);
   const shabTotal = lots.reduce((s, l) => s + (l.shab_m2 ?? 0), 0);
 
@@ -917,7 +956,7 @@ export function calculer(entrees, referentiels) {
     frais_gestion_pct_loyers: exp.frais_gestion_pct_loyers ?? 0,
     rel_annuel_eur: exp.rel_annuel_eur ?? 0,
     gros_entretien_eur_m2: exp.gros_entretien_eur_m2 ?? 0,
-    pge_taux: exp.pge_taux ?? cfgPGE.taux_defaut ?? 0,
+    pge_taux: tauxPGERetenu,
     pge_taux_par_annee: exp.pge_taux_par_annee ?? [],
     pge_base_eur: exp.pge_base_eur ?? assiettePGE,
     shab_m2: shabTotal,
@@ -928,6 +967,10 @@ export function calculer(entrees, referentiels) {
       exp.tfpb_par_logement_eur ?? baremes.constantes_reglementaires.tfpb.montant_par_logement_eur,
     annee_debut_tfpb: exp.annee_debut_tfpb ?? tfpb.annee_debut_tfpb,
     annuites: annuitesAplaties,
+    // R-EXP-2 : de quoi tenir la vue comptable a cote de la vue tresorerie.
+    interets_par_annee: interetsAplatis,
+    dotation_amortissements_eur: dotationAnnuelle,
+    dotation_amortissements_par_annee: exp.dotation_amortissements_par_annee ?? [],
     // Trajectoires par poste, issues du referentiel normalise. Une surcharge
     // explicite dans les entrees reste possible pour tester un scenario.
     trajectoires: exp.trajectoires ?? trajectoires.par_poste,
@@ -954,7 +997,9 @@ export function calculer(entrees, referentiels) {
   evenements.sort((x, y) => x.annee - y.annee);
 
   exploitation.evenements = evenements;
-  exploitation.indicateurs = indicateursExploitation(exploitation.lignes);
+  exploitation.indicateurs = indicateursExploitation(exploitation.lignes, {
+    prix_revient_ttc_eur: bilan.total_ttc_module_eur,
+  });
   exploitation.jalons = jalonsExploitation(exploitation.lignes, evenements);
   exploitation.indicateurs.annee_reconstitution_fonds_propres = anneeReconstitutionFondsPropres(
     exploitation.lignes,
@@ -986,11 +1031,11 @@ export function calculer(entrees, referentiels) {
   // l'ecran le dise plutot que de laisser croire a un compte complet. TEOM,
   // CGLLS, ANCOLS et assurance PNO en sont sortis : ils sont desormais des
   // postes du referentiel que la saisie active (Q-16).
-  exploitation.postes_absents = [
-    'Frais de structure',
-    'Dotation aux amortissements comptables',
-    'Subvention d’exploitation à durée limitée',
-  ];
+  // Les frais de structure ont rejoint le catalogue de charges (forfait par
+  // logement indexe sur la gestion) et la dotation aux amortissements est
+  // desormais calculee : ils sortent de cette liste. Le seul poste de LEON qui
+  // reste sans equivalent est la subvention d'exploitation a duree limitee.
+  exploitation.postes_absents = ['Subvention d’exploitation à durée limitée'];
 
   // Base d'amortissement comptable (Grille d'analyse). Calculee UNIQUEMENT si
   // l'appelant fournit le montant de terrain et la quotite non amortissable :

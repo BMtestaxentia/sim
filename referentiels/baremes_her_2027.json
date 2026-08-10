@@ -368,11 +368,20 @@
         "valeur": 0.00045,
         "index": null,
         "source": "cotisations_her_pmt2026.json, taux 2026 reconduit. L'assiette exacte reste a confirmer (la note HER dit « a confirmer (produits locatifs) »)."
+      },
+      {
+        "code": "frais_structure",
+        "libelle": "Frais de structure",
+        "assiette": "logement",
+        "valeur": 124,
+        "index": "gestion",
+        "source": "Presentation CA J202 x D79, indexe sur la trajectoire de gestion (annexe SIMTEST_BM_HAB)",
+        "note": "Quote-part des frais de siege imputee a l operation. Forfait par logement, indexe comme la gestion. Comme tout poste du catalogue, inactif tant que la saisie ne l active pas."
       }
     ]
   },
   "provision_gros_entretien": {
-    "source": "SimPLUS!BH12 (taux), SimPLUS!BK31 (assiette), SimPLUS!DX15 (charge annuelle)",
+    "source": "SimPLUS!BH12 (taux), SimPLUS!BK31 (assiette), SimPLUS!DX15 (charge annuelle) ; plafond : Presentation CA K82 (PLAFOND PGERC)",
     "usage": "Provision pour gros entretien, dite aussi PCRC. PGE(N) = taux x assiette x cumul d'indexation du gros entretien. LEON la presente au m2 mais la SHAB se simplifie : ce n'est pas une grandeur au metre carre.",
     "taux_defaut": 0.006,
     "assiette": {
@@ -400,6 +409,13 @@
           "source": "BilTOTAL!S68 (INTERETS PREFI. FORFAITES)"
         }
       ]
-    }
+    },
+    "taux_plafond": 0.006
+  },
+  "amortissement_comptable": {
+    "source": "Presentation CA colonne E (AMORT. COMPTABLES IFRS), valeur calculee hors annexe",
+    "usage": "Dotation annuelle = (prix de revient TTC - valeur comptable du terrain) / duree. Le terrain ne s amortit pas.",
+    "duree_defaut_ans": 40,
+    "note": "SIMPLIFICATION assumee : LEON amortit PAR COMPOSANTS, chacun sur sa duree (structure, clos-couvert, equipements), et sa dotation arrive dans l annexe deja calculee ailleurs. Un etalement lineaire unique donne la bonne mecanique et le bon ordre de grandeur, pas le chiffre de LEON a l euro. Duree a confirmer par le metier (Q-34)."
   }
 }

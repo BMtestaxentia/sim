@@ -695,7 +695,7 @@ describe('golden - BERGERAC compte d exploitation (81 annees de LEON)', () => {
   it('reproduit le total des charges et le solde annuel', () => {
     expect(ecartMax((l) => l.total_charges_eur, (c) => c.total_depenses * 1000).pire)
       .toBeLessThanOrEqual(ARRONDI);
-    expect(ecartMax((l) => l.resultat_eur, (c) => c.solde * 1000).pire)
+    expect(ecartMax((l) => l.autofinancement_eur, (c) => c.solde * 1000).pire)
       .toBeLessThanOrEqual(ARRONDI);
   });
 
@@ -703,6 +703,6 @@ describe('golden - BERGERAC compte d exploitation (81 annees de LEON)', () => {
     const l = compte.lignes[0];
     expect(l.total_produits_eur).toBe(30036);
     expect(l.total_charges_eur).toBe(39072);
-    expect(l.resultat_eur).toBe(-9036);
+    expect(l.autofinancement_eur).toBe(-9036);
   });
 });

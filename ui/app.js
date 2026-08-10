@@ -712,15 +712,12 @@ function rendreStructureTranches() {
       const RFP = etat.remuneration_fonds_propres[code] ?? { remuneres: false };
       const prets = etat.prets.map((p, i) => ({ p, i })).filter(({ p }) => (p.produit ?? code) === code);
       const subs = etat.subventions.map((s, i) => ({ s, i })).filter(({ s }) => s.affectation === code);
-      return `
-      <main class="ecran ecran--tranche" id="ecran-tranche-${code}" role="tabpanel" hidden style="--cat:${catProduit(code)}">
-        <!-- Jauges verticales : l'equilibre de la tranche encadre sa saisie.
-             A gauche ce qu'elle coute, a droite ce qui la finance, a la meme
-             echelle. Un desequilibre se voit sans quitter l'ecran. -->
-        <div class="jauge" data-jauge="emplois" data-tranche="${code}" title="Emplois"></div>
-        <div class="ecran__corps">
-        <div class="indicateurs indicateurs--tranche" data-recap-tranche="${code}"></div>
 
+      // Loyer et fonds propres sont montes en variable pour pouvoir se placer
+      // APRES les subventions et les prets. L'ordre de l'ecran suit celui du
+      // montage : on cherche d'abord ce qui finance la tranche, on regarde
+      // ensuite ce qu'elle rapporte et ce qu'elle coute en capital propre.
+      const colonnesLoyerFP = `
         <div class="colonnes">
           <section class="bloc bloc--tranche">
             <h2 class="bloc__titre">Loyer de la tranche ${att(libelleProduit(code))}</h2>
@@ -764,40 +761,50 @@ function rendreStructureTranches() {
             <!-- DEUX options independantes, et les quatre combinaisons se
                  rencontrent : remuneres sans etre reconstitues (interets servis,
                  capital laisse dans l'operation), reconstitues sans etre
-                 remuneres, les deux, ou ni l'un ni l'autre. -->
+                 remuneres, les deux, ou ni l'un ni l'autre.
+
+                 Les champs conditionnels sont TOUJOURS rendus, seulement masques
+                 quand leur case est decochee : leur place est reservee d'avance
+                 et les deux intitules ne bougent plus. Les faire apparaitre et
+                 disparaitre deplacait « Reconstitues » d'un champ entier a
+                 chaque clic, et il fallait rechercher des yeux la case qu'on
+                 venait de cocher. -->
             <div class="options-fp">
               <label class="champ champ--interrupteur">
                 <input type="checkbox" data-champ="remuneration_fonds_propres.${code}.remuneres"
                   data-type="booleen" data-structure="1" ${RFP.remuneres ? 'checked' : ''} />
                 <span>Rémunérés</span>
               </label>
-              ${
-                RFP.remuneres
-                  ? `<label class="champ champ--serre">
+              <label class="champ champ--serre ${RFP.remuneres ? '' : 'champ--reserve'}">
                 <span>Taux (%)</span>
                 <input type="number" step="0.01" min="0" data-champ="remuneration_fonds_propres.${code}.taux"
-                  data-type="pourcentage" value="${valNum(enPourcent(RFP.taux))}" />
-              </label>`
-                  : ''
-              }
+                  data-type="pourcentage" value="${valNum(enPourcent(RFP.taux))}"
+                  ${RFP.remuneres ? '' : 'disabled tabindex="-1"'} />
+              </label>
               <label class="champ champ--interrupteur">
                 <input type="checkbox" data-champ="remuneration_fonds_propres.${code}.reconstitues"
                   data-type="booleen" data-structure="1" ${RFP.reconstitues ? 'checked' : ''} />
                 <span>Reconstitués</span>
               </label>
-              ${
-                RFP.reconstitues
-                  ? `<label class="champ champ--serre">
+              <label class="champ champ--serre ${RFP.reconstitues ? '' : 'champ--reserve'}">
                 <span>Durée (ans)</span>
                 <input type="number" step="1" min="1" data-champ="remuneration_fonds_propres.${code}.duree_reconstitution_ans"
-                  data-type="nombre" value="${valNum(RFP.duree_reconstitution_ans)}" />
-              </label>`
-                  : ''
-              }
+                  data-type="nombre" value="${valNum(RFP.duree_reconstitution_ans)}"
+                  ${RFP.reconstitues ? '' : 'disabled tabindex="-1"'} />
+              </label>
             </div>
             <p class="aide" data-aide-fp="${code}"></p>
           </section>
-        </div>
+        </div>`;
+
+      return `
+      <main class="ecran ecran--tranche" id="ecran-tranche-${code}" role="tabpanel" hidden style="--cat:${catProduit(code)}">
+        <!-- Jauges verticales : l'equilibre de la tranche encadre sa saisie.
+             A gauche ce qu'elle coute, a droite ce qui la finance, a la meme
+             echelle. Un desequilibre se voit sans quitter l'ecran. -->
+        <div class="jauge" data-jauge="emplois" data-tranche="${code}" title="Emplois"></div>
+        <div class="ecran__corps">
+        <div class="indicateurs indicateurs--tranche" data-recap-tranche="${code}"></div>
 
         <section class="bloc bloc--tranche">
           <h2 class="bloc__titre">
@@ -844,6 +851,8 @@ function rendreStructureTranches() {
             <div class="liste" data-prets-derives="${code}"></div>
           </div>
         </section>
+
+        ${colonnesLoyerFP}
         </div>
         <div class="jauge" data-jauge="ressources" data-tranche="${code}" title="Ressources"></div>
       </main>`;

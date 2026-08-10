@@ -289,7 +289,13 @@ html, body {
   margin-bottom: 12px;
 }
 .bloc:last-child { margin-bottom: 0; }
+/* Les blocs en colonnes n'espacent pas eux-memes : c'est la grille qui le fait,
+   avec son `gap`. Mais le CONTENEUR doit alors reprendre a son compte l'espace
+   qu'ils ne posent plus, sinon une rangee de colonnes colle au bloc suivant -
+   le pas etait visiblement plus serre a cet endroit qu'ailleurs. */
 .colonnes > .bloc { margin-bottom: 0; }
+.colonnes { margin-bottom: 12px; }
+.colonnes:last-child { margin-bottom: 0; }
 
 .bloc__titre {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -836,6 +842,9 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 .indicateurs {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
   background: var(--bg-primary); border-radius: var(--radius-sm); overflow: hidden;
+  /* Meme pas que celui des blocs entre eux : le bandeau collait au premier
+     bloc alors que tous les suivants respiraient. */
+  margin-bottom: 12px;
 }
 .indicateur {
   display: flex; flex-direction: column; gap: 2px; padding: 10px 12px;
@@ -1098,6 +1107,10 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
    chaque interrupteur reste colle au champ qu'il commande. */
 .options-fp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin-top: 12px; }
 .options-fp .champ--interrupteur { margin-bottom: 0; }
+/* Place tenue, contenu efface : le champ garde sa largeur pour que les
+   intitules voisins ne se decalent pas quand on coche. `visibility` et non
+   `display`, qui rendrait la place et ferait tout glisser. */
+.champ--reserve { visibility: hidden; }
 .champ--serre { flex-direction: row; align-items: center; gap: 6px; }
 .champ--serre > span { white-space: nowrap; }
 .champ--serre > input { width: 88px; }

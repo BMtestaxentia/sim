@@ -303,7 +303,13 @@ html, body {
   margin-bottom: 12px;
 }
 .bloc:last-child { margin-bottom: 0; }
+/* Les blocs en colonnes n'espacent pas eux-memes : c'est la grille qui le fait,
+   avec son `gap`. Mais le CONTENEUR doit alors reprendre a son compte l'espace
+   qu'ils ne posent plus, sinon une rangee de colonnes colle au bloc suivant -
+   le pas etait visiblement plus serre a cet endroit qu'ailleurs. */
 .colonnes > .bloc { margin-bottom: 0; }
+.colonnes { margin-bottom: 12px; }
+.colonnes:last-child { margin-bottom: 0; }
 
 .bloc__titre {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -850,6 +856,9 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 .indicateurs {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
   background: var(--bg-primary); border-radius: var(--radius-sm); overflow: hidden;
+  /* Meme pas que celui des blocs entre eux : le bandeau collait au premier
+     bloc alors que tous les suivants respiraient. */
+  margin-bottom: 12px;
 }
 .indicateur {
   display: flex; flex-direction: column; gap: 2px; padding: 10px 12px;
@@ -1112,6 +1121,10 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
    chaque interrupteur reste colle au champ qu'il commande. */
 .options-fp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin-top: 12px; }
 .options-fp .champ--interrupteur { margin-bottom: 0; }
+/* Place tenue, contenu efface : le champ garde sa largeur pour que les
+   intitules voisins ne se decalent pas quand on coche. `visibility` et non
+   `display`, qui rendrait la place et ferait tout glisser. */
+.champ--reserve { visibility: hidden; }
 .champ--serre { flex-direction: row; align-items: center; gap: 6px; }
 .champ--serre > span { white-space: nowrap; }
 .champ--serre > input { width: 88px; }
@@ -4549,7 +4562,7 @@ function facteurIndexation(trajectoire, annee_debut, annee) {
  * @property {Array<{annee: number, taux: number}>} [pge_taux_par_annee]  taux annee par annee
  * @property {number} [pge_base_eur]                   assiette de la provision (prix de revient TTC)
  * @property {number} [shab_m2]
- * @property {number} [taux_vacance_impayes]           fraction des loyers
+ * @property {number} [taux_vacance_impayes]           fraction des loyers ; sans effet en transparence
  * @property {number} [taux_produits_financiers]       applique a l'autofinancement cumule
  * @property {number} [is_taux]                        R-EXP-4, 0 = pas d'IS (cas des logements conventionnes)
  * @property {number} [is_duree_differe_ans]           annees sans IS depuis la mise en location
@@ -4839,12 +4852,20 @@ function compteExploitation(e) {
     // elles-memes refacturees : R = C0 + t x R, resolu en forme fermee plutot
     // qu'en iterant, R = C0 / (1 - t). Sans taux de ce genre, t vaut 0 et la
     // redevance est la simple somme des charges.
+    // En TRANSPARENCE, le bailleur ne porte ni vacance ni impaye : il refacture
+    // ses frais au gestionnaire, qui les lui doit que les places soient
+    // occupees ou non. Appliquer le taux reviendrait a lui faire supporter un
+    // risque qu'il a precisement transfere. Un seul point de decision, utilise
+    // par la forme fermee ET par le calcul des loyers nets - les separer les
+    // aurait fait diverger a la premiere retouche.
+    const tauxVacance = transparence ? 0 : taux_vacance_impayes;
+
     let redevance = 0;
     if (transparence) {
       const socle =
         annuitesAnnee + tfpb + grosEntretien + rel + annuiteFP + chargesFixes +
         (frais_gestion_pct_loyers > 0 ? 0 : fraisGestionForfait);
-      const t = frais_gestion_pct_loyers + tauxBruts + tauxNets * (1 - taux_vacance_impayes);
+      const t = frais_gestion_pct_loyers + tauxBruts + tauxNets * (1 - tauxVacance);
       redevance = t < 1 ? socle / (1 - t) : socle;
     } else if (foyer) {
       // La redevance porte une ANNEE DE VALEUR : le montant negocie date d'un
@@ -4863,7 +4884,7 @@ function compteExploitation(e) {
     // Assiette commune aux deux modes : ce que l'operation encaisse de son
     // occupation. C'est elle que visent la vacance et les taux de cotisation.
     const loyersBruts = redevance + loyersLogements + loyersAnnexes + loyersDivers;
-    const vacanceImpayes = loyersBruts * taux_vacance_impayes;
+    const vacanceImpayes = loyersBruts * tauxVacance;
     const loyersNets = loyersBruts - vacanceImpayes;
     // La quote-part de subventions virée au résultat s'eteint au terme de la
     // duree d'etalement ; duree 0 = pas d'extinction.
@@ -6323,20 +6344,20 @@ function calculer(entrees, referentiels) {
   exploitation.fonds_propres_par_tranche = fondsPropresParTranche;
   exploitation.annuite_fonds_propres_eur = annuiteFPTotale;
 
-  // En transparence, la redevance vaut la somme des charges (annexe RA44). Un
-  // taux de vacance la rabote donc SANS que les charges baissent : le compte
-  // sort en deficit permanent de ce taux, ce qui ressemble a un bug de modele
-  // alors que c'est une hypothese de saisie. Sous bail a gestionnaire la
-  // redevance est garantie et la vacance vaut zero.
+  // En transparence, la redevance vaut la somme des charges (annexe RA44), et le
+  // bailleur ne porte ni vacance ni impaye : le gestionnaire lui doit ces frais
+  // que les places soient occupees ou non. Le taux saisi est donc NEUTRALISE par
+  // le compte. On le dit quand meme : une valeur saisie qui ne produit rien doit
+  // etre signalee, sans quoi l'utilisateur la croirait prise en compte.
   if (
     (exp.mode ?? 'loyers') === 'redevance' &&
     (exp.mode_redevance ?? 'forfaitaire') === 'transparence' &&
     (exp.taux_vacance_impayes ?? 0) > 0
   ) {
     alertes.push(
-      `Redevance en transparence avec ${((exp.taux_vacance_impayes ?? 0) * 100).toFixed(1)} % de ` +
-        'vacance : la redevance refacture les charges mais la vacance en retranche une part, ' +
-        "d'ou un deficit permanent de ce meme taux. Mettre la vacance a 0 % sous bail a gestionnaire.",
+      `Redevance en transparence : les ${((exp.taux_vacance_impayes ?? 0) * 100).toFixed(1)} % de ` +
+        'vacance et impayes ne sont pas appliques. Sous bail a gestionnaire, la redevance ' +
+        'refacture les charges quelle que soit l’occupation - le risque est porte par le gestionnaire.',
     );
   }
   // Postes du compte que le moteur ne sait pas encore produire, listes pour que
@@ -7170,15 +7191,12 @@ function rendreStructureTranches() {
       const RFP = etat.remuneration_fonds_propres[code] ?? { remuneres: false };
       const prets = etat.prets.map((p, i) => ({ p, i })).filter(({ p }) => (p.produit ?? code) === code);
       const subs = etat.subventions.map((s, i) => ({ s, i })).filter(({ s }) => s.affectation === code);
-      return `
-      <main class="ecran ecran--tranche" id="ecran-tranche-${code}" role="tabpanel" hidden style="--cat:${catProduit(code)}">
-        <!-- Jauges verticales : l'equilibre de la tranche encadre sa saisie.
-             A gauche ce qu'elle coute, a droite ce qui la finance, a la meme
-             echelle. Un desequilibre se voit sans quitter l'ecran. -->
-        <div class="jauge" data-jauge="emplois" data-tranche="${code}" title="Emplois"></div>
-        <div class="ecran__corps">
-        <div class="indicateurs indicateurs--tranche" data-recap-tranche="${code}"></div>
 
+      // Loyer et fonds propres sont montes en variable pour pouvoir se placer
+      // APRES les subventions et les prets. L'ordre de l'ecran suit celui du
+      // montage : on cherche d'abord ce qui finance la tranche, on regarde
+      // ensuite ce qu'elle rapporte et ce qu'elle coute en capital propre.
+      const colonnesLoyerFP = `
         <div class="colonnes">
           <section class="bloc bloc--tranche">
             <h2 class="bloc__titre">Loyer de la tranche ${att(libelleProduit(code))}</h2>
@@ -7222,40 +7240,50 @@ function rendreStructureTranches() {
             <!-- DEUX options independantes, et les quatre combinaisons se
                  rencontrent : remuneres sans etre reconstitues (interets servis,
                  capital laisse dans l'operation), reconstitues sans etre
-                 remuneres, les deux, ou ni l'un ni l'autre. -->
+                 remuneres, les deux, ou ni l'un ni l'autre.
+
+                 Les champs conditionnels sont TOUJOURS rendus, seulement masques
+                 quand leur case est decochee : leur place est reservee d'avance
+                 et les deux intitules ne bougent plus. Les faire apparaitre et
+                 disparaitre deplacait « Reconstitues » d'un champ entier a
+                 chaque clic, et il fallait rechercher des yeux la case qu'on
+                 venait de cocher. -->
             <div class="options-fp">
               <label class="champ champ--interrupteur">
                 <input type="checkbox" data-champ="remuneration_fonds_propres.${code}.remuneres"
                   data-type="booleen" data-structure="1" ${RFP.remuneres ? 'checked' : ''} />
                 <span>Rémunérés</span>
               </label>
-              ${
-                RFP.remuneres
-                  ? `<label class="champ champ--serre">
+              <label class="champ champ--serre ${RFP.remuneres ? '' : 'champ--reserve'}">
                 <span>Taux (%)</span>
                 <input type="number" step="0.01" min="0" data-champ="remuneration_fonds_propres.${code}.taux"
-                  data-type="pourcentage" value="${valNum(enPourcent(RFP.taux))}" />
-              </label>`
-                  : ''
-              }
+                  data-type="pourcentage" value="${valNum(enPourcent(RFP.taux))}"
+                  ${RFP.remuneres ? '' : 'disabled tabindex="-1"'} />
+              </label>
               <label class="champ champ--interrupteur">
                 <input type="checkbox" data-champ="remuneration_fonds_propres.${code}.reconstitues"
                   data-type="booleen" data-structure="1" ${RFP.reconstitues ? 'checked' : ''} />
                 <span>Reconstitués</span>
               </label>
-              ${
-                RFP.reconstitues
-                  ? `<label class="champ champ--serre">
+              <label class="champ champ--serre ${RFP.reconstitues ? '' : 'champ--reserve'}">
                 <span>Durée (ans)</span>
                 <input type="number" step="1" min="1" data-champ="remuneration_fonds_propres.${code}.duree_reconstitution_ans"
-                  data-type="nombre" value="${valNum(RFP.duree_reconstitution_ans)}" />
-              </label>`
-                  : ''
-              }
+                  data-type="nombre" value="${valNum(RFP.duree_reconstitution_ans)}"
+                  ${RFP.reconstitues ? '' : 'disabled tabindex="-1"'} />
+              </label>
             </div>
             <p class="aide" data-aide-fp="${code}"></p>
           </section>
-        </div>
+        </div>`;
+
+      return `
+      <main class="ecran ecran--tranche" id="ecran-tranche-${code}" role="tabpanel" hidden style="--cat:${catProduit(code)}">
+        <!-- Jauges verticales : l'equilibre de la tranche encadre sa saisie.
+             A gauche ce qu'elle coute, a droite ce qui la finance, a la meme
+             echelle. Un desequilibre se voit sans quitter l'ecran. -->
+        <div class="jauge" data-jauge="emplois" data-tranche="${code}" title="Emplois"></div>
+        <div class="ecran__corps">
+        <div class="indicateurs indicateurs--tranche" data-recap-tranche="${code}"></div>
 
         <section class="bloc bloc--tranche">
           <h2 class="bloc__titre">
@@ -7302,6 +7330,8 @@ function rendreStructureTranches() {
             <div class="liste" data-prets-derives="${code}"></div>
           </div>
         </section>
+
+        ${colonnesLoyerFP}
         </div>
         <div class="jauge" data-jauge="ressources" data-tranche="${code}" title="Ressources"></div>
       </main>`;

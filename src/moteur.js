@@ -305,9 +305,36 @@ export function calculer(entrees, referentiels) {
   // --- 5. Financement (R-FIN) ---
   // Les fonds propres se saisissent par tranche (onglets Tranches de l'UI). Le
   // scalaire global reste accepte pour les appels anciens et les fixtures.
+  // R-FIN-7 - Apport AUTOMATIQUE. Un apport non saisi n'est pas un apport nul :
+  // c'est une part du prix de revient de la tranche, 5 % en regle generale et
+  // 2 % en redevance transparente ou il prend la forme d'une avance de
+  // tresorerie. Le moteur le resout lui-meme, comme il resout le montant d'un
+  // pret CDC laisse en automatique - sinon l'ecran devrait pre-remplir une
+  // valeur, et une valeur pre-remplie devient vite une valeur figee.
+  const cfgApport = baremes.fonds_propres?.apport ?? {};
+  const expEntree = entrees.exploitation ?? {};
+  const tauxApport =
+    (expEntree.mode === 'redevance' &&
+    (expEntree.mode_redevance ?? 'forfaitaire') === 'transparence'
+      ? cfgApport.taux_redevance_transparence
+      : cfgApport.taux_defaut) ?? 0;
+  /** Apport automatique d'une tranche : la part du referentiel sur son PR TTC. */
+  const apportAutoDe = (c) => arrondiEuro((bilan.par_tranche?.[c]?.total_ttc_eur ?? 0) * tauxApport);
+  const apportSaisi = (c) => {
+    const v = entrees.fonds_propres_par_produit?.[c];
+    return v === undefined || v === null || v === '' ? null : (Number(v) || 0);
+  };
+  /** Apport resolu d'une tranche : la saisie si elle existe, sinon la part. */
+  const apportDe = (c) => apportSaisi(c) ?? apportAutoDe(c);
+
   const fpParProduit = entrees.fonds_propres_par_produit ?? null;
+  // Union des tranches PRESENTES et des tranches SAISIES : l'apport automatique
+  // ne vaut que pour les premieres, mais un montant saisi compte la ou il est,
+  // meme si le produit a quitte le programme entre-temps. Restreindre la somme
+  // aux tranches presentes ferait disparaitre cet apport sans le dire.
+  const clesFP = [...new Set([...codesPresents, ...Object.keys(fpParProduit ?? {})])];
   const fondsPropres = fpParProduit
-    ? Object.values(fpParProduit).reduce((s, v) => s + (Number(v) || 0), 0)
+    ? clesFP.reduce((s, c) => s + apportDe(c), 0)
     : (entrees.fonds_propres_eur ?? 0);
   // R-FIN-7 - Fonds propres REMUNERES : ceux dont la tranche porte un taux de
   // remuneration et une duree de reconstitution produisent une annuite, comme
@@ -323,7 +350,7 @@ export function calculer(entrees, referentiels) {
   const horizon = dates.duree_simulation_ans ?? 50;
   for (const c of codesPresents) {
     const montant = fpParProduit
-      ? (Number(fpParProduit[c]) || 0)
+      ? apportDe(c)
       : (quotesParts[c] ?? 0) * (entrees.fonds_propres_eur ?? 0);
     const p = paramFP[c] ?? {};
     // Deux options INDEPENDANTES : un taux sans duree sert des interets sans
@@ -343,6 +370,12 @@ export function calculer(entrees, referentiels) {
     }
     fondsPropresParTranche[c] = {
       montant_eur: arrondiEuro(montant),
+      // De quoi permettre a l'ecran de dire d'ou vient le montant : calcule a la
+      // part du referentiel, ou saisi. Sans cette distinction il ne pourrait
+      // qu'afficher un nombre, sans jamais dire s'il est subi ou choisi.
+      montant_auto: fpParProduit ? apportSaisi(c) === null : false,
+      montant_auto_eur: fpParProduit ? apportAutoDe(c) : null,
+      taux_apport: fpParProduit ? tauxApport : null,
       remuneres: taux > 0,
       reconstitues: duree > 0,
       taux_remuneration: taux,

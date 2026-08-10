@@ -688,7 +688,6 @@ function pretsCDCParDefaut(codes) {
 function rendreStructureTranches() {
   const codes = tranchesActives();
   const defautFP = referentiels.baremes.fonds_propres ?? {};
-  amorcerApportsFondsPropres(codes);
   for (const code of codes) {
     etat.loyers_par_produit[code] ??= { marge_majoration: 0, loyer_sortie_force: null };
     // R-FIN-7 : non remuneres par defaut. Les valeurs de taux et de duree sont
@@ -748,12 +747,28 @@ function rendreStructureTranches() {
           <section class="bloc bloc--tranche">
             <h2 class="bloc__titre">Fonds propres</h2>
             <div class="liste">
-              <div class="ligne ligne--ressource ligne--fp">
+              <!-- Meme grammaire que le montant d'un pret : non saisi, l'apport
+                   est CALCULE (part du referentiel sur le prix de revient) et se
+                   lit en filigrane, bordure pointillee. Saisi, il fige, et un
+                   bouton rend la main au calcul. Un champ vide qui vaudrait zero
+                   en silence serait la pire des trois lectures. -->
+              <div class="ligne ligne--ressource ligne--fp ${
+                nul(etat.fonds_propres_par_produit[code]) ? 'fp--auto' : ''
+              }">
                 <div class="pret__entete">
                   <span class="ressource__libelle">Apport de la tranche</span>
                   <input type="text" inputmode="decimal" class="pret__montant"
                     data-champ="fonds_propres_par_produit.${code}" data-type="montant"
+                    data-apport-auto="${code}"
                     value="${valMontant(etat.fonds_propres_par_produit[code])}" />
+                  <!-- Bouton TOUJOURS emis, masque par CSS tant qu'on est en
+                       automatique : saisir un montant ne reconstruit pas la
+                       table - cela couterait le focus a la premiere frappe -
+                       donc le rendu conditionnel ne le ferait jamais paraitre. -->
+                  <span class="pret__actions">
+                    <button type="button" class="bouton--auto" data-apport-rendre-auto="${code}"
+                      title="Revenir au montant calculé">auto</button>
+                  </span>
                 </div>
                 <div class="jetons">
                   <span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-fp="${code}">-</span></span>
@@ -890,48 +905,29 @@ function apportTheoriqueFP(code) {
 }
 
 /**
- * Preremplit l'apport des tranches qui n'en ont pas encore.
- *
- * `??=` et non une affectation : une valeur saisie ne se fait jamais ecraser par
- * un defaut. Une tranche dont l'apport a ete mis a zero volontairement garde son
- * zero - c'est une saisie, pas une absence.
- */
-function amorcerApportsFondsPropres(codes) {
-  for (const code of codes) {
-    if (etat.fonds_propres_par_produit[code] !== undefined) continue;
-    const a = apportTheoriqueFP(code);
-    if (a !== null) etat.fonds_propres_par_produit[code] = a;
-  }
-}
-
-/**
  * Changement de regime : la part d'apport passe de 5 % a 2 % ou l'inverse.
  *
- * On ne recalcule PAS en silence - l'apport est une saisie, et la voir bouger
- * seule apres avoir touche a un tout autre reglage serait incomprehensible. On
- * propose, en donnant les deux montants, et on ne touche a rien sur un refus.
+ * Les tranches laissees en AUTOMATIQUE suivent d'elles-memes - c'est ce que veut
+ * dire automatique, et leur bordure pointillee l'annonce. On ne demande donc
+ * rien pour elles. Les tranches SAISIES, en revanche, ne bougeront pas : ce sont
+ * elles qui pourraient surprendre, et ce sont les seules sur lesquelles on
+ * propose quelque chose. Refuser les laisse telles quelles.
  */
 function proposerReajustementApports(ancienTaux) {
   const nouveauTaux = tauxApportFP();
   if (nouveauTaux === ancienTaux) return;
-  const codes = Object.keys(etat.fonds_propres_par_produit).filter(
-    (c) => apportTheoriqueFP(c) !== null,
+  const saisies = Object.keys(etat.fonds_propres_par_produit).filter(
+    (c) => !nul(etat.fonds_propres_par_produit[c]) && apportTheoriqueFP(c) !== null,
   );
-  if (!codes.length) return;
-  const total = (t) =>
-    codes.reduce(
-      (s, c) => s + Math.round((dernierResultat.bilan.par_tranche[c].total_ttc_eur ?? 0) * t),
-      0,
-    );
+  if (!saisies.length) return;
   const ok = confirm(
-    `Le changement de mode fait passer l’apport en fonds propres de ` +
-      `${pct(ancienTaux, 1)} à ${pct(nouveauTaux, 1)} du prix de revient, ` +
-      `soit ${eur(total(ancienTaux))} au lieu de ${eur(total(nouveauTaux))}.\n\n` +
-      `Réajuster les apports des ${codes.length} tranche(s) ? ` +
-      `Annuler les laisse tels quels.`,
+    `L’apport en fonds propres passe de ${pct(ancienTaux, 1)} à ${pct(nouveauTaux, 1)} ` +
+      `du prix de revient.\n\n` +
+      `${saisies.length} tranche(s) portent un montant saisi, qui ne suivra pas. ` +
+      `Les remettre au montant calculé ? Annuler les laisse tels quels.`,
   );
   if (!ok) return;
-  for (const c of codes) etat.fonds_propres_par_produit[c] = apportTheoriqueFP(c);
+  for (const c of saisies) delete etat.fonds_propres_par_produit[c];
 }
 
 /**
@@ -1047,7 +1043,8 @@ function gabaritPret(p, i) {
               ${OPTIONS_REVISABILITE.map((v) => `<option value="${v}" ${v === p.revisabilite ? 'selected' : ''}>${v}</option>`).join('')}
             </select></label>
           <label class="champ"><span>Progressivité (%)</span>
-            <input type="number" step="0.1" data-champ="prets.${i}.progressivite" data-type="pourcentage" value="${valNum(enPourcent(p.progressivite))}" /></label>
+            <input type="number" step="0.1" data-champ="prets.${i}.progressivite" data-type="pourcentage"
+              data-defaut="progressivite" value="${valNum(enPourcent(p.progressivite))}" /></label>
           <label class="champ"><span>Différé (ans)</span>
             <input type="number" step="1" min="0" data-champ="prets.${i}.differe_ans" data-type="nombre" value="${valNum(p.differe_ans)}" /></label>
           <label class="champ"><span>Type de différé</span>
@@ -1768,6 +1765,7 @@ function rendreValeurs(r) {
     defaut('duree', nul(a?.duree_ans) ? '' : String(a.duree_ans));
     defaut('echeance', amorti?.annee_premiere_echeance ? String(amorti.annee_premiere_echeance) : '');
     defaut('revisabilite', a?.revisabilite ?? '');
+    defaut('progressivite', nul(a?.progressivite) ? '' : String(enPourcent(a.progressivite)));
 
     // Rappel de composition du taux, sous la cellule de marge. Sans lui, la
     // cellule affiche « 1,11 » sans dire de quoi c'est la marge ni ce que le
@@ -1836,6 +1834,25 @@ function rendreValeurs(r) {
     // reconstitution sinon. Les deux repondent a la meme question - quand
     // l'organisme revoit-il son argent - par deux mecaniques differentes.
     const fp = r.exploitation?.fonds_propres_par_tranche?.[code];
+
+    // Apport laisse au calcul : la valeur se lit en filigrane, comme le montant
+    // d'un pret automatique. On ecrit un PLACEHOLDER et non une valeur - poser
+    // une valeur reviendrait a saisir a la place de l'utilisateur, et le champ
+    // ne saurait plus dire s'il a ete rempli ou non.
+    const champApport = /** @type {HTMLInputElement|null} */ (
+      document.querySelector(`[data-apport-auto="${code}"]`)
+    );
+    if (champApport && fp) {
+      champApport.placeholder =
+        fp.montant_auto_eur === null ? '' : fMontantSaisie.format(fp.montant_auto_eur);
+      champApport.title = fp.montant_auto
+        ? `Calculé : ${pct(fp.taux_apport ?? 0, 1)} du prix de revient TTC de la tranche`
+        : 'Montant saisi - le bouton « auto » rend la main au calcul';
+      // L'etat auto se pose ICI et non au rendu de structure : taper un montant
+      // ne reconstruit pas la table, seul ce passage voit la premiere frappe.
+      champApport.closest('.ligne--fp')?.classList.toggle('fp--auto', fp.montant_auto === true);
+    }
+
     const annuite = document.querySelector(`[data-annuite-fp="${code}"]`);
     if (annuite) annuite.textContent = fp?.annuite_eur ? `${eur(fp.annuite_eur)}/an` : '-';
     const recon = document.querySelector(`[data-reconstitution-fp="${code}"]`);
@@ -4044,6 +4061,18 @@ document.addEventListener('click', (ev) => {
     const i = Number(/** @type {HTMLElement} */ (remettreAuto).dataset.remettreAuto);
     etat.prets[i].montant_auto = true;
     etat.prets[i].montant_eur = null;
+    rafraichirTout();
+    return;
+  }
+
+  // Rendre la main au calcul : on EFFACE la saisie plutot que d'y ecrire le
+  // montant automatique. Y ecrire le nombre le figerait a nouveau, et il ne
+  // suivrait plus ni le prix de revient ni le regime de redevance.
+  const rendreAuto = el.closest('[data-apport-rendre-auto]');
+  if (rendreAuto) {
+    delete etat.fonds_propres_par_produit[
+      /** @type {HTMLElement} */ (rendreAuto).dataset.apportRendreAuto
+    ];
     rafraichirTout();
     return;
   }

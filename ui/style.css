@@ -1046,11 +1046,16 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 .pret__actions { display: flex; align-items: center; gap: 2px; margin-left: auto; flex: none; }
 /* Montant de pret calcule : il se lit comme un resultat, pas comme une saisie,
    mais il reste modifiable - c'est ainsi qu'on le fige. */
-.pret--auto .pret__montant {
+/* L'apport en fonds propres suit exactement la meme grammaire : meme selecteur,
+   meme lecture. Deux mecanismes identiques a l'usage ne doivent pas se
+   distinguer a l'oeil. */
+.pret--auto .pret__montant, .fp--auto .pret__montant {
   background: transparent; border-style: dashed;
   border-color: var(--border-color-strong); color: var(--text-secondary);
 }
-.pret--auto .pret__montant:focus { background: var(--bg-primary); border-style: solid; }
+.pret--auto .pret__montant:focus, .fp--auto .pret__montant:focus {
+  background: var(--bg-primary); border-style: solid;
+}
 .bouton--auto {
   appearance: none; cursor: pointer; font-family: inherit; flex: none;
   font-size: 10.5px; font-weight: 600; padding: 3px 8px;
@@ -1059,7 +1064,7 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 }
 .bouton--auto:hover { background: var(--info-accent); color: #fff; }
 /* Rien a remettre en automatique tant qu'on y est deja. */
-.pret--auto .bouton--auto { display: none; }
+.pret--auto .bouton--auto, .fp--auto .bouton--auto { display: none; }
 
 .bouton--deplier {
   appearance: none; border: none; background: transparent; cursor: pointer;

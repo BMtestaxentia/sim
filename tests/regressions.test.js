@@ -1280,3 +1280,57 @@ describe('R-EXP-PGE - assiette de la provision, relevee sur SIMTEST_BM_HAB', () 
     expect(l[4].gros_entretien_eur).toBeGreaterThan(l[0].gros_entretien_eur);
   });
 });
+
+describe('R-FIN-7 - apport en fonds propres laisse au calcul', () => {
+  const op = (fp, exploitation) =>
+    calculer(
+      {
+        identite: { zone_123: 2, zone_ABC: 'B1' },
+        dates: { annee_mise_en_location: 2028, duree_simulation_ans: 5 },
+        lots: [{ code_produit: 'PLS', nb_logements: 6, shab_m2: 400 }],
+        postes_bilan: [{ chapitre: 'batiment', libelle: 'T', montant_ht_eur: 1000000, taux_tva: 0.1 }],
+        fonds_propres_par_produit: fp,
+        exploitation,
+      },
+      REFERENTIELS,
+    );
+
+  it('vaut 5 % du prix de revient TTC quand rien n est saisi', () => {
+    const r = op({});
+    const ttc = r.bilan.par_tranche.PLS.total_ttc_eur;
+    const fp = r.exploitation.fonds_propres_par_tranche.PLS;
+    expect(fp.montant_auto).toBe(true);
+    expect(fp.montant_eur).toBe(Math.round(ttc * 0.05));
+    expect(r.indicateurs.fonds_propres_eur).toBe(fp.montant_eur);
+  });
+
+  it('tombe a 2 % en redevance transparente', () => {
+    const r = op({}, { mode: 'redevance', mode_redevance: 'transparence' });
+    const ttc = r.bilan.par_tranche.PLS.total_ttc_eur;
+    expect(r.exploitation.fonds_propres_par_tranche.PLS.montant_eur).toBe(Math.round(ttc * 0.02));
+  });
+
+  it('reste a 5 % en redevance forfaitaire', () => {
+    const r = op({}, { mode: 'redevance', mode_redevance: 'forfaitaire', redevance_annuelle_eur: 100000 });
+    const ttc = r.bilan.par_tranche.PLS.total_ttc_eur;
+    expect(r.exploitation.fonds_propres_par_tranche.PLS.montant_eur).toBe(Math.round(ttc * 0.05));
+  });
+
+  it('se laisse figer par une saisie, zero compris', () => {
+    const fige = op({ PLS: 12345 }).exploitation.fonds_propres_par_tranche.PLS;
+    expect(fige.montant_auto).toBe(false);
+    expect(fige.montant_eur).toBe(12345);
+    // Un zero saisi est une DECISION, pas une absence : il ne doit pas
+    // reveiller le calcul automatique.
+    const zero = op({ PLS: 0 }).exploitation.fonds_propres_par_tranche.PLS;
+    expect(zero.montant_auto).toBe(false);
+    expect(zero.montant_eur).toBe(0);
+  });
+
+  it('expose le montant automatique meme quand il est ecrase', () => {
+    // C'est ce qui permet a l'ecran de proposer le retour au calcul.
+    const r = op({ PLS: 12345 });
+    const ttc = r.bilan.par_tranche.PLS.total_ttc_eur;
+    expect(r.exploitation.fonds_propres_par_tranche.PLS.montant_auto_eur).toBe(Math.round(ttc * 0.05));
+  });
+});

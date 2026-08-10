@@ -989,18 +989,6 @@ span.ressource__libelle {
 }
 .para-carte__annuler:hover { color: var(--text-primary); }
 
-/* Une option qui ECARTE de LEON se distingue d'un simple reglage : elle porte
-   sa consequence en clair, pas seulement son intitule. */
-.para-interrupteur {
-  display: flex; gap: 9px; align-items: flex-start; cursor: pointer;
-  padding: 9px 11px; margin: 0 0 12px;
-  border: 1px solid var(--border-color); border-left: 3px solid var(--info-accent);
-  border-radius: var(--radius-sm); background: var(--bg-secondary);
-  font-size: 11px; color: var(--text-tertiary); line-height: 1.45;
-}
-.para-interrupteur input { width: auto; margin-top: 2px; flex: none; }
-.para-interrupteur b { color: var(--text-primary); font-size: 12px; font-weight: 650; }
-
 .para-matrice { margin-top: 16px; }
 .para-matrice h4 {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -4711,13 +4699,14 @@ function calculer(entrees, referentiels) {
   // 1er janvier : les appliquer tels quels a une mise en location posterieure
   // sous-estime les recettes de toute la simulation.
   //
-  // La revalorisation est une OPTION, par defaut inactive. Aucune source ne dit
-  // que LEON la pratique, et l'imposer deplacerait les golden tests, donc le
-  // contrat de reproduction. Active, elle applique au plafond de zone le cumul
-  // des IRL de la trajectoire entre le millesime et la mise en location ; la
-  // marge locale n'est pas touchee, c'est une saisie en euros du jour.
-  // Inactive, le moteur alerte tout de meme et chiffre ce que l'ecart coute :
-  // un plafond perime doit etre un choix, jamais un oubli.
+  // Le moteur revalorise DONC PAR DEFAUT : il applique au plafond de zone le
+  // cumul des IRL de la trajectoire entre le millesime et la mise en location.
+  // La marge locale n'est pas touchee - c'est une saisie en euros du jour, elle
+  // n'a pas de millesime a rattraper.
+  //
+  // LEON, lui, applique le bareme tel quel. Les fixtures qui le reproduisent
+  // posent donc explicitement `revaloriser_loyers_plafonds: false` : l'ecart est
+  // ecrit dans la fixture, la ou il se lit, plutot que cache dans un defaut.
   const millesimeBareme = (() => {
     const a = [
       baremes.loyers_max_zone_123?.annee_reference,
@@ -4730,7 +4719,7 @@ function calculer(entrees, referentiels) {
   for (let a = millesimeBareme + 1; a <= anneeMEL && anneesARattraper > 0; a++) {
     cumulIRL *= 1 + (trajectoires.par_poste?.loyers_irl?.[a] ?? 0);
   }
-  const revaloriser = options.revaloriser_loyers_plafonds === true && anneesARattraper > 0;
+  const revaloriser = options.revaloriser_loyers_plafonds !== false && anneesARattraper > 0;
   const coefficientMillesime = revaloriser ? cumulIRL : 1;
 
   const loyers = codesPresents.map((code) => {
@@ -7910,17 +7899,10 @@ function modeleParametres() {
       titre: 'Loyers plafonds',
       resume: 'Barèmes par zone, et leur millésime',
       aide:
-        'Les plafonds sont revalorisés au 1er janvier. Le millésime est celui des valeurs ' +
-        "ci-dessous : il ne suit pas la simulation, sans quoi le barème 2025 se ferait passer " +
-        "pour celui de l'année de livraison. C'est la revalorisation ci-dessous qui rattrape " +
-        "l'écart, à l'IRL de la trajectoire, année par année.",
-      interrupteur: {
-        chemin: 'options.revaloriser_loyers_plafonds',
-        libelle: 'Revaloriser les plafonds du millésime à la mise en location',
-        aide:
-          'LEON applique le barème tel quel. Activer cette option en écarte volontairement : ' +
-          "les plafonds sont indexés à l'IRL entre le millésime et l'année de mise en location.",
-      },
+        "Le millésime est celui des valeurs ci-dessous, il ne suit pas la simulation : sans lui, " +
+        "le barème 2025 se ferait passer pour celui de l'année de livraison. Le moteur rattrape " +
+        "l'écart de lui-même en indexant les plafonds à l'IRL de la trajectoire, du millésime à " +
+        'la mise en location. La marge locale, saisie en euros du jour, reste intacte.',
       champs: [
         ch('baremes.loyers_max_zone_123.annee_reference', 'Millésime du barème 1/2/3', b.loyers_max_zone_123.annee_reference, 'annee'),
         ch('baremes.loyers_max_zone_ABC.annee_reference', 'Millésime du barème A/B/C', b.loyers_max_zone_ABC.annee_reference, 'annee'),
@@ -8248,15 +8230,6 @@ function rendreParametres() {
       <section class="bloc para-section">
         <h3>${att(s.titre)}</h3>
         <p class="para-source">${att(s.aide)}</p>
-        ${
-          s.interrupteur && !enRecherche
-            ? `<label class="para-interrupteur">
-                <input type="checkbox" data-champ="${s.interrupteur.chemin}" data-type="booleen"
-                  ${lireChemin(etat, s.interrupteur.chemin) ? 'checked' : ''} />
-                <span><b>${att(s.interrupteur.libelle)}</b><br />${att(s.interrupteur.aide)}</span>
-              </label>`
-            : ''
-        }
         ${champs.length ? `<div class="para-grille">${champs.map(carteParametre).join('')}</div>` : ''}
         ${matrices.join('')}
         ${traj}

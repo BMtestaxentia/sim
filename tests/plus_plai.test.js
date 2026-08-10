@@ -53,6 +53,10 @@ function operation(surcharges = {}) {
     fonds_propres_eur: 400000,
     prets: [],
     exploitation: { frais_gestion_pct_loyers: 0.07, taux_vacance_impayes: 0.02, gros_entretien_eur_m2: 5 },
+    // R-LOYER-9 neutralise : ces tests portent sur la LECTURE du bareme, pas sur
+    // le rattrapage de son millesime. Revalorise, le plafond ne serait plus
+    // comparable a la valeur lue directement au referentiel.
+    options: { revaloriser_loyers_plafonds: false },
     ...surcharges,
   };
 }
@@ -162,6 +166,7 @@ describe('PLUS 33 % - majoration multiplicative (arbitrage I-6)', () => {
       operation({
         identite: { nom: 'Test PLUS33', zone_123: 2, zone_ABC: 'B1', type_operation: 'VEFA' },
         lots: [{ code_produit: 'PLUS33', nb_logements: 30, shab_m2: 1800, surfaces_annexes_m2: 200 }],
+        options: { revaloriser_loyers_plafonds: false },
       }),
       REFERENTIELS,
     );

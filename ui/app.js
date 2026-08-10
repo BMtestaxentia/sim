@@ -2344,17 +2344,10 @@ function modeleParametres() {
       titre: 'Loyers plafonds',
       resume: 'Barèmes par zone, et leur millésime',
       aide:
-        'Les plafonds sont revalorisés au 1er janvier. Le millésime est celui des valeurs ' +
-        "ci-dessous : il ne suit pas la simulation, sans quoi le barème 2025 se ferait passer " +
-        "pour celui de l'année de livraison. C'est la revalorisation ci-dessous qui rattrape " +
-        "l'écart, à l'IRL de la trajectoire, année par année.",
-      interrupteur: {
-        chemin: 'options.revaloriser_loyers_plafonds',
-        libelle: 'Revaloriser les plafonds du millésime à la mise en location',
-        aide:
-          'LEON applique le barème tel quel. Activer cette option en écarte volontairement : ' +
-          "les plafonds sont indexés à l'IRL entre le millésime et l'année de mise en location.",
-      },
+        "Le millésime est celui des valeurs ci-dessous, il ne suit pas la simulation : sans lui, " +
+        "le barème 2025 se ferait passer pour celui de l'année de livraison. Le moteur rattrape " +
+        "l'écart de lui-même en indexant les plafonds à l'IRL de la trajectoire, du millésime à " +
+        'la mise en location. La marge locale, saisie en euros du jour, reste intacte.',
       champs: [
         ch('baremes.loyers_max_zone_123.annee_reference', 'Millésime du barème 1/2/3', b.loyers_max_zone_123.annee_reference, 'annee'),
         ch('baremes.loyers_max_zone_ABC.annee_reference', 'Millésime du barème A/B/C', b.loyers_max_zone_ABC.annee_reference, 'annee'),
@@ -2682,15 +2675,6 @@ function rendreParametres() {
       <section class="bloc para-section">
         <h3>${att(s.titre)}</h3>
         <p class="para-source">${att(s.aide)}</p>
-        ${
-          s.interrupteur && !enRecherche
-            ? `<label class="para-interrupteur">
-                <input type="checkbox" data-champ="${s.interrupteur.chemin}" data-type="booleen"
-                  ${lireChemin(etat, s.interrupteur.chemin) ? 'checked' : ''} />
-                <span><b>${att(s.interrupteur.libelle)}</b><br />${att(s.interrupteur.aide)}</span>
-              </label>`
-            : ''
-        }
         ${champs.length ? `<div class="para-grille">${champs.map(carteParametre).join('')}</div>` : ''}
         ${matrices.join('')}
         ${traj}

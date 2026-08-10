@@ -975,18 +975,6 @@ span.ressource__libelle {
 }
 .para-carte__annuler:hover { color: var(--text-primary); }
 
-/* Une option qui ECARTE de LEON se distingue d'un simple reglage : elle porte
-   sa consequence en clair, pas seulement son intitule. */
-.para-interrupteur {
-  display: flex; gap: 9px; align-items: flex-start; cursor: pointer;
-  padding: 9px 11px; margin: 0 0 12px;
-  border: 1px solid var(--border-color); border-left: 3px solid var(--info-accent);
-  border-radius: var(--radius-sm); background: var(--bg-secondary);
-  font-size: 11px; color: var(--text-tertiary); line-height: 1.45;
-}
-.para-interrupteur input { width: auto; margin-top: 2px; flex: none; }
-.para-interrupteur b { color: var(--text-primary); font-size: 12px; font-weight: 650; }
-
 .para-matrice { margin-top: 16px; }
 .para-matrice h4 {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;

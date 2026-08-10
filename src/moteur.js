@@ -138,13 +138,14 @@ export function calculer(entrees, referentiels) {
   // 1er janvier : les appliquer tels quels a une mise en location posterieure
   // sous-estime les recettes de toute la simulation.
   //
-  // La revalorisation est une OPTION, par defaut inactive. Aucune source ne dit
-  // que LEON la pratique, et l'imposer deplacerait les golden tests, donc le
-  // contrat de reproduction. Active, elle applique au plafond de zone le cumul
-  // des IRL de la trajectoire entre le millesime et la mise en location ; la
-  // marge locale n'est pas touchee, c'est une saisie en euros du jour.
-  // Inactive, le moteur alerte tout de meme et chiffre ce que l'ecart coute :
-  // un plafond perime doit etre un choix, jamais un oubli.
+  // Le moteur revalorise DONC PAR DEFAUT : il applique au plafond de zone le
+  // cumul des IRL de la trajectoire entre le millesime et la mise en location.
+  // La marge locale n'est pas touchee - c'est une saisie en euros du jour, elle
+  // n'a pas de millesime a rattraper.
+  //
+  // LEON, lui, applique le bareme tel quel. Les fixtures qui le reproduisent
+  // posent donc explicitement `revaloriser_loyers_plafonds: false` : l'ecart est
+  // ecrit dans la fixture, la ou il se lit, plutot que cache dans un defaut.
   const millesimeBareme = (() => {
     const a = [
       baremes.loyers_max_zone_123?.annee_reference,
@@ -157,7 +158,7 @@ export function calculer(entrees, referentiels) {
   for (let a = millesimeBareme + 1; a <= anneeMEL && anneesARattraper > 0; a++) {
     cumulIRL *= 1 + (trajectoires.par_poste?.loyers_irl?.[a] ?? 0);
   }
-  const revaloriser = options.revaloriser_loyers_plafonds === true && anneesARattraper > 0;
+  const revaloriser = options.revaloriser_loyers_plafonds !== false && anneesARattraper > 0;
   const coefficientMillesime = revaloriser ? cumulIRL : 1;
 
   const loyers = codesPresents.map((code) => {

@@ -276,14 +276,30 @@ const COULEURS = new Proxy({}, { get: (_, cle) => couleur(String(cle)) });
 
 /**
  * Identite couleur d'une TRANCHE, stable d'un ecran a l'autre : l'onglet, le
- * bloc, la ligne de pret et la legende d'un meme produit portent la meme teinte.
- * L'ordre canonique des produits fixe l'index, donc la couleur ne bouge pas
- * quand on ajoute une tranche.
+ * bloc, la ligne de pret, la ligne de lot et la colonne du prix de revient d'un
+ * meme produit portent la meme teinte.
+ *
+ * La correspondance est EXPLICITE, et non deduite du rang du produit dans
+ * l'ordre canonique : deduite, elle rebattait toutes les couleurs des qu'un
+ * produit s'ajoutait a la liste - l'arrivee des foyers avait ainsi repeint le
+ * LLI et le libre. Un produit garde desormais sa couleur pour de bon.
+ *
+ * Un foyer prend la teinte de son financement : FPLUS est un PLUS pose sur un
+ * batiment collectif, pas une sixieme famille.
  */
-const CAT_PAR_PRODUIT = Object.fromEntries(
-  produitsOrdonnes().map((p, i) => [p.code, `var(--cat-${(i % 6) + 1})`]),
-);
-const catProduit = (code) => CAT_PAR_PRODUIT[code] ?? 'var(--cat-6)';
+const CAT_PAR_PRODUIT = {
+  PLAI: 'var(--prod-plai)',
+  FPLAI: 'var(--prod-plai)',
+  PLUS: 'var(--prod-plus)',
+  PLUS33: 'var(--prod-plus)',
+  FPLUS: 'var(--prod-plus)',
+  PLS: 'var(--prod-pls)',
+  FPLS: 'var(--prod-pls)',
+  LOC: 'var(--prod-lli)',
+  LIBRE: 'var(--prod-libre)',
+  REHAB: 'var(--prod-rehab)',
+};
+const catProduit = (code) => CAT_PAR_PRODUIT[code] ?? 'var(--prod-autre)';
 
 /**
  * Libelles de chapitre DERIVES de la nomenclature, jamais recopies : une table
@@ -1077,6 +1093,75 @@ function rendreBlocRedevance() {
 let triLots = null;
 
 /**
+ * Lots selectionnes, par index REEL - jamais par rang affiche, sinon un tri
+ * deplacerait la selection sous les pieds de l'utilisateur.
+ *
+ * Etat purement visuel, comme le tri : il ne va ni dans `etat`, ni dans la
+ * saisie memorisee, ni au moteur. Une selection est un geste en cours, pas une
+ * propriete de l'operation - la retrouver a la reouverture serait une surprise.
+ *
+ * @type {Set<number>}
+ */
+const lotsSelectionnes = new Set();
+
+/** Dernier lot coche : origine d'une selection par plage au clic majuscule. */
+let dernierLotCoche = null;
+
+/**
+ * Champs qu'une modification propage aux autres lignes selectionnees.
+ *
+ * L'IDENTIFIANT en est exclu, et c'est le seul : c'est la reference du lot au
+ * plan de vente. Le recopier sur vingt lignes ne ferait pas gagner une saisie,
+ * il rendrait vingt lots indiscernables.
+ */
+const CHAMPS_LOT_PROPAGEABLES = new Set([
+  'batiment', 'etage', 'typologie', 'code_produit', 'shab_m2', 'surfaces_annexes_m2',
+]);
+
+/**
+ * Etat visuel de la selection : lignes teintees, case d'en-tete a trois etats,
+ * et rappel de ce qu'une modification va toucher. Sans ce rappel, propager une
+ * valeur sur des lignes hors de l'ecran ressemblerait a un bug.
+ */
+function rendreSelectionLots() {
+  const n = lotsSelectionnes.size;
+  const tous = /** @type {HTMLInputElement|null} */ (document.getElementById('select-tous-lots'));
+  if (tous) {
+    tous.checked = n > 0 && n === etat.lots.length;
+    tous.indeterminate = n > 0 && n < etat.lots.length;
+  }
+  const rappel = document.getElementById('rappel-selection-lots');
+  if (rappel) {
+    rappel.hidden = n < 2;
+    rappel.textContent =
+      `${n} lots sélectionnés — modifier une cellule de l’un d’eux applique la valeur ` +
+      'aux autres. L’ID reste propre à chaque lot.';
+  }
+}
+
+/**
+ * Reporte une valeur saisie sur toutes les autres lignes selectionnees.
+ * Ne fait rien si la ligne modifiee n'est pas elle-meme selectionnee : on ne
+ * propage pas depuis l'exterieur d'une selection, ce serait agir a distance.
+ * @returns {boolean} vrai si des lignes ont ete touchees
+ */
+function propagerSurLotsSelectionnes(chemin, valeur) {
+  const m = /^lots\.(\d+)\.(\w+)$/.exec(chemin);
+  if (!m) return false;
+  const source = Number(m[1]);
+  const champ = m[2];
+  if (lotsSelectionnes.size < 2 || !lotsSelectionnes.has(source)) return false;
+  if (!CHAMPS_LOT_PROPAGEABLES.has(champ)) return false;
+  let touche = false;
+  for (const i of lotsSelectionnes) {
+    if (i === source || !etat.lots[i]) continue;
+    etat.lots[i][champ] = valeur;
+    touche = true;
+  }
+  return touche;
+}
+
+/**
  * Valeur de tri d'un lot, colonne par colonne. Les deux dernieres ne sont pas
  * saisies mais calculees : elles se lisent dans le dernier resultat du moteur,
  * et valent zero tant qu'il n'y en a pas.
@@ -1139,6 +1224,11 @@ function rendreStructure() {
       .map((p) => `<option value="${p.code}" ${p.code === selection ? 'selected' : ''} ${p.v1 ? '' : 'disabled'}>${p.libelle}</option>`)
       .join('');
 
+  // Les lots disparus ne restent pas selectionnes : sans cela, supprimer une
+  // ligne laisserait une selection fantome qui recevrait les modifications
+  // suivantes sans que rien ne l'indique a l'ecran.
+  for (const i of [...lotsSelectionnes]) if (!etat.lots[i]) lotsSelectionnes.delete(i);
+
   const lotsAffiches = ordreAffichageLots();
   $('#table-lots').querySelector('tbody').innerHTML = etat.lots.length
     ? lotsAffiches
@@ -1146,7 +1236,14 @@ function rendreStructure() {
           // `l` est le rang AFFICHE et non l'index du lot : la grille se
           // parcourt telle qu'elle est vue, tri compris, alors que les liaisons
           // de saisie continuent de pointer le lot reel.
-          ({ lot, i }, l) => `<tr data-lot="${i}">
+          // La couleur du financement suit le lot : c'est la meme que celle de
+          // sa colonne au prix de revient et de sa tranche partout ailleurs.
+          // Une table de cinquante lots se relit alors par blocs, sans avoir a
+          // lire la colonne « Financement » ligne a ligne.
+          ({ lot, i }, l) => `<tr data-lot="${i}" style="--cat:${catProduit(lot.code_produit)}"
+             class="lot--tranche ${lotsSelectionnes.has(i) ? 'lot--selectionne' : ''}">
+        <td class="col-select"><input type="checkbox" class="lot__select" data-select-lot="${i}"
+          aria-label="Sélectionner le lot ${i + 1}" ${lotsSelectionnes.has(i) ? 'checked' : ''} /></td>
         <td class="num num-poste">${i + 1}</td>
         <!-- L'ID est la reference du lot au plan de vente ou a l'EDD. Le N° a
              gauche, lui, n'est qu'un rang de saisie : il bouge des qu'on
@@ -1170,8 +1267,9 @@ function rendreStructure() {
       </tr>`,
         )
         .join('')
-    : '<tr><td colspan="11" class="vide">Aucun lot. Utiliser le générateur ci-dessus ou « + lot ».</td></tr>';
+    : '<tr><td colspan="12" class="vide">Aucun lot. Utiliser le générateur ci-dessus ou « + lot ».</td></tr>';
   rendreEntetesTriLots();
+  rendreSelectionLots();
 
   // --- Onglets et ecrans de tranche, un par produit present ---
   rendreStructureTranches();
@@ -3227,6 +3325,16 @@ function afficherEcran(cible) {
   for (const e of document.querySelectorAll('.ecran')) {
     /** @type {HTMLElement} */ (e).hidden = e.id !== `ecran-${vise}`;
   }
+  // L'ecran affiche se retient : recharger la page pour reprendre au programme
+  // alors qu'on travaillait sur l'exploitation coute une navigation a chaque
+  // fois. Il est memorise a part de la saisie - c'est une position de lecture,
+  // pas une donnee d'operation, et il ne doit pas disparaitre avec une
+  // reinitialisation.
+  try {
+    localStorage.setItem(CLE_ECRAN, vise);
+  } catch {
+    /* voir memoriserSaisie */
+  }
   if (vise === 'parametres') rendreParametres();
 }
 
@@ -3279,6 +3387,9 @@ function themeInitial() {
  * bumper cette version est le geste qui accompagne un changement de structure.
  */
 const CLE_SAISIE = 'moteur-sim.saisie.v1';
+
+/** Ecran affiche. Memorise a part : c'est une position de lecture, pas une donnee. */
+const CLE_ECRAN = 'moteur-sim.ecran';
 
 /** Les seules racines memorisees : ce que l'utilisateur a saisi, rien d'autre. */
 const RACINES_PERSISTEES = [
@@ -3393,6 +3504,24 @@ document.addEventListener('input', (ev) => {
     valeur = el.checked;
   } else {
     valeur = el.value === '' ? null : el.value;
+  }
+
+  // Selection multiple : la valeur frappee sur une ligne selectionnee se pose
+  // sur toutes les autres. On reconstruit alors la table, pour que les lignes
+  // touchees affichent leur nouvelle valeur - et on rend le focus au champ en
+  // cours de frappe, qui vient de disparaitre avec l'ancienne table.
+  if (propagerSurLotsSelectionnes(chemin, valeur)) {
+    ecrireSaisie(chemin, valeur);
+    const debut = el.selectionStart;
+    rafraichirTout();
+    const repris = /** @type {HTMLInputElement|null} */ (
+      document.querySelector(`[data-champ="${chemin}"]`)
+    );
+    if (repris) {
+      repris.focus();
+      if (debut !== null && repris.setSelectionRange) repris.setSelectionRange(debut, debut);
+    }
+    return;
   }
 
   if (ecrireSaisie(chemin, valeur)) {
@@ -3640,6 +3769,53 @@ document.addEventListener('click', (ev) => {
 
   if (el.closest('#btn-reinitialiser')) {
     reinitialiserSaisie();
+    return;
+  }
+
+  // --- Selection de lots ---
+  // Le clic majuscule etend la selection depuis la derniere case cochee : c'est
+  // le geste attendu sur une liste, et le seul praticable a cinquante lots.
+  const caseLot = /** @type {HTMLInputElement|null} */ (el.closest('[data-select-lot]'));
+  if (caseLot) {
+    const i = Number(caseLot.dataset.selectLot);
+    const rangs = ordreAffichageLots().map((x) => x.i);
+    const cibles =
+      /** @type {MouseEvent} */ (ev).shiftKey && dernierLotCoche !== null
+        ? (() => {
+            // La plage se lit dans l'ordre AFFICHE : c'est celui que l'on voit,
+            // et donc celui que l'on croit selectionner.
+            const a = rangs.indexOf(dernierLotCoche);
+            const b = rangs.indexOf(i);
+            return a < 0 || b < 0 ? [i] : rangs.slice(Math.min(a, b), Math.max(a, b) + 1);
+          })()
+        : [i];
+    for (const c of cibles) {
+      if (caseLot.checked) lotsSelectionnes.add(c);
+      else lotsSelectionnes.delete(c);
+    }
+    dernierLotCoche = i;
+    for (const tr of document.querySelectorAll('#table-lots tbody tr[data-lot]')) {
+      const idx = Number(/** @type {HTMLElement} */ (tr).dataset.lot);
+      tr.classList.toggle('lot--selectionne', lotsSelectionnes.has(idx));
+      const c = /** @type {HTMLInputElement|null} */ (tr.querySelector('.lot__select'));
+      if (c) c.checked = lotsSelectionnes.has(idx);
+    }
+    rendreSelectionLots();
+    return;
+  }
+
+  if (el.id === 'select-tous-lots') {
+    const tout = /** @type {HTMLInputElement} */ (el).checked;
+    lotsSelectionnes.clear();
+    if (tout) etat.lots.forEach((_, i) => lotsSelectionnes.add(i));
+    dernierLotCoche = null;
+    for (const tr of document.querySelectorAll('#table-lots tbody tr[data-lot]')) {
+      const idx = Number(/** @type {HTMLElement} */ (tr).dataset.lot);
+      tr.classList.toggle('lot--selectionne', tout);
+      const c = /** @type {HTMLInputElement|null} */ (tr.querySelector('.lot__select'));
+      if (c) c.checked = tout;
+    }
+    rendreSelectionLots();
     return;
   }
 
@@ -3953,8 +4129,21 @@ appliquerTheme(themeInitial());
 // La saisie memorisee se pose AVANT le premier rendu : la reposer apres
 // ferait clignoter l'operation de demonstration a chaque ouverture.
 const saisieRestauree = restaurerSaisie();
+// L'ecran quitte se lit AVANT le premier rendu : celui-ci reaffiche l'onglet
+// marque dans le HTML, et `afficherEcran` reecrit alors la memoire - on
+// perdrait la position en la relisant apres.
+const ecranMemorise = (() => {
+  try {
+    return localStorage.getItem(CLE_ECRAN);
+  } catch {
+    return null;
+  }
+})();
 rendreChampsStatiques();
 rafraichirTout();
+// `afficherEcran` retombe seul sur le programme si l'ecran memorise n'existe
+// plus - une tranche dont le dernier lot a ete supprime, par exemple.
+if (ecranMemorise) afficherEcran(ecranMemorise);
 // Dire ce qui est a l'ecran. Une saisie qui reapparait sans un mot laisse
 // croire a une operation de demonstration bizarrement remplie.
 if (saisieRestauree) {

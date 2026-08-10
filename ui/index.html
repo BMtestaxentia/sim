@@ -278,6 +278,13 @@
                    rendent l'ordre de saisie. Le tri ne touche qu'a l'affichage,
                    jamais a l'ordre des lots. -->
               <tr>
+                <!-- Selection multiple : cocher plusieurs lignes, puis modifier
+                     une cellule de l'une d'elles, applique la valeur a toutes.
+                     Vingt logements identiques a un etage pres ne se saisissent
+                     pas vingt fois. -->
+                <th class="col-select">
+                  <input type="checkbox" id="select-tous-lots" aria-label="Tout sélectionner" />
+                </th>
                 <th class="num tri" data-tri="numero" aria-sort="none">N°<span class="tri__fleche"></span></th>
                 <th class="tri" data-tri="identifiant" aria-sort="none">ID<span class="tri__fleche"></span></th>
                 <th class="tri" data-tri="batiment" aria-sort="none">Bâtiment<span class="tri__fleche"></span></th>
@@ -295,6 +302,7 @@
             <tfoot></tfoot>
           </table>
         </div>
+        <p id="rappel-selection-lots" hidden></p>
       </section>
 
       <section class="bloc">

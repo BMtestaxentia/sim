@@ -30,6 +30,8 @@
  * @property {string} cle_lasm           cle du taux LASM (ex. 'taux_reduit_simulation')
  * @property {boolean} coefficient_structure  le loyer passe-t-il par le CS (R-SURF-2) ?
  * @property {number} duree_exoneration_tfpb_ans  R-FISC-1, propriete du PRODUIT (CGI)
+ * @property {boolean} [foyer]           R-SURF-2 : le CS prend le facteur foyers (38 et non 20)
+ * @property {boolean} [loyer_par_convention] R-LOYER : pas de bareme de zone, le plafond est conventionnel
  * @property {PretDefaut[]} prets_defaut
  * @property {boolean} v1                traite dans la V1 (PLUS/PLAI/PLS) ?
  */
@@ -124,6 +126,81 @@ export const PRODUITS = {
     // defaut, duree d'exoneration et plafond de financement a 90 % sont en place.
     v1: true,
   },
+
+  // --- Foyers (ParaFPLUS, SimFPLUS_2) ---------------------------------------
+  // Un foyer n'est PAS une famille de financement a part : c'est le meme pret
+  // PLUS ou PLAI, pose sur un batiment collectif. LEON en fait des codes
+  // distincts (FPLUS, FPLS) parce que son moteur est duplique ; ici, deux
+  // proprietes suffisent a les decrire, le reste est herite tel quel.
+  //   - `foyer` bascule le coefficient de structure sur le facteur 38 (R-SURF-2) ;
+  //   - le produit d'exploitation est une redevance, pas un loyer : c'est le
+  //     mode 'redevance' du compte, deja en place (Q-27).
+  FPLUS: {
+    code: 'FPLUS',
+    libelle: 'Foyer PLUS',
+    cle_bareme_loyer: 'PLUS',
+    zonage: '123',
+    cle_lasm: 'taux_reduit_simulation',
+    coefficient_structure: true,
+    foyer: true,
+    duree_exoneration_tfpb_ans: 25,
+    prets_defaut: [
+      { nature: 'construction', cle_marge: 'PLUS', duree_ref: '40', revisabilite: 'DOUBLE' },
+      { nature: 'foncier', cle_marge: 'PLUS', duree_ref: 'zone_abc:B2|C->50,sinon->60', revisabilite: 'DOUBLE' },
+    ],
+    v1: true,
+  },
+  FPLAI: {
+    code: 'FPLAI',
+    libelle: 'Foyer PLAI',
+    cle_bareme_loyer: 'PLAI',
+    zonage: '123',
+    cle_lasm: 'taux_reduit_simulation',
+    coefficient_structure: true,
+    foyer: true,
+    duree_exoneration_tfpb_ans: 25,
+    prets_defaut: [
+      { nature: 'construction', cle_marge: 'PLAI', duree_ref: '40', revisabilite: 'DOUBLE' },
+      { nature: 'foncier', cle_marge: 'PLAI', duree_ref: 'zone_abc:B2|C->50,sinon->60', revisabilite: 'DOUBLE' },
+    ],
+    v1: true,
+  },
+  FPLS: {
+    code: 'FPLS',
+    libelle: 'Foyer PLS',
+    cle_bareme_loyer: 'PLS',
+    zonage: 'ABC',
+    cle_lasm: 'taux_reduit_simulation',
+    coefficient_structure: true,
+    foyer: true,
+    duree_exoneration_tfpb_ans: 25,
+    prets_defaut: [
+      { nature: 'construction', cle_marge: 'PLS', duree_ref: '40', revisabilite: 'SIMPLE' },
+      { nature: 'foncier', cle_marge: 'PLS', duree_ref: 'zone_abc:B2|C->50,sinon->60', revisabilite: 'SIMPLE' },
+    ],
+    v1: true,
+  },
+
+  // --- Rehabilitation (ParaREH, BilREH) -------------------------------------
+  // La rehabilitation se distingue sur un point de fond : le loyer ne sort
+  // d'aucun bareme de zone. ParaREH!A23 « Loyer maxi convention » est une
+  // SAISIE - c'est la convention APL en vigueur, eventuellement majoree de
+  // l'impact loyer des travaux (ParaREH!J27). Le moteur ne doit donc pas
+  // chercher a le calculer : il le prend tel qu'il lui est donne.
+  REHAB: {
+    code: 'REHAB',
+    libelle: 'Rehabilitation',
+    cle_bareme_loyer: 'PLUS', // repli d'ordre de grandeur ; le plafond reel est conventionnel
+    zonage: '123',
+    loyer_par_convention: true,
+    cle_lasm: 'taux_reduit_travaux', // travaux d'amelioration : taux reduit, pas de LASM neuf
+    coefficient_structure: true,
+    duree_exoneration_tfpb_ans: 0, // le bati existant n'ouvre pas l'exoneration des constructions neuves
+    prets_defaut: [
+      { nature: 'construction', cle_marge: 'PAM', duree_ref: '25', revisabilite: 'DOUBLE' },
+    ],
+    v1: false,
+  },
 };
 
 /**
@@ -142,7 +219,18 @@ export function produit(code) {
  * recapitulatifs par tranche et les tableaux - evite de recoder l'ordre partout.
  * @type {CodeProduit[]}
  */
-export const ORDRE_PRODUITS = ['PLAI', 'PLUS', 'PLUS33', 'PLS', 'LOC', 'LIBRE'];
+export const ORDRE_PRODUITS = [
+  'PLAI',
+  'PLUS',
+  'PLUS33',
+  'PLS',
+  'FPLAI',
+  'FPLUS',
+  'FPLS',
+  'REHAB',
+  'LOC',
+  'LIBRE',
+];
 
 /**
  * Produits tries dans l'ordre canonique.

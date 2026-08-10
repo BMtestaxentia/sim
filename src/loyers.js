@@ -177,6 +177,7 @@ export function majorationLCR(ratio_lcr, referentiels) {
  * @param {number} [p.marge_locale_eur_m2]
  * @param {number} [p.marge_majoration]     fraction deja plafonnee (R-LOYER-3)
  * @param {number} [p.loyer_sortie_force]   EUR/m2/mois, court-circuite le calcul
+ * @param {number} [p.loyer_plafond_convention_eur_m2] produits a plafond conventionnel (rehabilitation)
  * @param {boolean} [p.foyer]
  * @param {any} referentiels
  * @returns {{cs: number, loyer_base_eur_m2: number, loyer_max_base_eur_m2: number,
@@ -191,14 +192,38 @@ export function loyerProduit(
     marge_locale_eur_m2 = 0,
     marge_majoration = 0,
     loyer_sortie_force,
+    loyer_plafond_convention_eur_m2,
     foyer = false,
     coefficient_millesime = 1,
   },
   referentiels,
 ) {
   const def = produit(/** @type {any} */ (code_produit));
+
+  // R-LOYER - Produits dont le plafond est CONVENTIONNEL (rehabilitation,
+  // ParaREH!A23 « Loyer maxi convention »). Aucun bareme de zone ne s'applique :
+  // le plafond est celui de la convention APL en vigueur, eventuellement majore
+  // de l'impact loyer des travaux. Le moteur le prend tel quel plutot que
+  // d'inventer un plafond a partir d'un bareme de logement neuf.
+  if (def.loyer_par_convention) {
+    const plafond = arrondiLoyer(loyer_plafond_convention_eur_m2 ?? 0);
+    const pratique = arrondiLoyer(loyer_sortie_force ?? plafond);
+    return {
+      cs: 1,
+      loyer_base_eur_m2: plafond,
+      loyer_max_base_eur_m2: plafond,
+      loyer_pratique_eur_m2: pratique,
+      loyer_annuel_eur: arrondiEuro(MOIS_PAR_AN * su_m2 * pratique),
+      force: loyer_sortie_force !== undefined && loyer_sortie_force !== null,
+      plafond_conventionnel: true,
+    };
+  }
+
+  // Un produit foyer l'est par nature (FPLUS, FPLAI, FPLS) ; le drapeau
+  // d'operation permet en plus de traiter en foyer un produit qui ne l'est pas
+  // de base. Les deux se cumulent, le produit ne pouvant pas etre dementi.
   const cs = def.coefficient_structure
-    ? coefficientStructure({ nb_logements, su_m2, foyer }, referentiels)
+    ? coefficientStructure({ nb_logements, su_m2, foyer: def.foyer || foyer }, referentiels)
     : 1;
 
   const loyerBase = loyerDeBase(
@@ -243,6 +268,14 @@ export function loyerAnnexesSeparees(annexes) {
  */
 export function controlesLoyer(loyer, code_produit) {
   const alertes = [];
+  // Un plafond conventionnel non saisi vaut zero : le compte serait faux en
+  // silence. On le dit plutot que de laisser passer une recette nulle.
+  if (loyer.plafond_conventionnel && loyer.loyer_max_base_eur_m2 <= 0) {
+    alertes.push(
+      `${code_produit} : plafond de loyer conventionnel non renseigne - ` +
+        `il ne se deduit d'aucun bareme de zone, il doit etre saisi`,
+    );
+  }
   if (loyer.force && loyer.loyer_pratique_eur_m2 > loyer.loyer_max_base_eur_m2) {
     alertes.push(
       `${code_produit} : loyer de sortie force (${loyer.loyer_pratique_eur_m2} EUR/m2) ` +

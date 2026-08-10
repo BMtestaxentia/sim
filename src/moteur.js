@@ -41,6 +41,7 @@ import { tableauAmortissement, anneePremiereEcheance, prefinancement } from './a
 import { exonerationTFPB, taxeAmenagement } from './fiscalite.js';
 import {
   compteExploitation,
+  dotationParComposants,
   resoudreChargesExploitation,
   anneeReconstitutionFondsPropres,
   indicateursExploitation,
@@ -176,7 +177,13 @@ export function calculer(entrees, referentiels) {
         marge_locale_eur_m2: params.marge_locale_eur_m2 ?? premiere?.marge_locale_eur_m2,
         marge_majoration: params.marge_majoration ?? premiere?.marge_majoration,
         loyer_sortie_force: params.loyer_sortie_force ?? forcee?.loyer_sortie_force,
-        foyer: identite.foyer,
+        loyer_plafond_convention_eur_m2:
+          params.loyer_plafond_convention_eur_m2 ?? premiere?.loyer_plafond_convention_eur_m2,
+        // Le foyer se declare au niveau du PRODUIT (FPLUS, FPLAI, FPLS) ou de
+        // l'operation entiere : une operation mixte peut porter une tranche de
+        // foyer a cote de tranches d'habitat ordinaire, chacune avec son propre
+        // coefficient de structure (R-SURF-2).
+        foyer: produit(code).foyer ?? identite.foyer,
         coefficient_millesime: coefficientMillesime,
       },
       baremes,
@@ -897,25 +904,42 @@ export function calculer(entrees, referentiels) {
     a.tableau.map((l) => ({ annee: l.annee, montant_eur: l.interets_eur })),
   );
 
-  // R-EXP-2 - Dotation aux amortissements comptables. La base est le prix de
-  // revient diminue de la valeur comptable du terrain, qui ne s'amortit pas ;
-  // l'etalement est lineaire sur la duree du referentiel.
-  //
-  // Attention : LEON amortit PAR COMPOSANTS (structure, clos-couvert,
-  // equipements...), chacun sur sa duree, et sa dotation arrive dans l'annexe
-  // comme une donnee deja calculee ailleurs. L'etalement lineaire unique est
-  // donc une SIMPLIFICATION, signalee comme telle - elle donne le bon ordre de
-  // grandeur et la bonne mecanique, pas le chiffre de LEON a l'euro.
+  // R-EXP-2 et R-EXP-5 - Dotation aux amortissements comptables. La base est le
+  // prix de revient diminue de la valeur comptable du terrain, qui ne s'amortit
+  // pas. Sur cette base, deux etalements possibles :
+  //  - PAR COMPOSANTS (le cas de LEON) : chaque composant a sa quote-part et sa
+  //    duree, la dotation decroit par paliers a mesure qu'ils s'eteignent ;
+  //  - LINEAIRE sur une duree unique, repli quand aucune grille n'est retenue.
   const cfgAmort = baremes.amortissement_comptable ?? {};
-  const dotationAnnuelle = (() => {
-    if (exp.dotation_amortissements_eur !== undefined) return exp.dotation_amortissements_eur;
-    const duree = exp.duree_amortissement_ans ?? cfgAmort.duree_defaut_ans;
-    if (!(duree > 0)) return 0;
+  const baseAmortissable = (() => {
     const quotiteTerrain =
       exp.quotite_terrain_non_amortissable ??
       quotiteFoncier(identite.zone_ABC, baremes, 'valeur_comptable_terrain_vefa');
     const terrain = (bilan.chapitres.charge_fonciere?.ttc_lasm_eur ?? 0) * quotiteTerrain;
-    return arrondiEuro(Math.max(0, bilan.total_ttc_module_eur - terrain) / duree);
+    return Math.max(0, bilan.total_ttc_module_eur - terrain);
+  })();
+
+  // Une operation collective et une operation individuelle ne s'amortissent pas
+  // de la meme facon : la maison est presque tout structure, l'immeuble porte
+  // des equipements a duree courte. La grille suit donc la nature du programme.
+  const grilleComposants =
+    exp.composants_amortissement ??
+    cfgAmort.composants?.[exp.nature_batie ?? identite.nature_batie ?? 'collectif'];
+  const dureeSerie = dates.duree_simulation_ans ?? 50;
+  const dotationSerie =
+    exp.dotation_amortissements_par_annee?.length
+      ? exp.dotation_amortissements_par_annee
+      : exp.dotation_amortissements_eur === undefined && grilleComposants?.length
+        ? dotationParComposants(baseAmortissable, grilleComposants, anneeMEL, dureeSerie, {
+            continuer: cfgAmort.continuer_amortissement === true,
+          })
+        : [];
+
+  const dotationAnnuelle = (() => {
+    if (exp.dotation_amortissements_eur !== undefined) return exp.dotation_amortissements_eur;
+    const duree = exp.duree_amortissement_ans ?? cfgAmort.duree_defaut_ans;
+    if (!(duree > 0)) return 0;
+    return arrondiEuro(baseAmortissable / duree);
   })();
   const nbLogements = lots.reduce((s, l) => s + (l.nb_logements ?? 0), 0);
   const shabTotal = lots.reduce((s, l) => s + (l.shab_m2 ?? 0), 0);
@@ -924,6 +948,34 @@ export function calculer(entrees, referentiels) {
   // fait que les activer. Q-27 : le mode foyer remplace les loyers par une
   // redevance forfaitaire indexee.
   const chargesDiverses = resoudreChargesExploitation(exp.charges_diverses, baremes);
+
+  // R-EXP-4 - Impot sur les societes. Le logement social conventionne releve du
+  // service d'interet general et en est exonere ; le logement intermediaire non.
+  // C'est donc une propriete des PRODUITS presents dans le programme, et non un
+  // reglage d'operation : une seule tranche imposable suffit a rendre l'IS du.
+  // La saisie peut trancher elle-meme (exp.soumis_is), le referentiel fournit
+  // toujours le taux, le differe et la liste des charges deductibles.
+  const cfgIS = baremes.impot_societes ?? {};
+  const produitsSoumisIS = new Set(cfgIS.produits_soumis ?? []);
+  const soumisIS =
+    exp.soumis_is ?? loyers.some((l) => produitsSoumisIS.has(l.code_produit));
+
+  // La part fixe deductible se saisit par lot ou globalement (bloc « Part fixe
+  // de la PGE/PGR »). Le moteur ramene les deux a un montant annuel.
+  const partFixeGE = cfgIS.part_fixe_gros_entretien ?? {};
+  const partFixeGEAnnuelle =
+    (exp.is_part_fixe_ge_eur ?? partFixeGE.montant_eur ?? 0) *
+    ((exp.is_part_fixe_ge_assiette ?? partFixeGE.assiette) === 'lot' ? nbLogements : 1);
+
+  // Credits d'impot TFPB des logements intermediaires : un montant, une duree,
+  // a compter de la mise en location (SimTOTAL_IS colonne J).
+  const creditsIS = (exp.is_credits_impot ?? cfgIS.credit_impot_tfpb_lli?.lignes ?? []).flatMap(
+    (c) =>
+      Array.from({ length: c.duree_ans ?? 0 }, (_, k) => ({
+        annee: anneeMEL + k,
+        montant_eur: c.montant_eur ?? 0,
+      })),
+  );
 
   const exploitation = compteExploitation({
     annee_mise_en_location: anneeMEL,
@@ -970,7 +1022,15 @@ export function calculer(entrees, referentiels) {
     // R-EXP-2 : de quoi tenir la vue comptable a cote de la vue tresorerie.
     interets_par_annee: interetsAplatis,
     dotation_amortissements_eur: dotationAnnuelle,
-    dotation_amortissements_par_annee: exp.dotation_amortissements_par_annee ?? [],
+    dotation_amortissements_par_annee: dotationSerie,
+    // R-EXP-4 : l'IS ne s'active que si un produit assujetti est au programme.
+    is_taux: soumisIS ? (exp.is_taux ?? cfgIS.taux ?? 0) : 0,
+    is_duree_differe_ans: exp.is_duree_differe_ans ?? cfgIS.duree_differe_ans ?? 0,
+    is_charges_deductibles: exp.is_charges_deductibles ?? cfgIS.charges_deductibles ?? [],
+    is_credits_impot_par_annee: creditsIS,
+    is_part_fixe_ge_eur: partFixeGEAnnuelle,
+    is_part_fixe_ge_differe_ans:
+      exp.is_part_fixe_ge_differe_ans ?? partFixeGE.duree_differe_ans ?? 0,
     // Trajectoires par poste, issues du referentiel normalise. Une surcharge
     // explicite dans les entrees reste possible pour tester un scenario.
     trajectoires: exp.trajectoires ?? trajectoires.par_poste,

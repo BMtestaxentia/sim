@@ -193,6 +193,11 @@
         "valeur": 0.014,
         "libelle": "PLI / LLI",
         "source": "Taux!C14"
+      },
+      "PAM": {
+        "valeur": 0.006,
+        "libelle": "PAM (rehabilitation)",
+        "source": "Marge de reference des prets a l amelioration, alignee sur le PLUS. A confirmer par le metier (Q-37)."
       }
     }
   },
@@ -211,7 +216,9 @@
       "LIBRE": 0.2,
       "ACCESSION": 0.2,
       "REHAB": 0.1,
-      "FOYER_PLUS": 0.055
+      "FPLUS": 0.055,
+      "FPLAI": 0.055,
+      "FPLS": 0.1
     },
     "taux_reduit_social": 0.055,
     "plus_en_qpv": {
@@ -225,7 +232,8 @@
         0,
         0.2
       ]
-    }
+    },
+    "taux_reduit_travaux": 0.1
   },
   "constantes_reglementaires": {
     "coefficient_surface_annexes": {
@@ -413,9 +421,130 @@
     "taux_plafond": 0.006
   },
   "amortissement_comptable": {
-    "source": "Presentation CA colonne E (AMORT. COMPTABLES IFRS), valeur calculee hors annexe",
-    "usage": "Dotation annuelle = (prix de revient TTC - valeur comptable du terrain) / duree. Le terrain ne s amortit pas.",
+    "source": "Ecran LEON  Paramétrage des composants  (IFRS), quotes-parts et durees collectif / individuel",
+    "usage": "Dotation annuelle = somme, sur les composants, de (base amortissable x quote-part) / duree. Chaque composant s arrete a sa propre fin de vie : la dotation decroit par paliers, elle n est pas constante.",
+    "base": "Prix de revient TTC diminue de la valeur comptable du terrain, qui ne s amortit pas.",
+    "continuer_amortissement": false,
+    "note_continuer": "Ecran  Continuer amortissement  = NON : un composant arrive en fin de vie n est pas renouvele, sa dotation cesse. A OUI, elle repartirait pour une nouvelle duree.",
+    "reprise_subvention_impact_foncier": false,
     "duree_defaut_ans": 40,
-    "note": "SIMPLIFICATION assumee : LEON amortit PAR COMPOSANTS, chacun sur sa duree (structure, clos-couvert, equipements), et sa dotation arrive dans l annexe deja calculee ailleurs. Un etalement lineaire unique donne la bonne mecanique et le bon ordre de grandeur, pas le chiffre de LEON a l euro. Duree a confirmer par le metier (Q-34)."
+    "note_defaut": "Repli lineaire unique quand aucune grille de composants n est retenue.",
+    "composants": {
+      "collectif": [
+        {
+          "libelle": "Structure",
+          "quote_part": 0.7,
+          "duree_ans": 50
+        },
+        {
+          "libelle": "Menuiseries exterieures",
+          "quote_part": 0.07,
+          "duree_ans": 15
+        },
+        {
+          "libelle": "Chauffage",
+          "quote_part": 0.04,
+          "duree_ans": 20
+        },
+        {
+          "libelle": "Etancheite",
+          "quote_part": 0.1,
+          "duree_ans": 15
+        },
+        {
+          "libelle": "Ravalement",
+          "quote_part": 0.04,
+          "duree_ans": 20
+        },
+        {
+          "libelle": "Electricite",
+          "quote_part": 0.05,
+          "duree_ans": 15
+        },
+        {
+          "libelle": "Plomberie / sanitaires",
+          "quote_part": 0,
+          "duree_ans": 25
+        },
+        {
+          "libelle": "Ascenseurs",
+          "quote_part": 0,
+          "duree_ans": 15
+        }
+      ],
+      "individuel": [
+        {
+          "libelle": "Structure",
+          "quote_part": 0.887,
+          "duree_ans": 50
+        },
+        {
+          "libelle": "Menuiseries exterieures",
+          "quote_part": 0.054,
+          "duree_ans": 15
+        },
+        {
+          "libelle": "Chauffage",
+          "quote_part": 0.032,
+          "duree_ans": 20
+        },
+        {
+          "libelle": "Etancheite",
+          "quote_part": 0,
+          "duree_ans": 15
+        },
+        {
+          "libelle": "Ravalement",
+          "quote_part": 0.027,
+          "duree_ans": 20
+        },
+        {
+          "libelle": "Electricite",
+          "quote_part": 0,
+          "duree_ans": 15
+        },
+        {
+          "libelle": "Plomberie / sanitaires",
+          "quote_part": 0,
+          "duree_ans": 25
+        },
+        {
+          "libelle": "Ascenseurs",
+          "quote_part": 0,
+          "duree_ans": 15
+        }
+      ]
+    }
+  },
+  "impot_societes": {
+    "source": "Ecran LEON  Paramétrage de l impôt sur les sociétés  (ParaGEN!GA28:GE31, SimTOTAL_IS colonnes B a J)",
+    "usage": "IS = base x taux, une fois passe le differe. La base est un resultat FISCAL, plus etroit que le resultat comptable : LEON n y deduit que six lignes.",
+    "taux": 0.25,
+    "duree_differe_ans": 2,
+    "base_negative_reportable": false,
+    "note_report": "Ecran  Credit IS  = NON : une base negative ne cree pas de credit d impot reportable sur les exercices suivants. L IS est simplement nul cette annee-la.",
+    "produits_soumis": [
+      "LOC",
+      "LIBRE"
+    ],
+    "note_produits": "Ecran  Choix des financements  : cases cochees PLI/LLI et LIBRE. Le logement social conventionne releve du service d interet general et en est exonere. La liste est un PARAMETRE, surchargeable par profil - une societe peut assujettir d autres financements.",
+    "charges_deductibles": [
+      "frais_gestion",
+      "tfpb",
+      "part_fixe_gros_entretien",
+      "interets",
+      "dotation_amortissements"
+    ],
+    "note_base": "Colonnes SimTOTAL_IS B a G : loyers nets, moins frais de gestion, impots fonciers, PART FIXE du gros entretien, interets d emprunts et amortissement technique. N y figurent NI les autres depenses, NI l assurance, NI les frais de structure - la base fiscale est plus etroite que le resultat comptable.",
+    "part_fixe_gros_entretien": {
+      "montant_eur": 0,
+      "assiette": "lot",
+      "duree_differe_ans": 0,
+      "note": "Bloc  Part fixe de la PGE/PGR  de l ecran IS : seule cette part forfaitaire est deductible de la base, et non la PGE entiere. Assiette  lot  (montant par logement) ou  global . Zero par defaut, comme sur la matrice HAB."
+    },
+    "credit_impot_tfpb_lli": {
+      "lignes": [],
+      "note": "Bloc  Credit d impot TFPB LLI  : couples {montant_eur, duree_ans} venant en deduction de l impot du (SimTOTAL_IS colonne J)."
+    }
   }
 }

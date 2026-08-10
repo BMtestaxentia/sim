@@ -178,3 +178,54 @@ describe('R-LOYER - baremes et loyer pratique', () => {
     expect(() => loyerMaxZone('PLS', { zone_ABC: 'Z9' }, baremes)).toThrow(/zone/i);
   });
 });
+
+// --- Foyers et rehabilitation -------------------------------------------
+describe('Foyers : le coefficient de structure prend le facteur 38', () => {
+  const p = { su_m2: 1_200, nb_logements: 30, zones: { zone_123: 2, zone_ABC: 'B1' } };
+
+  it('un foyer PLUS ne se calcule pas comme un PLUS ordinaire', () => {
+    const ordinaire = loyerProduit({ code_produit: 'PLUS', ...p }, baremes);
+    const foyer = loyerProduit({ code_produit: 'FPLUS', ...p }, baremes);
+    // Meme bareme de base, mais un CS different : le facteur foyers est 38.
+    expect(foyer.loyer_base_eur_m2).toBe(ordinaire.loyer_base_eur_m2);
+    expect(foyer.cs).not.toBe(ordinaire.cs);
+    expect(foyer.cs).toBe(
+      coefficientStructure({ nb_logements: 30, su_m2: 1_200, foyer: true }, baremes),
+    );
+  });
+
+  it('le foyer se declare par tranche, sans basculer toute l operation', () => {
+    // Une tranche FPLAI et une tranche PLAI dans le meme programme gardent
+    // chacune son coefficient : c'est le produit qui porte l'information.
+    expect(loyerProduit({ code_produit: 'FPLAI', ...p }, baremes).cs).not.toBe(
+      loyerProduit({ code_produit: 'PLAI', ...p }, baremes).cs,
+    );
+  });
+});
+
+describe('Rehabilitation : plafond conventionnel, hors bareme de zone', () => {
+  const p = { su_m2: 1_000, nb_logements: 20, zones: { zone_123: 2, zone_ABC: 'B1' } };
+
+  it('retient le plafond de la convention et non celui du neuf', () => {
+    const l = loyerProduit({ code_produit: 'REHAB', ...p, loyer_plafond_convention_eur_m2: 5.9 }, baremes);
+    expect(l.loyer_max_base_eur_m2).toBe(5.9);
+    expect(l.loyer_pratique_eur_m2).toBe(5.9);
+    expect(l.cs).toBe(1); // aucun coefficient de structure ne s'y applique
+    expect(l.loyer_annuel_eur).toBe(12 * 1_000 * 5.9);
+  });
+
+  it('alerte quand le plafond conventionnel manque', () => {
+    const l = loyerProduit({ code_produit: 'REHAB', ...p }, baremes);
+    expect(controlesLoyer(l, 'REHAB')).toHaveLength(1);
+    expect(controlesLoyer(l, 'REHAB')[0]).toMatch(/conventionnel non renseigne/);
+  });
+
+  it('laisse forcer un loyer de sortie sous le plafond', () => {
+    const l = loyerProduit(
+      { code_produit: 'REHAB', ...p, loyer_plafond_convention_eur_m2: 5.9, loyer_sortie_force: 5.5 },
+      baremes,
+    );
+    expect(l.loyer_pratique_eur_m2).toBe(5.5);
+    expect(controlesLoyer(l, 'REHAB')).toHaveLength(0);
+  });
+});

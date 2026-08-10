@@ -115,7 +115,7 @@ export const PRODUITS = {
   },
   LOC: {
     code: 'LOC',
-    libelle: 'LLI (LOC)',
+    libelle: 'LLI',
     cle_bareme_loyer: 'PLI',
     zonage: 'ABC',
     cle_lasm: 'taux_reduit_simulation',

@@ -529,10 +529,11 @@
             <section class="bloc para-section">
               <h3>Hypothèses d'exploitation</h3>
               <p class="para-source">
-                Ces trois hypothèses pilotent le compte d'exploitation, donc l'année de
+                Ces hypothèses pilotent le compte d'exploitation, donc l'année de
                 reconstitution des fonds propres. Elles appartiennent à la simulation, pas au
                 profil : changer de profil ne les emporte pas. L'indexation annuelle, elle,
-                vient bien du profil.
+                vient bien du profil, comme le montant de taxe foncière de référence — laisser
+                le champ vide le reprend. La durée d'exonération, elle, tient au produit.
               </p>
               <div class="champs">
                 <label class="champ">
@@ -546,6 +547,16 @@
                 <label class="champ">
                   <span>Gros entretien (€/m² SHAB/an)</span>
                   <input type="number" step="0.1" min="0" data-champ="exploitation.gros_entretien_eur_m2" data-type="nombre" />
+                </label>
+                <!-- La TFPB depend de la COMMUNE : son taux d'imposition n'est
+                     pas le meme d'une operation a l'autre. Elle a donc sa place
+                     ici, en surcharge de simulation, a cote du montant de
+                     reference qui reste au referentiel. Laisser vide reprend ce
+                     dernier - c'est ce que dit le filigrane. -->
+                <label class="champ">
+                  <span>Taxe foncière (€/logement/an)</span>
+                  <input type="number" step="1" min="0" id="tfpb-simulation"
+                    data-champ="exploitation.tfpb_par_logement_eur" data-type="nombre" />
                 </label>
               </div>
 

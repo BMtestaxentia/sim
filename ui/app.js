@@ -2280,10 +2280,16 @@ function rendreFinancement(r) {
     const montant = lot.reduce((s, a) => s + a.montant_eur, 0);
     if (montant > 0) ressources.push({ libelle, montant, couleur });
   };
-  const principaux = p.amortissements.filter((a) => a.principal);
-  cumulerPrets('Prêt principal', principaux, COULEURS.pret_construction);
+  // Pluriel dans les deux cas : ce sont des POSTES de la legende, pas des prets.
+  // Un intitule qui change de nombre selon le contenu de la ligne se lit comme
+  // un decompte, et on se met a chercher combien de prets se cachent derriere.
   cumulerPrets(
-    p.amortissements.length - principaux.length > 1 ? 'Autres prêts' : 'Autre prêt',
+    'Prêts principaux',
+    p.amortissements.filter((a) => a.principal),
+    COULEURS.pret_construction,
+  );
+  cumulerPrets(
+    'Autres prêts',
     p.amortissements.filter((a) => !a.principal),
     COULEURS.pret_autre,
   );
@@ -2521,6 +2527,21 @@ const dateLisible = (iso) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? '');
   return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso ?? '');
 };
+
+/**
+ * Montant de TFPB du referentiel, en filigrane du champ de simulation. Sans
+ * lui, un champ vide laisserait croire a une taxe nulle alors que le compte en
+ * porte bien une - c'est exactement la question qui s'est posee.
+ */
+function rendreFiligraneTFPB() {
+  const champ = /** @type {HTMLInputElement|null} */ (document.getElementById('tfpb-simulation'));
+  if (!champ) return;
+  const ref = referentiels.baremes.constantes_reglementaires?.tfpb?.montant_par_logement_eur;
+  champ.placeholder = nul(ref) ? '' : String(ref);
+  champ.title = nul(ref)
+    ? ''
+    : `Référentiel : ${eur(ref)} par logement et par an. Laisser vide pour le reprendre.`;
+}
 
 function rendreCalendrier(r) {
   const c = r.calendrier;
@@ -3446,6 +3467,7 @@ function recalculer() {
     erreur.hidden = true;
     $('#version-moteur').textContent = `v${r.version_moteur}`;
     rendreCalendrier(r);
+    rendreFiligraneTFPB();
     rendreValeurs(r);
     pastille.textContent = 'à jour';
     pastille.className = 'pastille pastille--ok';
@@ -3863,7 +3885,7 @@ document.addEventListener('keydown', (ev) => {
  */
 function valeurCollee(cible, texte) {
   if (cible.tagName === 'SELECT') {
-    // On accepte le code (« PLS ») comme le libelle affiche (« LLI (LOC) ») :
+    // On accepte le code (« PLS ») comme le libelle affiche (« LLI ») :
     // un tableur exporte l'un ou l'autre selon qui l'a rempli.
     const norme = sansAccent(texte);
     const opt = [.../** @type {HTMLSelectElement} */ (cible).options].find(

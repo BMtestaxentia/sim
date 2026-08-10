@@ -383,12 +383,14 @@
               <div class="balance__libelle">Emplois</div>
               <div class="barre" id="barre-emplois"></div>
               <div class="balance__total" id="total-emplois">-</div>
-              <div class="legende" id="legende-emplois"></div>
+              <div class="balance__precision" id="precision-emplois"></div>
+              <div class="legende legende--detail" id="legende-emplois"></div>
             </div>
             <div class="balance__colonne">
               <div class="balance__libelle">Ressources</div>
               <div class="barre" id="barre-ressources"></div>
               <div class="balance__total" id="total-ressources">-</div>
+              <div class="balance__precision" id="precision-ressources"></div>
               <div class="legende" id="legende-ressources"></div>
             </div>
           </div>
@@ -400,43 +402,11 @@
         </section>
       </div>
 
-      <div class="colonnes">
-        <section class="bloc">
-          <h2 class="bloc__titre">Emplois</h2>
-          <div class="table-defilante">
-            <table class="tableau" id="table-emplois">
-              <thead>
-                <tr>
-                  <th>Chapitre</th>
-                  <th class="num">HT</th>
-                  <th class="num">TTC / LASM</th>
-                  <th class="num">Part</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-              <tfoot></tfoot>
-            </table>
-          </div>
-        </section>
-
-        <section class="bloc">
-          <h2 class="bloc__titre">Ressources</h2>
-          <div class="table-defilante">
-            <table class="tableau" id="table-ressources">
-              <thead>
-                <tr>
-                  <th>Nature</th>
-                  <th class="num">Montant</th>
-                  <th class="num">Part</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-              <tfoot></tfoot>
-            </table>
-          </div>
-        </section>
-      </div>
-
+      <!-- Les tables « Emplois » et « Ressources » ont ete retirees : elles
+           redisaient ligne pour ligne ce que porte deja la balance ci-dessus,
+           qui le montre en plus. Ce qu'elles seules donnaient - le HT par
+           chapitre, le prix de revient par logement et au m2, le reste a
+           couvrir par pret CDC - a rejoint la balance. -->
 
       <section class="bloc">
         <h2 class="bloc__titre">Prêts</h2>

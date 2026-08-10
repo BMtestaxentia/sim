@@ -552,11 +552,9 @@ export function calculer(entrees, referentiels) {
           montant_calcule: true,
           derive: true,
         });
-        alertes.push(
-          `PLS plafonne a 55 % du prix de revient de sa tranche : ${scission.cpls_eur} EUR ` +
-            'basculent en CPLS. Son taux et sa duree reprennent ceux du PLS tant qu ils ne sont ' +
-            'pas saisis - a confirmer, la calculette CDC ne donne pas de tarif au CPLS.',
-        );
+        // Pas d'alerte : la ligne CPLS apparait d'elle-meme dans le plan de
+        // financement, avec son origine en jeton. Le dire deux fois faisait
+        // passer une mecanique normale pour un incident.
       } else if (scission.sous_plancher && totalPLS > 0) {
         alertes.push(
           `PLS a ${(scission.part_pls * 100).toFixed(1)} % du prix de revient de sa tranche, ` +

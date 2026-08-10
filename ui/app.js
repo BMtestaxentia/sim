@@ -613,10 +613,6 @@ function rendreStructureTranches() {
                  meme grammaire que les prets, et cinq lignes de tableau pour
                  cinq nombres pesaient plus que ce qu'elles montraient. -->
             <div class="jetons jetons--chaine" data-jetons-loyer="${code}"></div>
-            <p class="aide">
-              ⚙ La majoration s'applique au loyer plafond après coefficient de structure
-              (R-LOYER-5). Un loyer forcé court-circuite tout le calcul.
-            </p>
           </section>
 
           <section class="bloc bloc--tranche">
@@ -705,10 +701,6 @@ function rendreStructureTranches() {
                 : '<p class="aide">Aucune subvention sur cette tranche.</p>'
             }
           </div>
-          <p class="aide">
-            ⚙ Toute subvention réduit le droit à prêt foncier CDC, au prorata de son poids
-            dans le prix de revient (R-FIN-2). Les prêts de la tranche s'ajustent en conséquence.
-          </p>
         </section>
 
         <section class="bloc">
@@ -1693,41 +1685,46 @@ function rendreFinancement(r) {
   $('#total-ressources').textContent = eur(totalRessources);
   // Une legende PAR COTE, et le poids de chaque poste dans SON total : la part
   // d'un pret se lit dans les ressources, pas dans le prix de revient.
-  const legende = (segments, total) =>
-    segments
-      .filter((s) => s.montant > 0)
-      .map(
-        (s) => `<div class="legende__item"><span class="legende__puce" style="background:${s.couleur}"></span>
-        <span>${att(s.libelle)}</span><span class="legende__montant">${eur(s.montant)}</span>
+  //
+  // Le cote emplois porte DEUX montants par chapitre, le HT et le TTC apres
+  // livraison a soi-meme : c'est l'ecart entre les deux qui fait la TVA de
+  // l'operation, et le lire ailleurs obligeait a tenir deux listes identiques
+  // a l'ecran. Une ligne d'entete nomme les colonnes, sans quoi deux nombres
+  // cote a cote ne se distinguent pas.
+  const legende = (segments, total, avecHT = false) => {
+    const entete = avecHT
+      ? `<div class="legende__item legende__item--entete" aria-hidden="true">
+        <span></span><span></span><span>HT</span><span>TTC / LASM</span><span>Part</span></div>`
+      : '';
+    return (
+      entete +
+      segments
+        .filter((s) => s.montant > 0)
+        .map(
+          (s) => `<div class="legende__item"><span class="legende__puce" style="background:${s.couleur}"></span>
+        <span class="legende__libelle">${att(s.libelle)}</span>
+        ${avecHT ? `<span class="legende__ht">${nul(s.ht) ? '-' : eur(s.ht)}</span>` : ''}
+        <span class="legende__montant">${eur(s.montant)}</span>
         <span class="legende__part">${total ? pct(s.montant / total, 1) : '-'}</span></div>`,
-      )
-      .join('');
-  $('#legende-emplois').innerHTML = legende(emplois, totalEmplois);
+        )
+        .join('')
+    );
+  };
+  $('#legende-emplois').innerHTML = legende(emplois, totalEmplois, true);
   $('#legende-ressources').innerHTML = legende(ressources, totalRessources);
 
-  const part = (m, t) => (t ? pct(m / t, 1) : '-');
-
-  const tE = $('#table-emplois');
-  tE.querySelector('tbody').innerHTML = emplois
-    .map((e) => `<tr><td>${att(e.libelle)}</td><td class="num">${eur(e.ht)}</td>
-      <td class="num">${eur(e.montant)}</td><td class="num">${part(e.montant, totalEmplois)}</td></tr>`)
-    .join('');
-  tE.querySelector('tfoot').innerHTML = `<tr>
-      <td class="libelle">Total</td><td class="num">${eur(r.bilan.total_ht_eur)}</td>
-      <td class="num">${eur(totalEmplois)}</td><td class="num">100 %</td></tr>
-    <tr><td colspan="4" style="font-weight:400;color:var(--encre-doux);border-top:none">
-      ${eur(ind.prix_revient_par_logement_eur)} / logement · ${eur(ind.prix_revient_par_m2_shab_eur)} / m² SHAB</td></tr>`;
-
-  const tR = $('#table-ressources');
-  tR.querySelector('tbody').innerHTML = ressources
-    .map((s) => `<tr><td>${att(s.libelle)}</td><td class="num">${eur(s.montant)}</td>
-      <td class="num">${part(s.montant, totalRessources)}</td></tr>`)
-    .join('');
-  tR.querySelector('tfoot').innerHTML = `<tr>
-      <td class="libelle">Total ressources</td><td class="num">${eur(totalRessources)}</td><td class="num">100 %</td></tr>
-    <tr><td class="libelle">Restant à couvrir par prêt CDC</td>
-      <td class="num">${eur(r.financement.solde_a_financer_eur)}</td>
-      <td class="num" style="font-weight:400;color:var(--encre-doux)">hors prêts CDC</td></tr>`;
+  // Sous chaque total, ce que la barre ne peut pas montrer : le total HT et les
+  // ratios d'un cote, le besoin de financement restant de l'autre.
+  $('#precision-emplois').innerHTML =
+    `${eur(r.bilan.total_ht_eur)} HT · ${eur(ind.prix_revient_par_logement_eur)} / logement · ` +
+    `${eur(ind.prix_revient_par_m2_shab_eur)} / m² SHAB`;
+  // Le besoin en prets CDC est deja une tuile d'indicateur : le redire ici
+  // n'apprendrait rien. Ce que les deux totaux ne disent pas, c'est s'ils sont
+  // egaux - a sept chiffres, l'oeil ne le voit pas. C'est donc le controle
+  // d'equilibre qui prend la place.
+  $('#precision-ressources').innerHTML = eq.ecart_eur
+    ? `<span class="precision--alerte">Écart de ${eur(eq.ecart_eur)} avec les emplois</span>`
+    : `<span class="discret">Plan équilibré</span>`;
 
   const corps = $('#table-prets').querySelector('tbody');
   const pied = $('#table-prets').querySelector('tfoot');
@@ -1758,11 +1755,12 @@ function rendreFinancement(r) {
       `échéance. Profil ${r.profil_trajectoires ?? 'non renseigné'}.`
     : '';
 
+  // Le prix de revient a quitte ces tuiles : la balance le porte deja, en gros
+  // et avec ses ratios. Le RMO aussi, retire a la demande de Bastien.
   $('#indicateurs').innerHTML = [
-    { l: 'Prix de revient', v: eur(ind.prix_revient_ttc_eur), d: `${eur(ind.prix_revient_par_logement_eur)} / logement` },
     { l: 'Coût au m² SHAB', v: eur(ind.prix_revient_par_m2_shab_eur), d: `${nb(ind.shab_m2)} m² SHAB` },
     { l: 'Surface utile', v: `${nb(ind.su_m2)} m²`, d: `${nb(ind.nb_logements)} logements` },
-    { l: 'Loyers annuels', v: eur(ind.loyers_annuels_eur), d: `RMO ${pct(ind.rmo)}` },
+    { l: 'Loyers annuels', v: eur(ind.loyers_annuels_eur), d: `${nb(ind.nb_logements)} logements loués` },
     { l: 'Fonds propres', v: pct(ind.taux_fonds_propres), d: eur(ind.fonds_propres_eur) },
     { l: 'Prêts CDC', v: pct(eq.ratio_prets_cdc), d: eur(r.financement.total_prets_cdc_eur) },
     {
@@ -1881,6 +1879,7 @@ function viderRestitution(message) {
     <span class="bandeau__detail">${att(message)}</span>`;
   for (const sel of [
     '#barre-emplois', '#barre-ressources', '#legende-emplois', '#legende-ressources',
+    '#precision-emplois', '#precision-ressources',
     '#indicateurs', '#controles',
     '#messages-moteur', '#tuiles-exploitation', '#graphe-exploitation', '#postes-absents',
   ]) {
@@ -1894,10 +1893,8 @@ function viderRestitution(message) {
   $('#aide-exploitation').textContent = '';
   $('#total-emplois').textContent = '-';
   $('#total-ressources').textContent = '-';
-  for (const id of ['#table-emplois', '#table-ressources', '#table-prets']) {
-    $(id).querySelector('tbody').innerHTML = '';
-    $(id).querySelector('tfoot').innerHTML = '';
-  }
+  $('#table-prets').querySelector('tbody').innerHTML = '';
+  $('#table-prets').querySelector('tfoot').innerHTML = '';
   $('#aide-taux').textContent = '';
 }
 

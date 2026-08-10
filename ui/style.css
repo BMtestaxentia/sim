@@ -699,6 +699,28 @@ td.calc { text-align: right; }
   font-variant-numeric: tabular-nums; color: var(--text-tertiary);
   min-width: 46px; text-align: right;
 }
+/* Cote emplois : une colonne de plus pour le HT, le TTC restant la valeur de
+   reference. Le libelle se tronque plutot que de pousser les nombres hors du
+   bloc - c'est la colonne la plus elastique des cinq. */
+.legende--detail .legende__item { grid-template-columns: 9px 1fr auto auto auto; }
+.legende__libelle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legende__ht {
+  font-variant-numeric: tabular-nums; color: var(--text-secondary);
+  min-width: 86px; text-align: right;
+}
+.legende--detail .legende__montant { min-width: 92px; text-align: right; }
+.legende__item--entete {
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-tertiary);
+  padding-bottom: 3px; border-bottom: 1px solid var(--border-color);
+  margin-bottom: 2px;
+}
+.legende__item--entete > span:nth-child(n + 3) { text-align: right; }
+
+/* Ce que la barre ne sait pas dire : totaux HT, ratios, reste a financer. */
+.balance__precision { font-size: 11px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.balance__precision .discret { color: var(--text-tertiary); opacity: 0.75; }
+.precision--alerte { color: var(--danger-text); font-weight: 650; }
 
 /* ============================================================ GRAPHE */
 

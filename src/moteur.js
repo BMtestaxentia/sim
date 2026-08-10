@@ -389,6 +389,12 @@ export function calculer(entrees, referentiels) {
    * @type {Record<string, {subventions_eur: number, fonds_propres_eur: number}>}
    */
   const ressourcesParTranche = {};
+  /**
+   * Subventions ligne par ligne, chacune ventilee sur les tranches. Une seule
+   * source pour le besoin de financement et pour la restitution.
+   * @type {Array<{libelle: string, montant_eur: number, affectation: string|null, par_tranche: Record<string, number>}>}
+   */
+  const detailSubventions = [];
   {
     const surcharges = entrees.caracteristiques_prets_defaut ?? {};
     const codesFinances = codesPresents.length ? codesPresents : [];
@@ -422,21 +428,32 @@ export function calculer(entrees, referentiels) {
     // au prorata de surface utile, comme le prix de revient. La rattacher a
     // aucune tranche la ferait disparaitre du besoin, et les prets couvriraient
     // un montant deja finance.
-    /** @type {Record<string, number>} */
-    const subAffectees = {};
-    let subNonAffectees = ssf?.subvention_eur ?? 0;
+    // Le detail est etabli UNE fois et sert deux fois : a chiffrer le besoin de
+    // chaque tranche, et a le restituer ligne par ligne. Deux parcours de la
+    // meme liste finiraient par ventiler differemment.
+    /** @type {Array<{libelle: string, montant_eur: number, affectation: string|null, par_tranche: Record<string, number>}>} */
+    const lignesSub = [];
+    const ventiler = (libelle, montant, affectation) => {
+      const cible = affectation && codesFinances.includes(affectation) ? affectation : null;
+      /** @type {Record<string, number>} */
+      const parTranche = {};
+      for (const c of codesFinances) {
+        parTranche[c] = cible ? (c === cible ? montant : 0) : (quotesParts[c] ?? 0) * montant;
+      }
+      lignesSub.push({ libelle, montant_eur: montant, affectation: cible, par_tranche: parTranche });
+    };
     for (const s of entrees.subventions ?? []) {
       const m = Number(s.montant_eur) || 0;
-      const c = s.affectation;
-      if (c && codesFinances.includes(c)) subAffectees[c] = (subAffectees[c] ?? 0) + m;
-      else subNonAffectees += m;
+      if (m) ventiler(s.libelle ?? 'Subvention', m, s.affectation);
     }
+    if (ssf?.subvention_eur) ventiler('Surcharge foncière', ssf.subvention_eur, null);
+    detailSubventions.push(...lignesSub);
 
     /** @type {Record<string, number>} */
     const besoinBrut = {};
     for (const c of codesFinances) {
       const pr = bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0;
-      const sub = (subAffectees[c] ?? 0) + (quotesParts[c] ?? 0) * subNonAffectees;
+      const sub = lignesSub.reduce((s, l) => s + (l.par_tranche[c] ?? 0), 0);
       const fp = fpParProduit ? (Number(fpParProduit[c]) || 0) : (quotesParts[c] ?? 0) * fondsPropres;
       // Memorise pour la restitution par tranche : la ventilation des ressources
       // est une regle du moteur (une subvention non affectee profite a tous, au
@@ -742,6 +759,16 @@ export function calculer(entrees, referentiels) {
       ),
       prix_revient_ttc_eur: t.total_ttc_module_eur,
       part_su: t.part_su,
+      // Le detail ne retient que les lignes qui rapportent quelque chose a
+      // cette tranche : une subvention flechee ailleurs n'a rien a y faire.
+      subventions: detailSubventions
+        .filter((l) => (l.par_tranche[code] ?? 0) > 0)
+        .map((l) => ({
+          libelle: l.libelle,
+          montant_eur: arrondiEuro(l.par_tranche[code]),
+          montant_total_eur: l.montant_eur,
+          ventilee: l.affectation === null,
+        })),
       subventions_eur: res.subventions_eur,
       fonds_propres_eur: res.fonds_propres_eur,
       prets,
@@ -1029,6 +1056,9 @@ export function calculer(entrees, referentiels) {
       // marge.
       livret_a_reference: laOrigine,
       marges_prets: margesPrets,
+      // Subventions ligne par ligne, avec leur ventilation : la restitution en
+      // a besoin, et l'operation entiere se lit comme une tranche de plus.
+      subventions_detail: detailSubventions,
       prefinancement: prefi,
       total_prets_eur: totalPrets,
       total_prets_cdc_eur: totalPretsCDC,

@@ -430,6 +430,29 @@ td.calc { text-align: right; }
 .bascule__option:hover { color: var(--text-primary); }
 .bascule__option[aria-pressed='true'] { background: var(--info-bg); color: var(--info-text); }
 
+/* Liste des subventions du plan de financement : une ligne par subvention,
+   son montant sur ce perimetre, et son poids dans le prix de revient. */
+.liste--sub { gap: 2px; }
+.ligne--sub {
+  display: grid; grid-template-columns: 1fr auto 46px; gap: 2px 10px;
+  align-items: baseline; padding: 6px 9px;
+  border-radius: var(--radius-sm); background: var(--bg-secondary);
+}
+.sub__libelle { font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
+.sub__montant { font-variant-numeric: tabular-nums; font-weight: 650; }
+.sub__part { font-variant-numeric: tabular-nums; color: var(--text-tertiary); text-align: right; font-size: 11.5px; }
+/* L'origine passe sous le libelle : elle explique le montant, elle ne le
+   concurrence pas. */
+.sub__origine { grid-column: 1 / -1; font-size: 10.5px; color: var(--text-tertiary); }
+.sub__total {
+  display: grid; grid-template-columns: 1fr auto 46px; gap: 10px;
+  padding: 7px 9px 0; margin-top: 4px; border-top: 1px solid var(--border-color);
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+.sub__total > span:nth-child(2) { font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.sub__total > span:nth-child(3) { text-align: right; color: var(--text-tertiary); }
+
 /* Selecteur de perimetre du plan de financement. L'option active d'une TRANCHE
    prend la couleur de cette tranche, la meme que son onglet et ses lignes de
    pret : on sait de quel produit on lit le plan avant d'avoir lu le libelle. */
@@ -1553,6 +1576,11 @@ span.ressource__libelle {
            chapitre, le prix de revient par logement et au m2, le reste a
            couvrir par pret CDC - a rejoint la balance. -->
 
+      <!-- Deuxieme rangee, sur la meme grille que la premiere : les prets sous
+           l'equilibre qu'ils bouclent, les subventions sous les indicateurs.
+           Une table de prets etalee sur toute la largeur laissait ses neuf
+           colonnes flotter et la colonne de droite vide. -->
+      <div class="colonnes colonnes--balance">
       <section class="bloc">
         <h2 class="bloc__titre">Prêts</h2>
         <div class="table-defilante">
@@ -1576,6 +1604,12 @@ span.ressource__libelle {
         </div>
         <p class="aide" id="aide-taux"></p>
       </section>
+
+        <section class="bloc">
+          <h2 class="bloc__titre">Subventions</h2>
+          <div id="liste-subventions"></div>
+        </section>
+      </div>
 
       <section class="bloc">
         <h2 class="bloc__titre">Contrôles</h2>
@@ -5014,6 +5048,12 @@ function calculer(entrees, referentiels) {
    * @type {Record<string, {subventions_eur: number, fonds_propres_eur: number}>}
    */
   const ressourcesParTranche = {};
+  /**
+   * Subventions ligne par ligne, chacune ventilee sur les tranches. Une seule
+   * source pour le besoin de financement et pour la restitution.
+   * @type {Array<{libelle: string, montant_eur: number, affectation: string|null, par_tranche: Record<string, number>}>}
+   */
+  const detailSubventions = [];
   {
     const surcharges = entrees.caracteristiques_prets_defaut ?? {};
     const codesFinances = codesPresents.length ? codesPresents : [];
@@ -5047,21 +5087,32 @@ function calculer(entrees, referentiels) {
     // au prorata de surface utile, comme le prix de revient. La rattacher a
     // aucune tranche la ferait disparaitre du besoin, et les prets couvriraient
     // un montant deja finance.
-    /** @type {Record<string, number>} */
-    const subAffectees = {};
-    let subNonAffectees = ssf?.subvention_eur ?? 0;
+    // Le detail est etabli UNE fois et sert deux fois : a chiffrer le besoin de
+    // chaque tranche, et a le restituer ligne par ligne. Deux parcours de la
+    // meme liste finiraient par ventiler differemment.
+    /** @type {Array<{libelle: string, montant_eur: number, affectation: string|null, par_tranche: Record<string, number>}>} */
+    const lignesSub = [];
+    const ventiler = (libelle, montant, affectation) => {
+      const cible = affectation && codesFinances.includes(affectation) ? affectation : null;
+      /** @type {Record<string, number>} */
+      const parTranche = {};
+      for (const c of codesFinances) {
+        parTranche[c] = cible ? (c === cible ? montant : 0) : (quotesParts[c] ?? 0) * montant;
+      }
+      lignesSub.push({ libelle, montant_eur: montant, affectation: cible, par_tranche: parTranche });
+    };
     for (const s of entrees.subventions ?? []) {
       const m = Number(s.montant_eur) || 0;
-      const c = s.affectation;
-      if (c && codesFinances.includes(c)) subAffectees[c] = (subAffectees[c] ?? 0) + m;
-      else subNonAffectees += m;
+      if (m) ventiler(s.libelle ?? 'Subvention', m, s.affectation);
     }
+    if (ssf?.subvention_eur) ventiler('Surcharge foncière', ssf.subvention_eur, null);
+    detailSubventions.push(...lignesSub);
 
     /** @type {Record<string, number>} */
     const besoinBrut = {};
     for (const c of codesFinances) {
       const pr = bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0;
-      const sub = (subAffectees[c] ?? 0) + (quotesParts[c] ?? 0) * subNonAffectees;
+      const sub = lignesSub.reduce((s, l) => s + (l.par_tranche[c] ?? 0), 0);
       const fp = fpParProduit ? (Number(fpParProduit[c]) || 0) : (quotesParts[c] ?? 0) * fondsPropres;
       // Memorise pour la restitution par tranche : la ventilation des ressources
       // est une regle du moteur (une subvention non affectee profite a tous, au
@@ -5367,6 +5418,16 @@ function calculer(entrees, referentiels) {
       ),
       prix_revient_ttc_eur: t.total_ttc_module_eur,
       part_su: t.part_su,
+      // Le detail ne retient que les lignes qui rapportent quelque chose a
+      // cette tranche : une subvention flechee ailleurs n'a rien a y faire.
+      subventions: detailSubventions
+        .filter((l) => (l.par_tranche[code] ?? 0) > 0)
+        .map((l) => ({
+          libelle: l.libelle,
+          montant_eur: arrondiEuro(l.par_tranche[code]),
+          montant_total_eur: l.montant_eur,
+          ventilee: l.affectation === null,
+        })),
       subventions_eur: res.subventions_eur,
       fonds_propres_eur: res.fonds_propres_eur,
       prets,
@@ -5654,6 +5715,9 @@ function calculer(entrees, referentiels) {
       // marge.
       livret_a_reference: laOrigine,
       marges_prets: margesPrets,
+      // Subventions ligne par ligne, avec leur ventilation : la restitution en
+      // a besoin, et l'operation entiere se lit comme une tranche de plus.
+      subventions_detail: detailSubventions,
       prefinancement: prefi,
       total_prets_eur: totalPrets,
       total_prets_cdc_eur: totalPretsCDC,
@@ -7524,6 +7588,15 @@ function perimetreFinancement(r) {
       prix_revient_par_logement_eur: ind.prix_revient_par_logement_eur,
       prix_revient_par_m2_shab_eur: ind.prix_revient_par_m2_shab_eur,
       subventions_eur: ind.subventions_eur,
+      // En consolide, chaque subvention compte pour son montant entier : c'est
+      // la ventilation qui n'a pas lieu d'etre, pas la ligne.
+      subventions: (r.financement.subventions_detail ?? []).map((l) => ({
+        libelle: l.libelle,
+        montant_eur: l.montant_eur,
+        montant_total_eur: l.montant_eur,
+        affectation: l.affectation,
+        ventilee: false,
+      })),
       fonds_propres_eur: ind.fonds_propres_eur,
       taux_fonds_propres: ind.taux_fonds_propres,
       amortissements: r.amortissements,
@@ -7561,6 +7634,7 @@ function perimetreFinancement(r) {
     prix_revient_par_logement_eur: l.nb_logements ? Math.round(pr / l.nb_logements) : null,
     prix_revient_par_m2_shab_eur: l.shab_m2 ? Math.round(pr / l.shab_m2) : null,
     subventions_eur: t.subventions_eur ?? 0,
+    subventions: t.subventions ?? [],
     fonds_propres_eur: t.fonds_propres_eur ?? 0,
     taux_fonds_propres: pr ? (t.fonds_propres_eur ?? 0) / pr : 0,
     amortissements,
@@ -7682,6 +7756,31 @@ function rendreFinancement(r) {
     pied.innerHTML = `<tr><td class="libelle">Total</td>
       <td class="num">${eur(p.total_prets_eur)}</td><td colspan="7"></td></tr>`;
   }
+
+  // Subventions ligne par ligne, avec leur poids dans le prix de revient du
+  // perimetre affiche. Une ligne VENTILEE porte aussi son montant d'origine :
+  // sans lui, on lirait « Agglomération 20 000 € » sans savoir que la
+  // subvention en vaut 30 000 dont deux tiers pour une autre tranche.
+  $('#liste-subventions').innerHTML = p.subventions.length
+    ? `<div class="liste liste--sub">${p.subventions
+        .map(
+          (s) => `<div class="ligne ligne--sub">
+        <span class="sub__libelle">${att(s.libelle)}</span>
+        <span class="sub__montant">${eur(s.montant_eur)}</span>
+        <span class="sub__part">${p.total_emplois ? pct(s.montant_eur / p.total_emplois, 1) : '-'}</span>
+        ${
+          s.ventilee
+            ? `<span class="sub__origine">ventilée · ${eur(s.montant_total_eur)} au total</span>`
+            : s.affectation
+              ? `<span class="sub__origine">fléchée ${att(libelleProduit(s.affectation))}</span>`
+              : ''
+        }
+      </div>`,
+        )
+        .join('')}</div>
+      <div class="sub__total"><span>Total</span><span>${eur(p.subventions_eur)}</span>
+        <span>${p.total_emplois ? pct(p.subventions_eur / p.total_emplois, 1) : '-'}</span></div>`
+    : '<p class="vide">Aucune subvention sur ce périmètre.</p>';
 
   const ecarts = p.amortissements.filter((a) => !nul(a.taux_saisi) && Math.abs(a.tableau[0].taux - a.taux_saisi) > 1e-9);
   $('#aide-taux').textContent = ecarts.length
@@ -7824,7 +7923,7 @@ function viderRestitution(message) {
     <span class="bandeau__detail">${att(message)}</span>`;
   for (const sel of [
     '#barre-emplois', '#barre-ressources', '#legende-emplois', '#legende-ressources',
-    '#precision-emplois', '#precision-ressources',
+    '#precision-emplois', '#precision-ressources', '#liste-subventions',
     '#indicateurs', '#controles',
     '#messages-moteur', '#tuiles-exploitation', '#graphe-exploitation', '#postes-absents',
   ]) {

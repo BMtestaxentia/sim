@@ -1861,6 +1861,15 @@ function perimetreFinancement(r) {
       prix_revient_par_logement_eur: ind.prix_revient_par_logement_eur,
       prix_revient_par_m2_shab_eur: ind.prix_revient_par_m2_shab_eur,
       subventions_eur: ind.subventions_eur,
+      // En consolide, chaque subvention compte pour son montant entier : c'est
+      // la ventilation qui n'a pas lieu d'etre, pas la ligne.
+      subventions: (r.financement.subventions_detail ?? []).map((l) => ({
+        libelle: l.libelle,
+        montant_eur: l.montant_eur,
+        montant_total_eur: l.montant_eur,
+        affectation: l.affectation,
+        ventilee: false,
+      })),
       fonds_propres_eur: ind.fonds_propres_eur,
       taux_fonds_propres: ind.taux_fonds_propres,
       amortissements: r.amortissements,
@@ -1898,6 +1907,7 @@ function perimetreFinancement(r) {
     prix_revient_par_logement_eur: l.nb_logements ? Math.round(pr / l.nb_logements) : null,
     prix_revient_par_m2_shab_eur: l.shab_m2 ? Math.round(pr / l.shab_m2) : null,
     subventions_eur: t.subventions_eur ?? 0,
+    subventions: t.subventions ?? [],
     fonds_propres_eur: t.fonds_propres_eur ?? 0,
     taux_fonds_propres: pr ? (t.fonds_propres_eur ?? 0) / pr : 0,
     amortissements,
@@ -2019,6 +2029,31 @@ function rendreFinancement(r) {
     pied.innerHTML = `<tr><td class="libelle">Total</td>
       <td class="num">${eur(p.total_prets_eur)}</td><td colspan="7"></td></tr>`;
   }
+
+  // Subventions ligne par ligne, avec leur poids dans le prix de revient du
+  // perimetre affiche. Une ligne VENTILEE porte aussi son montant d'origine :
+  // sans lui, on lirait « Agglomération 20 000 € » sans savoir que la
+  // subvention en vaut 30 000 dont deux tiers pour une autre tranche.
+  $('#liste-subventions').innerHTML = p.subventions.length
+    ? `<div class="liste liste--sub">${p.subventions
+        .map(
+          (s) => `<div class="ligne ligne--sub">
+        <span class="sub__libelle">${att(s.libelle)}</span>
+        <span class="sub__montant">${eur(s.montant_eur)}</span>
+        <span class="sub__part">${p.total_emplois ? pct(s.montant_eur / p.total_emplois, 1) : '-'}</span>
+        ${
+          s.ventilee
+            ? `<span class="sub__origine">ventilée · ${eur(s.montant_total_eur)} au total</span>`
+            : s.affectation
+              ? `<span class="sub__origine">fléchée ${att(libelleProduit(s.affectation))}</span>`
+              : ''
+        }
+      </div>`,
+        )
+        .join('')}</div>
+      <div class="sub__total"><span>Total</span><span>${eur(p.subventions_eur)}</span>
+        <span>${p.total_emplois ? pct(p.subventions_eur / p.total_emplois, 1) : '-'}</span></div>`
+    : '<p class="vide">Aucune subvention sur ce périmètre.</p>';
 
   const ecarts = p.amortissements.filter((a) => !nul(a.taux_saisi) && Math.abs(a.tableau[0].taux - a.taux_saisi) > 1e-9);
   $('#aide-taux').textContent = ecarts.length
@@ -2161,7 +2196,7 @@ function viderRestitution(message) {
     <span class="bandeau__detail">${att(message)}</span>`;
   for (const sel of [
     '#barre-emplois', '#barre-ressources', '#legende-emplois', '#legende-ressources',
-    '#precision-emplois', '#precision-ressources',
+    '#precision-emplois', '#precision-ressources', '#liste-subventions',
     '#indicateurs', '#controles',
     '#messages-moteur', '#tuiles-exploitation', '#graphe-exploitation', '#postes-absents',
   ]) {

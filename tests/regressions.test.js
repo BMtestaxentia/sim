@@ -1185,6 +1185,28 @@ describe('R-FIN - plan de financement PAR TRANCHE', () => {
     expect(Math.abs(somme - 80000)).toBeLessThanOrEqual(1);
   });
 
+  it('restitue les subventions ligne par ligne, ventilation comprise', () => {
+    const d = r.financement.subventions_detail;
+    expect(d.map((l) => l.libelle)).toEqual(['Ville', 'Agglo']);
+    // Flechee : tout pour sa tranche, rien pour l'autre.
+    expect(d[0].affectation).toBe('PLAI');
+    expect(d[0].par_tranche).toEqual({ PLS: 0, PLAI: 50000 });
+    // Libre : repartie a la surface utile, et la somme reste le montant d'origine.
+    expect(d[1].affectation).toBe(null);
+    expect(d[1].par_tranche.PLS + d[1].par_tranche.PLAI).toBeCloseTo(30000, 6);
+
+    // Le detail d'une tranche ne retient que ce qui lui revient, et somme a son
+    // total : une ligne de restitution qui ne recolle pas au besoin de
+    // financement signalerait deux ventilations divergentes.
+    for (const [c, t] of Object.entries(r.financement.par_tranche)) {
+      const somme = t.subventions.reduce((s, l) => s + l.montant_eur, 0);
+      expect(Math.abs(somme - t.subventions_eur), `tranche ${c}`).toBeLessThanOrEqual(1);
+    }
+    expect(r.financement.par_tranche.PLS.subventions.map((l) => l.libelle)).toEqual(['Agglo']);
+    expect(r.financement.par_tranche.PLS.subventions[0].ventilee).toBe(true);
+    expect(r.financement.par_tranche.PLS.subventions[0].montant_total_eur).toBe(30000);
+  });
+
   it('n attribue a une tranche que SES prets', () => {
     for (const [c, t] of Object.entries(r.financement.par_tranche)) {
       for (const pret of t.prets) expect(pret.produit, `${c} / ${pret.code}`).toBe(c);

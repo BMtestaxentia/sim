@@ -288,18 +288,29 @@ const COULEURS = new Proxy({}, { get: (_, cle) => couleur(String(cle)) });
  * batiment collectif, pas une sixieme famille.
  */
 const CAT_PAR_PRODUIT = {
-  PLAI: 'var(--prod-plai)',
-  FPLAI: 'var(--prod-plai)',
-  PLUS: 'var(--prod-plus)',
-  PLUS33: 'var(--prod-plus)',
-  FPLUS: 'var(--prod-plus)',
-  PLS: 'var(--prod-pls)',
-  FPLS: 'var(--prod-pls)',
-  LOC: 'var(--prod-lli)',
-  LIBRE: 'var(--prod-libre)',
-  REHAB: 'var(--prod-rehab)',
+  PLAI: 'plai',
+  FPLAI: 'plai',
+  PLUS: 'plus',
+  PLUS33: 'plus',
+  FPLUS: 'plus',
+  PLS: 'pls',
+  FPLS: 'pls',
+  LOC: 'lli',
+  LIBRE: 'libre',
+  REHAB: 'rehab',
 };
-const catProduit = (code) => CAT_PAR_PRODUIT[code] ?? 'var(--prod-autre)';
+
+/**
+ * Deux roles, deux jetons, pour une meme identite :
+ * - `catProduit` est le TRAIT et le TEXTE. Il doit tenir sur le fond de la page,
+ *   donc il s'assombrit en theme clair.
+ * - `catFondProduit` est le FOND. C'est le pastel d'origine, identique dans les
+ *   deux themes : c'est lui qui porte la teinte que l'on reconnait.
+ * Les confondre obligeait a choisir entre une couleur lisible et une couleur
+ * juste ; les separer permet d'avoir les deux.
+ */
+const catProduit = (code) => `var(--prod-${CAT_PAR_PRODUIT[code] ?? 'autre'})`;
+const catFondProduit = (code) => `var(--prod-${CAT_PAR_PRODUIT[code] ?? 'autre'}-fond)`;
 
 /**
  * Libelles de chapitre DERIVES de la nomenclature, jamais recopies : une table
@@ -1240,7 +1251,8 @@ function rendreStructure() {
           // sa colonne au prix de revient et de sa tranche partout ailleurs.
           // Une table de cinquante lots se relit alors par blocs, sans avoir a
           // lire la colonne « Financement » ligne a ligne.
-          ({ lot, i }, l) => `<tr data-lot="${i}" style="--cat:${catProduit(lot.code_produit)}"
+          ({ lot, i }, l) => `<tr data-lot="${i}"
+             style="--cat:${catProduit(lot.code_produit)};--cat-fond:${catFondProduit(lot.code_produit)}"
              class="lot--tranche ${lotsSelectionnes.has(i) ? 'lot--selectionne' : ''}">
         <td class="col-select"><input type="checkbox" class="lot__select" data-select-lot="${i}"
           aria-label="Sélectionner le lot ${i + 1}" ${lotsSelectionnes.has(i) ? 'checked' : ''} /></td>

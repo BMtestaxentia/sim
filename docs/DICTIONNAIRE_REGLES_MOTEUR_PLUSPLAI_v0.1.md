@@ -96,6 +96,12 @@ Reconstruit depuis ParaPLUS, SimPLUS!A8:A42, ParaGLOB, validé par l'onglet IN d
 
 Table SimPLUS!DO..EC+ (années en lignes, montants k€). Par année N : **Produits** = loyers logements (an 1 R-LOYER-5 indexé IRL) + loyers annexes + loyer divers + produits financiers. **Charges** = Σ annuités (VLOOKUP tables amortissement, filtrées par date 1re échéance) + frais de gestion + TFPB (à partir de fin d'exonération R-FISC-1) + REL + gros entretien/PGERC (trajectoire GE €/m² × SHAB × index BT01) + vacance & impayés + frais financiers. **Soldes** = résultat, autofinancement, cumuls, reconstitution FP (durée, taux, différé, mode). Bloc à transcrire produit par produit avec l'annexe en golden test (colonnes EC-EN + cachées GU/HB/HH/HX/IA).
 
+- **R-EXP-PGE** ✅ **Provision pour gros entretien, dite aussi PCRC** (10/08/2026, matrice SIMTEST_BM_HAB). LEON la présente au m² (`SimPLUS!DX` = tarif €/m² × SHAB) mais ce tarif vient lui-même de `taux × base / SHAB` (`SimPLUS!BJ12`), puis d'une indexation cumulée (`GK = BJ × GI`, `GI` composant la trajectoire de gros entretien). **La SHAB se simplifie** : la provision vaut donc
+  ```
+  PGE(N) = taux(N) × base × cumul d'indexation du gros entretien
+  ```
+  et n'est **pas** une grandeur au mètre carré, malgré la forme sous laquelle la matrice la présente. La **base** (`SimPLUS!BK31`) est le prix de revient TTC de la tranche en VEFA, et le prix de revient de l'opération net de quelques postes puis réparti à la surface utile sinon. Le **taux** peut varier par année : c'est ainsi que la provision monte en charge sur les premières années (Bergerac double en quatre ans, ce qu'aucun taux constant ne reproduit). Trois modes au choix dans `SimPLUS!BI10` : `% PGE` (celui décrit ici, 0,6 % sur la matrice d'habitation), `Stats GE` et `Stats internes`, qui lisent des tables de statistiques (`ParaGEN!DF`/`DG`, cette dernière à 1,13 €/m² à plat). Implémenté sous `pge_taux` / `pge_taux_par_annee` / `pge_base_eur` ; une table annuelle saisie continue de primer, une donnée constatée ne se faisant pas recalculer.
+
 ## 10. R-FISC - Fiscalité
 
 - **R-FISC-1** 🔶 Exonération TFPB : année_début = année(DAT) + 25 + correction (pivot 1er janvier). Durée 25 ans standard (⚠️ I-7 : paramétrable 2/15/25/30). Source SimPLUS!G37.

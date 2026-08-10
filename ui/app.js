@@ -28,7 +28,9 @@ const $ = (sel) => /** @type {HTMLElement} */ (document.querySelector(sel));
 // __REFERENTIELS_DEBUT__ (bloc remplace par des litteraux dans la version autonome)
 const referentiels = {
   baremes: await (await fetch('../referentiels/baremes_2025.json')).json(),
-  trajectoires: await (await fetch('../referentiels/trajectoires_axentia_2026.json')).json(),
+  // Profil EN VIGUEUR (HER 2027). Le profil precedent reste au depot : les
+  // golden tests s'y adossent, ils reproduisent la matrice qui le portait.
+  trajectoires: await (await fetch('../referentiels/trajectoires_her_2027.json')).json(),
   nomenclature_pdr: await (await fetch('../referentiels/nomenclature_pdr.json')).json(),
   zonage_abc: await (await fetch('../referentiels/zonage_abc_communes.json')).json(),
   departements: await (await fetch('../referentiels/departements.json')).json(),
@@ -207,8 +209,36 @@ const etat = {
   // fichier rejoue ailleurs ne donnerait pas les memes annuites.
   profils: [
     { id: 'referentiel', nom: 'Référentiel du dépôt', parametrage: {} },
+    // Profil EN VIGUEUR, releve sur la matrice LEON 2026-043h (SIMTEST_BM_HAB,
+    // profil AXENTIA HER 2027 / PMT2026). Il est actif par defaut : c'est avec
+    // ces valeurs qu'on chiffre aujourd'hui. Le referentiel du depot reste la
+    // reference de comparaison, et les golden tests continuent de s'y adosser -
+    // ils reproduisent LEON 2025-042d, qui portait les valeurs precedentes.
+    {
+      id: 'her-2027',
+      nom: 'AXENTIA HER 2027 (en vigueur)',
+      parametrage: {
+        baremes: {
+          // Loyers plafonds du millesime 2026 (ParaGEN!D22:G24 et D56:H59).
+          loyers_max_zone_123: {
+            annee_reference: 2026,
+            PLUS: [7.4, 6.49, 6.01, 7.85],
+            PLAI: [6.57, 5.77, 5.33, 7.0],
+          },
+          loyers_max_zone_ABC: {
+            annee_reference: 2026,
+            PLS: [11.8, 15.32, 10.17, 9.74, 9.03],
+            PLI: [14.64, 19.71, 11.8, 10.26, 10.26],
+            PSLA_plafond_loyer: [11.87, 15.46, 10.24, 9.83, 9.09],
+            PSLA_plafond_prix_vente_ht: [4423, 5837, 3542, 3269, 2857],
+          },
+          // Valeurs forfaitaires de la taxe d'amenagement (ParaGEN!B31:B32).
+          taxe_amenagement: { hors_idf: 892, idf: 1011 },
+        },
+      },
+    },
   ],
-  profil_actif: 'referentiel',
+  profil_actif: 'her-2027',
   options: {},
 };
 
@@ -2767,7 +2797,17 @@ function carteParametre(c) {
   const s = surchargeDe(c.chemin);
   const modifie = !nul(s);
   const format = (v) =>
-    nul(v) ? '' : c.type === 'pourcentage' ? pct(v, 2) : c.type === 'montant' ? eur(v) : nb(v);
+    nul(v)
+      ? ''
+      : c.type === 'pourcentage'
+        ? pct(v, 2)
+        : c.type === 'montant'
+          ? eur(v)
+          : // Un millesime n'est pas une quantite : le grouper par milliers le
+            // ferait lire « 2 025 ».
+            c.type === 'annee'
+            ? String(v)
+            : nb(v);
   const enPct = c.type === 'pourcentage';
   const saisie =
     c.type === 'montant'

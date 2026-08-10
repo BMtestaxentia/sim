@@ -885,6 +885,13 @@ export function calculer(entrees, referentiels) {
     frais_gestion_pct_loyers: exp.frais_gestion_pct_loyers ?? 0,
     rel_annuel_eur: exp.rel_annuel_eur ?? 0,
     gros_entretien_eur_m2: exp.gros_entretien_eur_m2 ?? 0,
+    // R-EXP-PGE - Provision pour gros entretien (PCRC), en pourcentage du prix
+    // de revient. L'assiette par defaut est celle de LEON en VEFA
+    // (`SimPLUS!BK31`) : le prix de revient TTC apres modulation. Une assiette
+    // saisie prime, pour les montages ou LEON en retranche certains postes.
+    pge_taux: exp.pge_taux ?? 0,
+    pge_taux_par_annee: exp.pge_taux_par_annee ?? [],
+    pge_base_eur: exp.pge_base_eur ?? bilan.total_ttc_module_eur,
     shab_m2: shabTotal,
     taux_vacance_impayes: exp.taux_vacance_impayes ?? 0,
     taux_produits_financiers: exp.taux_produits_financiers ?? 0,

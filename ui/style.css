@@ -549,6 +549,21 @@ td.calc { text-align: right; }
   text-align: right; font-variant-numeric: tabular-nums;
 }
 
+/* Table des LOTS : intitules et valeurs centres, les uns au-dessus des autres.
+   Ses colonnes sont larges et ses valeurs courtes - un « A », un T2, 66,67 m2 -
+   si bien qu'un calage sur les bords eloignait chaque donnee de son intitule.
+   Les tables de MONTANTS, elles, gardent leur calage a droite : c'est lui qui
+   permet de comparer une colonne de chiffres d'un coup d'oeil, ce qu'un lot ne
+   demande pas. */
+#table-lots th, #table-lots td { text-align: center; }
+#table-lots input, #table-lots select { text-align: center; }
+#table-lots select { text-align-last: center; }
+/* La fleche de tri reste collee a son intitule, qui n'est plus au bord. */
+#table-lots th.tri { white-space: nowrap; }
+/* Sauf le libelle du pied, qui court sur six colonnes : centre, il se retrouvait
+   au milieu du tableau, loin du bord ou se lit un total. */
+#table-lots tfoot td.libelle { text-align: left; }
+
 .num-poste { color: var(--text-tertiary); font-variant-numeric: tabular-nums; width: 1%; }
 .libelle-poste { color: var(--text-secondary); }
 /* La colonne des libelles absorbe toute la largeur restante d'une table large :

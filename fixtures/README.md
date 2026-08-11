@@ -12,6 +12,12 @@ les **annexes** LEON (Mulhouse) et la **matrice** LEON complète (Bergerac).
 - `mulhouse_3308_lli/` — simulation n°3307 (même opération, partie LLI), VEFA, zone 2/B1.
   Prêts : LLI 5 198 270 EUR (35 ans, DOUBLE, LA+1,4 %), LLI Foncier 2 546 267 EUR (40 ans, DOUBLE),
   ALS 100 000 EUR. Subventions 1 193 114 EUR. FP 643 020 EUR.
+- `agde_2402_foyer_pls/` : simulation n°2402, **foyer en colocation** de 16 lots, VEFA zone 3/B1,
+  financé en **PLS** (Foncier 606 891 € / 50 ans, Travaux 1 371 760 € / 40 ans, tous deux en double
+  révisabilité, LA + 1,11 %, progressivité −0,5 %). Subventions 193 000 €, avance de trésorerie
+  rémunérée 44 318,74 € (2 % du PR, rémunérée 2,5 %, reconstituée sur 30 ans). Régime **redevance
+  forfaitaire**. C'est la fixture la plus complète du dépôt : bilan, plan de financement,
+  amortissement, amortissement comptable et compte d'exploitation, tous confrontés.
 - `bergerac_lls6_pls/` — produit **PLS**, VEFA, habitation. Extraite le 04/08/2026 non pas d'une
   annexe mais de la **matrice complète** (131 onglets), en lecture seule via Excel COM.
   Prêts : PLS construction 494 023 EUR (40 ans) et PLS foncier 176 035 EUR (50 ans), tous deux
@@ -65,6 +71,17 @@ l'échéancier année par année (taux, annuité, intérêts, amortissement, CRD
 - LLI : le TOTAL FINANCEMENTS de LEON est affiché arrondi à l'euro (9 680 671) alors que le
   PR TTC vaut 9 680 671,454... L'écart de 0,45 EUR est un arrondi de présentation de LEON,
   pas une erreur du moteur. Ne pas chercher à le reproduire.
+- **AGDE foyer PLS** : les 50 annuités contractuelles sont reproduites à **moins de 10⁻¹² d'écart
+  relatif**, sur une trajectoire de Livret A réelle et non plate lue dans l'annexe elle-même
+  (1,6 % en 2026, puis 2,1 / 2,0 / 2,2 %). Trois pièges à connaître sur cette fixture :
+  - **l'année 1 ne compte qu'un mois** (mise en location au 01/12/2026). Le rapport année 2 / année 1
+    vaut 12,42 sur les charges, pas 12 : c'est douze mois indexés de 2,1 %. La comparaison
+    d'exploitation porte donc sur 2027 à 2085 ;
+  - **la redevance et les charges suivent DEUX trajectoires distinctes** (+1,7 % puis +1,8 %, contre
+    +2,0 % puis +1,8 %). La trajectoire unique observée sur Orléans n'est pas une règle du mode
+    redevance ;
+  - **LEON émet une 51ᵉ échéance sur le prêt de 50 ans** (écart E-13). Elle est hors contrat et
+    n'est pas reproduite ; le test l'affirme explicitement plutôt que de l'ignorer.
 - Les valeurs annuelles LEON portent du bruit de virgule flottante (irrégularité I-4 du
   dictionnaire) : comparer en tolérance relative, jamais en égalité stricte.
 - Dates : converties en ISO (AAAA-MM-JJ) depuis les numéros de série Excel.

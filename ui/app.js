@@ -1059,7 +1059,7 @@ function detailPret(p, i) {
   const groupe = (titre, aide, champs, cleSynthese) => `
     <section class="pret__groupe">
       <h4 class="pret__groupe-titre">${att(titre)}${aide ? `<span class="pret__groupe-aide">${att(aide)}</span>` : ''}</h4>
-      <div class="champs champs--serres">${champs}</div>
+      <div class="pret__groupe-corps">${champs}</div>
       <p class="pret__synthese" data-synthese="${cleSynthese}">-</p>
     </section>`;
 
@@ -1067,7 +1067,7 @@ function detailPret(p, i) {
     ${groupe(
       'Conditions',
       '',
-      `<div class="champ champ--large"><span>Indexation</span>
+      `<div class="champ champ--choix"><span>Indexation</span>
         ${segments(
           c('mode_taux'),
           [
@@ -1085,7 +1085,7 @@ function detailPret(p, i) {
             <label class="champ"><span>Taux plancher (%)</span>
               <input type="number" step="0.01" min="0" data-champ="${c('taux_plancher')}" data-type="pourcentage"
                 value="${valNum(enPourcent(p.taux_plancher))}" placeholder="aucun" /></label>
-            <div class="champ champ--large"><span>Révisabilité</span>
+            <div class="champ champ--choix"><span>Révisabilité</span>
               ${segments(
                 c('revisabilite'),
                 [
@@ -1115,9 +1115,9 @@ function detailPret(p, i) {
       `<label class="champ"><span>Durée (ans)</span>
         <input type="number" step="1" min="1" data-champ="${c('duree_ans')}" data-type="nombre"
           data-defaut="duree" value="${valNum(p.duree_ans)}" /></label>
-      <div class="champ champ--large"><span>Échéance</span>
+      <div class="champ champ--choix"><span>Échéance</span>
         ${segments(c('periodicite'), PERIODICITES, p.periodicite ?? 1, 'nombre')}</div>
-      <div class="champ champ--large"><span>Amortissement</span>
+      <div class="champ champ--choix"><span>Amortissement</span>
         ${segments(
           c('profil_amortissement'),
           [
@@ -1142,7 +1142,7 @@ function detailPret(p, i) {
       <label class="champ"><span>Différé (ans)</span>
         <input type="number" step="1" min="0" data-champ="${c('differe_ans')}" data-type="nombre"
           value="${valNum(p.differe_ans)}" /></label>
-      <div class="champ champ--large ${p.differe_ans ? '' : 'champ--eteint'}"><span>Pendant le différé</span>
+      <div class="champ champ--choix ${p.differe_ans ? '' : 'champ--eteint'}"><span>Pendant le différé</span>
         ${segments(c('differe_type'), OPTIONS_DIFFERE.map((o) => ({ v: o.v, l: o.l })), p.differe_type ?? 2, 'nombre')}</div>`,
       'calendrier',
     )}

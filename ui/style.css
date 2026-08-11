@@ -1154,72 +1154,79 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
   text-transform: uppercase; letter-spacing: 0.03em;
 }
 /* ---------- Detail d'un pret, groupe par question ----------
-   Trois groupes cote a cote tant que la largeur le permet, empiles ensuite.
-   Dix champs alignes sur deux rangs ne disaient pas lesquels vont ensemble ;
-   ici chaque groupe porte son sujet et, en clair, ce que le reglage produit. */
+   Trois BANDES l'une sous l'autre, et non trois colonnes : en colonnes, chaque
+   champ occupait toute la largeur d'une carte etroite et les segments passaient
+   a la ligne - beaucoup d'air, peu de contenu. En bande, l'intitule tient la
+   gouttiere de gauche, les champs coulent sur la largeur reelle du panneau, et
+   la phrase de synthese conclut la bande. */
 .pret__detail {
-  margin-top: 10px; padding-top: 12px;
+  margin-top: 10px;
   border-top: 1px dashed var(--border-color);
-  display: grid; gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 .pret__groupe {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 9px 11px 10px;
-  min-width: 0;
+  display: grid; grid-template-columns: 122px minmax(0, 1fr);
+  column-gap: 16px; row-gap: 5px; align-items: start;
 }
+.pret__groupe + .pret__groupe { border-top: 1px solid var(--border-color); }
+.pret__groupe { padding: 10px 0 11px; }
 .pret__groupe-titre {
-  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
-  margin: 0 0 8px; font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary);
+  grid-column: 1; grid-row: 1 / span 2; margin: 14px 0 0;
+  font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary);
 }
-.pret__groupe-aide {
-  text-transform: none; letter-spacing: 0; font-weight: 400;
-  font-size: 10.5px; color: var(--text-tertiary);
+.pret__groupe-aide { display: none; }
+.pret__groupe-corps {
+  grid-column: 2; grid-row: 1;
+  display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: flex-end;
 }
-.pret__groupe .champs { gap: 8px 10px; }
-.pret__groupe .champ { margin-bottom: 0; flex: 1 1 130px; min-width: 0; }
-/* La phrase de synthese : ce que les reglages ci-dessus PRODUISENT. Elle se lit
-   comme une conclusion, d'ou le filet qui la separe des champs. */
+/* Chaque champ prend SA place : un nombre n'a pas besoin de plus de 110 px, et
+   l'etirer ne le rendait pas plus lisible - il repoussait ses voisins. */
+.pret__groupe-corps .champ { margin-bottom: 0; flex: 0 1 auto; min-width: 0; }
+.pret__groupe-corps .champ > input { width: 110px; }
+.pret__groupe-corps .champ--choix { flex: 0 1 auto; }
+/* La phrase de synthese conclut la bande, sans filet : l'alignement sous les
+   champs suffit a dire qu'elle en decoule. */
 .pret__synthese {
-  margin: 9px 0 0; padding-top: 7px;
-  border-top: 1px solid var(--border-color);
-  font-size: 11px; line-height: 1.45; color: var(--text-secondary);
+  grid-column: 2; grid-row: 2;
+  margin: 0; font-size: 11px; line-height: 1.45; color: var(--text-secondary);
 }
 /* Un champ sans objet reste VISIBLE mais eteint : le retirer ferait sauter la
    mise en page a chaque changement de profil, et masquerait qu'il existe. */
-.pret__groupe .champ input:disabled, .pret__groupe .champ select:disabled,
-.champ--eteint .segments { opacity: 0.45; }
-.pret__groupe .champ input:disabled, .pret__groupe .champ select:disabled { cursor: not-allowed; }
-.champ--large { flex: 1 1 100%; }
+.pret__groupe .champ input:disabled, .champ--eteint .segments { opacity: 0.45; }
+.pret__groupe .champ input:disabled { cursor: not-allowed; }
+@media (max-width: 760px) {
+  .pret__groupe { grid-template-columns: 1fr; }
+  .pret__groupe-titre { grid-row: 1; margin-top: 0; }
+  .pret__groupe-corps { grid-column: 1; grid-row: 2; }
+  .pret__synthese { grid-column: 1; grid-row: 3; }
+}
 
 /* ---------- Choix en segments ----------
    Un menu deroulant cache ses options : il faut l'ouvrir pour savoir qu'un pret
    peut s'amortir a capital constant. En segments, les possibilites se lisent
-   sans clic et le choix courant se voit d'un coup d'oeil - sur un panneau qui
-   sert a comparer des montages, cela vaut mieux que la place economisee. */
+   sans clic et le choix courant se voit d'un coup d'oeil.
+   Boutons JOINTS, sans conteneur grise : la capsule unique dit « un seul choix
+   parmi ceux-ci » la ou des pastilles espacees dans une boite ressemblaient a
+   des etiquettes. L'actif est PLEIN, pas cercle : un filet bleu sur fond bleu
+   pale se distinguait mal du repos. */
 .segments {
-  display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px;
-  background: var(--bg-tertiary); border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm); max-width: 100%;
+  display: inline-flex; max-width: 100%; overflow-x: auto;
+  border: 1px solid var(--border-color-strong);
+  border-radius: var(--radius-sm);
 }
 .segment {
   appearance: none; cursor: pointer; font-family: inherit; white-space: nowrap;
-  border: none; background: transparent; color: var(--text-secondary);
-  padding: 4px 9px; border-radius: var(--radius-xs);
-  font-size: 11px; font-weight: 600;
+  border: none; background: var(--bg-primary); color: var(--text-secondary);
+  padding: 5px 11px; font-size: 11px; font-weight: 600; line-height: 1.2;
 }
+.segment + .segment { border-left: 1px solid var(--border-color); }
 .segment:hover { background: var(--bg-secondary); color: var(--text-primary); }
-.segment--actif {
-  background: var(--info-bg); color: var(--info-text);
-  box-shadow: inset 0 0 0 1px var(--info-accent);
+.segment--actif, .segment--actif:hover {
+  background: var(--info-accent); color: #fff;
 }
-.segment--actif:hover { background: var(--info-bg); color: var(--info-text); }
 /* Valeur HERITEE, a cote du libelle du segment : plus legere que lui, parce
    qu'elle informe sans etre le choix qu'on fait. */
-.segment__defaut { font-weight: 400; opacity: 0.75; }
+.segment__defaut { font-weight: 400; opacity: 0.8; margin-left: 4px; }
 @media (max-width: 720px) {
   .pret__entete { flex-wrap: wrap; }
   .pret__montant, .pret__nature { flex: 1 1 120px; }

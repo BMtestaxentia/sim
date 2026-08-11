@@ -33,6 +33,7 @@ const MODULES = [
   'produits.js',
   'amortissement.js',
   'calendrier.js', // depend de amortissement.js (jourUTC)
+  'tresorerie.js', // depend de arrondis.js et calendrier.js (decalerMois)
   'trajectoires.js',
   'loyers.js',
   'bilan.js',

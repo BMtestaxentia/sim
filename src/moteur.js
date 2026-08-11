@@ -17,6 +17,7 @@
 import { surfaceUtile, quotesPartsSU, loyerProduit, loyerAnnexesSeparees, controlesLoyer } from './loyers.js';
 import { normaliserTrajectoires } from './trajectoires.js';
 import { calendrierOperation } from './calendrier.js';
+import { tresorerieChantier } from './tresorerie.js';
 import { pretsDefautResolus, produit, marge, ORDRE_PRODUITS } from './produits.js';
 import { fusionner, surchargerTrajectoires, ecartsParametrage } from './parametrage.js';
 import {
@@ -92,6 +93,9 @@ export function calculer(entrees, referentiels) {
   // --- 0. Calendrier (R-AMT-3 en amont) ---
   const calendrier = calendrierOperation(dates);
   const anneeMEL = calendrier.annee_mise_en_location;
+  // Duree du chantier : elle sert au differe par defaut des prets principaux
+  // (R-AMT-9) et a l'echeancier de tresorerie (R-TRESO).
+  const dureeChantierMois = Number(dates.duree_chantier_mois) || 0;
 
   // --- 1. Surfaces (R-SURF) ---
   // La SU de chaque lot est conservee EXACTE pour l'agregation ; l'arrondi a
@@ -759,7 +763,11 @@ export function calculer(entrees, referentiels) {
           anneePremiereEcheance(anneeMEL, { demembrement: identite.demembrement }),
         revisabilite: p.revisabilite ?? 'TAUX FIXE',
         differe_ans: p.differe_ans ?? 0,
-        differe_type: p.differe_type,
+        // R-AMT-9 : le differe se compte en MOIS, l'unite du chantier. Un pret
+        // principal differe par defaut le temps des travaux - il n'y a rien a
+        // rembourser tant que l'operation ne produit pas de loyer.
+        differe_mois: p.differe_mois ?? (p.principal ? dureeChantierMois : undefined),
+        differe_type: p.differe_type ?? (p.principal ? 2 : undefined),
         // R-AMT-6 : capital constant plutot qu'annuite progressive. C'est le
         // profil de la seconde phase du PHB 2.0 ; les prets CDC ordinaires
         // gardent l'annuite, qui reste le defaut.
@@ -803,6 +811,11 @@ export function calculer(entrees, referentiels) {
           ? p.taux
           : Math.max(p.taux, p.taux_plancher),
     duree_ans: p.duree_ans ?? null,
+    // R-AMT-9 : le differe EFFECTIF, en mois. Un pret principal le tient de la
+    // duree du chantier s'il n'en porte pas : l'ecran doit pouvoir le dire sans
+    // refaire la resolution de son cote.
+    differe_mois:
+      p.differe_mois ?? (p.differe_ans ? p.differe_ans * 12 : p.principal ? dureeChantierMois : 0),
     revisabilite: p.revisabilite ?? null,
     progressivite: p.progressivite ?? 0,
   }));
@@ -1144,6 +1157,25 @@ export function calculer(entrees, referentiels) {
     trajectoires: exp.trajectoires ?? trajectoires.par_poste,
   });
 
+  // --- R-TRESO : tresorerie de la phase chantier ---
+  // Elle se calcule APRES le plan de financement : il lui faut le prix de
+  // revient par chapitre, les subventions et les fonds propres resolus. Elle
+  // s'arrete a la livraison, la ou le compte d'exploitation commence.
+  const tresorerie =
+    dates.date_debut_travaux && dureeChantierMois > 0
+      ? tresorerieChantier({
+          date_debut_travaux: dates.date_debut_travaux,
+          duree_chantier_mois: dureeChantierMois,
+          depenses_par_chapitre: Object.fromEntries(
+            Object.entries(bilan.chapitres).map(([c, v]) => [c, v.ttc_lasm_eur]),
+          ),
+          // Mobilisables des l'ordre de service : arbitrage metier du 11/08/2026.
+          subventions_eur: subventionsTotal,
+          fonds_propres_eur: fondsPropres,
+          courbes: baremes.tresorerie?.courbes,
+        })
+      : null;
+
   // Ruptures qui expliquent la forme de la courbe de resultat. Elles sont
   // calculees ici, sinon l'interface les redecouvrirait par difference, ce qui
   // serait du calcul metier dans l'ecran.
@@ -1319,6 +1351,8 @@ export function calculer(entrees, referentiels) {
     amortissements,
     fiscalite: { tfpb, taxe_amenagement: ta },
     exploitation,
+    // R-TRESO : la phase chantier, en amont du compte d exploitation.
+    tresorerie,
     indicateurs,
     alertes,
   };

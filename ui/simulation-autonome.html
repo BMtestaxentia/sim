@@ -1651,6 +1651,31 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
   .bloc { break-inside: avoid; }
 }
 
+/* ---------- Trésorerie de chantier ----------
+   Trois traces sur la meme echelle : c'est leur ECART qui interesse. L'aire du
+   BESOIN se remplit, les deux cumuls restent des traits - ce qui est plein se
+   lit avant ce qui est trace, et le besoin est ce qu'on vient chercher. */
+.treso__aire { fill: color-mix(in srgb, var(--warning-accent) 22%, transparent); stroke: none; }
+.treso__depenses { fill: none; stroke: var(--cat-1); stroke-width: 2; }
+.treso__tirages { fill: none; stroke: var(--success-accent); stroke-width: 2; stroke-dasharray: 5 3; }
+#graphe-tresorerie svg { width: 100%; height: auto; display: block; }
+/* Puces de legende : elles reprennent le trait de leur courbe, pointille
+   compris, pour qu'on n'ait pas a deviner laquelle est laquelle. */
+.treso__cle {
+  display: inline-block; width: 16px; height: 3px; margin: 0 4px 0 12px;
+  vertical-align: middle; border-radius: 2px;
+}
+.treso__cle--depenses { background: var(--cat-1); }
+.treso__cle--tirages {
+  background: repeating-linear-gradient(to right, var(--success-accent) 0 5px, transparent 5px 8px);
+}
+.treso__cle--besoin {
+  height: 9px; background: color-mix(in srgb, var(--warning-accent) 22%, transparent);
+}
+/* La date sous le rang du mois : le rang sert a compter, la date a se reperer. */
+.treso__date { display: block; font-size: 10px; color: var(--text-tertiary); }
+#table-tresorerie th:first-child, #table-tresorerie td:first-child { width: 1%; white-space: nowrap; }
+
 </style>
   </head>
   <body>
@@ -1681,6 +1706,9 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
         <span class="onglets__tranches" id="onglets-tranches"></span>
         <button type="button" class="onglet" role="tab" data-ecran="financement" aria-selected="false">
           Plan de financement
+        </button>
+        <button type="button" class="onglet" role="tab" data-ecran="tresorerie" aria-selected="false">
+          Trésorerie
         </button>
         <button type="button" class="onglet" role="tab" data-ecran="exploitation" aria-selected="false">
           Exploitation
@@ -2052,6 +2080,46 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
     </main>
 
     <!-- ================= ÉCRAN 3 - EXPLOITATION ================= -->
+    <!-- ================= ÉCRAN - TRÉSORERIE DE CHANTIER =================
+         Le point de vue du financeur sur la phase travaux : ce qui sort, ce qui
+         rentre, et à quel moment le besoin culmine. Le compte d'exploitation
+         commence à la mise en location ; cet écran couvre ce qui le précède. -->
+    <main class="ecran" id="ecran-tresorerie" role="tabpanel" hidden>
+      <section class="bloc">
+        <h2 class="bloc__titre">Trésorerie de chantier</h2>
+        <div class="indicateurs" id="recap-tresorerie"></div>
+        <p class="aide" id="aide-tresorerie"></p>
+      </section>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">Besoin de financement au fil du chantier</h2>
+        <div id="graphe-tresorerie"></div>
+        <p class="aide" id="legende-tresorerie"></p>
+      </section>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">Échéancier mensuel</h2>
+        <div>
+          <table class="tableau tableau--entete-figee" id="table-tresorerie">
+            <thead>
+              <tr>
+                <th>Mois</th>
+                <th class="num">Dépenses</th>
+                <th class="num">Cumul dépensé</th>
+                <th class="num">Subventions</th>
+                <th class="num">Fonds propres</th>
+                <th class="num">Tirage de prêt</th>
+                <th class="num">Cumul tiré</th>
+                <th class="num">Besoin cumulé</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+      </section>
+    </main>
+
     <main class="ecran" id="ecran-exploitation" role="tabpanel" hidden>
       <div id="bandeau-exploitation" class="bandeau"></div>
 
@@ -3004,6 +3072,7 @@ function livretAPourAnnee(livret_a_par_annee, annee, defaut) {
  * @property {number} annee_premiere_echeance    annee civile de la 1re echeance DE CE PRET (R-AMT-3)
  * @property {Revisabilite|string} [revisabilite] defaut 'TAUX FIXE'
  * @property {number} [differe_ans]              d, defaut 0
+ * @property {number} [differe_mois]             R-AMT-9 : differe en MOIS, prioritaire sur `differe_ans`
  * @property {1|2} [differe_type]                1 = rien n'est du ; 2 = interets seuls
  * @property {number} [livret_a_origine]         LA_0 a l'origine du pret (plage nommee Tx_LA)
  * @property {Record<number, number>} [livret_a_par_annee] trajectoire LA (annee civile -> taux)
@@ -3063,6 +3132,28 @@ function livretAPourAnnee(livret_a_par_annee, annee, defaut) {
  * @param {{rev: Revisabilite, la0: number}} contexte deja normalises par l'appelant
  * @returns {LigneAmortissement[]}
  */
+/**
+ * R-AMT-9 - Differe exprime en PERIODES d'echeance.
+ *
+ * Le differe se saisit desormais en MOIS, parce que c'est l'unite du chantier :
+ * un pret principal differe le temps des travaux, et un chantier de trente mois
+ * ne fait pas un nombre entier d'annees. Il se convertit ici en periodes
+ * d'echeance, arrondies a l'entier le plus proche - la moitie d'une echeance
+ * n'existe pas, et un pret annuel ne peut pas commencer a s'amortir en juin.
+ *
+ * `differe_ans` reste accepte pour les appels qui raisonnent en annees, dont
+ * les fixtures : il vaut alors autant de periodes que d'annees fois la
+ * periodicite.
+ * @param {PretEntree} pret
+ * @param {number} m nombre d'echeances par an
+ * @returns {number}
+ */
+function differeEnPeriodes(pret, m) {
+  return pret.differe_mois !== undefined && pret.differe_mois !== null
+    ? Math.round((Number(pret.differe_mois) * m) / 12)
+    : (pret.differe_ans ?? 0) * m;
+}
+
 function tableauPeriodique(pret, { rev, la0 }) {
   const {
     montant_eur,
@@ -3081,7 +3172,11 @@ function tableauPeriodique(pret, { rev, la0 }) {
   /** @type {LigneAmortissement[]} */
   const lignes = [];
   let crd = montant_eur;
-  const periodesAmortissantes = (duree_ans - differe_ans) * m;
+  // R-AMT-9 : le differe se compte en PERIODES. Un differe de 30 mois sur un
+  // pret trimestriel vaut dix echeances, ce qu'une duree en annees entieres ne
+  // sait pas dire.
+  const differePeriodes = differeEnPeriodes(pret, m);
+  const periodesAmortissantes = duree_ans * m - differePeriodes;
 
   for (let k = 0; k < duree_ans; k++) {
     const annee = annee_premiere_echeance + k;
@@ -3102,12 +3197,13 @@ function tableauPeriodique(pret, { rev, la0 }) {
     let interetsAnnee = 0;
     let amortAnnee = 0;
     for (let j = 0; j < m; j++) {
-      if (k < differe_ans) {
+      const periode = k * m + j;
+      if (periode < differePeriodes) {
         interetsAnnee += differe_type === 1 ? 0 : txp * crd;
         continue;
       }
       if (arrondiCRD(crd) <= 0) continue;
-      const restantes = periodesAmortissantes - ((k - differe_ans) * m + j);
+      const restantes = periodesAmortissantes - (periode - differePeriodes);
       const amort =
         profil === 'constant'
           ? montant_eur / periodesAmortissantes
@@ -3156,15 +3252,18 @@ function tableauAmortissement(pret) {
   if (!Number.isInteger(annee_premiere_echeance)) {
     throw new Error(`Annee de premiere echeance invalide : ${annee_premiere_echeance}`);
   }
-  if (differe_ans < 0 || differe_ans >= duree_ans) {
-    throw new Error(`Differe invalide : ${differe_ans} an(s) pour un pret de ${duree_ans} an(s)`);
+  const differeControle = differeEnPeriodes(pret, periodicite) / periodicite;
+  if (differeControle < 0 || differeControle >= duree_ans) {
+    throw new Error(`Differe invalide : ${differeControle} an(s) pour un pret de ${duree_ans} an(s)`);
   }
-  if (differe_ans > 0 && differe_type !== 1 && differe_type !== 2) {
+  if (differeControle > 0 && differe_type !== 1 && differe_type !== 2) {
     throw new Error(`Type de differe invalide : ${differe_type} (attendu 1 ou 2)`);
   }
 
   const rev = normaliserRevisabilite(String(revisabilite));
   const la0 = livret_a_origine ?? 0;
+  // R-AMT-9 : a periodicite annuelle, une periode EST une annee.
+  const differeAns = differeEnPeriodes(pret, 1);
 
   // R-AMT-8 - ECHEANCES INFRA-ANNUELLES. Les prets Action Logement s'amortissent
   // par trimestre. Le compte d'exploitation, lui, reste annuel : on amortit donc
@@ -3204,7 +3303,7 @@ function tableauAmortissement(pret) {
     const revN =
       rev === 'DOUBLE' ? revBrut : rev === 'D.LIMITEE' ? Math.max(revBrut, 0) : progressivite;
 
-    if (k < differe_ans) {
+    if (k < differeAns) {
       // Differe : aucun amortissement, CRD inchange. Type 1 -> rien n'est du
       // (LEON ne capitalise PAS ces interets, cf. ECARTS_LEON E-2).
       const interets = differe_type === 1 ? 0 : tx * crd;
@@ -3227,7 +3326,7 @@ function tableauAmortissement(pret) {
     // nul : ici le taux joue, il ne fait varier que la part d'interets.
     if (profil === 'constant') {
       const solde = arrondiCRD(crd) <= 0;
-      const amort = solde ? 0 : montant_eur / (duree_ans - differe_ans);
+      const amort = solde ? 0 : montant_eur / (duree_ans - differeAns);
       const interets = solde ? 0 : tx * crd;
       crd -= amort;
       lignes.push({
@@ -3246,7 +3345,7 @@ function tableauAmortissement(pret) {
       annuite = 0; // pret deja solde : LEON continue d'emettre des lignes a zero
     } else if ((taux === 0 && progressivite === 0) || (revN === 0 && tx === 0)) {
       // Branche lineaire de FK117 : capital d'ORIGINE / duree amortissante.
-      annuite = montant_eur / (duree_ans - differe_ans);
+      annuite = montant_eur / (duree_ans - differeAns);
     } else {
       annuite = crd * facteurAnnuite(tx, revN, duree_ans - k);
     }
@@ -3467,6 +3566,172 @@ function calendrierOperation(entrees = {}) {
     date_mise_en_location: miseEnLocation,
     annee_mise_en_location: annee,
     origine,
+  };
+}
+
+/* ===== src/tresorerie.js ===== */
+// @ts-check
+/**
+ * R-TRESO - Tresorerie de la PHASE CHANTIER, du premier ordre de service a la
+ * livraison.
+ *
+ * Ce module repond a une question que le compte d'exploitation ne pose jamais :
+ * l'operation a-t-elle de quoi payer ses factures PENDANT les travaux ? Le
+ * compte d'exploitation demarre a la mise en location ; entre l'ordre de service
+ * et la livraison, l'operation ne fait que depenser, et ce qui la finance
+ * n'arrive pas au meme rythme.
+ *
+ * Le point de vue est celui du FINANCEUR : on suit le solde mois par mois, on
+ * regarde a quel moment il creuse le plus, et de combien. Ce creux est le besoin
+ * de prefinancement, et c'est lui qui porte les interets intercalaires (R-FIN-6).
+ *
+ * Trois flux, trois rythmes distincts :
+ *  - les DEPENSES suivent l'avancement, chapitre par chapitre : le foncier se
+ *    paie a l'ordre de service, les travaux s'etalent sur le chantier ;
+ *  - les SUBVENTIONS sont mobilisables des l'ordre de service (regle metier du
+ *    11/08/2026) ;
+ *  - les PRETS se tirent au fil de l'eau, a hauteur de ce qui manque : un
+ *    organisme ne tire pas plus tot que necessaire, les interets courent.
+ *
+ * Module pur : aucune date systeme, aucun acces disque. Meme entrees, memes
+ * sorties.
+ */
+
+
+/**
+ * Courbe de decaissement par defaut, chapitre par chapitre.
+ *
+ * `os` est la part payee a l'ordre de service, le reste s'etale lineairement sur
+ * le chantier. Le foncier se paie comptant a l'acquisition, les travaux suivent
+ * l'avancement : ce sont deux rythmes qu'une courbe unique ne saurait pas dire.
+ * Surchargeable par le referentiel (`tresorerie.courbes`).
+ */
+const COURBES_DEFAUT = {
+  charge_fonciere: { os: 1 },
+  batiment: { os: 0 },
+  honoraires: { os: 0.2 },
+  frais_annexes: { os: 0.3 },
+  frais_financiers: { os: 0 },
+};
+
+/**
+ * @typedef {Object} LigneTresorerie
+ * @property {number} mois            rang du mois, 0 = ordre de service
+ * @property {string} date            premier jour du mois, ISO
+ * @property {number} depenses_eur    decaissements du mois
+ * @property {number} subventions_eur encaissements de subventions
+ * @property {number} fonds_propres_eur apport mobilise
+ * @property {number} tirage_eur      pret tire ce mois pour couvrir le manque
+ * @property {number} solde_eur       solde du mois, tirages compris
+ * @property {number} cumul_depenses_eur
+ * @property {number} cumul_tirages_eur
+ * @property {number} besoin_eur      cumul depenses - cumul ressources hors prets
+ */
+
+/**
+ * Echeancier de tresorerie du chantier.
+ *
+ * @param {Object} p
+ * @param {string} p.date_debut_travaux         ordre de service
+ * @param {number} p.duree_chantier_mois
+ * @param {Record<string, number>} p.depenses_par_chapitre  prix de revient TTC par chapitre
+ * @param {number} [p.subventions_eur]          mobilisables a l'ordre de service
+ * @param {number} [p.fonds_propres_eur]        apport de l'organisme
+ * @param {Record<string, {os: number}>} [p.courbes] surcharge des courbes
+ * @param {boolean} [p.tirer_les_prets]         defaut vrai : les prets comblent le manque
+ * @returns {{lignes: LigneTresorerie[], indicateurs: Object, tirages: Array<{date: string, montant_eur: number}>}}
+ */
+function tresorerieChantier(p) {
+  const {
+    date_debut_travaux,
+    duree_chantier_mois,
+    depenses_par_chapitre = {},
+    subventions_eur = 0,
+    fonds_propres_eur = 0,
+    courbes = COURBES_DEFAUT,
+    tirer_les_prets = true,
+  } = p;
+
+  const n = Math.max(1, Math.round(Number(duree_chantier_mois) || 0));
+
+  // Depenses mois par mois. Le mois 0 porte les parts payees a l'ordre de
+  // service ; le reste s'etale jusqu'a la livraison incluse.
+  const brut = new Array(n + 1).fill(0);
+  for (const [chapitre, montant] of Object.entries(depenses_par_chapitre)) {
+    if (!(montant > 0)) continue;
+    const partOS = courbes[chapitre]?.os ?? COURBES_DEFAUT[chapitre]?.os ?? 0;
+    brut[0] += montant * partOS;
+    const etale = montant * (1 - partOS);
+    for (let m = 1; m <= n; m++) brut[m] += etale / n;
+  }
+  // Les mensualites s'arrondissent EN CONSERVANT LEUR SOMME : arrondies une a
+  // une, vingt-cinq lignes derivaient de quelques euros du prix de revient, et
+  // un echeancier qui ne totalise pas son propre total n'inspire rien de bon.
+  const depenses = arrondirEnConservantLaSomme(brut);
+
+  /** @type {LigneTresorerie[]} */
+  const lignes = [];
+  /** @type {Array<{date: string, montant_eur: number}>} */
+  const tirages = [];
+  let cumulDepenses = 0;
+  let cumulTirages = 0;
+  let tresorerie = 0;
+
+  for (let m = 0; m <= n; m++) {
+    const depense = depenses[m];
+    // Subventions et fonds propres arrivent a l'ordre de service : la regle des
+    // subventions est un arbitrage metier, celle des fonds propres suit le bon
+    // sens - l'organisme met sa part avant d'emprunter.
+    const subvention = m === 0 ? subventions_eur : 0;
+    const apport = m === 0 ? fonds_propres_eur : 0;
+
+    cumulDepenses += depense;
+    tresorerie += subvention + apport - depense;
+
+    // Le pret se tire a hauteur du MANQUE, jamais plus : tirer d'avance ferait
+    // courir des interets intercalaires sur de l'argent qui dort.
+    let tirage = 0;
+    if (tirer_les_prets && tresorerie < 0) {
+      tirage = -tresorerie;
+      tresorerie = 0;
+      cumulTirages += tirage;
+      tirages.push({ date: decalerMois(date_debut_travaux, m), montant_eur: arrondiEuro(tirage) });
+    }
+
+    lignes.push({
+      mois: m,
+      date: decalerMois(date_debut_travaux, m),
+      depenses_eur: arrondiEuro(depense),
+      subventions_eur: arrondiEuro(subvention),
+      fonds_propres_eur: arrondiEuro(apport),
+      tirage_eur: arrondiEuro(tirage),
+      solde_eur: arrondiEuro(tresorerie),
+      cumul_depenses_eur: arrondiEuro(cumulDepenses),
+      cumul_tirages_eur: arrondiEuro(cumulTirages),
+      besoin_eur: arrondiEuro(cumulDepenses - subventions_eur - fonds_propres_eur),
+    });
+  }
+
+  // Le besoin de prefinancement est le point HAUT du besoin cumule : c'est le
+  // moment ou l'operation doit le plus d'argent, et donc ce que les prets
+  // devront couvrir. Le chercher au point bas donnait zero sur toute operation
+  // normale - le besoin y est positif du premier au dernier mois.
+  const pic = lignes.reduce((max, l) => (l.besoin_eur > max.besoin_eur ? l : max), lignes[0]);
+
+  return {
+    lignes,
+    tirages,
+    indicateurs: {
+      total_depenses_eur: arrondiEuro(cumulDepenses),
+      total_subventions_eur: arrondiEuro(subventions_eur),
+      total_fonds_propres_eur: arrondiEuro(fonds_propres_eur),
+      total_tirages_eur: arrondiEuro(cumulTirages),
+      besoin_maximal_eur: arrondiEuro(Math.max(0, pic.besoin_eur)),
+      mois_pic: pic.mois,
+      // Part du prix de revient deja engagee a l'ordre de service : elle dit
+      // d'un chiffre a quel point l'operation demande de l'argent tout de suite.
+      part_a_l_os: cumulDepenses > 0 ? depenses[0] / cumulDepenses : 0,
+    },
   };
 }
 
@@ -5857,6 +6122,7 @@ function jalonsExploitation(lignes, evenements = []) {
 
 
 
+
 /** Version du moteur, reportee dans les resultats pour la tracabilite. */
 const VERSION_MOTEUR = '0.4.0';
 
@@ -5900,6 +6166,9 @@ function calculer(entrees, referentiels) {
   // --- 0. Calendrier (R-AMT-3 en amont) ---
   const calendrier = calendrierOperation(dates);
   const anneeMEL = calendrier.annee_mise_en_location;
+  // Duree du chantier : elle sert au differe par defaut des prets principaux
+  // (R-AMT-9) et a l'echeancier de tresorerie (R-TRESO).
+  const dureeChantierMois = Number(dates.duree_chantier_mois) || 0;
 
   // --- 1. Surfaces (R-SURF) ---
   // La SU de chaque lot est conservee EXACTE pour l'agregation ; l'arrondi a
@@ -6567,7 +6836,11 @@ function calculer(entrees, referentiels) {
           anneePremiereEcheance(anneeMEL, { demembrement: identite.demembrement }),
         revisabilite: p.revisabilite ?? 'TAUX FIXE',
         differe_ans: p.differe_ans ?? 0,
-        differe_type: p.differe_type,
+        // R-AMT-9 : le differe se compte en MOIS, l'unite du chantier. Un pret
+        // principal differe par defaut le temps des travaux - il n'y a rien a
+        // rembourser tant que l'operation ne produit pas de loyer.
+        differe_mois: p.differe_mois ?? (p.principal ? dureeChantierMois : undefined),
+        differe_type: p.differe_type ?? (p.principal ? 2 : undefined),
         // R-AMT-6 : capital constant plutot qu'annuite progressive. C'est le
         // profil de la seconde phase du PHB 2.0 ; les prets CDC ordinaires
         // gardent l'annuite, qui reste le defaut.
@@ -6611,6 +6884,11 @@ function calculer(entrees, referentiels) {
           ? p.taux
           : Math.max(p.taux, p.taux_plancher),
     duree_ans: p.duree_ans ?? null,
+    // R-AMT-9 : le differe EFFECTIF, en mois. Un pret principal le tient de la
+    // duree du chantier s'il n'en porte pas : l'ecran doit pouvoir le dire sans
+    // refaire la resolution de son cote.
+    differe_mois:
+      p.differe_mois ?? (p.differe_ans ? p.differe_ans * 12 : p.principal ? dureeChantierMois : 0),
     revisabilite: p.revisabilite ?? null,
     progressivite: p.progressivite ?? 0,
   }));
@@ -6952,6 +7230,25 @@ function calculer(entrees, referentiels) {
     trajectoires: exp.trajectoires ?? trajectoires.par_poste,
   });
 
+  // --- R-TRESO : tresorerie de la phase chantier ---
+  // Elle se calcule APRES le plan de financement : il lui faut le prix de
+  // revient par chapitre, les subventions et les fonds propres resolus. Elle
+  // s'arrete a la livraison, la ou le compte d'exploitation commence.
+  const tresorerie =
+    dates.date_debut_travaux && dureeChantierMois > 0
+      ? tresorerieChantier({
+          date_debut_travaux: dates.date_debut_travaux,
+          duree_chantier_mois: dureeChantierMois,
+          depenses_par_chapitre: Object.fromEntries(
+            Object.entries(bilan.chapitres).map(([c, v]) => [c, v.ttc_lasm_eur]),
+          ),
+          // Mobilisables des l'ordre de service : arbitrage metier du 11/08/2026.
+          subventions_eur: subventionsTotal,
+          fonds_propres_eur: fondsPropres,
+          courbes: baremes.tresorerie?.courbes,
+        })
+      : null;
+
   // Ruptures qui expliquent la forme de la courbe de resultat. Elles sont
   // calculees ici, sinon l'interface les redecouvrirait par difference, ce qui
   // serait du calcul metier dans l'ecran.
@@ -7127,6 +7424,8 @@ function calculer(entrees, referentiels) {
     amortissements,
     fiscalite: { tfpb, taxe_amenagement: ta },
     exploitation,
+    // R-TRESO : la phase chantier, en amont du compte d exploitation.
+    tresorerie,
     indicateurs,
     alertes,
   };
@@ -8260,6 +8559,10 @@ function presetsDisponibles(p, i) {
 function detailPret(p, i) {
   const indexe = nul(p.taux) || !nul(p.spread);
   const c = (chemin) => `prets.${i}.${chemin}`;
+  // Le differe EFFECTIF, saisie ou defaut du chantier : c'est lui qui decide si
+  // le choix « pendant le differe » a un objet, pas la seule saisie.
+  const differeEffectif =
+    !nul(p.differe_mois) || (p.principal && Number(etat.dates?.duree_chantier_mois) > 0);
 
   /**
    * Choix en SEGMENTS plutot qu'en menu deroulant. Un menu cache ses options :
@@ -8366,16 +8669,19 @@ function detailPret(p, i) {
       `<label class="champ"><span>1re échéance (année)</span>
         <input type="number" step="1" data-champ="${c('annee_premiere_echeance')}" data-type="nombre"
           data-defaut="echeance" value="${valNum(p.annee_premiere_echeance)}" /></label>
-      <label class="champ"><span>Différé (ans)</span>
-        <input type="number" step="1" min="0" data-champ="${c('differe_ans')}" data-type="nombre"
-          value="${valNum(p.differe_ans)}" /></label>
-      <div class="champ champ--choix ${p.differe_ans ? '' : 'champ--eteint'}"><span>Pendant le différé</span>
+      <!-- Le differe se saisit en MOIS : c'est l'unite du chantier, qui le
+           commande. Laisse vide, un pret principal prend la duree du chantier -
+           le filigrane le dit, et le rendre explicite le figerait. -->
+      <label class="champ"><span>Différé (mois)</span>
+        <input type="number" step="1" min="0" data-champ="${c('differe_mois')}" data-type="nombre"
+          data-defaut="differe" value="${valNum(p.differe_mois)}" /></label>
+      <div class="champ champ--choix ${differeEffectif ? '' : 'champ--eteint'}"><span>Pendant le différé</span>
         ${segments(
           c('differe_type'),
           OPTIONS_DIFFERE.map((o) => ({ v: o.v, l: o.l })),
           p.differe_type ?? 2,
           'nombre',
-          !p.differe_ans,
+          !differeEffectif,
         )}</div>`,
       'calendrier',
     )}
@@ -8401,12 +8707,9 @@ function gabaritPret(p, i) {
     // car un pret CDC non saisi la tient du referentiel. La conditionner a la
     // saisie masquait les -0,5 % par defaut, qui pilotent pourtant l'annuite.
     jeton('progr.', '-', 'progressivite'),
-    // Le TYPE de differe ne se met pas dans le jeton : c'est un detail de
-    // mecanique - interets dus ou non - qui se lit dans le detail deplie, la ou
-    // il se saisit. Sur la ligne repliee, il encombrait sans repondre a la
-    // question qu'on se pose, qui est de savoir quand le pret commence a
-    // s'amortir.
-    ...(p.differe_ans ? [jeton('différé', `${p.differe_ans} ans`)] : []),
+    // Plus de jeton de differe : il a rejoint la vignette de DUREE, qui repond
+    // a la meme question - combien de temps ce pret court, et a partir de quand.
+    // Le type de differe, lui, reste dans le detail deplie, la ou il se saisit.
   ].join('');
 
   // Montant AUTOMATIQUE, reserve aux prets STRUCTURANTS de la tranche - les CDC
@@ -9174,7 +9477,15 @@ function rendreValeurs(r) {
     // Action Logement a -0,75 % nominal s'affiche bien a son 0,25 % plancher.
     const tauxPaye = a?.taux_applique ?? a?.taux;
     poser('taux', nul(tauxPaye) ? '-' : pct(tauxPaye, 2));
-    poser('duree', nul(a?.duree_ans) ? '-' : `${a.duree_ans} ans`);
+    // Le differe se lit DANS la vignette de duree, en mois : c'est la meme
+    // question - combien de temps ce pret court, et a partir de quand - et
+    // c'est l'unite du chantier, qui le commande. Un jeton separe le renvoyait
+    // en fin de ligne, loin de la duree qu'il ampute.
+    const dm = a?.differe_mois ?? 0;
+    poser(
+      'duree',
+      nul(a?.duree_ans) ? '-' : `${a.duree_ans} ans${dm ? ` · différé ${dm} mois` : ''}`,
+    );
     // Les modeles ne se proposent que sur un pret qui n'en porte pas encore.
     // Le rendu de structure le sait deja - appliquer un modele reconstruit la
     // ligne - mais la garde reste, au cas ou l'etat changerait sans rendu.
@@ -9276,6 +9587,7 @@ function rendreValeurs(r) {
       b.setAttribute('aria-pressed', String(actif));
     }
     defaut('progressivite', nul(a?.progressivite) ? '' : String(enPourcent(a.progressivite)));
+    defaut('differe', a?.differe_mois ? String(a.differe_mois) : '');
 
   }
 
@@ -9653,6 +9965,7 @@ function rendreValeurs(r) {
   if ($('#bloc-ventilation-pdr')) $('#bloc-ventilation-pdr').hidden = !vent;
 
   rendreFinancement(r);
+  rendreTresorerie(r);
   rendreExploitation(r);
 }
 
@@ -10279,6 +10592,117 @@ function badgesEvenements(evenements = []) {
       return `<span class="evenement evenement--${att(code)}" title="${att(libelles.join(' · '))}">${att(texte)}</span>`;
     })
     .join('');
+}
+
+/**
+ * R-TRESO - Courbe du chantier, vue financeur.
+ *
+ * Trois traces sur la meme echelle, parce que c'est leur ECART qui interesse :
+ * le cumul des depenses, ce que les ressources hors prets couvrent, et le besoin
+ * qui reste entre les deux. Trois graphes separes auraient demande de comparer
+ * de tete des hauteurs sur des echelles differentes.
+ */
+function grapheTresorerie(t) {
+  const l = t.lignes;
+  if (l.length < 2) return '<p class="aide">Aucun chantier à représenter.</p>';
+
+  const L = 1000;
+  const H = 240;
+  const marge = { haut: 14, bas: 30, gauche: 8, droite: 8 };
+  const largeur = L - marge.gauche - marge.droite;
+  const hauteur = H - marge.haut - marge.bas;
+  const maxi = Math.max(...l.map((x) => x.cumul_depenses_eur), 1);
+  const x = (i) => marge.gauche + (largeur * i) / (l.length - 1);
+  const y = (v) => marge.haut + hauteur * (1 - v / maxi);
+
+  const ligne = (cle, classe) =>
+    `<polyline class="${classe}" points="${l.map((p, i) => `${x(i).toFixed(1)},${y(p[cle]).toFixed(1)}`).join(' ')}" />`;
+
+  // L'aire du BESOIN est ce que l'on vient chercher : elle se remplit, les deux
+  // autres restent des traits. Ce qui est plein se lit avant ce qui est trace.
+  const aire =
+    `M ${x(0).toFixed(1)},${y(0).toFixed(1)} ` +
+    l.map((p, i) => `L ${x(i).toFixed(1)},${y(Math.max(0, p.besoin_eur)).toFixed(1)}`).join(' ') +
+    ` L ${x(l.length - 1).toFixed(1)},${y(0).toFixed(1)} Z`;
+
+  const pic = t.indicateurs.mois_pic;
+  const xPic = x(l.findIndex((p) => p.mois === pic));
+
+  return `<svg viewBox="0 0 ${L} ${H}" role="img"
+      aria-label="Cumul des dépenses, ressources hors prêts et besoin de financement, du mois 0 au mois ${l.at(-1).mois}">
+    <path class="treso__aire" d="${aire}" />
+    ${ligne('cumul_depenses_eur', 'treso__depenses')}
+    ${ligne('cumul_tirages_eur', 'treso__tirages')}
+    <line class="graphe__repere" x1="${xPic.toFixed(1)}" y1="${marge.haut}" x2="${xPic.toFixed(1)}" y2="${marge.haut + hauteur}" />
+    <text class="graphe__texte graphe__texte--repere" x="${xPic.toFixed(1)}" y="${marge.haut - 3}" text-anchor="middle">pic</text>
+    ${[0, Math.floor((l.length - 1) / 2), l.length - 1]
+      .map(
+        (i) =>
+          `<text class="graphe__texte" x="${x(i).toFixed(1)}" y="${H - 14}" text-anchor="middle">M+${l[i].mois}</text>`,
+      )
+      .join('')}
+    <text class="graphe__texte" x="${marge.gauche}" y="${H - 2}">Échelle 0 à ${eur(maxi)}</text>
+  </svg>`;
+}
+
+function rendreTresorerie(r) {
+  const t = r.tresorerie;
+  const bloc = document.getElementById('recap-tresorerie');
+  if (!bloc) return;
+  if (!t) {
+    bloc.innerHTML = '';
+    $('#aide-tresorerie').textContent =
+      '⚙ Renseigner une date de début des travaux et une durée de chantier pour suivre la trésorerie de la phase travaux.';
+    $('#graphe-tresorerie').innerHTML = '';
+    $('#table-tresorerie').querySelector('tbody').innerHTML = '';
+    return;
+  }
+
+  const i = t.indicateurs;
+  const tuile = (l, v, d) =>
+    `<div class="indicateur"><div class="indicateur__libelle">${l}</div>` +
+    `<div class="indicateur__valeur">${v}</div><div class="indicateur__detail">${d}</div></div>`;
+  bloc.innerHTML = [
+    tuile('Durée', `${t.lignes.at(-1).mois} mois`, `de ${t.lignes[0].date.slice(0, 7)} à ${t.lignes.at(-1).date.slice(0, 7)}`),
+    tuile('Dépensé', eur(i.total_depenses_eur), `${pct(i.part_a_l_os, 1)} dès l’ordre de service`),
+    tuile('Mobilisé à l’OS', eur(i.total_subventions_eur + i.total_fonds_propres_eur),
+      `${eur(i.total_subventions_eur)} de subventions · ${eur(i.total_fonds_propres_eur)} de fonds propres`),
+    tuile('Besoin maximal', eur(i.besoin_maximal_eur), `atteint au mois ${i.mois_pic}`),
+    tuile('Tiré sur les prêts', eur(i.total_tirages_eur), 'au fil de l’eau, jamais d’avance'),
+  ].join('');
+
+  $('#aide-tresorerie').textContent =
+    '⚙ Les subventions sont mobilisables dès l’ordre de service. Les prêts se tirent à hauteur du ' +
+    'manque du mois, jamais d’avance : tirer plus tôt ferait courir des intérêts intercalaires sur ' +
+    'de l’argent qui dort. Le besoin maximal est ce que le préfinancement doit couvrir.';
+
+  $('#graphe-tresorerie').innerHTML = grapheTresorerie(t);
+  $('#legende-tresorerie').innerHTML =
+    '<span class="treso__cle treso__cle--depenses"></span> cumul dépensé ' +
+    '<span class="treso__cle treso__cle--tirages"></span> cumul tiré sur les prêts ' +
+    '<span class="treso__cle treso__cle--besoin"></span> besoin restant à financer';
+
+  $('#table-tresorerie').querySelector('tbody').innerHTML = t.lignes
+    .map(
+      (l) => `<tr class="${l.mois === i.mois_pic ? 'ligne--rupture' : ''}">
+      <td>M+${l.mois}<span class="treso__date">${l.date.slice(0, 7)}</span></td>
+      <td class="num">${eur(l.depenses_eur)}</td>
+      <td class="num">${eur(l.cumul_depenses_eur)}</td>
+      <td class="num">${l.subventions_eur ? eur(l.subventions_eur) : '-'}</td>
+      <td class="num">${l.fonds_propres_eur ? eur(l.fonds_propres_eur) : '-'}</td>
+      <td class="num">${l.tirage_eur ? eur(l.tirage_eur) : '-'}</td>
+      <td class="num">${eur(l.cumul_tirages_eur)}</td>
+      <td class="num">${eur(l.besoin_eur)}</td>
+    </tr>`,
+    )
+    .join('');
+  $('#table-tresorerie').querySelector('tfoot').innerHTML = `<tr>
+    <td class="libelle">Total</td>
+    <td class="num">${eur(i.total_depenses_eur)}</td><td></td>
+    <td class="num">${eur(i.total_subventions_eur)}</td>
+    <td class="num">${eur(i.total_fonds_propres_eur)}</td>
+    <td class="num">${eur(i.total_tirages_eur)}</td><td></td><td></td>
+  </tr>`;
 }
 
 function rendreExploitation(r) {

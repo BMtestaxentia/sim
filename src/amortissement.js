@@ -157,6 +157,7 @@ function livretAPourAnnee(livret_a_par_annee, annee, defaut) {
  * @property {number} annee_premiere_echeance    annee civile de la 1re echeance DE CE PRET (R-AMT-3)
  * @property {Revisabilite|string} [revisabilite] defaut 'TAUX FIXE'
  * @property {number} [differe_ans]              d, defaut 0
+ * @property {number} [differe_mois]             R-AMT-9 : differe en MOIS, prioritaire sur `differe_ans`
  * @property {1|2} [differe_type]                1 = rien n'est du ; 2 = interets seuls
  * @property {number} [livret_a_origine]         LA_0 a l'origine du pret (plage nommee Tx_LA)
  * @property {Record<number, number>} [livret_a_par_annee] trajectoire LA (annee civile -> taux)
@@ -216,6 +217,28 @@ function livretAPourAnnee(livret_a_par_annee, annee, defaut) {
  * @param {{rev: Revisabilite, la0: number}} contexte deja normalises par l'appelant
  * @returns {LigneAmortissement[]}
  */
+/**
+ * R-AMT-9 - Differe exprime en PERIODES d'echeance.
+ *
+ * Le differe se saisit desormais en MOIS, parce que c'est l'unite du chantier :
+ * un pret principal differe le temps des travaux, et un chantier de trente mois
+ * ne fait pas un nombre entier d'annees. Il se convertit ici en periodes
+ * d'echeance, arrondies a l'entier le plus proche - la moitie d'une echeance
+ * n'existe pas, et un pret annuel ne peut pas commencer a s'amortir en juin.
+ *
+ * `differe_ans` reste accepte pour les appels qui raisonnent en annees, dont
+ * les fixtures : il vaut alors autant de periodes que d'annees fois la
+ * periodicite.
+ * @param {PretEntree} pret
+ * @param {number} m nombre d'echeances par an
+ * @returns {number}
+ */
+function differeEnPeriodes(pret, m) {
+  return pret.differe_mois !== undefined && pret.differe_mois !== null
+    ? Math.round((Number(pret.differe_mois) * m) / 12)
+    : (pret.differe_ans ?? 0) * m;
+}
+
 function tableauPeriodique(pret, { rev, la0 }) {
   const {
     montant_eur,
@@ -234,7 +257,11 @@ function tableauPeriodique(pret, { rev, la0 }) {
   /** @type {LigneAmortissement[]} */
   const lignes = [];
   let crd = montant_eur;
-  const periodesAmortissantes = (duree_ans - differe_ans) * m;
+  // R-AMT-9 : le differe se compte en PERIODES. Un differe de 30 mois sur un
+  // pret trimestriel vaut dix echeances, ce qu'une duree en annees entieres ne
+  // sait pas dire.
+  const differePeriodes = differeEnPeriodes(pret, m);
+  const periodesAmortissantes = duree_ans * m - differePeriodes;
 
   for (let k = 0; k < duree_ans; k++) {
     const annee = annee_premiere_echeance + k;
@@ -255,12 +282,13 @@ function tableauPeriodique(pret, { rev, la0 }) {
     let interetsAnnee = 0;
     let amortAnnee = 0;
     for (let j = 0; j < m; j++) {
-      if (k < differe_ans) {
+      const periode = k * m + j;
+      if (periode < differePeriodes) {
         interetsAnnee += differe_type === 1 ? 0 : txp * crd;
         continue;
       }
       if (arrondiCRD(crd) <= 0) continue;
-      const restantes = periodesAmortissantes - ((k - differe_ans) * m + j);
+      const restantes = periodesAmortissantes - (periode - differePeriodes);
       const amort =
         profil === 'constant'
           ? montant_eur / periodesAmortissantes
@@ -309,15 +337,18 @@ export function tableauAmortissement(pret) {
   if (!Number.isInteger(annee_premiere_echeance)) {
     throw new Error(`Annee de premiere echeance invalide : ${annee_premiere_echeance}`);
   }
-  if (differe_ans < 0 || differe_ans >= duree_ans) {
-    throw new Error(`Differe invalide : ${differe_ans} an(s) pour un pret de ${duree_ans} an(s)`);
+  const differeControle = differeEnPeriodes(pret, periodicite) / periodicite;
+  if (differeControle < 0 || differeControle >= duree_ans) {
+    throw new Error(`Differe invalide : ${differeControle} an(s) pour un pret de ${duree_ans} an(s)`);
   }
-  if (differe_ans > 0 && differe_type !== 1 && differe_type !== 2) {
+  if (differeControle > 0 && differe_type !== 1 && differe_type !== 2) {
     throw new Error(`Type de differe invalide : ${differe_type} (attendu 1 ou 2)`);
   }
 
   const rev = normaliserRevisabilite(String(revisabilite));
   const la0 = livret_a_origine ?? 0;
+  // R-AMT-9 : a periodicite annuelle, une periode EST une annee.
+  const differeAns = differeEnPeriodes(pret, 1);
 
   // R-AMT-8 - ECHEANCES INFRA-ANNUELLES. Les prets Action Logement s'amortissent
   // par trimestre. Le compte d'exploitation, lui, reste annuel : on amortit donc
@@ -357,7 +388,7 @@ export function tableauAmortissement(pret) {
     const revN =
       rev === 'DOUBLE' ? revBrut : rev === 'D.LIMITEE' ? Math.max(revBrut, 0) : progressivite;
 
-    if (k < differe_ans) {
+    if (k < differeAns) {
       // Differe : aucun amortissement, CRD inchange. Type 1 -> rien n'est du
       // (LEON ne capitalise PAS ces interets, cf. ECARTS_LEON E-2).
       const interets = differe_type === 1 ? 0 : tx * crd;
@@ -380,7 +411,7 @@ export function tableauAmortissement(pret) {
     // nul : ici le taux joue, il ne fait varier que la part d'interets.
     if (profil === 'constant') {
       const solde = arrondiCRD(crd) <= 0;
-      const amort = solde ? 0 : montant_eur / (duree_ans - differe_ans);
+      const amort = solde ? 0 : montant_eur / (duree_ans - differeAns);
       const interets = solde ? 0 : tx * crd;
       crd -= amort;
       lignes.push({
@@ -399,7 +430,7 @@ export function tableauAmortissement(pret) {
       annuite = 0; // pret deja solde : LEON continue d'emettre des lignes a zero
     } else if ((taux === 0 && progressivite === 0) || (revN === 0 && tx === 0)) {
       // Branche lineaire de FK117 : capital d'ORIGINE / duree amortissante.
-      annuite = montant_eur / (duree_ans - differe_ans);
+      annuite = montant_eur / (duree_ans - differeAns);
     } else {
       annuite = crd * facteurAnnuite(tx, revN, duree_ans - k);
     }

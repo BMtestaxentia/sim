@@ -1636,3 +1636,28 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
   .ecran[hidden] { display: block !important; }
   .bloc { break-inside: avoid; }
 }
+
+/* ---------- Trésorerie de chantier ----------
+   Trois traces sur la meme echelle : c'est leur ECART qui interesse. L'aire du
+   BESOIN se remplit, les deux cumuls restent des traits - ce qui est plein se
+   lit avant ce qui est trace, et le besoin est ce qu'on vient chercher. */
+.treso__aire { fill: color-mix(in srgb, var(--warning-accent) 22%, transparent); stroke: none; }
+.treso__depenses { fill: none; stroke: var(--cat-1); stroke-width: 2; }
+.treso__tirages { fill: none; stroke: var(--success-accent); stroke-width: 2; stroke-dasharray: 5 3; }
+#graphe-tresorerie svg { width: 100%; height: auto; display: block; }
+/* Puces de legende : elles reprennent le trait de leur courbe, pointille
+   compris, pour qu'on n'ait pas a deviner laquelle est laquelle. */
+.treso__cle {
+  display: inline-block; width: 16px; height: 3px; margin: 0 4px 0 12px;
+  vertical-align: middle; border-radius: 2px;
+}
+.treso__cle--depenses { background: var(--cat-1); }
+.treso__cle--tirages {
+  background: repeating-linear-gradient(to right, var(--success-accent) 0 5px, transparent 5px 8px);
+}
+.treso__cle--besoin {
+  height: 9px; background: color-mix(in srgb, var(--warning-accent) 22%, transparent);
+}
+/* La date sous le rang du mois : le rang sert a compter, la date a se reperer. */
+.treso__date { display: block; font-size: 10px; color: var(--text-tertiary); }
+#table-tresorerie th:first-child, #table-tresorerie td:first-child { width: 1%; white-space: nowrap; }

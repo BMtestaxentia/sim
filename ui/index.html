@@ -41,6 +41,9 @@
         <button type="button" class="onglet" role="tab" data-ecran="financement" aria-selected="false">
           Plan de financement
         </button>
+        <button type="button" class="onglet" role="tab" data-ecran="tresorerie" aria-selected="false">
+          Trésorerie
+        </button>
         <button type="button" class="onglet" role="tab" data-ecran="exploitation" aria-selected="false">
           Exploitation
         </button>
@@ -411,6 +414,46 @@
     </main>
 
     <!-- ================= ÉCRAN 3 - EXPLOITATION ================= -->
+    <!-- ================= ÉCRAN - TRÉSORERIE DE CHANTIER =================
+         Le point de vue du financeur sur la phase travaux : ce qui sort, ce qui
+         rentre, et à quel moment le besoin culmine. Le compte d'exploitation
+         commence à la mise en location ; cet écran couvre ce qui le précède. -->
+    <main class="ecran" id="ecran-tresorerie" role="tabpanel" hidden>
+      <section class="bloc">
+        <h2 class="bloc__titre">Trésorerie de chantier</h2>
+        <div class="indicateurs" id="recap-tresorerie"></div>
+        <p class="aide" id="aide-tresorerie"></p>
+      </section>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">Besoin de financement au fil du chantier</h2>
+        <div id="graphe-tresorerie"></div>
+        <p class="aide" id="legende-tresorerie"></p>
+      </section>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">Échéancier mensuel</h2>
+        <div>
+          <table class="tableau tableau--entete-figee" id="table-tresorerie">
+            <thead>
+              <tr>
+                <th>Mois</th>
+                <th class="num">Dépenses</th>
+                <th class="num">Cumul dépensé</th>
+                <th class="num">Subventions</th>
+                <th class="num">Fonds propres</th>
+                <th class="num">Tirage de prêt</th>
+                <th class="num">Cumul tiré</th>
+                <th class="num">Besoin cumulé</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+      </section>
+    </main>
+
     <main class="ecran" id="ecran-exploitation" role="tabpanel" hidden>
       <div id="bandeau-exploitation" class="bandeau"></div>
 

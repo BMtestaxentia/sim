@@ -218,8 +218,32 @@ html, body {
 /* Ecran de tranche encadre par ses deux jauges : ce qu'elle coute a gauche, ce
    qui la finance a droite, a la meme echelle. C'est la barre d'equilibre du
    plan de financement, tournee d'un quart de tour et posee sur les bords. */
-.ecran--tranche { display: block; }
+/* ---------- Ecran de tranche : la couleur du produit sur les bords ----------
+   Un degrade lateral, dense au bord et eteint vers le centre, dit dans quelle
+   tranche on se trouve sans rien ajouter au contenu. L'onglet actif le dit
+   deja, mais il est en haut de page : des qu'on defile, plus rien ne rappelle
+   qu'on saisit du PLS et non du PLAI, et deux tranches se ressemblent beaucoup.
+   Pose en `fixed` pour rester visible au defilement, et `pointer-events: none`
+   pour ne jamais intercepter un clic. */
+.ecran--tranche { display: block; position: relative; }
 .ecran--tranche[hidden] { display: none; }
+.ecran--tranche::before, .ecran--tranche::after {
+  content: ''; position: fixed; top: 58px; bottom: 0; width: 190px;
+  pointer-events: none; z-index: 0;
+}
+.ecran--tranche::before {
+  left: 0;
+  background: linear-gradient(to right,
+    color-mix(in srgb, var(--cat, var(--prod-autre)) 42%, transparent), transparent);
+}
+.ecran--tranche::after {
+  right: 0;
+  background: linear-gradient(to left,
+    color-mix(in srgb, var(--cat, var(--prod-autre)) 42%, transparent), transparent);
+}
+/* Le contenu passe AU-DESSUS du degrade : sans cela, les jauges laterales et
+   les blocs prendraient sa teinte par transparence. */
+.ecran--tranche > * { position: relative; z-index: 1; }
 /* Les jauges sortent du flux (voir plus bas) : le corps leur reserve sa place
    par une marge, sans quoi la saisie passerait dessous. */
 .ecran__corps { margin: 0 219px; min-width: 0; }
@@ -1302,7 +1326,28 @@ span.ressource__libelle {
 /* Chaine de calcul : les jetons se lisent de gauche a droite, separes d'une
    fleche pour dire qu'ils s'enchainent et ne se juxtaposent pas. La fleche est
    un element a part : en pseudo-element du jeton, elle tomberait DANS sa boite. */
-.jetons--chaine { align-items: center; gap: 4px; }
+/* La chaine du loyer en COLONNE : cinq etapes ne tiennent pas sur la largeur
+   d'un encart en demi-largeur, et une chaine qui se replie sur deux rangs cesse
+   de se lire comme une chaine. Empilee, elle se lit comme le calcul qu'elle
+   est : intitule a gauche, valeur a droite, la derniere ligne detachee parce
+   que c'est elle qu'on cherche. */
+.jetons--chaine { display: block; margin-top: 10px; }
+.chaine__etape {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 4px 0; border-bottom: 1px dashed var(--border-color);
+  font-size: 11.5px;
+}
+.chaine__cle { color: var(--text-secondary); }
+.chaine__valeur {
+  font-variant-numeric: tabular-nums; font-weight: 650; color: var(--text-primary);
+  white-space: nowrap;
+}
+.chaine__etape--fin {
+  border-bottom: none; border-top: 1px solid var(--border-color-strong);
+  margin-top: 2px; padding-top: 6px;
+}
+.chaine__etape--fin .chaine__cle { color: var(--text-primary); font-weight: 600; }
+.chaine__etape--fin .chaine__valeur { font-size: 13px; }
 .jetons__lien { color: var(--text-tertiary); font-size: 11px; user-select: none; }
 
 .ligne__pied {
@@ -1681,33 +1726,6 @@ span.ressource__libelle {
           </p>
         </section>
       </div>
-
-      <section class="bloc">
-        <h2 class="bloc__titre">
-          Mode foyer (redevance)
-          <span class="bloc__outils" id="bascule-redevance" hidden>
-            <span class="bascule">
-              <button type="button" class="bascule__option" data-mode-redevance="forfaitaire">Forfaitaire</button>
-              <button type="button" class="bascule__option" data-mode-redevance="transparence">En transparence</button>
-            </span>
-          </span>
-        </h2>
-        <label class="champ champ--interrupteur">
-          <input type="checkbox" data-champ="exploitation.mode" data-type="mode-redevance" data-structure="1" />
-          <span>Les produits sont une redevance, pas un loyer au m²</span>
-        </label>
-        <div class="champs" id="champs-redevance">
-          <label class="champ" data-si-redevance="forfaitaire">
-            <span>Redevance annuelle (€)</span>
-            <input type="text" inputmode="decimal" data-champ="exploitation.redevance_annuelle_eur" data-type="montant" />
-          </label>
-          <label class="champ" data-si-redevance="forfaitaire">
-            <span>Année de valeur de la redevance</span>
-            <input type="number" step="1" data-champ="exploitation.redevance_annee_valeur" data-type="nombre" placeholder="mise en location" />
-          </label>
-        </div>
-        <p class="aide" id="aide-redevance"></p>
-      </section>
 
       <section class="bloc">
         <h2 class="bloc__titre">Récapitulatif de l'opération</h2>
@@ -5008,6 +5026,10 @@ function compteExploitation(e) {
     interets_par_annee = [],
     dotation_amortissements_eur = 0,
     dotation_amortissements_par_annee = [],
+    // R-EXP-7 : produits par TRANCHE. Chacune est soit en loyers, soit en
+    // redevance, et une operation mixte porte les deux. Vide, le compte retombe
+    // sur les entrees scalaires ci-dessus, qui decrivent l'operation entiere.
+    tranches_produits = [],
     // R-EXP-4 : impot sur les societes. Inactif tant que le taux est nul, ce
     // qui laisse intact le regime d'exoneration des logements conventionnes.
     is_taux = 0,
@@ -5255,33 +5277,85 @@ function compteExploitation(e) {
     // risque qu'il a precisement transfere. Un seul point de decision, utilise
     // par la forme fermee ET par le calcul des loyers nets - les separer les
     // aurait fait diverger a la premiere retouche.
-    const tauxVacance = transparence ? 0 : taux_vacance_impayes;
+    // La REDEVANCE FORFAITAIRE porte une ANNEE DE VALEUR : le montant negocie
+    // date d'un exercice donne, et l'indexation court depuis CET exercice, pas
+    // depuis la mise en location. Une redevance en valeur 2026 pour une
+    // livraison en 2029 arrive donc deja indexee de trois ans en annee 1.
+    const redevanceForfait = (r) =>
+      (r.redevance_annuelle_eur ?? 0) *
+      (r.redevance_annee_valeur
+        ? facteurIndexation(
+            trajectoires[r.index_redevance ?? index_redevance] ?? 0,
+            r.redevance_annee_valeur,
+            annee,
+          )
+        : idx(r.index_redevance ?? index_redevance));
 
-    let redevance = 0;
-    if (transparence) {
+    // Produits par TRANCHE quand la liste est fournie : une operation mixte
+    // porte des tranches en loyers a cote de tranches en redevance, et le compte
+    // les additionne. La voie scalaire reste pour les appels qui decrivent
+    // l'operation entiere d'un seul mode - les fixtures, notamment.
+    const parTranche = tranches_produits.length > 0;
+    let loyersLogements = 0;
+    let forfaits = 0;
+    /** Quote-part des tranches en transparence : elles refacturent CETTE part. */
+    let quotePartTransparence = 0;
+    if (parTranche) {
+      for (const t of tranches_produits) {
+        if (t.mode !== 'redevance') {
+          loyersLogements += (t.loyers_annuels_eur ?? 0) * idxLoyers;
+        } else if (t.mode_redevance === 'transparence') {
+          quotePartTransparence += t.quote_part ?? 0;
+        } else {
+          forfaits += redevanceForfait(t);
+        }
+      }
+    } else {
+      loyersLogements = foyer ? 0 : loyers_logements_annuels_eur * idxLoyers;
+      if (foyer && !transparence) {
+        forfaits = redevanceForfait({ redevance_annuelle_eur, redevance_annee_valeur, index_redevance });
+      }
+      if (transparence) quotePartTransparence = 1;
+    }
+    const loyersAnnexes = (parTranche ? 1 : foyer ? 0 : 1) * loyers_annexes_annuels_eur * idxLoyers;
+    const loyersDivers = (parTranche ? 1 : foyer ? 0 : 1) * loyers_divers_annuels_eur * idxLoyers;
+
+    // R-EXP-7 - REDEVANCE EN TRANSPARENCE, part par part. Le bailleur refacture
+    // ses frais : la redevance des tranches concernees doit couvrir LEUR part
+    // des charges, quote-part de surface utile a l'appui - la meme cle que
+    // partout ailleurs dans le moteur.
+    //
+    // Les cotisations assises sur les produits locatifs se refacturent
+    // elles-memes, d'ou une equation en R. En notant L ce qui est deja connu
+    // (loyers et redevances forfaitaires), Q la quote-part en transparence, C0
+    // les charges fixes et k le total des taux assis sur les produits :
+    //   R = Q x (C0 + k x (L + R) - tauxNets x v x L)
+    //   R = Q x (C0 + k x L - tauxNets x v x L) / (1 - Q x k)
+    // A Q = 1 et L = 0, on retrouve la forme fermee d'une operation entierement
+    // en transparence, R = C0 / (1 - k).
+    const connus = loyersLogements + loyersAnnexes + loyersDivers + forfaits;
+    let redevanceTransparence = 0;
+    if (quotePartTransparence > 0) {
       const socle =
         annuitesAnnee + tfpb + grosEntretien + rel + annuiteFP + chargesFixes +
         (frais_gestion_pct_loyers > 0 ? 0 : fraisGestionForfait);
-      const t = frais_gestion_pct_loyers + tauxBruts + tauxNets * (1 - tauxVacance);
-      redevance = t < 1 ? socle / (1 - t) : socle;
-    } else if (foyer) {
-      // La redevance porte une ANNEE DE VALEUR : le montant negocie date d'un
-      // exercice donne, et l'indexation court depuis CET exercice, pas depuis la
-      // mise en location. Une redevance en valeur 2026 pour une livraison en 2029
-      // arrive donc deja indexee de trois ans en annee 1.
-      redevance =
-        redevance_annuelle_eur *
-        (redevance_annee_valeur
-          ? facteurIndexation(trajectoires[index_redevance] ?? 0, redevance_annee_valeur, annee)
-          : idx(index_redevance));
+      const k = frais_gestion_pct_loyers + tauxBruts + tauxNets;
+      const num =
+        quotePartTransparence * (socle + k * connus - tauxNets * taux_vacance_impayes * connus);
+      const den = 1 - quotePartTransparence * k;
+      redevanceTransparence = den > 0 ? num / den : quotePartTransparence * socle;
     }
-    const loyersLogements = foyer ? 0 : loyers_logements_annuels_eur * idxLoyers;
-    const loyersAnnexes = foyer ? 0 : loyers_annexes_annuels_eur * idxLoyers;
-    const loyersDivers = foyer ? 0 : loyers_divers_annuels_eur * idxLoyers;
+    const redevance = forfaits + redevanceTransparence;
+
     // Assiette commune aux deux modes : ce que l'operation encaisse de son
     // occupation. C'est elle que visent la vacance et les taux de cotisation.
     const loyersBruts = redevance + loyersLogements + loyersAnnexes + loyersDivers;
-    const vacanceImpayes = loyersBruts * tauxVacance;
+    // En TRANSPARENCE, le bailleur ne porte ni vacance ni impaye : il refacture
+    // ses frais au gestionnaire, qui les lui doit que les places soient
+    // occupees ou non. La vacance ne mord donc QUE sur le reste, ce qui permet
+    // a une operation mixte d'en porter sur ses tranches en loyers sans en
+    // faire supporter aux tranches qui ont transfere le risque.
+    const vacanceImpayes = (loyersBruts - redevanceTransparence) * taux_vacance_impayes;
     const loyersNets = loyersBruts - vacanceImpayes;
     // La quote-part de subventions virée au résultat s'eteint au terme de la
     // duree d'etalement ; duree 0 = pas d'extinction.
@@ -6695,6 +6769,32 @@ function calculer(entrees, referentiels) {
   // redevance forfaitaire indexee.
   const chargesDiverses = resoudreChargesExploitation(exp.charges_diverses, baremes);
 
+  // R-EXP-7 - Regime de produits par tranche. Une tranche est soit en LOYERS,
+  // soit en REDEVANCE ; la redevance est forfaitaire (montant negocie) ou en
+  // transparence (refacturation des charges). La quote-part de surface utile
+  // suit, car c'est elle qui dit quelle PART des charges une tranche en
+  // transparence refacture - la meme cle de ventilation que partout ailleurs.
+  //
+  // La liste n'est constituee que si au moins une tranche declare un regime :
+  // sans cela on laisse le compte sur sa voie scalaire, qui porte les golden
+  // tests et decrit tres bien une operation d'un seul tenant.
+  const regimes = entrees.regimes_par_produit ?? {};
+  const produitsParTranche = Object.keys(regimes).length
+    ? loyers.map((l) => {
+        const g = regimes[l.code_produit] ?? {};
+        return {
+          code: l.code_produit,
+          mode: g.mode ?? 'loyers',
+          mode_redevance: g.mode_redevance ?? 'forfaitaire',
+          redevance_annuelle_eur: g.redevance_annuelle_eur ?? 0,
+          redevance_annee_valeur: g.redevance_annee_valeur,
+          index_redevance: g.index_redevance,
+          loyers_annuels_eur: l.loyer_annuel_eur,
+          quote_part: quotesParts[l.code_produit] ?? 0,
+        };
+      })
+    : [];
+
   // R-EXP-4 - Impot sur les societes. Le logement social conventionne releve du
   // service d'interet general et en est exonere ; le logement intermediaire non.
   // C'est donc une propriete des PRODUITS presents dans le programme, et non un
@@ -6728,6 +6828,12 @@ function calculer(entrees, referentiels) {
     duree_ans: dates.duree_simulation_ans ?? 50,
     mode: exp.mode ?? 'loyers',
     mode_redevance: exp.mode_redevance ?? 'forfaitaire',
+    // R-EXP-7 : le regime de produits se declare TRANCHE PAR TRANCHE. Un foyer
+    // en redevance peut cotoyer des logements familiaux en loyers dans la meme
+    // operation, et c'est le cas courant des programmes mixtes. Les entrees
+    // scalaires ci-dessus restent servies pour les appels qui decrivent
+    // l'operation d'un seul tenant.
+    tranches_produits: produitsParTranche,
     redevance_annuelle_eur: exp.redevance_annuelle_eur ?? 0,
     redevance_annee_valeur: exp.redevance_annee_valeur,
     index_redevance: exp.index_redevance ?? 'loyers_irl',
@@ -7145,6 +7251,8 @@ const etat = {
   fonds_propres_par_produit: {},
   // R-FIN-7 : regime des fonds propres, tranche par tranche.
   remuneration_fonds_propres: {},
+  // R-EXP-7 : regime de produits par tranche, loyers ou redevance.
+  regimes_par_produit: {},
   mode_prets: 'saisis',
   // Les prets CDC de chaque tranche sont crees a la volee par
   // `pretsCDCParDefaut`, en montant AUTOMATIQUE : rien n'est fige au depart.
@@ -7671,6 +7779,9 @@ function rendreStructureTranches() {
   $('#ecrans-tranches').innerHTML = codes
     .map((code) => {
       const L = etat.loyers_par_produit[code];
+      // R-EXP-7 : regime de produits de la tranche. « loyers » par defaut, ce
+      // qui laisse une operation ordinaire se comporter exactement comme avant.
+      const REG = etat.regimes_par_produit?.[code] ?? { mode: 'loyers' };
       const RFP = etat.remuneration_fonds_propres[code] ?? { remuneres: false };
       const prets = etat.prets.map((p, i) => ({ p, i })).filter(({ p }) => (p.produit ?? code) === code);
       const subs = etat.subventions.map((s, i) => ({ s, i })).filter(({ s }) => s.affectation === code);
@@ -7682,8 +7793,58 @@ function rendreStructureTranches() {
       const colonnesLoyerFP = `
         <div class="colonnes">
           <section class="bloc bloc--tranche">
-            <h2 class="bloc__titre">Loyer de la tranche ${att(libelleProduit(code))}</h2>
-            <div class="champs champs--serres">
+            <!-- R-EXP-7 : une tranche encaisse SOIT un loyer, SOIT une
+                 redevance, jamais les deux. Le regime se choisit donc ici, et il
+                 remplace le contenu de l'encart plutot que d'ajouter un bloc a
+                 cote : deux encarts dont un seul compte laisseraient croire que
+                 les montants s'additionnent. Le choix est de TRANCHE, un foyer
+                 en redevance pouvant cotoyer des logements familiaux en loyers
+                 dans la meme operation. -->
+            <h2 class="bloc__titre">
+              Produits de la tranche ${att(libelleProduit(code))}
+              <span class="bloc__outils"><span class="choix">
+                ${[
+                  { v: 'loyers', l: 'Loyer au m²' },
+                  { v: 'redevance', l: 'Redevance' },
+                ]
+                  .map(
+                    (o) => `<button type="button" class="choix__option ${REG.mode === o.v ? 'choix__option--actif' : ''}"
+                      data-poser-champ="regimes_par_produit.${code}.mode" data-valeur="${o.v}"
+                      data-type-valeur="texte">${o.l}</button>`,
+                  )
+                  .join('')}
+              </span></span>
+            </h2>
+            ${
+              REG.mode === 'redevance'
+                ? `<div class="champs champs--serres">
+              <div class="champ champ--choix"><span>Régime</span>
+                <span class="choix">
+                  ${[
+                    { v: 'forfaitaire', l: 'Forfaitaire', a: 'Montant négocié, indexé depuis son année de valeur' },
+                    { v: 'transparence', l: 'En transparence', a: 'Refacturation des charges : le résultat de la tranche est nul' },
+                  ]
+                    .map(
+                      (o) => `<button type="button" class="choix__option ${(REG.mode_redevance ?? 'forfaitaire') === o.v ? 'choix__option--actif' : ''}"
+                        data-poser-champ="regimes_par_produit.${code}.mode_redevance" data-valeur="${o.v}"
+                        data-type-valeur="texte" title="${att(o.a)}">${o.l}</button>`,
+                    )
+                    .join('')}
+                </span></div>
+              ${
+                (REG.mode_redevance ?? 'forfaitaire') === 'forfaitaire'
+                  ? `<label class="champ"><span>Redevance annuelle (€)</span>
+                      <input type="text" inputmode="decimal" data-champ="regimes_par_produit.${code}.redevance_annuelle_eur"
+                        data-type="montant" value="${valMontant(REG.redevance_annuelle_eur)}" /></label>
+                     <label class="champ"><span>Année de valeur</span>
+                      <input type="number" step="1" data-champ="regimes_par_produit.${code}.redevance_annee_valeur"
+                        data-type="nombre" value="${valNum(REG.redevance_annee_valeur)}"
+                        placeholder="mise en location" /></label>`
+                  : ''
+              }
+            </div>
+            <p class="aide" data-aide-redevance="${code}"></p>`
+                : `<div class="champs champs--serres">
               <label class="champ">
                 <span>Majoration (%)</span>
                 <input type="number" step="0.1" data-champ="loyers_par_produit.${code}.marge_majoration" data-type="pourcentage" value="${valNum(enPourcent(L.marge_majoration))}" />
@@ -7696,7 +7857,8 @@ function rendreStructureTranches() {
             <!-- La chaine de calcul du loyer en JETONS et non en table : c'est la
                  meme grammaire que les prets, et cinq lignes de tableau pour
                  cinq nombres pesaient plus que ce qu'elles montraient. -->
-            <div class="jetons jetons--chaine" data-jetons-loyer="${code}"></div>
+            <div class="jetons jetons--chaine" data-jetons-loyer="${code}"></div>`
+            }
           </section>
 
           <section class="bloc bloc--tranche">
@@ -7926,8 +8088,8 @@ function pretModifie(p) {
  * `champ` marque la valeur pour qu'un rendu ulterieur la remplisse depuis le
  * resultat du moteur, sans reconstruire la ligne.
  */
-const jeton = (cle, valeur, champ) =>
-  `<span class="jeton"><span class="jeton__cle">${att(cle)}</span>` +
+const jeton = (cle, valeur, champ, titre) =>
+  `<span class="jeton"${titre ? ` title="${att(titre)}"` : ''}><span class="jeton__cle">${att(cle)}</span>` +
   `<span class="jeton__valeur"${champ ? ` data-jeton="${champ}"` : ''}>${att(valeur)}</span></span>`;
 
 /**
@@ -8298,34 +8460,19 @@ function rendreZonage() {
  * Afficher un champ « redevance » en transparence laisserait croire qu'il agit.
  */
 function rendreBlocRedevance() {
-  const e = etat.exploitation;
-  const foyer = e.mode === 'redevance';
-  const champs = document.getElementById('champs-redevance');
-  const bascule = document.getElementById('bascule-redevance');
-  if (!champs) return;
-
-  champs.hidden = !foyer;
-  if (bascule) bascule.hidden = !foyer;
-  for (const b of document.querySelectorAll('[data-mode-redevance]')) {
-    b.setAttribute(
-      'aria-pressed',
-      String(/** @type {HTMLElement} */ (b).dataset.modeRedevance === (e.mode_redevance ?? 'forfaitaire')),
-    );
-  }
-  for (const el of champs.querySelectorAll('[data-si-redevance]')) {
-    /** @type {HTMLElement} */ (el).hidden =
-      /** @type {HTMLElement} */ (el).dataset.siRedevance !== (e.mode_redevance ?? 'forfaitaire');
-  }
-
-  const aide = document.getElementById('aide-redevance');
-  if (aide) {
-    aide.textContent =
-      (e.mode_redevance ?? 'forfaitaire') === 'transparence'
-        ? '⚙ En transparence, le bailleur refacture ses frais : la redevance vaut la somme des ' +
-          'charges de l’exercice (annuités d’emprunt et de fonds propres, gros entretien, gestion, ' +
-          'taxe foncière, assurances). Elle suit chaque rupture de charges, et les cotisations ' +
-          'assises sur la redevance sont refacturées elles aussi. Le résultat est nul, sauf si un ' +
-          'taux de vacance vient retrancher une part de la redevance sans réduire les charges.'
+  // Le regime se choisit desormais TRANCHE PAR TRANCHE, dans l'encart des
+  // produits de chacune : l'aide accompagne donc chaque encart, et dit ce que
+  // le regime choisi implique pour CETTE tranche.
+  for (const el of document.querySelectorAll('[data-aide-redevance]')) {
+    const code = /** @type {HTMLElement} */ (el).dataset.aideRedevance;
+    const r = etat.regimes_par_produit?.[code] ?? {};
+    el.textContent =
+      (r.mode_redevance ?? 'forfaitaire') === 'transparence'
+        ? '⚙ En transparence, le bailleur refacture ses frais : la redevance de cette tranche vaut ' +
+          'sa part des charges de l’exercice, au prorata de surface utile (annuités d’emprunt et de ' +
+          'fonds propres, gros entretien, gestion, taxe foncière, assurances). Elle suit chaque ' +
+          'rupture de charges, les cotisations assises sur elle sont refacturées à leur tour, et la ' +
+          'vacance ne s’y applique pas : le risque est porté par le gestionnaire.'
         : '⚙ En forfaitaire, la redevance est un montant négocié, indexé depuis son année de valeur. ' +
           'Elle ne suit pas les charges : vérifié sur l’annexe Orléans, où aucune rupture de charges ' +
           'ne laisse de trace sur 60 ans.';
@@ -9061,13 +9208,26 @@ function rendreValeurs(r) {
     // bareme, coefficient de structure, plafond, sortie, annuel.
     const chaine = document.querySelector(`[data-jetons-loyer="${code}"]`);
     if (chaine && l) {
+      // Chaine en COLONNE : cinq etapes ne tiennent pas sur les 390 px d'un
+      // encart en demi-largeur, et une chaine qui se replie sur deux rangs
+      // cesse de se lire comme une chaine - la fleche de liaison se retrouve en
+      // fin de rang, pointant vers le vide. Empilee, elle se lit comme le
+      // calcul qu'elle est : une etape par ligne, valeurs alignees a droite.
       chaine.innerHTML = [
-        jeton('barème de zone', `${nb(l.loyer_base_eur_m2)} €/m²`),
-        jeton('coef. structure', nb(l.cs)),
-        jeton('plafond', `${nb(l.loyer_max_base_eur_m2)} €/m²`),
-        jeton(l.force ? 'loyer forcé' : 'loyer de sortie', `${nb(l.loyer_pratique_eur_m2)} €/m²`),
-        jeton('loyer annuel', eur(l.loyer_annuel_eur)),
-      ].join('<span class="jetons__lien">→</span>');
+        ['Barème de zone', `${nb(l.loyer_base_eur_m2)} €/m²`],
+        ['Coefficient de structure', nb(l.cs)],
+        ['Loyer plafond', `${nb(l.loyer_max_base_eur_m2)} €/m²`],
+        [l.force ? 'Loyer de sortie forcé' : 'Loyer de sortie', `${nb(l.loyer_pratique_eur_m2)} €/m²`],
+        ['Loyer annuel', eur(l.loyer_annuel_eur)],
+      ]
+        .map(
+          ([k, v], i, t) =>
+            `<div class="chaine__etape ${i === t.length - 1 ? 'chaine__etape--fin' : ''}">
+              <span class="chaine__cle">${att(k)}</span>
+              <span class="chaine__valeur">${att(v)}</span>
+            </div>`,
+        )
+        .join('');
     }
 
     // Poids de chaque ressource dans le prix de revient de SA tranche : c'est
@@ -11095,7 +11255,8 @@ const CLE_ECRAN = 'moteur-sim.ecran';
 /** Les seules racines memorisees : ce que l'utilisateur a saisi, rien d'autre. */
 const RACINES_PERSISTEES = [
   'identite', 'dates', 'lots', 'postes_bilan', 'loyers_par_produit', 'subventions',
-  'fonds_propres_par_produit', 'remuneration_fonds_propres', 'mode_prets', 'prets',
+  'fonds_propres_par_produit', 'remuneration_fonds_propres', 'regimes_par_produit',
+  'mode_prets', 'prets',
   'exploitation', 'profils', 'profil_actif', 'options',
 ];
 

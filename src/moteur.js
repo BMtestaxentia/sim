@@ -1025,6 +1025,32 @@ export function calculer(entrees, referentiels) {
   // redevance forfaitaire indexee.
   const chargesDiverses = resoudreChargesExploitation(exp.charges_diverses, baremes);
 
+  // R-EXP-7 - Regime de produits par tranche. Une tranche est soit en LOYERS,
+  // soit en REDEVANCE ; la redevance est forfaitaire (montant negocie) ou en
+  // transparence (refacturation des charges). La quote-part de surface utile
+  // suit, car c'est elle qui dit quelle PART des charges une tranche en
+  // transparence refacture - la meme cle de ventilation que partout ailleurs.
+  //
+  // La liste n'est constituee que si au moins une tranche declare un regime :
+  // sans cela on laisse le compte sur sa voie scalaire, qui porte les golden
+  // tests et decrit tres bien une operation d'un seul tenant.
+  const regimes = entrees.regimes_par_produit ?? {};
+  const produitsParTranche = Object.keys(regimes).length
+    ? loyers.map((l) => {
+        const g = regimes[l.code_produit] ?? {};
+        return {
+          code: l.code_produit,
+          mode: g.mode ?? 'loyers',
+          mode_redevance: g.mode_redevance ?? 'forfaitaire',
+          redevance_annuelle_eur: g.redevance_annuelle_eur ?? 0,
+          redevance_annee_valeur: g.redevance_annee_valeur,
+          index_redevance: g.index_redevance,
+          loyers_annuels_eur: l.loyer_annuel_eur,
+          quote_part: quotesParts[l.code_produit] ?? 0,
+        };
+      })
+    : [];
+
   // R-EXP-4 - Impot sur les societes. Le logement social conventionne releve du
   // service d'interet general et en est exonere ; le logement intermediaire non.
   // C'est donc une propriete des PRODUITS presents dans le programme, et non un
@@ -1058,6 +1084,12 @@ export function calculer(entrees, referentiels) {
     duree_ans: dates.duree_simulation_ans ?? 50,
     mode: exp.mode ?? 'loyers',
     mode_redevance: exp.mode_redevance ?? 'forfaitaire',
+    // R-EXP-7 : le regime de produits se declare TRANCHE PAR TRANCHE. Un foyer
+    // en redevance peut cotoyer des logements familiaux en loyers dans la meme
+    // operation, et c'est le cas courant des programmes mixtes. Les entrees
+    // scalaires ci-dessus restent servies pour les appels qui decrivent
+    // l'operation d'un seul tenant.
+    tranches_produits: produitsParTranche,
     redevance_annuelle_eur: exp.redevance_annuelle_eur ?? 0,
     redevance_annee_valeur: exp.redevance_annee_valeur,
     index_redevance: exp.index_redevance ?? 'loyers_irl',

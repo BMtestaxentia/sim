@@ -204,8 +204,32 @@ html, body {
 /* Ecran de tranche encadre par ses deux jauges : ce qu'elle coute a gauche, ce
    qui la finance a droite, a la meme echelle. C'est la barre d'equilibre du
    plan de financement, tournee d'un quart de tour et posee sur les bords. */
-.ecran--tranche { display: block; }
+/* ---------- Ecran de tranche : la couleur du produit sur les bords ----------
+   Un degrade lateral, dense au bord et eteint vers le centre, dit dans quelle
+   tranche on se trouve sans rien ajouter au contenu. L'onglet actif le dit
+   deja, mais il est en haut de page : des qu'on defile, plus rien ne rappelle
+   qu'on saisit du PLS et non du PLAI, et deux tranches se ressemblent beaucoup.
+   Pose en `fixed` pour rester visible au defilement, et `pointer-events: none`
+   pour ne jamais intercepter un clic. */
+.ecran--tranche { display: block; position: relative; }
 .ecran--tranche[hidden] { display: none; }
+.ecran--tranche::before, .ecran--tranche::after {
+  content: ''; position: fixed; top: 58px; bottom: 0; width: 190px;
+  pointer-events: none; z-index: 0;
+}
+.ecran--tranche::before {
+  left: 0;
+  background: linear-gradient(to right,
+    color-mix(in srgb, var(--cat, var(--prod-autre)) 42%, transparent), transparent);
+}
+.ecran--tranche::after {
+  right: 0;
+  background: linear-gradient(to left,
+    color-mix(in srgb, var(--cat, var(--prod-autre)) 42%, transparent), transparent);
+}
+/* Le contenu passe AU-DESSUS du degrade : sans cela, les jauges laterales et
+   les blocs prendraient sa teinte par transparence. */
+.ecran--tranche > * { position: relative; z-index: 1; }
 /* Les jauges sortent du flux (voir plus bas) : le corps leur reserve sa place
    par une marge, sans quoi la saisie passerait dessous. */
 .ecran__corps { margin: 0 219px; min-width: 0; }
@@ -1288,7 +1312,28 @@ span.ressource__libelle {
 /* Chaine de calcul : les jetons se lisent de gauche a droite, separes d'une
    fleche pour dire qu'ils s'enchainent et ne se juxtaposent pas. La fleche est
    un element a part : en pseudo-element du jeton, elle tomberait DANS sa boite. */
-.jetons--chaine { align-items: center; gap: 4px; }
+/* La chaine du loyer en COLONNE : cinq etapes ne tiennent pas sur la largeur
+   d'un encart en demi-largeur, et une chaine qui se replie sur deux rangs cesse
+   de se lire comme une chaine. Empilee, elle se lit comme le calcul qu'elle
+   est : intitule a gauche, valeur a droite, la derniere ligne detachee parce
+   que c'est elle qu'on cherche. */
+.jetons--chaine { display: block; margin-top: 10px; }
+.chaine__etape {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 4px 0; border-bottom: 1px dashed var(--border-color);
+  font-size: 11.5px;
+}
+.chaine__cle { color: var(--text-secondary); }
+.chaine__valeur {
+  font-variant-numeric: tabular-nums; font-weight: 650; color: var(--text-primary);
+  white-space: nowrap;
+}
+.chaine__etape--fin {
+  border-bottom: none; border-top: 1px solid var(--border-color-strong);
+  margin-top: 2px; padding-top: 6px;
+}
+.chaine__etape--fin .chaine__cle { color: var(--text-primary); font-weight: 600; }
+.chaine__etape--fin .chaine__valeur { font-size: 13px; }
 .jetons__lien { color: var(--text-tertiary); font-size: 11px; user-select: none; }
 
 .ligne__pied {

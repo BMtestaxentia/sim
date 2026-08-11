@@ -150,33 +150,6 @@
       </div>
 
       <section class="bloc">
-        <h2 class="bloc__titre">
-          Mode foyer (redevance)
-          <span class="bloc__outils" id="bascule-redevance" hidden>
-            <span class="bascule">
-              <button type="button" class="bascule__option" data-mode-redevance="forfaitaire">Forfaitaire</button>
-              <button type="button" class="bascule__option" data-mode-redevance="transparence">En transparence</button>
-            </span>
-          </span>
-        </h2>
-        <label class="champ champ--interrupteur">
-          <input type="checkbox" data-champ="exploitation.mode" data-type="mode-redevance" data-structure="1" />
-          <span>Les produits sont une redevance, pas un loyer au m²</span>
-        </label>
-        <div class="champs" id="champs-redevance">
-          <label class="champ" data-si-redevance="forfaitaire">
-            <span>Redevance annuelle (€)</span>
-            <input type="text" inputmode="decimal" data-champ="exploitation.redevance_annuelle_eur" data-type="montant" />
-          </label>
-          <label class="champ" data-si-redevance="forfaitaire">
-            <span>Année de valeur de la redevance</span>
-            <input type="number" step="1" data-champ="exploitation.redevance_annee_valeur" data-type="nombre" placeholder="mise en location" />
-          </label>
-        </div>
-        <p class="aide" id="aide-redevance"></p>
-      </section>
-
-      <section class="bloc">
         <h2 class="bloc__titre">Récapitulatif de l'opération</h2>
         <div class="indicateurs" id="recap-operation"></div>
       </section>

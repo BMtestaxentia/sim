@@ -974,5 +974,12 @@
     "note_differe": "Les fiches Action Logement annoncent un differe d amortissement de 4 ans au maximum. Il est pose au maximum par defaut, en type 2 : le capital est differe, les interets restent dus.",
     "note_principal": "Un modele PRINCIPAL decrit un pret structurant de tranche : il ne se supprime pas, il se regle. Sa marge pointe la grille des prets CDC par sa cle, si bien qu une seule valeur sert au modele et au calcul des prets par defaut.",
     "note_produits_liste": "produits : tranches sur lesquelles le modele est proposable. Vide, il l est partout."
+  },
+  "tresorerie": {
+    "source": "Classeur « Indexeur cout travaux » fourni par le metier le 11/08/2026.",
+    "usage": "Indexation des depenses de chantier. Le cout est revise de sa date de valeur au demarrage, puis reparti a parts egales sur les mois de chantier, chaque mensualite etant indexee de SA propre duree - seules les sommes dues sont indexees.",
+    "taux_indexation": 0.02,
+    "base_jours": 365.25,
+    "note_base": "Base 365,25 jours, celle du classeur. La premiere echeance tombe un mois APRES l ordre de service : un chantier ne facture pas le jour ou il commence."
   }
 }

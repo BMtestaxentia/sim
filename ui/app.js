@@ -192,6 +192,8 @@ const etat = {
   remuneration_fonds_propres: {},
   // R-EXP-7 : regime de produits par tranche, loyers ou redevance.
   regimes_par_produit: {},
+  // R-TRESO-2 : indexation des depenses de chantier, hypothese de simulation.
+  tresorerie: {},
   mode_prets: 'saisis',
   // Les prets CDC de chaque tranche sont crees a la volee par
   // `pretsCDCParDefaut`, en montant AUTOMATIQUE : rien n'est fige au depart.
@@ -2973,6 +2975,15 @@ function rendreFiligraneTFPB(r) {
   // Dire QUAND la taxe commence a courir. Une exoneration de vingt-cinq ans
   // rend la ligne nulle sur la moitie du compte, et on cherche alors le montant
   // sans le trouver - c'est ce qui s'est produit.
+  // Meme convention pour l indexation du chantier : le referentiel en
+  // filigrane, la saisie par-dessus.
+  const idx = /** @type {HTMLInputElement|null} */ (document.getElementById('indexation-chantier'));
+  if (idx) {
+    const ti = referentiels.baremes.tresorerie?.taux_indexation;
+    idx.placeholder = nul(ti) ? '' : String(enPourcent(ti));
+    idx.title = nul(ti) ? '' : `Référentiel : ${pct(ti, 2)} par an. Laisser vide pour le reprendre.`;
+  }
+
   const aide = document.getElementById('aide-tfpb');
   if (!aide) return;
   const premiere = r?.exploitation?.lignes?.find((l) => (l.tfpb_eur ?? 0) > 0);
@@ -3212,10 +3223,13 @@ function grapheTresorerie(t) {
     <line class="graphe__repere" x1="${xPic.toFixed(1)}" y1="${marge.haut}" x2="${xPic.toFixed(1)}" y2="${marge.haut + hauteur}" />
     <text class="graphe__texte graphe__texte--repere" x="${xPic.toFixed(1)}" y="${marge.haut - 3}" text-anchor="middle">pic</text>
     ${[0, Math.floor((l.length - 1) / 2), l.length - 1]
-      .map(
-        (i) =>
-          `<text class="graphe__texte" x="${x(i).toFixed(1)}" y="${H - 14}" text-anchor="middle">M+${l[i].mois}</text>`,
-      )
+      .map((i, rang) => {
+        // Les reperes des EXTREMITES s'ancrent par leur bord et non par leur
+        // milieu : centres, la moitie du premier et du dernier sortait du
+        // cadre. Celui du milieu reste centre, il a la place des deux cotes.
+        const ancre = rang === 0 ? 'start' : rang === 2 ? 'end' : 'middle';
+        return `<text class="graphe__texte" x="${x(i).toFixed(1)}" y="${H - 14}" text-anchor="${ancre}">M+${l[i].mois}</text>`;
+      })
       .join('')}
     <text class="graphe__texte" x="${marge.gauche}" y="${H - 2}">Échelle 0 à ${eur(maxi)}</text>
   </svg>`;
@@ -3239,8 +3253,15 @@ function rendreTresorerie(r) {
     `<div class="indicateur"><div class="indicateur__libelle">${l}</div>` +
     `<div class="indicateur__valeur">${v}</div><div class="indicateur__detail">${d}</div></div>`;
   bloc.innerHTML = [
-    tuile('Durée', `${t.lignes.at(-1).mois} mois`, `de ${t.lignes[0].date.slice(0, 7)} à ${t.lignes.at(-1).date.slice(0, 7)}`),
-    tuile('Dépensé', eur(i.total_depenses_eur), `${pct(i.part_a_l_os, 1)} dès l’ordre de service`),
+    tuile('Durée', `${t.lignes.length} mois`, `de ${t.lignes[0].date.slice(0, 7)} à ${t.lignes.at(-1).date.slice(0, 7)}`),
+    tuile('Échéance mensuelle', eur(i.echeance_nominale_eur), 'nominale, avant indexation'),
+    tuile(
+      'Dépensé',
+      eur(i.total_depenses_eur),
+      i.surcout_indexation_eur
+        ? `dont ${eur(i.surcout_indexation_eur)} d’indexation à ${pct(i.taux_indexation, 2)}`
+        : 'sans indexation',
+    ),
     tuile('Mobilisé à l’OS', eur(i.total_subventions_eur + i.total_fonds_propres_eur),
       `${eur(i.total_subventions_eur)} de subventions · ${eur(i.total_fonds_propres_eur)} de fonds propres`),
     tuile('Besoin maximal', eur(i.besoin_maximal_eur), `atteint au mois ${i.mois_pic}`),
@@ -3248,9 +3269,11 @@ function rendreTresorerie(r) {
   ].join('');
 
   $('#aide-tresorerie').textContent =
-    '⚙ Les subventions sont mobilisables dès l’ordre de service. Les prêts se tirent à hauteur du ' +
-    'manque du mois, jamais d’avance : tirer plus tôt ferait courir des intérêts intercalaires sur ' +
-    'de l’argent qui dort. Le besoin maximal est ce que le préfinancement doit couvrir.';
+    '⚙ Le coût est réparti à parts égales sur les mois de chantier, et chaque mensualité est ' +
+    'indexée de sa propre durée : seules les sommes dues sont indexées. Les subventions sont ' +
+    'mobilisables dès l’ordre de service, et les prêts se tirent à hauteur du manque du mois, ' +
+    'jamais d’avance : tirer plus tôt ferait courir des intérêts intercalaires sur de l’argent ' +
+    'qui dort. Le besoin maximal est ce que le préfinancement doit couvrir.';
 
   $('#graphe-tresorerie').innerHTML = grapheTresorerie(t);
   $('#legende-tresorerie').innerHTML =
@@ -3262,6 +3285,11 @@ function rendreTresorerie(r) {
     .map(
       (l) => `<tr class="${l.mois === i.mois_pic ? 'ligne--rupture' : ''}">
       <td>M+${l.mois}<span class="treso__date">${l.date.slice(0, 7)}</span></td>
+      <td class="num">${eur(l.nominal_eur)}</td>
+      <!-- Quatre decimales : a deux, le coefficient du premier mois s'affichait
+           « 1,00 » et celui du deuxieme aussi, alors que c'est justement leur
+           progression qui explique le surcout. -->
+      <td class="num">${l.coefficient === 1 ? '-' : l.coefficient.toFixed(4).replace('.', ',')}</td>
       <td class="num">${eur(l.depenses_eur)}</td>
       <td class="num">${eur(l.cumul_depenses_eur)}</td>
       <td class="num">${l.subventions_eur ? eur(l.subventions_eur) : '-'}</td>
@@ -3274,6 +3302,7 @@ function rendreTresorerie(r) {
     .join('');
   $('#table-tresorerie').querySelector('tfoot').innerHTML = `<tr>
     <td class="libelle">Total</td>
+    <td></td><td></td>
     <td class="num">${eur(i.total_depenses_eur)}</td><td></td>
     <td class="num">${eur(i.total_subventions_eur)}</td>
     <td class="num">${eur(i.total_fonds_propres_eur)}</td>
@@ -4557,7 +4586,7 @@ const CLE_ECRAN = 'moteur-sim.ecran';
 /** Les seules racines memorisees : ce que l'utilisateur a saisi, rien d'autre. */
 const RACINES_PERSISTEES = [
   'identite', 'dates', 'lots', 'postes_bilan', 'loyers_par_produit', 'subventions',
-  'fonds_propres_par_produit', 'remuneration_fonds_propres', 'regimes_par_produit',
+  'fonds_propres_par_produit', 'remuneration_fonds_propres', 'regimes_par_produit', 'tresorerie',
   'mode_prets', 'prets',
   'exploitation', 'profils', 'profil_actif', 'options',
 ];

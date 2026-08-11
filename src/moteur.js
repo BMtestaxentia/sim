@@ -1166,13 +1166,15 @@ export function calculer(entrees, referentiels) {
       ? tresorerieChantier({
           date_debut_travaux: dates.date_debut_travaux,
           duree_chantier_mois: dureeChantierMois,
-          depenses_par_chapitre: Object.fromEntries(
-            Object.entries(bilan.chapitres).map(([c, v]) => [c, v.ttc_lasm_eur]),
-          ),
+          // Le prix de revient TTC, reparti a parts egales sur les mois de
+          // chantier puis indexe (R-TRESO-2, classeur « Indexeur cout travaux »).
+          cout_total_eur: bilan.total_ttc_module_eur,
+          date_valeur_cout: dates.date_valeur_cout ?? entrees.tresorerie?.date_valeur_cout,
+          taux_indexation:
+            entrees.tresorerie?.taux_indexation ?? baremes.tresorerie?.taux_indexation ?? 0,
           // Mobilisables des l'ordre de service : arbitrage metier du 11/08/2026.
           subventions_eur: subventionsTotal,
           fonds_propres_eur: fondsPropres,
-          courbes: baremes.tresorerie?.courbes,
         })
       : null;
 

@@ -13,48 +13,46 @@
  * regarde a quel moment il creuse le plus, et de combien. Ce creux est le besoin
  * de prefinancement, et c'est lui qui porte les interets intercalaires (R-FIN-6).
  *
- * Trois flux, trois rythmes distincts :
- *  - les DEPENSES suivent l'avancement, chapitre par chapitre : le foncier se
- *    paie a l'ordre de service, les travaux s'etalent sur le chantier ;
- *  - les SUBVENTIONS sont mobilisables des l'ordre de service (regle metier du
- *    11/08/2026) ;
- *  - les PRETS se tirent au fil de l'eau, a hauteur de ce qui manque : un
- *    organisme ne tire pas plus tot que necessaire, les interets courent.
+ * R-TRESO-2 - INDEXATION DES DEPENSES. Transcription du classeur « Indexeur cout
+ * travaux » (Bastien, 11/08/2026). Deux indexations se suivent, et les confondre
+ * donnerait un surcout faux :
+ *
+ *  1. le cout est saisi a une DATE DE VALEUR, et revise jusqu'a l'ordre de
+ *     service :  cout_revise = cout x (1 + t)^((debut - valeur)/365,25)  ;
+ *  2. l'echeancier repartit ce cout revise a PARTS EGALES sur les mois de
+ *     chantier, et chaque mensualite est indexee de SA propre duree, du debut
+ *     des travaux a son echeance. Le classeur le dit en titre : « seules les
+ *     sommes dues sont indexees » - une facture payee au premier mois ne subit
+ *     pas l'indexation de la trentieme.
+ *
+ * La base est 365,25 jours, celle du classeur, et la premiere echeance tombe un
+ * mois APRES l'ordre de service : un chantier ne facture pas le jour ou il
+ * commence.
  *
  * Module pur : aucune date systeme, aucun acces disque. Meme entrees, memes
  * sorties.
  */
 import { arrondiEuro, arrondirEnConservantLaSomme } from './arrondis.js';
 import { decalerMois } from './calendrier.js';
+import { jourUTC } from './amortissement.js';
 
-/**
- * Courbe de decaissement par defaut, chapitre par chapitre.
- *
- * `os` est la part payee a l'ordre de service, le reste s'etale lineairement sur
- * le chantier. Le foncier se paie comptant a l'acquisition, les travaux suivent
- * l'avancement : ce sont deux rythmes qu'une courbe unique ne saurait pas dire.
- * Surchargeable par le referentiel (`tresorerie.courbes`).
- */
-export const COURBES_DEFAUT = {
-  charge_fonciere: { os: 1 },
-  batiment: { os: 0 },
-  honoraires: { os: 0.2 },
-  frais_annexes: { os: 0.3 },
-  frais_financiers: { os: 0 },
-};
+/** Base de jours de l'indexation : celle du classeur (365,25). */
+const BASE_JOURS = 365.25;
 
 /**
  * @typedef {Object} LigneTresorerie
- * @property {number} mois            rang du mois, 0 = ordre de service
- * @property {string} date            premier jour du mois, ISO
- * @property {number} depenses_eur    decaissements du mois
+ * @property {number} mois            rang du mois, 1 = premiere echeance
+ * @property {string} date            date d'echeance, ISO
+ * @property {number} nominal_eur     mensualite avant indexation
+ * @property {number} coefficient     (1 + t) ^ (duree ecoulee en annees)
+ * @property {number} depenses_eur    mensualite indexee, ce qui sort vraiment
  * @property {number} subventions_eur encaissements de subventions
  * @property {number} fonds_propres_eur apport mobilise
  * @property {number} tirage_eur      pret tire ce mois pour couvrir le manque
  * @property {number} solde_eur       solde du mois, tirages compris
  * @property {number} cumul_depenses_eur
  * @property {number} cumul_tirages_eur
- * @property {number} besoin_eur      cumul depenses - cumul ressources hors prets
+ * @property {number} besoin_eur      cumul depenses - ressources hors prets
  */
 
 /**
@@ -63,10 +61,11 @@ export const COURBES_DEFAUT = {
  * @param {Object} p
  * @param {string} p.date_debut_travaux         ordre de service
  * @param {number} p.duree_chantier_mois
- * @param {Record<string, number>} p.depenses_par_chapitre  prix de revient TTC par chapitre
+ * @param {number} p.cout_total_eur             prix de revient TTC de l'operation
+ * @param {string} [p.date_valeur_cout]         date a laquelle le cout est exprime
+ * @param {number} [p.taux_indexation]          taux ANNUEL, fraction
  * @param {number} [p.subventions_eur]          mobilisables a l'ordre de service
  * @param {number} [p.fonds_propres_eur]        apport de l'organisme
- * @param {Record<string, {os: number}>} [p.courbes] surcharge des courbes
  * @param {boolean} [p.tirer_les_prets]         defaut vrai : les prets comblent le manque
  * @returns {{lignes: LigneTresorerie[], indicateurs: Object, tirages: Array<{date: string, montant_eur: number}>}}
  */
@@ -74,29 +73,31 @@ export function tresorerieChantier(p) {
   const {
     date_debut_travaux,
     duree_chantier_mois,
-    depenses_par_chapitre = {},
+    cout_total_eur = 0,
+    date_valeur_cout,
+    taux_indexation = 0,
     subventions_eur = 0,
     fonds_propres_eur = 0,
-    courbes = COURBES_DEFAUT,
     tirer_les_prets = true,
   } = p;
 
   const n = Math.max(1, Math.round(Number(duree_chantier_mois) || 0));
+  const anneesDepuis = (date) => (jourUTC(date) - jourUTC(date_debut_travaux)) / BASE_JOURS;
 
-  // Depenses mois par mois. Le mois 0 porte les parts payees a l'ordre de
-  // service ; le reste s'etale jusqu'a la livraison incluse.
-  const brut = new Array(n + 1).fill(0);
-  for (const [chapitre, montant] of Object.entries(depenses_par_chapitre)) {
-    if (!(montant > 0)) continue;
-    const partOS = courbes[chapitre]?.os ?? COURBES_DEFAUT[chapitre]?.os ?? 0;
-    brut[0] += montant * partOS;
-    const etale = montant * (1 - partOS);
-    for (let m = 1; m <= n; m++) brut[m] += etale / n;
-  }
+  // 1. Revision du cout jusqu'a l'ordre de service. Sans date de valeur, le
+  //    cout est repute exprime au demarrage : il n'y a rien a rattraper.
+  const anneesRevision = date_valeur_cout ? -anneesDepuis(date_valeur_cout) : 0;
+  const coutRevise = cout_total_eur * (1 + taux_indexation) ** anneesRevision;
+
+  // 2. Echeancier a parts egales, chaque mensualite indexee de SA duree.
+  const nominal = coutRevise / n;
+  const dates = Array.from({ length: n }, (_, k) => decalerMois(date_debut_travaux, k + 1));
+  const coefficients = dates.map((d) => (1 + taux_indexation) ** anneesDepuis(d));
+  const indexees = coefficients.map((c) => nominal * c);
   // Les mensualites s'arrondissent EN CONSERVANT LEUR SOMME : arrondies une a
-  // une, vingt-cinq lignes derivaient de quelques euros du prix de revient, et
-  // un echeancier qui ne totalise pas son propre total n'inspire rien de bon.
-  const depenses = arrondirEnConservantLaSomme(brut);
+  // une, trente lignes derivaient de quelques euros du total, et un echeancier
+  // qui ne totalise pas son propre total n'inspire rien de bon.
+  const depenses = arrondirEnConservantLaSomme(indexees);
 
   /** @type {LigneTresorerie[]} */
   const lignes = [];
@@ -104,18 +105,16 @@ export function tresorerieChantier(p) {
   const tirages = [];
   let cumulDepenses = 0;
   let cumulTirages = 0;
-  let tresorerie = 0;
+  // Subventions et fonds propres arrivent a l'ordre de service, donc AVANT la
+  // premiere echeance : la tresorerie demarre en positif. La regle des
+  // subventions est un arbitrage metier ; celle des fonds propres suit le bon
+  // sens - l'organisme met sa part avant d'emprunter.
+  let tresorerie = subventions_eur + fonds_propres_eur;
 
-  for (let m = 0; m <= n; m++) {
-    const depense = depenses[m];
-    // Subventions et fonds propres arrivent a l'ordre de service : la regle des
-    // subventions est un arbitrage metier, celle des fonds propres suit le bon
-    // sens - l'organisme met sa part avant d'emprunter.
-    const subvention = m === 0 ? subventions_eur : 0;
-    const apport = m === 0 ? fonds_propres_eur : 0;
-
+  for (let k = 0; k < n; k++) {
+    const depense = depenses[k];
     cumulDepenses += depense;
-    tresorerie += subvention + apport - depense;
+    tresorerie -= depense;
 
     // Le pret se tire a hauteur du MANQUE, jamais plus : tirer d'avance ferait
     // courir des interets intercalaires sur de l'argent qui dort.
@@ -124,15 +123,17 @@ export function tresorerieChantier(p) {
       tirage = -tresorerie;
       tresorerie = 0;
       cumulTirages += tirage;
-      tirages.push({ date: decalerMois(date_debut_travaux, m), montant_eur: arrondiEuro(tirage) });
+      tirages.push({ date: dates[k], montant_eur: arrondiEuro(tirage) });
     }
 
     lignes.push({
-      mois: m,
-      date: decalerMois(date_debut_travaux, m),
-      depenses_eur: arrondiEuro(depense),
-      subventions_eur: arrondiEuro(subvention),
-      fonds_propres_eur: arrondiEuro(apport),
+      mois: k + 1,
+      date: dates[k],
+      nominal_eur: arrondiEuro(nominal),
+      coefficient: coefficients[k],
+      depenses_eur: depense,
+      subventions_eur: k === 0 ? arrondiEuro(subventions_eur) : 0,
+      fonds_propres_eur: k === 0 ? arrondiEuro(fonds_propres_eur) : 0,
       tirage_eur: arrondiEuro(tirage),
       solde_eur: arrondiEuro(tresorerie),
       cumul_depenses_eur: arrondiEuro(cumulDepenses),
@@ -143,23 +144,27 @@ export function tresorerieChantier(p) {
 
   // Le besoin de prefinancement est le point HAUT du besoin cumule : c'est le
   // moment ou l'operation doit le plus d'argent, et donc ce que les prets
-  // devront couvrir. Le chercher au point bas donnait zero sur toute operation
-  // normale - le besoin y est positif du premier au dernier mois.
+  // devront couvrir.
   const pic = lignes.reduce((max, l) => (l.besoin_eur > max.besoin_eur ? l : max), lignes[0]);
 
   return {
     lignes,
     tirages,
     indicateurs: {
+      cout_initial_eur: arrondiEuro(cout_total_eur),
+      cout_revise_eur: arrondiEuro(coutRevise),
+      revision_au_demarrage_eur: arrondiEuro(coutRevise - cout_total_eur),
+      echeance_nominale_eur: arrondiEuro(nominal),
       total_depenses_eur: arrondiEuro(cumulDepenses),
+      // Ce que l'indexation coute en propre, revision de depart comprise : le
+      // chiffre que le classeur appelle « ecart total vs cout initial ».
+      surcout_indexation_eur: arrondiEuro(cumulDepenses - cout_total_eur),
+      taux_indexation,
       total_subventions_eur: arrondiEuro(subventions_eur),
       total_fonds_propres_eur: arrondiEuro(fonds_propres_eur),
       total_tirages_eur: arrondiEuro(cumulTirages),
       besoin_maximal_eur: arrondiEuro(Math.max(0, pic.besoin_eur)),
       mois_pic: pic.mois,
-      // Part du prix de revient deja engagee a l'ordre de service : elle dit
-      // d'un chiffre a quel point l'operation demande de l'argent tout de suite.
-      part_a_l_os: cumulDepenses > 0 ? depenses[0] / cumulDepenses : 0,
     },
   };
 }

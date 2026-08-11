@@ -108,6 +108,14 @@
 
 * { box-sizing: border-box; }
 
+html {
+  /* La gouttiere de la barre de defilement est RESERVEE en permanence. Sans
+     cela, passer d'un ecran court a un ecran long fait apparaitre la barre, qui
+     retrecit la page de neuf pixels : tout se decale lateralement, y compris
+     les tuiles du bandeau et les jauges qui l'encadrent. On croit alors a un
+     defaut de mise en page alors que c'est la page entiere qui a bouge. */
+  scrollbar-gutter: stable;
+}
 html, body {
   margin: 0; padding: 0;
   font-family: var(--police);
@@ -903,10 +911,25 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 }
 .indicateur__detail { font-size: 10.5px; color: var(--text-tertiary); }
 
-/* Recapitulatif de tranche : ses six tuiles tiennent sur UNE rangee des 900 px,
+/* Recapitulatif de tranche : ses six tuiles tiennent sur UNE rangee, toujours,
    sans quoi « Prix de revient » et « Ressources » cesseraient d'etre aux deux
-   bouts - c'est justement leur position qui fait sens, en echo aux deux jauges. */
-.indicateurs--tranche { grid-template-columns: repeat(auto-fit, minmax(136px, 1fr)); }
+   bouts - c'est justement leur position qui fait sens, en echo aux deux jauges.
+   Six colonnes FIXES et non `auto-fit` : au-dela d'une certaine etroitesse
+   celui-ci repliait la sixieme tuile, et le bandeau changeait de hauteur d'une
+   tranche a l'autre. Le detail, lui, peut se couper sur deux lignes ; c'est la
+   ligne du dessous, pas la rangee de tuiles. */
+.indicateurs--tranche { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.indicateurs--tranche .indicateur { min-width: 0; }
+/* Le detail fait exactement DEUX lignes, ni plus ni moins : en dessous il est
+   complete par du vide, au-dela il est coupe et son texte entier se lit en
+   infobulle. Sans ce plafond, une tranche dont les ressources tiennent en trois
+   lignes grandissait tout le bandeau, et sa hauteur changeait d'une tranche a
+   l'autre alors qu'on passe justement de l'une a l'autre pour les comparer. */
+.indicateurs--tranche .indicateur__detail {
+  min-height: 2.6em; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 /* ============================================================ BANDEAUX */
 
@@ -1107,6 +1130,15 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
   background: var(--info-bg); color: var(--info-text); white-space: nowrap;
 }
 .bouton--auto:hover { background: var(--info-accent); color: #fff; }
+/* Retour aux defauts du produit : meme gabarit que le retour au calcul, en
+   orange - il defait une saisie, il ne recalcule pas un montant. */
+.bouton--reset {
+  appearance: none; cursor: pointer; font-family: inherit; flex: none;
+  font-size: 10.5px; font-weight: 600; padding: 3px 8px;
+  border: 1px solid var(--warning-accent); border-radius: var(--radius-pill);
+  background: var(--warning-bg); color: var(--warning-text); white-space: nowrap;
+}
+.bouton--reset:hover { background: var(--warning-accent); color: #fff; }
 /* Rien a remettre en automatique tant qu'on y est deja. */
 .pret--auto .bouton--auto, .fp--auto .bouton--auto { display: none; }
 /* Presets : ils occupent la place laissee libre par le bouton « auto », qui n'a
@@ -1192,7 +1224,7 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 }
 /* Un champ sans objet reste VISIBLE mais eteint : le retirer ferait sauter la
    mise en page a chaque changement de profil, et masquerait qu'il existe. */
-.pret__groupe .champ input:disabled, .champ--eteint .segments { opacity: 0.45; }
+.pret__groupe .champ input:disabled, .champ--eteint .choix { opacity: 0.45; }
 .pret__groupe .champ input:disabled { cursor: not-allowed; }
 @media (max-width: 760px) {
   .pret__groupe { grid-template-columns: 1fr; }
@@ -1209,24 +1241,24 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
    parmi ceux-ci » la ou des pastilles espacees dans une boite ressemblaient a
    des etiquettes. L'actif est PLEIN, pas cercle : un filet bleu sur fond bleu
    pale se distinguait mal du repos. */
-.segments {
+.choix {
   display: inline-flex; max-width: 100%; overflow-x: auto;
   border: 1px solid var(--border-color-strong);
   border-radius: var(--radius-sm);
 }
-.segment {
+.choix__option {
   appearance: none; cursor: pointer; font-family: inherit; white-space: nowrap;
   border: none; background: var(--bg-primary); color: var(--text-secondary);
   padding: 5px 11px; font-size: 11px; font-weight: 600; line-height: 1.2;
 }
-.segment + .segment { border-left: 1px solid var(--border-color); }
-.segment:hover { background: var(--bg-secondary); color: var(--text-primary); }
-.segment--actif, .segment--actif:hover {
+.choix__option + .choix__option { border-left: 1px solid var(--border-color); }
+.choix__option:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.choix__option--actif, .choix__option--actif:hover {
   background: var(--info-accent); color: #fff;
 }
-/* Valeur HERITEE, a cote du libelle du segment : plus legere que lui, parce
-   qu'elle informe sans etre le choix qu'on fait. */
-.segment__defaut { font-weight: 400; opacity: 0.8; margin-left: 4px; }
+/* Valeur HERITEE, a cote du libelle : plus legere que lui, parce qu'elle
+   informe sans etre le choix qu'on fait. */
+.choix__defaut { font-weight: 400; opacity: 0.8; margin-left: 4px; }
 @media (max-width: 720px) {
   .pret__entete { flex-wrap: wrap; }
   .pret__montant, .pret__nature { flex: 1 1 120px; }

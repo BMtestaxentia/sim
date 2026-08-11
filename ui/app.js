@@ -938,6 +938,35 @@ function proposerReajustementApports(ancienTaux) {
 const pretsDeplies = new Set();
 
 /**
+ * Souvenir de la description de taux ABANDONNEE quand on change d'indexation.
+ *
+ * Basculer en taux fixe efface la marge et le plancher, et l'inverse efface le
+ * taux : le pret ne doit etre decrit qu'une fois. Mais celui qui essaie les
+ * deux ne doit pas ressaisir sa marge a chaque aller-retour, ni surtout voir un
+ * ZERO s'inscrire la ou le champ etait VIDE : vide, la marge herite du produit,
+ * et zero est une toute autre chose. Etat d'ecran, par index, comme le depli.
+ * @type {Map<number, {spread?: number, taux_plancher?: number, taux?: number}>}
+ */
+const cacheModeTaux = new Map();
+
+/**
+ * Champs qui CARACTERISENT un pret, par opposition a ceux qui l'identifient
+ * (libelle, nature, produit) ou le dimensionnent (montant). C'est la liste que
+ * remet a zero le bouton de reinitialisation, et elle sert aussi a savoir si le
+ * pret s'ecarte de ses defauts.
+ */
+const CHAMPS_CARACTERISTIQUES_PRET = [
+  'spread', 'taux', 'taux_plancher', 'duree_ans', 'revisabilite', 'progressivite',
+  'profil_amortissement', 'differe_ans', 'differe_type', 'periodicite',
+  'annee_premiere_echeance',
+];
+
+/** Un pret s'ecarte-t-il des caracteristiques par defaut de son produit ? */
+function pretModifie(p) {
+  return CHAMPS_CARACTERISTIQUES_PRET.some((k) => !nul(p[k]));
+}
+
+/**
  * Jeton de metadonnee : etiquette en petites capitales, valeur en clair.
  * `champ` marque la valeur pour qu'un rendu ulterieur la remplisse depuis le
  * resultat du moteur, sans reconstruire la ligne.
@@ -995,7 +1024,7 @@ function presetsDisponibles(p, i) {
     proposes.push({
       id: variante.id,
       libelle: x.groupe,
-      note: `${variante.libelle} — ${variante.note ?? ''}`,
+      note: `${variante.libelle}. ${variante.note ?? ''}`,
     });
   }
   if (!proposes.length) return '';
@@ -1040,14 +1069,14 @@ function detailPret(p, i) {
    * economisee.
    */
   const segments = (chemin, options, courante, type) => `
-    <span class="segments" role="group">
+    <span class="choix" role="group">
       ${options
         .map(
-          (o) => `<button type="button" class="segment ${o.v === courante ? 'segment--actif' : ''}"
+          (o) => `<button type="button" class="choix__option ${o.v === courante ? 'choix__option--actif' : ''}"
             data-poser-champ="${chemin}" data-valeur="${att(String(o.v))}" data-type-valeur="${type}"
             ${o.aide ? `title="${att(o.aide)}"` : ''}
             aria-pressed="${o.v === courante}">${att(o.l)}${
-              o.marque ? `<span class="segment__defaut" data-defaut="${o.marque}"></span>` : ''
+              o.marque ? `<span class="choix__defaut" data-defaut="${o.marque}"></span>` : ''
             }</button>`,
         )
         .join('')}
@@ -1085,22 +1114,16 @@ function detailPret(p, i) {
             <label class="champ"><span>Taux plancher (%)</span>
               <input type="number" step="0.01" min="0" data-champ="${c('taux_plancher')}" data-type="pourcentage"
                 value="${valNum(enPourcent(p.taux_plancher))}" placeholder="aucun" /></label>
+            <!-- Pas de segment « du produit » : la valeur heritee s'affiche
+                 comme ACTIVE parmi les quatre, remplie depuis le resultat. Un
+                 cinquieme bouton d'heritage obligeait a savoir que DOUBLE et
+                 « du produit (DOUBLE) » sont le meme reglage. Le retour au
+                 defaut passe par le bouton de reinitialisation du pret. -->
             <div class="champ champ--choix"><span>Révisabilité</span>
               ${segments(
                 c('revisabilite'),
-                [
-                  // Le segment d'heritage NOMME ce dont il herite : « du
-                  // produit » seul laisse ignorer ce que le moteur applique, et
-                  // c'est precisement ce qu'on vient verifier.
-                  {
-                    v: '',
-                    l: 'du produit',
-                    marque: 'revisabilite',
-                    aide: 'Hérite de la révisabilité du produit de financement',
-                  },
-                  ...OPTIONS_REVISABILITE.map((v) => ({ v, l: v })),
-                ],
-                p.revisabilite ?? '',
+                OPTIONS_REVISABILITE.map((v) => ({ v, l: v })),
+                p.revisabilite ?? null,
                 'texte',
               )}</div>`
           : `<label class="champ"><span>Taux (%)</span>
@@ -1206,7 +1229,18 @@ function gabaritPret(p, i) {
         ${
           p.principal
             ? `<button type="button" class="bouton--auto" data-remettre-auto="${i}"
-                 title="Revenir au montant calculé">↺ auto</button>`
+                 title="Revenir au montant calculé">↺ auto</button>` +
+              // Le bouton de retour aux DEFAUTS ne parait que si le pret s'en
+              // ecarte : permanent, il serait un appel a defaire une saisie qui
+              // n'existe pas. C'est aussi lui qui dit, d'un coup d'oeil, qu'un
+              // pret structurant a ete retouche : un DOUBLE saisi et un DOUBLE
+              // herite se ressemblent en tout point ailleurs.
+              //
+              // Toujours EMIS, masque au remplissage : saisir une marge ne
+              // reconstruit pas la ligne, cela couterait le focus a la premiere
+              // frappe, donc un rendu conditionnel ne le ferait jamais paraitre.
+              `<button type="button" class="bouton--reset" data-reset-pret="${i}" ${pretModifie(p) ? '' : 'hidden'}
+                 title="Effacer les réglages saisis et revenir aux caractéristiques du produit">↺ défauts du produit</button>`
             : presetsDisponibles(p, i)
         }
         <span class="pret__actions">
@@ -1395,7 +1429,7 @@ function rendreSelectionLots() {
   if (rappel) {
     rappel.hidden = n < 2;
     rappel.textContent =
-      `${n} lots sélectionnés — modifier une cellule de l’un d’eux applique la valeur ` +
+      `${n} lots sélectionnés : modifier une cellule de l’un d’eux applique la valeur ` +
       'aux autres. L’ID reste propre à chaque lot.';
   }
 
@@ -1883,7 +1917,9 @@ function rendreValeurs(r) {
     { l: 'Tranches', v: r.surfaces.tranches.length, d: r.surfaces.tranches.map(libelleProduit).join(', ') || '-' },
     { l: 'Surface utile', v: `${nb(ind.su_m2)} m²`, d: `${nb(ind.shab_m2)} m² SHAB` },
     { l: 'Prix de revient', v: eur(ind.prix_revient_ttc_eur), d: `${eur(ind.prix_revient_par_logement_eur)} / logement` },
-    { l: 'Loyers annuels', v: eur(ind.loyers_annuels_eur), d: `RMO ${pct(ind.rmo)}` },
+    // Sans le RMO : retire du recapitulatif a la demande de Bastien, comme il
+    // l'avait deja ete de l'indicateur du plan de financement.
+    { l: 'Loyers annuels', v: eur(ind.loyers_annuels_eur), d: '' },
     { l: 'Mise en location', v: r.calendrier.annee_mise_en_location, d: `${etat.dates.duree_simulation_ans} ans simulés` },
   ]
     .map((i) => `<div class="indicateur"><div class="indicateur__libelle">${i.l}</div>
@@ -1921,13 +1957,14 @@ function rendreValeurs(r) {
       const el = ligne.querySelector(`[data-jeton="${champ}"]`);
       if (el) el.textContent = v ?? '-';
     };
-    // Le taux AFFICHE est celui que le pret paie reellement, donc celui de la
-    // premiere echeance de sa table - plancher applique. Le taux nominal peut
-    // etre negatif sur un pret indexe sous le Livret A : afficher « -0,25 % »
-    // pour un pret qui paie 0,25 % serait faux, et faux dans le sens qui
-    // rassure. La table n'existe que si le pret est mobilise ; sinon on se
-    // rabat sur le nominal, qui est tout ce qu'on sait.
-    const tauxPaye = amorti?.tableau?.[0]?.taux ?? a?.taux_applique ?? a?.taux;
+    // Le jeton affiche le taux d'ORIGINE : Livret A de reference plus ou moins
+    // la marge, borne par le plancher (decision du 11/08/2026). PAS le taux de
+    // la premiere echeance, que la trajectoire du Livret A revise deja : la
+    // vignette disait 1,80 % quand la synthese composait 1,30 %, et l'ecran
+    // semblait se contredire. La revision se lit dans le tableau d'echeances.
+    // `taux_applique` vient du moteur et vaut max(nominal, plancher) : un pret
+    // Action Logement a -0,75 % nominal s'affiche bien a son 0,25 % plancher.
+    const tauxPaye = a?.taux_applique ?? a?.taux;
     poser('taux', nul(tauxPaye) ? '-' : pct(tauxPaye, 2));
     poser('duree', nul(a?.duree_ans) ? '-' : `${a.duree_ans} ans`);
     // Les modeles ne se proposent que sur un pret qui n'en porte pas encore.
@@ -1935,6 +1972,8 @@ function rendreValeurs(r) {
     // ligne - mais la garde reste, au cas ou l'etat changerait sans rendu.
     const presets = ligne.querySelector('.pret__presets');
     if (presets) presets.hidden = Boolean(p?.preset);
+    const reset = ligne.querySelector('[data-reset-pret]');
+    if (reset) reset.hidden = !p || !pretModifie(p);
 
     // Ce que les reglages PRODUISENT, en clair, sous chaque groupe. Un pret se
     // juge sur son annuite et son terme, pas sur la valeur de ses parametres :
@@ -1955,7 +1994,7 @@ function rendreValeurs(r) {
           : `Livret A ${pct(la, 2)} ${a.spread < 0 ? '−' : '+'} ${pct(Math.abs(a.spread), 2)}`;
       const plafonne =
         !nul(a.taux_plancher) && !nul(a.taux) && a.taux < a.taux_plancher
-          ? ` — sous le plancher, le prêt paie ${pct(a.taux_plancher, 2)}`
+          ? `, sous le plancher : le prêt paie ${pct(a.taux_plancher, 2)}`
           : '';
       dire(
         'taux',
@@ -1978,8 +2017,8 @@ function rendreValeurs(r) {
         nul(a.duree_ans)
           ? 'Durée à saisir.'
           : `${a.duree_ans * m} échéances ${nom.replace(/e$/, 'es')}` +
-            `, ${constant ? 'à capital constant — l’annuité décroît' : nul(a.progressivite) || a.progressivite === 0 ? 'à annuité constante' : `à annuité progressant de ${pct(a.progressivite, 2)} par an`}` +
-            `${t.length ? ` — première annuité ${eur(t.find((l) => l.annuite_eur > 0)?.annuite_eur ?? 0)}` : ''}.`,
+            `, ${constant ? 'à capital constant (l’annuité décroît)' : nul(a.progressivite) || a.progressivite === 0 ? 'à annuité constante' : `à annuité progressant de ${pct(a.progressivite, 2)} par an`}` +
+            `${t.length ? `, première annuité ${eur(t.find((l) => l.annuite_eur > 0)?.annuite_eur ?? 0)}` : ''}.`,
       );
 
       const debut = amorti?.annee_premiere_echeance ?? p?.annee_premiere_echeance;
@@ -1990,9 +2029,9 @@ function rendreValeurs(r) {
           ? 'Première échéance et durée à préciser.'
           : `De ${debut} à ${debut + a.duree_ans - 1}` +
             (d
-              ? `, dont ${d} an${d > 1 ? 's' : ''} de différé — ${
+              ? `, dont ${d} an${d > 1 ? 's' : ''} de différé (${
                   p.differe_type === 1 ? 'rien n’est dû' : 'les intérêts restent dus'
-                }, le capital ne recule qu’à partir de ${debut + d}`
+                }, le capital ne recule qu’à partir de ${debut + d})`
               : ', sans différé') +
             '.',
       );
@@ -2010,14 +2049,24 @@ function rendreValeurs(r) {
       if (el.tagName === 'OPTION') el.textContent = v ? `- du produit : ${v} -` : '- du produit -';
       // Segment d'heritage : la valeur heritee s'ecrit a cote du libelle, pas a
       // sa place - le bouton doit rester lisible quand rien n'est herite.
-      else if (el.classList.contains('segment__defaut')) el.textContent = v ? ` (${v})` : '';
+      else if (el.classList.contains('choix__defaut')) el.textContent = v ? ` (${v})` : '';
       else /** @type {HTMLInputElement} */ (el).placeholder = v ?? '';
     };
     defaut('taux', nul(a?.taux) ? '' : String(enPourcent(a.taux)));
     defaut('spread', nul(a?.spread) ? '' : String(enPourcent(a.spread)));
     defaut('duree', nul(a?.duree_ans) ? '' : String(a.duree_ans));
     defaut('echeance', amorti?.annee_premiere_echeance ? String(amorti.annee_premiere_echeance) : '');
-    defaut('revisabilite', a?.revisabilite ?? '');
+    // Segments de revisabilite : sans saisie, l'EFFECTIVE vient du produit et
+    // s'affiche comme active. Un DOUBLE herite et un DOUBLE saisi se montrent
+    // pareil, a dessein : c'est le bouton de reinitialisation qui dit si le
+    // pret s'ecarte de ses defauts, pas la couleur d'un segment.
+    const idx = /** @type {HTMLElement} */ (ligne).dataset.pret;
+    const revEffective = p?.revisabilite ?? a?.revisabilite ?? null;
+    for (const b of ligne.querySelectorAll(`[data-poser-champ="prets.${idx}.revisabilite"]`)) {
+      const actif = /** @type {HTMLElement} */ (b).dataset.valeur === revEffective;
+      b.classList.toggle('choix__option--actif', actif);
+      b.setAttribute('aria-pressed', String(actif));
+    }
     defaut('progressivite', nul(a?.progressivite) ? '' : String(enPourcent(a.progressivite)));
 
   }
@@ -3080,7 +3129,7 @@ function rendreExploitation(r) {
     parAnneeGraphe.get(x.annee).push(x.libelle.toLowerCase());
   }
   $('#aide-graphe').textContent = parAnneeGraphe.size
-    ? `⚙ Repères verticaux — ${[...parAnneeGraphe.entries()]
+    ? `⚙ Repères verticaux : ${[...parAnneeGraphe.entries()]
         .sort((a, b) => a[0] - b[0])
         .map(([annee, l]) => `${annee} : ${l.join(', ')}`)
         .join(' · ')}.`
@@ -3310,7 +3359,7 @@ function modeleParametres() {
         'Le taux d’un prêt CDC vaut Livret A + marge, la marge étant propre au produit. Les ' +
         'modèles, eux, décrivent un produit entier : ils se posent d’un clic sur un prêt ajouté ' +
         'à une tranche, et seul le montant reste à saisir. Les valeurs viennent des fiches ' +
-        'produit des prêteurs — modifiez-les si votre convention diffère, ajoutez les vôtres.',
+        'produit des prêteurs : modifiez-les si votre convention diffère, ajoutez les vôtres.',
       presets: true,
       champs: Object.entries(b.prets_cdc?.marges ?? {}).map(([cle, m]) => ({
         ...ch(`baremes.prets_cdc.marges.${cle}.valeur`, m.libelle ?? cle, m.valeur, 'pourcentage'),
@@ -3663,7 +3712,7 @@ function tablePresets() {
     const aff = c.type === 'pourcentage' ? enPourcent(v) : v;
     return `<td class="num"><input type="text" inputmode="decimal" data-champ="${chemin}"
       data-type="${c.type === 'pourcentage' ? 'pourcentage' : 'nombre'}"
-      value="${valNum(aff)}" placeholder="—" /></td>`;
+      value="${valNum(aff)}" placeholder="-" /></td>`;
   };
 
   return `
@@ -4195,24 +4244,6 @@ document.addEventListener('input', (ev) => {
     const n = lireMontant(el.value);
     if (n === undefined) return;
     valeur = n === null ? null : el.dataset.type === 'pourcentage' ? n / 100 : n;
-  } else if (el.dataset.type === 'mode-taux') {
-    // Choisir l'indexation EFFACE l'autre description du taux. Les garder
-    // toutes deux laisserait un pret decrit deux fois, dont une seule compte -
-    // c'est le taux en clair qui l'emporte - sans que l'ecran le dise.
-    const j = Number(el.dataset.champ.split('.')[1]);
-    const pret = etat.prets[j];
-    if (pret) {
-      if (el.value === 'fixe') {
-        delete pret.spread;
-        delete pret.taux_plancher;
-        pret.taux ??= 0.02;
-      } else {
-        delete pret.taux;
-        pret.spread ??= 0;
-      }
-    }
-    rafraichirTout();
-    return;
   } else if (el.dataset.type === 'mode-redevance') {
     valeur = el.checked ? 'redevance' : 'loyers';
   } else if (el.dataset.type === 'booleen') {
@@ -4675,6 +4706,22 @@ document.addEventListener('click', (ev) => {
     return;
   }
 
+  // Retour d'un pret structurant a ses defauts : on EFFACE les caracteristiques
+  // saisies, on ne les remplace pas par leurs valeurs courantes. Effacees,
+  // elles suivent a nouveau le produit et le profil de parametres ; recopiees,
+  // elles resteraient figees sur les valeurs d'aujourd'hui.
+  const resetPret = el.closest('[data-reset-pret]');
+  if (resetPret) {
+    const i = Number(/** @type {HTMLElement} */ (resetPret).dataset.resetPret);
+    const pret = etat.prets[i];
+    if (pret) {
+      for (const k of CHAMPS_CARACTERISTIQUES_PRET) delete pret[k];
+      cacheModeTaux.delete(i);
+      rafraichirTout();
+    }
+    return;
+  }
+
   // Choix en segments : un bouton pose une valeur. Le chemin et le type sont
   // portes par le bouton, si bien qu'un nouveau choix ne demande aucun code -
   // c'est ce qui permet d'en poser cinq dans le detail d'un pret sans cinq
@@ -4689,18 +4736,32 @@ document.addEventListener('click', (ev) => {
     if (d.typeValeur === 'mode-taux') {
       // L'indexation n'est pas un champ : c'est un choix entre deux facons de
       // decrire le taux. On EFFACE l'autre, sans quoi le pret resterait decrit
-      // deux fois, dont une seule compte.
+      // deux fois, dont une seule compte - mais on GARDE en memoire ce qu'on
+      // efface : un aller-retour ne doit pas faire ressaisir la marge, et un
+      // champ qui etait vide doit REVENIR vide. Y ecrire zero changerait son
+      // sens : vide, la marge herite du produit ; a zero, elle vaut zero.
       const j = Number(d.poserChamp.split('.')[1]);
       const pret = etat.prets[j];
       if (pret) {
+        const cache = cacheModeTaux.get(j) ?? {};
         if (brut === 'fixe') {
+          cache.spread = pret.spread;
+          cache.taux_plancher = pret.taux_plancher;
           delete pret.spread;
           delete pret.taux_plancher;
-          pret.taux ??= 0.02;
+          // Un taux fixe sans taux n'existe pas : sans lui, le mode retomberait
+          // sur l'indexation au rendu suivant. Le cache d'abord, un ordre de
+          // grandeur a defaut.
+          pret.taux = cache.taux ?? pret.taux ?? 0.02;
         } else {
+          cache.taux = pret.taux;
           delete pret.taux;
-          pret.spread ??= 0;
+          if (nul(cache.spread)) delete pret.spread;
+          else pret.spread = cache.spread;
+          if (nul(cache.taux_plancher)) delete pret.taux_plancher;
+          else pret.taux_plancher = cache.taux_plancher;
         }
+        cacheModeTaux.set(j, cache);
       }
     } else {
       ecrireSaisie(d.poserChamp, valeur);

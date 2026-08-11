@@ -980,6 +980,70 @@
     "usage": "Indexation des depenses de chantier. Le cout est revise de sa date de valeur au demarrage, puis reparti a parts egales sur les mois de chantier, chaque mensualite etant indexee de SA propre duree - seules les sommes dues sont indexees.",
     "taux_indexation": 0.02,
     "base_jours": 365.25,
-    "note_base": "Base 365,25 jours, celle du classeur. La premiere echeance tombe un mois APRES l ordre de service : un chantier ne facture pas le jour ou il commence."
+    "note_base": "Base 365,25 jours, celle du classeur. La premiere echeance tombe un mois APRES l ordre de service : un chantier ne facture pas le jour ou il commence.",
+    "jalons_vefa": {
+      "source": "Bareme legal des appels de fonds en VEFA (CCH L261-12, R261-14), fourni par le metier le 11/08/2026.",
+      "usage": "Echeancier des DEPENSES en VEFA : le promoteur appelle des fonds a l avancement, pas par mensualites egales.  est la fraction du prix de revient appelee,  la fraction du chantier a laquelle le jalon tombe.",
+      "note_avancement": "Les parts sont LEGALES et ne se discutent pas ; les avancements, eux, sont une hypothese de calendrier - le bareme dit a quel STADE technique le fonds est appelable, pas a quel mois. Ils se reglent donc jalon par jalon.",
+      "note_apres_livraison": "Les trois derniers jalons - reserves, conformite, garantie de parfait achevement - tombent APRES la livraison. La tresorerie de chantier s arretant a la livraison, ils y sont ramenes : les ignorer ferait manquer 5 % du prix de revient a l echeancier.",
+      "jalons": [
+        {
+          "id": "signature",
+          "libelle": "Signature de l acte de vente et DROC",
+          "part": 0.25,
+          "avancement": 0
+        },
+        {
+          "id": "fondations",
+          "libelle": "Achevement des fondations",
+          "part": 0.1,
+          "avancement": 0.15
+        },
+        {
+          "id": "plancher_rdc",
+          "libelle": "Achevement du plancher bas du rez-de-chaussee",
+          "part": 0.15,
+          "avancement": 0.3
+        },
+        {
+          "id": "hors_eau",
+          "libelle": "Achevement des etancheites (hors eau)",
+          "part": 0.15,
+          "avancement": 0.5
+        },
+        {
+          "id": "hors_air",
+          "libelle": "Mise hors d air",
+          "part": 0.15,
+          "avancement": 0.7
+        },
+        {
+          "id": "livraison",
+          "libelle": "Livraison",
+          "part": 0.15,
+          "avancement": 1
+        },
+        {
+          "id": "reserves",
+          "libelle": "Levee des reserves",
+          "part": 0.03,
+          "avancement": 1
+        },
+        {
+          "id": "conformite",
+          "libelle": "Non-contestation de la conformite administrative",
+          "part": 0.01,
+          "avancement": 1
+        },
+        {
+          "id": "gpa",
+          "libelle": "Levee de la garantie de parfait achevement",
+          "part": 0.01,
+          "avancement": 1
+        }
+      ]
+    },
+    "mode_tirage": "integral",
+    "note_tirage": "integral : le pret est tire en totalite au premier mois, ce qui est la pratique de l organisme. au_fil_de_l_eau : il ne se tire qu a hauteur du manque de chaque mois, ce qui minimise les interets intercalaires mais ne correspond pas au montage reel."
   }
 }

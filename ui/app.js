@@ -3656,6 +3656,17 @@ function modeleParametres() {
       ],
     },
     {
+      id: 'jalons',
+      titre: 'Appels de fonds VEFA',
+      resume: 'Échéancier légal des dépenses',
+      aide:
+        'En VEFA, le promoteur appelle des fonds à l’avancement selon un barème légal, et non par ' +
+        'mensualités égales : 25 % à la signature change le besoin de trésorerie dès le premier ' +
+        'mois. Ce barème ne s’applique qu’aux opérations dont le type est VEFA ; ailleurs, le coût ' +
+        'se répartit à parts égales sur les mois de chantier.',
+      jalons: true,
+    },
+    {
       id: 'loyers',
       titre: 'Loyers plafonds',
       resume: 'Barèmes par zone, et leur millésime',
@@ -3811,6 +3822,16 @@ function nbModifies(s) {
   // est surchargee des qu'on y touche. On compte donc les modeles qui different
   // du referentiel, ajouts et suppressions compris - le nombre repond a « qu'ai
   // je change ici », pas a « combien de cellules ai-je remplies ».
+  if (s.jalons) {
+    const sj = surchargeDe('baremes.tresorerie.jalons_vefa.jalons');
+    if (!sj) return 0;
+    const bj = referentiels.baremes.tresorerie?.jalons_vefa?.jalons ?? [];
+    const parId = new Map(bj.map((x) => [x.id, JSON.stringify(x)]));
+    return (
+      sj.filter((x) => parId.get(x.id) !== JSON.stringify(x)).length +
+      bj.filter((x) => !sj.some((y) => y.id === x.id)).length
+    );
+  }
   if (s.presets) {
     // Les champs de la section comptent AUSSI : le Livret A de reference y
     // figure, et l'oublier faisait afficher « aucune modification » a un profil
@@ -3986,6 +4007,81 @@ const PERIODICITES = [
   { v: 4, l: 'trimestrielle' },
   { v: 12, l: 'mensuelle' },
 ];
+
+/**
+ * Colonnes d'un jalon d'appel de fonds. Deux natures de donnee, et la table le
+ * dit : la PART est legale et ne se discute pas ; l'AVANCEMENT est une
+ * hypothese de calendrier, le bareme disant a quel stade technique le fonds est
+ * appelable, jamais a quel mois.
+ */
+const COLONNES_JALON = [
+  { cle: 'libelle', libelle: 'Stade', type: 'texte', largeur: 320 },
+  { cle: 'part', libelle: 'Part du prix de revient', type: 'pourcentage' },
+  { cle: 'avancement', libelle: 'Avancement du chantier', type: 'pourcentage' },
+];
+
+/** Liste EFFECTIVE des jalons : surcharge du profil, ou referentiel. */
+function listeJalons() {
+  return (
+    surchargeDe('baremes.tresorerie.jalons_vefa.jalons') ??
+    referentiels.baremes.tresorerie?.jalons_vefa?.jalons ??
+    []
+  );
+}
+
+/** Table des jalons VEFA : une ligne par stade, ajout, suppression, glisser. */
+function tableJalons() {
+  const liste = listeJalons();
+  const visibles = liste
+    .map((x, i) => ({ x, i }))
+    .filter(({ x }) => correspond({ libelle: x.libelle ?? '' }));
+  if (!visibles.length && rechercheParametre) return '';
+
+  const total = liste.reduce((s, x) => s + (Number(x.part) || 0), 0);
+  const cellule = (x, i, c) => {
+    const chemin = `baremes.tresorerie.jalons_vefa.jalons.${i}.${c.cle}`;
+    if (c.type === 'texte') {
+      return `<td><input type="text" data-champ="${chemin}" value="${att(x[c.cle] ?? '')}" /></td>`;
+    }
+    return `<td class="num"><input type="text" inputmode="decimal" data-champ="${chemin}"
+      data-type="pourcentage" value="${valNum(enPourcent(x[c.cle]))}" placeholder="-" /></td>`;
+  };
+
+  return `
+    <div class="para-matrice">
+      <h4>Appels de fonds
+        <button type="button" class="bouton bouton--ajout" id="btn-ajouter-jalon">+ jalon</button>
+      </h4>
+      <div class="table-defilante"><table class="grille grille--presets" id="table-jalons">
+        <thead><tr>
+          <th class="col-poignee"></th>
+          ${COLONNES_JALON.map((c) => `<th${c.largeur ? ` style="min-width:${c.largeur}px"` : ''}>${att(c.libelle)}</th>`).join('')}
+          <th></th>
+        </tr></thead>
+        <tbody>${visibles
+          .map(
+            ({ x, i }) => `<tr data-rang="${i}">
+              <td class="col-poignee"><span class="poignee" draggable="true"
+                title="Glisser pour réordonner">⠿</span></td>
+              ${COLONNES_JALON.map((c) => cellule(x, i, c)).join('')}
+              <td class="col-action"><button type="button" class="bouton--supprimer"
+                data-supprimer-jalon="${i}" data-nom="${att(x.libelle)}" title="Supprimer">×</button></td>
+            </tr>`,
+          )
+          .join('')}</tbody>
+        <tfoot><tr>
+          <td></td><td class="libelle">Total</td>
+          <!-- Le total DOIT faire 100 % : au-dessous, une part du prix de revient
+               n'est jamais appelee ; au-dessus, on appelle plus que le coût. -->
+          <td class="num ${Math.abs(total - 1) > 1e-9 ? 'montant--negatif' : ''}">${pct(total, 1)}</td>
+          <td></td><td></td>
+        </tr></tfoot>
+      </table></div>
+      <p class="grille__aide">Barème légal des appels de fonds en VEFA : les parts ne se discutent
+        pas, l’avancement est une hypothèse de calendrier. Un jalon posté au-delà de la livraison
+        y est ramené, la trésorerie de chantier s’y arrêtant.</p>
+    </div>`;
+}
 
 /** Table des modeles de pret : une ligne par modele, ajout et suppression. */
 function tablePresets() {
@@ -4324,6 +4420,16 @@ function rendreParametres() {
     const champs = (s.champs ?? []).filter(correspond);
     const matrices = (s.matrices ?? []).map(tableMatrice).filter(Boolean);
     const traj = s.trajectoires && !enRecherche ? sectionTrajectoires() : '';
+    if (s.jalons) {
+      const t = tableJalons();
+      return t
+        ? `<section class="bloc para-section">
+            <h3>${att(s.titre)}</h3>
+            <p class="para-source">${att(s.aide)}</p>
+            ${t}
+          </section>`
+        : '';
+    }
     if (s.presets) {
       const t = tablePresets();
       if (!t && !champs.length) return '';
@@ -4375,6 +4481,10 @@ function rendreParametres() {
   // de les empiler sur une table qui aurait survecu.
   poserGlisser(document.getElementById('table-presets'), (de, vers) => {
     ecrireSaisie('baremes.presets_prets.presets', deplacer(listePresets(), de, vers));
+    rafraichirTout();
+  });
+  poserGlisser(document.getElementById('table-jalons'), (de, vers) => {
+    ecrireSaisie('baremes.tresorerie.jalons_vefa.jalons', deplacer(listeJalons(), de, vers));
     rafraichirTout();
   });
 }
@@ -5256,6 +5366,32 @@ document.addEventListener('click', (ev) => {
     } else {
       ecrireSaisie(d.poserChamp, valeur);
     }
+    rafraichirTout();
+    return;
+  }
+
+  // --- Jalons d'appels de fonds : ajout et suppression ---
+  if (el.id === 'btn-ajouter-jalon') {
+    const liste = listeJalons();
+    let n = liste.length + 1;
+    while (liste.some((x) => x.id === `jalon_${n}`)) n++;
+    ecrireSaisie('baremes.tresorerie.jalons_vefa.jalons', [
+      ...liste,
+      { id: `jalon_${n}`, libelle: `Nouveau stade ${n}`, part: 0, avancement: 0.5 },
+    ]);
+    rafraichirTout();
+    return;
+  }
+
+  const supJalon = el.closest('[data-supprimer-jalon]');
+  if (supJalon) {
+    const i = Number(/** @type {HTMLElement} */ (supJalon).dataset.supprimerJalon);
+    const nom = /** @type {HTMLElement} */ (supJalon).dataset.nom;
+    if (!confirm(`Supprimer le jalon « ${nom} » ?`)) return;
+    ecrireSaisie(
+      'baremes.tresorerie.jalons_vefa.jalons',
+      listeJalons().filter((_, k) => k !== i),
+    );
     rafraichirTout();
     return;
   }

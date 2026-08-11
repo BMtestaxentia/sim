@@ -1175,6 +1175,15 @@ export function calculer(entrees, referentiels) {
           // Mobilisables des l'ordre de service : arbitrage metier du 11/08/2026.
           subventions_eur: subventionsTotal,
           fonds_propres_eur: fondsPropres,
+          // R-TRESO-3 : le bareme d'appels de fonds ne vaut QU'EN VEFA. Une
+          // operation en maitrise d'ouvrage directe paie ses factures au fil du
+          // chantier, sans jalon legal.
+          jalons:
+            String(identite.type_operation ?? '').toUpperCase() === 'VEFA'
+              ? (entrees.tresorerie?.jalons ?? baremes.tresorerie?.jalons_vefa?.jalons ?? null)
+              : null,
+          mode_tirage:
+            entrees.tresorerie?.mode_tirage ?? baremes.tresorerie?.mode_tirage ?? 'integral',
         })
       : null;
 
@@ -1237,7 +1246,11 @@ export function calculer(entrees, referentiels) {
   // logement indexe sur la gestion) et la dotation aux amortissements est
   // desormais calculee : ils sortent de cette liste. Le seul poste de LEON qui
   // reste sans equivalent est la subvention d'exploitation a duree limitee.
-  exploitation.postes_absents = ['Subvention d’exploitation à durée limitée'];
+  // Plus aucun poste declare absent : la subvention d'exploitation a duree
+  // limitee, seule occupante de cette liste, est ecartee du perimetre par le
+  // metier (11/08/2026). La liste reste en place, elle servira au prochain
+  // poste connu mais non modelise.
+  exploitation.postes_absents = [];
 
   // Base d'amortissement comptable (Grille d'analyse). Calculee UNIQUEMENT si
   // l'appelant fournit le montant de terrain et la quotite non amortissable :

@@ -207,6 +207,67 @@
       "note_progressivite": "Progressivite des echeances a -0,5 % : l annuite decroit d un demi-point par an avant revision. Valeur AXENTIA par defaut, ecrasable pret par pret.",
       "note_revisabilite": "Double revisabilite sur PLAI, PLUS et PLS : le taux ET la progression de l annuite suivent le Livret A.",
       "note_profil": "Echeances et interets prioritaires : l echeance sert d abord les interets de l exercice, le solde amortit le capital. C est deja la mecanique du moteur (interets = taux x CRD, amortissement = annuite - interets) ; le parametre l explicite et documente le choix, il ne declenche pas un autre calcul."
+    },
+    "lignes_complementaires": {
+      "source": "Fiches produit Banque des Territoires (consultees le 11/08/2026) pour les caracteristiques financieres, calculette CDC production LS juin 2026 (feuille Construction) pour les droits.",
+      "note": "Ces lignes viennent EN COMPLEMENT des prets CDC principaux. Leur droit se calcule sur le programme, leur amortissement suit les caracteristiques ci-dessous.",
+      "booster": {
+        "libelle": "Pret Booster",
+        "montant_par_logement_eur": 15000,
+        "note_droit": "Calculette AT45 : 15 000 x (nb_logements - nb_PLI), moins nb_PLS si le Booster n est pas affecte au PLS (interrupteur AX53).",
+        "durees_ans": [
+          30,
+          35,
+          40
+        ],
+        "duree_defaut_ans": 40,
+        "revisabilite": "TAUX FIXE",
+        "taux_fixe": true,
+        "note_taux": "Taux FIXE sur ressource BEI, bareme mensuel. Aucune indexation sur le Livret A : le taux est celui du bareme du mois de la mobilisation, a saisir. Pas de progressivite documentee.",
+        "profil_amortissement": "annuite"
+      },
+      "phb_2_0": {
+        "libelle": "PHB 2.0",
+        "note_structure": "DEUX phases. Phase 1 : 20 ans a taux ZERO avec differe TOTAL d amortissement. Phase 2 : Livret A + 0,60 %, amortissement CONSTANT, sur 20 ans en construction neuve et 10 ans en rehabilitation. Duree totale 40 ans en neuf, 30 ans en rehabilitation.",
+        "duree_phase_1_ans": 20,
+        "duree_phase_2_ans": {
+          "construction_neuve": 20,
+          "rehabilitation": 10
+        },
+        "marge_phase_2": 0.006,
+        "revisabilite": "SIMPLE",
+        "profil_amortissement": "constant",
+        "note_moteur": "Se modelise avec le moteur en place : differe_ans = 20 et differe_type = 1 (rien n est du pendant le differe, ce qui EST le taux zero), profil = constant, taux = LA + 0,60 %. L ecart E-2, qui rendait le differe de type 1 economiquement gratuit, se trouve ici etre la regle et non un bug.",
+        "montants_par_logement_eur": {
+          "socle_zone_A": 9000,
+          "socle_zone_B1": 6500,
+          "socle_zone_B2_C": 5000,
+          "bonus_jeunes": 5000,
+          "constructions_vertes": 12000,
+          "constructions_vertes_bonus_energie": 4000,
+          "transformation_ecologique_neuf_metropole": 13900,
+          "transformation_ecologique_neuf_metropole_bonus": 3400,
+          "transformation_ecologique_outre_mer": 17300,
+          "transformation_ecologique_outre_mer_bonus": 4300,
+          "transformation_actifs": 17300,
+          "transformation_actifs_bonus": 4300
+        },
+        "note_montants": "Le socle par zone (tranches 1 a 3) et les variantes vertes / transformation ecologique sont EXCLUSIFS : une operation releve de l un ou de l autre, pas des deux."
+      },
+      "pli_bei": {
+        "libelle": "PLI a taux fixe sur ressource BEI",
+        "durees_ans": {
+          "minimum": 9,
+          "bati_maximum": 35,
+          "foncier_maximum": 50
+        },
+        "revisabilite": "TAUX FIXE",
+        "taux_fixe": true,
+        "note_taux": "Taux FIXE sur ressource BEI, sous reserve d eligibilite du projet. A saisir : le bareme est mensuel.",
+        "profil_amortissement": "annuite",
+        "note_droit": "Calculette AZ57 : MIN(50 000 x nb_PLI ; 50 % des prets PLI ; 50 % du prix de revient PLI ; prix de revient PLI - sa charge fonciere).",
+        "plafond_par_logement_eur": 50000
+      }
     }
   },
   "tva": {
@@ -433,7 +494,8 @@
         }
       ]
     },
-    "taux_plafond": 0.006
+    "taux_plafond": 0.006,
+    "note_perimetre": "Poste FUSIONNE gros entretien + renouvellement de composants, comme LEON (feuille HORIZON 50 <-> PGERC). Arbitrage metier du 11/08/2026 : le renouvellement n est pas un poste distinct, il est deja dans cette table."
   },
   "amortissement_comptable": {
     "source": "Ecran LEON  Paramétrage des composants  (IFRS), quotes-parts et durees collectif / individuel",

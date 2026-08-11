@@ -748,6 +748,10 @@ export function calculer(entrees, referentiels) {
         revisabilite: p.revisabilite ?? 'TAUX FIXE',
         differe_ans: p.differe_ans ?? 0,
         differe_type: p.differe_type,
+        // R-AMT-6 : capital constant plutot qu'annuite progressive. C'est le
+        // profil de la seconde phase du PHB 2.0 ; les prets CDC ordinaires
+        // gardent l'annuite, qui reste le defaut.
+        profil: p.profil_amortissement ?? 'annuite',
         livret_a_origine: p.livret_a_origine ?? laOrigine,
         livret_a_par_annee: p.livret_a_par_annee ?? laParAnnee,
       }),

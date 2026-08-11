@@ -282,8 +282,13 @@ describe('R-AMT-4 - differes', () => {
 });
 
 describe('R-AMT-3 - date de premiere echeance PAR PRET (bug historique ALS)', () => {
-  it('mise en location + 1 an, decalage nul en demembrement', () => {
-    expect(anneePremiereEcheance(2026)).toBe(2027);
+  it("demarre l'annee de la mise en location", () => {
+    // Le pret est mobilise a la livraison et s'amortit dans la foulee ; les
+    // interets du chantier sont deja portes par le prefinancement. Arbitrage
+    // metier du 11/08/2026 (Q-4, Q-28), contre le « +1 » lu dans LEON et
+    // contredit par les annexes BERGERAC et ORLEANS.
+    expect(anneePremiereEcheance(2026)).toBe(2026);
+    // Le demembrement ne decale plus rien : il n'y a plus de decalage a annuler.
     expect(anneePremiereEcheance(2026, { demembrement: true })).toBe(2026);
   });
 
@@ -361,5 +366,67 @@ describe('R-FIN-6 - prefinancement (capitalisation actuarielle exact/365)', () =
   it('les dates sont lues en UTC, sans horloge systeme', () => {
     expect(jourUTC('2028-01-01') - jourUTC('2027-01-01')).toBe(365);
     expect(() => jourUTC('01/01/2028')).toThrow();
+  });
+});
+
+// --- R-AMT-6 : amortissement a capital constant (PHB 2.0 phase 2) --------
+describe('R-AMT-6 amortissement constant', () => {
+  const base = {
+    montant_eur: 100_000,
+    taux: 0.02,
+    duree_ans: 10,
+    annee_premiere_echeance: 2028,
+    profil: 'constant',
+  };
+
+  it('rembourse la meme fraction de capital chaque annee', () => {
+    const t = tableauAmortissement(base);
+    for (const l of t) expect(l.amortissement_eur).toBeCloseTo(10_000, 6);
+    expect(t.at(-1)?.crd_eur).toBeCloseTo(0, 6);
+  });
+
+  it("fait DECROITRE l'annuite, contrairement au profil d'annuite", () => {
+    const t = tableauAmortissement(base);
+    // 10 000 de capital + 2 % du CRD : 12 000 la premiere annee, 10 200 la
+    // derniere. C'est la difference de fond avec une annuite constante.
+    expect(t[0].annuite_eur).toBeCloseTo(12_000, 6);
+    expect(t.at(-1)?.annuite_eur).toBeCloseTo(10_200, 6);
+    for (let i = 1; i < t.length; i++) expect(t[i].annuite_eur).toBeLessThan(t[i - 1].annuite_eur);
+  });
+
+  it('etale sur la duree AMORTISSANTE quand un differe le precede', () => {
+    // PHB 2.0 : 20 ans a taux zero en differe total, puis 20 ans d'amortissement.
+    const t = tableauAmortissement({
+      ...base,
+      duree_ans: 40,
+      differe_ans: 20,
+      differe_type: 1,
+    });
+    expect(t.slice(0, 20).every((l) => l.amortissement_eur === 0)).toBe(true);
+    expect(t.slice(0, 20).every((l) => l.interets_eur === 0)).toBe(true);
+    expect(t[20].amortissement_eur).toBeCloseTo(5_000, 6); // 100 000 / 20
+    expect(t.at(-1)?.crd_eur).toBeCloseTo(0, 6);
+  });
+
+  it('amortit exactement le capital, interets non compris', () => {
+    const t = tableauAmortissement(base);
+    expect(t.reduce((s, l) => s + l.amortissement_eur, 0)).toBeCloseTo(100_000, 6);
+  });
+
+  it('suit le Livret A quand le pret est revisable', () => {
+    const t = tableauAmortissement({
+      ...base,
+      revisabilite: 'SIMPLE',
+      livret_a_origine: 0.015,
+      livret_a_par_annee: { 2028: 0.015, 2029: 0.025 },
+    });
+    // Le capital rembourse ne bouge pas ; seuls les interets suivent le taux.
+    expect(t[1].amortissement_eur).toBeCloseTo(10_000, 6);
+    // 2 % sur 100 000 la premiere annee, puis 3 % sur le CRD DEJA amorti de
+    // 90 000 : les interets montent moins vite que le taux, precisement parce
+    // que le capital, lui, a deja recule.
+    expect(t[0].interets_eur).toBeCloseTo(2_000, 6);
+    expect(t[1].taux).toBeCloseTo(0.03, 12);
+    expect(t[1].interets_eur).toBeCloseTo(2_700, 6);
   });
 });

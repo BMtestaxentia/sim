@@ -1370,3 +1370,38 @@ describe('R-FIN-7 - un apport automatique finance vraiment la tranche', () => {
     );
   });
 });
+
+describe('R-AMT-6 - un PHB 2.0 se monte avec le moteur en place', () => {
+  it('20 ans a taux zero puis 20 ans a capital constant', () => {
+    // Le PHB 2.0 n'est pas un mecanisme a part : c'est un differe de type 1 -
+    // rien n'est du - suivi d'un amortissement a capital constant au Livret A
+    // majore de 0,60 %. Ce test verrouille cette equivalence.
+    const r = calculer(
+      {
+        identite: { zone_123: 2, zone_ABC: 'B1' },
+        dates: { annee_mise_en_location: 2028, duree_simulation_ans: 45 },
+        lots: [{ code_produit: 'PLUS', nb_logements: 10, shab_m2: 650 }],
+        postes_bilan: [{ chapitre: 'batiment', libelle: 'T', montant_ht_eur: 1500000, taux_tva: 0.1 }],
+        mode_prets: 'saisis',
+        prets: [
+          {
+            code: 'PHB', libelle: 'PHB 2.0', nature: 'autre', produit: 'PLUS',
+            montant_eur: 65000, duree_ans: 40, differe_ans: 20, differe_type: 1,
+            profil_amortissement: 'constant', revisabilite: 'SIMPLE',
+            taux: 0.021, annee_premiere_echeance: 2028,
+          },
+        ],
+      },
+      REFERENTIELS,
+    );
+    const t = r.amortissements.find((a) => a.code === 'PHB').tableau;
+    expect(t).toHaveLength(40);
+    // Phase 1 : rien n'est du, ni capital ni interets.
+    expect(t.slice(0, 20).every((l) => l.annuite_eur === 0)).toBe(true);
+    // Phase 2 : le capital se rembourse par vingtiemes, l'annuite decroit.
+    expect(t[20].amortissement_eur).toBeCloseTo(3250, 6); // 65 000 / 20
+    expect(t[39].amortissement_eur).toBeCloseTo(3250, 6);
+    expect(t[39].annuite_eur).toBeLessThan(t[20].annuite_eur);
+    expect(t.at(-1).crd_eur).toBeCloseTo(0, 6);
+  });
+});

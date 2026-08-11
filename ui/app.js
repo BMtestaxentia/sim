@@ -3000,7 +3000,7 @@ let rechercheParametre = '';
 /** Postes de trajectoire, dans l'ordre d'affichage. */
 const POSTES_TRAJECTOIRE = [
   { cle: 'loyers_irl', libelle: 'Loyers / IRL' },
-  { cle: 'gros_entretien', libelle: 'Gros entretien' },
+  { cle: 'gros_entretien', libelle: 'Gros entretien et renouvellement' },
   { cle: 'gestion', libelle: 'Gestion' },
   { cle: 'tfpb', libelle: 'TFPB' },
   { cle: 'livret_a', libelle: 'Livret A' },

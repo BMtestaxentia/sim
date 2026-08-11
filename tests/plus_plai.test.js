@@ -114,8 +114,8 @@ describe('PLUS / PLAI - la chaine complete traverse le perimetre V1', () => {
     for (const a of r.amortissements) {
       expect(a.tableau.length).toBeGreaterThan(0);
       expect(a.tableau.at(-1)?.crd_eur).toBeCloseTo(0, 4);
-      // R-AMT-3 : premiere echeance l'annee suivant la mise en location.
-      expect(a.tableau[0].annee).toBe(2029);
+      // R-AMT-3 : premiere echeance l'annee de la mise en location elle-meme.
+      expect(a.tableau[0].annee).toBe(2028);
     }
   });
 

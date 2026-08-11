@@ -67,16 +67,24 @@ export function normaliserRevisabilite(libelle) {
 }
 
 /**
- * R-AMT-3 - Annee de premiere echeance d'un pret CDC :
- * annee(mise en location) + 1 ; en demembrement le decalage est nul.
+ * R-AMT-3 - Annee de premiere echeance d'un pret CDC : l'annee de la MISE EN
+ * LOCATION elle-meme. Le pret est mobilise a la livraison, il commence a
+ * s'amortir dans la foulee ; les interets de la periode de chantier sont deja
+ * portes par le prefinancement (R-FIN-6), capitalise au capital emprunte.
+ *
+ * Le dictionnaire v0.1 lisait « annee(DAT) + 1 » dans LEON. Deux annexes le
+ * contredisent - BERGERAC et ORLEANS demarrent l'annee de la mise en location -
+ * et le metier a tranche le 11/08/2026 pour le decalage nul (Q-4, Q-28). Le
+ * decalage de demembrement devient donc sans objet.
+ *
  * Les prets « autres » portent leur propre date saisie (SimPLUS!AR17...) et ne
  * passent pas par cette fonction : chacun garde SA date.
  * @param {number} annee_mise_en_location annee civile de la mise en location (DAT)
- * @param {{demembrement?: boolean}} [options]
+ * @param {{demembrement?: boolean}} [options] conserve pour compatibilite d'appel
  * @returns {number}
  */
-export function anneePremiereEcheance(annee_mise_en_location, { demembrement = false } = {}) {
-  return annee_mise_en_location + (demembrement ? 0 : 1);
+export function anneePremiereEcheance(annee_mise_en_location, _options = {}) {
+  return annee_mise_en_location;
 }
 
 /**
@@ -152,6 +160,7 @@ function livretAPourAnnee(livret_a_par_annee, annee, defaut) {
  * @property {1|2} [differe_type]                1 = rien n'est du ; 2 = interets seuls
  * @property {number} [livret_a_origine]         LA_0 a l'origine du pret (plage nommee Tx_LA)
  * @property {Record<number, number>} [livret_a_par_annee] trajectoire LA (annee civile -> taux)
+ * @property {'annuite'|'constant'} [profil] R-AMT-6 : annuite progressive (defaut) ou capital constant
  *
  * @typedef {Object} LigneAmortissement
  * @property {number} annee             annee civile de l'echeance
@@ -201,6 +210,7 @@ export function tableauAmortissement(pret) {
     differe_type,
     livret_a_origine,
     livret_a_par_annee,
+    profil = 'annuite',
   } = pret;
 
   if (montant_eur === 0) return [];
@@ -249,6 +259,28 @@ export function tableauAmortissement(pret) {
         annuite_eur: interets,
         interets_eur: interets,
         amortissement_eur: 0,
+        crd_eur: crd,
+      });
+      continue;
+    }
+
+    // R-AMT-6 - Amortissement CONSTANT : c'est le CAPITAL qui est constant, et
+    // non l'annuite. Chaque echeance rembourse la meme fraction du capital
+    // d'origine, plus les interets du CRD - l'annuite decroit donc d'annee en
+    // annee. C'est le profil de la seconde phase du PHB 2.0, et il ne se
+    // confond pas avec la branche lineaire ci-dessous, qui ne vaut qu'a taux
+    // nul : ici le taux joue, il ne fait varier que la part d'interets.
+    if (profil === 'constant') {
+      const solde = arrondiCRD(crd) <= 0;
+      const amort = solde ? 0 : montant_eur / (duree_ans - differe_ans);
+      const interets = solde ? 0 : tx * crd;
+      crd -= amort;
+      lignes.push({
+        annee,
+        taux: tx,
+        annuite_eur: amort + interets,
+        interets_eur: interets,
+        amortissement_eur: amort,
         crd_eur: crd,
       });
       continue;

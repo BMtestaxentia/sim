@@ -19,7 +19,7 @@
  * dans une portee unique et refuse les collisions de noms racine.
  */
 import { calculer } from '../src/moteur.js';
-import { produitsOrdonnes } from '../src/produits.js';
+import { produitsOrdonnes, ORDRE_PRODUITS } from '../src/produits.js';
 import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
 import { ecartsParametrage } from '../src/parametrage.js';
 import { tauxLASM } from '../src/bilan.js';
@@ -317,6 +317,26 @@ const CAT_PAR_PRODUIT = {
  */
 const catProduit = (code) => `var(--prod-${CAT_PAR_PRODUIT[code] ?? 'autre'})`;
 const catFondProduit = (code) => `var(--prod-${CAT_PAR_PRODUIT[code] ?? 'autre'}-fond)`;
+
+/**
+ * FAMILLES de produits, deduites de la palette : un foyer PLAI est un PLAI, un
+ * PLUS 33 % est un PLUS. La couleur le dit deja, et une liste qui separerait
+ * PLAI de FPLAI demanderait de cocher deux cases pour une seule realite de
+ * financement. Derivee de la palette plutot que reecrite, pour qu'ajouter un
+ * produit a une couleur suffise a l'y ranger.
+ */
+const FAMILLES_PRODUIT = (() => {
+  /** @type {Map<string, string[]>} */
+  const par = new Map();
+  for (const code of ORDRE_PRODUITS) {
+    const cle = CAT_PAR_PRODUIT[code] ?? 'autre';
+    if (!par.has(cle)) par.set(cle, []);
+    par.get(cle).push(code);
+  }
+  // Le libelle de la famille est celui de son PREMIER produit dans l'ordre
+  // canonique : PLAI pour {PLAI, FPLAI}, PLUS pour {PLUS, PLUS33, FPLUS}.
+  return [...par.entries()].map(([cle, codes]) => ({ cle, codes, chef: codes[0] }));
+})();
 
 /**
  * Libelles de chapitre DERIVES de la nomenclature, jamais recopies : une table
@@ -3332,17 +3352,24 @@ function idProfil() {
  * actif, on en derive d'abord une copie : la reference doit rester intacte.
  * @returns {Object} le profil reellement modifie
  */
+/**
+ * Le profil ACTIF, modifie tel quel.
+ *
+ * Il derivait auparavant une copie « Profil personnalisé » des qu'on touchait
+ * au referentiel, pour ne pas perdre le point de comparaison. Mauvaise
+ * economie : on choisissait un profil, on le reglait, et l'ecran en affichait
+ * un autre - le reglage n'allait pas ou l'on croyait. Le point de comparaison
+ * n'est de toute facon jamais perdu, il est dans le FICHIER de referentiel, et
+ * « ↺ tout » y ramene. Ce qui protege une modification, desormais, c'est de la
+ * SAUVEGARDER explicitement, pas d'en detourner la destination.
+ */
 function profilModifiable() {
-  const p = profilActif();
-  if (p.id !== PROFIL_REFERENTIEL) return p;
-  const copie = {
-    id: idProfil(),
-    nom: 'Profil personnalisé',
-    parametrage: { baremes: {}, trajectoires: { par_annee: {} } },
-  };
-  etat.profils.push(copie);
-  etat.profil_actif = copie.id;
-  return copie;
+  return profilActif();
+}
+
+/** Un profil porte-t-il des modifications non sauvegardees ? */
+function profilNonSauve(p) {
+  return JSON.stringify(p.parametrage ?? {}) !== JSON.stringify(p.parametrage_sauve ?? {});
 }
 
 /** Lit une surcharge dans le profil actif, par chemin pointe. */
@@ -3445,12 +3472,21 @@ function modeleParametres() {
         'à une tranche, et seul le montant reste à saisir. Les valeurs viennent des fiches ' +
         'produit des prêteurs : modifiez-les si votre convention diffère, ajoutez les vôtres.',
       presets: true,
-      champs: Object.entries(b.prets_cdc?.marges ?? {}).map(([cle, m]) => ({
-        ...ch(`baremes.prets_cdc.marges.${cle}.valeur`, m.libelle ?? cle, m.valeur, 'pourcentage'),
-        // Le taux resultant se lit sous la marge, et suit la frappe : c'est lui
-        // que le pret paiera, la marge n'en est que la moitie visible.
-        cle_marge: cle,
-      })),
+      // Le LIVRET A DE REFERENCE, et lui seul, reste hors de la table : ce
+      // n'est pas la propriete d'un modele mais le socle de tous les prets
+      // indexes, et il vit dans les TRAJECTOIRES, pas dans les baremes. Le
+      // poser ici, en tete des modeles, le met la ou on le cherche - au-dessus
+      // des marges qui s'y ajoutent - sans pretendre qu'il appartient a l'un
+      // d'eux. Les marges, elles, ont rejoint la table.
+      champs: [
+        ch(
+          'trajectoires.taux_reference_livret_a',
+          'Livret A de référence',
+          referentiels.trajectoires?.taux_reference_livret_a,
+          'pourcentage',
+          'socle de tous les prêts indexés',
+        ),
+      ],
     },
     {
       id: 'loyers',
@@ -3609,13 +3645,17 @@ function nbModifies(s) {
   // du referentiel, ajouts et suppressions compris - le nombre repond a « qu'ai
   // je change ici », pas a « combien de cellules ai-je remplies ».
   if (s.presets) {
+    // Les champs de la section comptent AUSSI : le Livret A de reference y
+    // figure, et l'oublier faisait afficher « aucune modification » a un profil
+    // dont on venait de changer le socle de tous les prets indexes.
+    const champs = (s.champs ?? []).filter((c) => !nul(surchargeDe(c.chemin))).length;
     const surcharge = surchargeDe('baremes.presets_prets.presets');
-    if (!surcharge) return 0;
+    if (!surcharge) return champs;
     const base = referentiels.baremes.presets_prets?.presets ?? [];
     const parId = new Map(base.map((x) => [x.id, JSON.stringify(x)]));
     const changes = surcharge.filter((x) => parId.get(x.id) !== JSON.stringify(x)).length;
     const retires = base.filter((x) => !surcharge.some((y) => y.id === x.id)).length;
-    return changes + retires;
+    return champs + changes + retires;
   }
   if (s.trajectoires) {
     return Object.values(parametrageActif().trajectoires?.par_annee ?? {}).reduce(
@@ -3730,6 +3770,10 @@ function coinGrille(coin) {
  */
 const COLONNES_PRESET = [
   { cle: 'libelle', libelle: 'Modèle', type: 'texte', largeur: 190 },
+  // Sur quelles tranches le modele est proposable. Une liste a cocher plutot
+  // qu'un champ libre : les produits sont un ensemble ferme, et une faute de
+  // frappe rendrait le modele invisible sans rien dire.
+  { cle: 'produits', libelle: 'Tranches', type: 'produits', largeur: 150 },
   // Un groupe rassemble les declinaisons d'un meme preteur : l'ecran de tranche
   // n'en propose qu'une, celle du produit de la tranche. Laisser la colonne vide
   // fait du modele un modele autonome, propose partout.
@@ -3776,8 +3820,40 @@ function tablePresets() {
   if (!visibles.length && rechercheParametre) return '';
 
   const cellule = (x, i, c) => {
-    const chemin = `baremes.presets_prets.presets.${i}.${c.cle}`;
-    const v = x[c.cle];
+    // La MARGE d'un modele CDC n'est pas la sienne : c'est celle de la grille
+    // des prets, que le moteur lit aussi pour les prets par defaut. La cellule
+    // pointe donc `prets_cdc.marges`, si bien qu'une seule valeur sert aux
+    // deux. La dupliquer aurait cree deux marges pour un meme pret, et l'une
+    // des deux aurait fini par mentir.
+    const chemin = c.cle === 'spread' && x.cle_marge
+      ? `baremes.prets_cdc.marges.${x.cle_marge}.valeur`
+      : `baremes.presets_prets.presets.${i}.${c.cle}`;
+    const v =
+      c.cle === 'spread' && x.cle_marge
+        ? (surchargeDe(chemin) ?? referentiels.baremes.prets_cdc?.marges?.[x.cle_marge]?.valeur)
+        : x[c.cle];
+
+    if (c.type === 'produits') {
+      // Liste a cocher repliee dans un `details` : natif, sans script, et le
+      // resume dit l'essentiel sans qu'on ait a l'ouvrir.
+      // Une case par PRODUIT : un foyer PLAI partage la couleur du PLAI mais
+      // n'est pas le meme financement, et un modele peut viser l'un sans
+      // l'autre. Le regroupement par famille ne sert qu'a la couleur.
+      const choisis = new Set(Array.isArray(v) ? v : []);
+      const resume = choisis.size
+        ? ORDRE_PRODUITS.filter((p) => choisis.has(p)).map((p) => libelleProduit(p)).join(', ')
+        : 'toutes';
+      return `<td><details class="tranches-choix">
+        <summary title="${att(resume)}">${att(resume)}</summary>
+        <div class="tranches-choix__liste">
+          ${ORDRE_PRODUITS.map(
+            (p) => `<label><input type="checkbox" data-produit-preset="${i}" data-produit="${p}"
+              ${choisis.has(p) ? 'checked' : ''} /> <span style="--cat:${catProduit(p)}"
+              class="tranches-choix__pastille"></span>${att(libelleProduit(p))}</label>`,
+          ).join('')}
+        </div>
+      </details></td>`;
+    }
     if (c.type === 'periodicite') {
       return `<td><select data-champ="${chemin}" data-type="nombre">
         ${PERIODICITES.map((o) => `<option value="${o.v}" ${o.v === (v ?? 1) ? 'selected' : ''}>${o.l}</option>`).join('')}
@@ -3810,17 +3886,34 @@ function tablePresets() {
           <th></th>
         </tr></thead>
         <tbody>${visibles
-          .map(
-            ({ x, i }) =>
-              `<tr>${COLONNES_PRESET.map((c) => cellule(x, i, c)).join('')}
-                <td class="col-action"><button type="button" class="bouton--supprimer"
-                  data-supprimer-preset="${i}" data-nom="${att(x.libelle)}" title="Supprimer">×</button></td>
-              </tr>`,
-          )
+          .map(({ x, i }) => {
+            // Un modele qui vise une seule FAMILLE en prend la couleur, comme
+            // les lignes de lots. La famille et non le code : {PLAI, FPLAI} est
+            // une seule couleur, et exiger un code unique aurait laisse en gris
+            // tous les modeles couvrant un produit et son foyer. Sur plusieurs
+            // familles ou sur toutes, aucune couleur ne serait juste.
+            const viseees = FAMILLES_PRODUIT.filter((f) =>
+              f.codes.some((cd) => (x.produits ?? []).includes(cd)),
+            );
+            const cible = viseees.length === 1 ? viseees[0].chef : null;
+            return `<tr ${cible ? `class="preset--tranche" style="--cat-fond:${catFondProduit(cible)};--cat:${catProduit(cible)}"` : ''}>
+              ${COLONNES_PRESET.map((c) => cellule(x, i, c)).join('')}
+              <td class="col-action">${
+                // Un modele PRINCIPAL decrit un pret structurant : il ne se
+                // supprime pas, il se regle. Le supprimer priverait la tranche
+                // du pret qui absorbe son equilibre.
+                x.principal
+                  ? '<span class="preset__verrou" title="Prêt structurant : il se règle, il ne se supprime pas">⚿</span>'
+                  : `<button type="button" class="bouton--supprimer"
+                      data-supprimer-preset="${i}" data-nom="${att(x.libelle)}" title="Supprimer">×</button>`
+              }</td>
+            </tr>`;
+          })
           .join('')}</tbody>
       </table></div>
       <p class="grille__aide">Une cellule vide vaut « sans objet » : un prêt à taux fixe n’a pas
-        de marge, un prêt indexé n’a pas de taux fixe.</p>
+        de marge, un prêt indexé n’a pas de taux fixe. La durée d’un prêt foncier se déduit
+        de la zone (50 ans en B2 et C, 60 ans ailleurs) : la renseigner ici la fige.</p>
     </div>`;
 }
 
@@ -3915,19 +4008,27 @@ function rendreBarreProfil() {
   const profil = profilActif();
   const total = modeleParametres().reduce((t, s) => t + nbModifies(s), 0);
   const estRef = profil.id === PROFIL_REFERENTIEL;
+  const aSauver = profilNonSauve(profil);
   $('#para-profil').innerHTML = `
     <select id="select-profil" aria-label="Profil de paramètres">
       ${etat.profils
         .map((p) => `<option value="${att(p.id)}" ${p.id === profil.id ? 'selected' : ''}>${att(p.nom)}</option>`)
         .join('')}
     </select>
-    <span class="para-tete__etat ${total ? 'para-tete__etat--modifie' : ''}">
-      ${estRef ? 'référence, non modifiable' : `${total} modification${total > 1 ? 's' : ''}`}
+    <span class="para-tete__etat ${aSauver ? 'para-tete__etat--modifie' : ''}">
+      ${
+        total === 0
+          ? 'aucune modification'
+          : `${total} modification${total > 1 ? 's' : ''}${aSauver ? ' non sauvegardée' + (total > 1 ? 's' : '') : ''}`
+      }
     </span>
     <span class="para-tete__actions">
-      <button type="button" class="bouton bouton--ajout" data-profil="dupliquer">Dupliquer</button>
-      <button type="button" class="bouton bouton--discret" data-profil="renommer" ${estRef ? 'disabled' : ''}>Renommer</button>
-      <button type="button" class="bouton bouton--discret" data-profil="reinitialiser" ${estRef || !total ? 'disabled' : ''}>↺ tout</button>
+      <!-- La sauvegarde ne parait que s'il y a quelque chose a sauver : un
+           bouton toujours actif ne dit plus rien de l'etat du profil. -->
+      <button type="button" class="bouton bouton--ajout" data-profil="sauvegarder" ${aSauver ? '' : 'hidden'}>Sauvegarder</button>
+      <button type="button" class="bouton bouton--discret" data-profil="dupliquer">Dupliquer</button>
+      <button type="button" class="bouton bouton--discret" data-profil="renommer">Renommer</button>
+      <button type="button" class="bouton bouton--discret" data-profil="reinitialiser" ${total ? '' : 'disabled'}>↺ tout</button>
       <button type="button" class="bouton bouton--discret" data-profil="supprimer" ${estRef ? 'disabled' : ''}>Supprimer</button>
     </span>`;
 }
@@ -3977,7 +4078,7 @@ function rendreParametres() {
         <p class="para-source">${att(s.aide)}</p>
         ${
           champs.length
-            ? `<div class="para-matrice"><h4>Marges des prêts CDC, sur le Livret A</h4>
+            ? `<div class="para-matrice"><h4>Socle des prêts indexés</h4>
                 <div class="para-grille">${champs.map(carteParametre).join('')}</div></div>`
             : ''
         }
@@ -4308,6 +4409,28 @@ document.addEventListener('input', (ev) => {
     return;
   }
 
+  // Tranches d'un modele de pret : cocher ou decocher reecrit la LISTE entiere.
+  // Elle est ordonnee comme l'ordre canonique des produits, pour que deux
+  // modeles visant les memes tranches se lisent pareil quel que soit l'ordre
+  // dans lequel on a coche.
+  const caseProduit = /** @type {HTMLInputElement} */ (el).dataset?.produitPreset;
+  if (caseProduit !== undefined) {
+    const i = Number(caseProduit);
+    const liste = listePresets();
+    const courants = new Set(liste[i]?.produits ?? []);
+    const p = /** @type {HTMLElement} */ (el).dataset.produit;
+    if (/** @type {HTMLInputElement} */ (el).checked) courants.add(p);
+    else courants.delete(p);
+    ecrireSaisie(
+      'baremes.presets_prets.presets',
+      liste.map((x, k) =>
+        k === i ? { ...x, produits: ORDRE_PRODUITS.filter((c) => courants.has(c)) } : x,
+      ),
+    );
+    rafraichirTout();
+    return;
+  }
+
   const chemin = el.dataset?.champ;
   if (!chemin) return;
 
@@ -4374,6 +4497,11 @@ document.addEventListener('input', (ev) => {
   }
   if (chemin.startsWith('baremes.') || chemin.startsWith('trajectoires.')) {
     recalculer();
+    // La barre de profil compte les modifications et porte le bouton de
+    // sauvegarde : sans ce rafraichissement, elle affichait encore « aucune
+    // modification » alors que le moteur avait deja pris la nouvelle valeur.
+    // Elle seule est redessinee - reconstruire l'ecran couterait le focus.
+    rendreBarreProfil();
     return;
   }
 
@@ -4609,6 +4737,15 @@ document.addEventListener('change', (ev) => {
 document.addEventListener('click', (ev) => {
   const el = /** @type {HTMLElement} */ (ev.target);
 
+  // Un menu de tranches ouvert se ferme des qu'on clique AILLEURS. `details`
+  // ne le fait pas de lui-meme : il reste ouvert jusqu'a ce qu'on reclique son
+  // resume, si bien qu'on se retrouve avec deux ou trois panneaux flottants
+  // au-dessus du tableau. On ferme donc tous ceux qui ne contiennent pas le
+  // clic - celui qu'on vient d'ouvrir se contient lui-meme, il survit.
+  for (const d of document.querySelectorAll('details.tranches-choix[open]')) {
+    if (!d.contains(el)) /** @type {HTMLDetailsElement} */ (d).open = false;
+  }
+
   if (el.closest('#btn-reinitialiser')) {
     reinitialiserSaisie();
     return;
@@ -4746,11 +4883,17 @@ document.addEventListener('click', (ev) => {
   if (actionProfil) {
     const action = /** @type {HTMLElement} */ (actionProfil).dataset.profil;
     const p = profilActif();
-    if (action === 'dupliquer') {
+    if (action === 'sauvegarder') {
+      // Sauver, c'est figer l'etat courant comme nouvelle reference du profil.
+      // Le point de comparaison n'est pas perdu pour autant : le FICHIER de
+      // referentiel reste la valeur d'origine, et « ↺ tout » y ramene.
+      p.parametrage_sauve = structuredClone(p.parametrage ?? {});
+    } else if (action === 'dupliquer') {
       const copie = {
         id: idProfil(),
         nom: `${p.nom} (copie)`,
         parametrage: structuredClone(p.parametrage ?? {}),
+        parametrage_sauve: structuredClone(p.parametrage ?? {}),
       };
       etat.profils.push(copie);
       etat.profil_actif = copie.id;
@@ -4761,6 +4904,7 @@ document.addEventListener('click', (ev) => {
     } else if (action === 'reinitialiser') {
       if (!confirm(`Rendre au profil « ${p.nom} » toutes les valeurs du référentiel ?`)) return;
       p.parametrage = { baremes: {}, trajectoires: { par_annee: {} } };
+      p.parametrage_sauve = structuredClone(p.parametrage);
     } else if (action === 'supprimer') {
       if (!confirm(`Supprimer le profil « ${p.nom} » ?`)) return;
       etat.profils = etat.profils.filter((x) => x.id !== p.id);

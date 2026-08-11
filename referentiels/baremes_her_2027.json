@@ -629,6 +629,215 @@
     "usage": "Jeux de caracteristiques pretes a poser sur un pret ajoute a une tranche. Le preset renseigne tout sauf le MONTANT, qui reste la seule saisie.",
     "presets": [
       {
+        "id": "CDC_PLAI_CONSTRUCTION",
+        "libelle": "CDC construction PLAI",
+        "principal": true,
+        "groupe": "Prêts CDC",
+        "produits": [
+          "PLAI",
+          "FPLAI"
+        ],
+        "cle_marge": "PLAI",
+        "nature": "construction",
+        "duree_ans": 40,
+        "revisabilite": "DOUBLE",
+        "progressivite": -0.005,
+        "profil_amortissement": "progressif",
+        "differe_ans": 0,
+        "periodicite": 1,
+        "note": "Pret CDC de construction, 40 ans."
+      },
+      {
+        "id": "CDC_PLAI_FONCIER",
+        "libelle": "CDC foncier PLAI",
+        "principal": true,
+        "groupe": "Prêts CDC",
+        "produits": [
+          "PLAI",
+          "FPLAI"
+        ],
+        "cle_marge": "PLAI",
+        "nature": "foncier",
+        "duree_ans": null,
+        "revisabilite": "DOUBLE",
+        "progressivite": -0.005,
+        "profil_amortissement": "progressif",
+        "differe_ans": 0,
+        "periodicite": 1,
+        "note": "Duree du pret foncier : 50 ans en zone B2 et C, 60 ans ailleurs. Elle est resolue par le moteur selon la zone de l operation ; la renseigner ici la fige pour tous les zonages."
+      },
+      {
+        "id": "CDC_PLUS_CONSTRUCTION",
+        "libelle": "CDC construction PLUS",
+        "principal": true,
+        "groupe": "Prêts CDC",
+        "produits": [
+          "PLUS",
+          "PLUS33",
+          "FPLUS"
+        ],
+        "cle_marge": "PLUS",
+        "nature": "construction",
+        "duree_ans": 40,
+        "revisabilite": "DOUBLE",
+        "progressivite": -0.005,
+        "profil_amortissement": "progressif",
+        "differe_ans": 0,
+        "periodicite": 1,
+        "note": "Pret CDC de construction, 40 ans."
+      },
+      {
+        "id": "CDC_PLUS_FONCIER",
+        "libelle": "CDC foncier PLUS",
+        "principal": true,
+        "groupe": "Prêts CDC",
+        "produits": [
+          "PLUS",
+          "PLUS33",
+          "FPLUS"
+        ],
+        "cle_marge": "PLUS",
+        "nature": "foncier",
+        "duree_ans": null,
+        "revisabilite": "DOUBLE",
+        "progressivite": -0.005,
+        "profil_amortissement": "progressif",
+        "differe_ans": 0,
+        "periodicite": 1,
+        "note": "Duree du pret foncier : 50 ans en zone B2 et C, 60 ans ailleurs. Elle est resolue par le moteur selon la zone de l operation ; la renseigner ici la fige pour tous les zonages."
+      },
+      {
+        "id": "CDC_PLUS_VERTES",
+        "libelle": "CDC PLUS constructions vertes",
+        "principal": true,
+        "groupe": "Prêts CDC",
+        "produits": [
+          "PLUS",
+          "PLUS33",
+          "FPLUS"
+        ],
+        "cle_marge": "PLUS_VERTES",
+        "nature": "construction",
+        "duree_ans": 40,
+        "revisabilite": "DOUBLE",
+        "progressivite": -0.005,
+        "profil_amortissement": "progressif",
+        "differe_ans": 0,
+        "periodicite": 1,
+        "note": "Marge reduite des constructions vertes, applicable au pret de construction ET au pret foncier (guide CDC B40)."
+      },
+      {
+        "id": "CDC_PLS_CONSTRUCTION",
+        "libelle": "CDC construction PLS",
+        "principal": true,
+        "groupe": "Prêts CDC",
+        "produits": [
+          "PLS",
+          "FPLS"
+        ],
+        "cle_marge": "PLS",
+        "nature": "construction",
+        "duree_ans": 40,
+        "revisabilite": "DOUBLE",
+        "progressivite": -0.005,
+        "profil_amortissement": "progressif",
+        "differe_ans": 0,
+        "periodicite": 1,
+        "note": "Pret CDC de construction, 40 ans."
+      },
+      {
+        "id": "CDC_PLS_FONCIER",
+        "libelle": "CDC foncier PLS",
+        "principal": true,
+        "groupe": "Prêts CDC",
+        "produits": [
+          "PLS",
+          "FPLS"
+        ],
+        "cle_marge": "PLS",
+        "nature": "foncier",
+        "duree_ans": null,
+        "revisabilite": "DOUBLE",
+        "progressivite": -0.005,
+        "profil_amortissement": "progressif",
+        "differe_ans": 0,
+        "periodicite": 1,
+        "note": "Duree du pret foncier : 50 ans en zone B2 et C, 60 ans ailleurs. Elle est resolue par le moteur selon la zone de l operation ; la renseigner ici la fige pour tous les zonages."
+      },
+      {
+        "id": "CPLS",
+        "libelle": "CPLS",
+        "principal": true,
+        "groupe": "Prêts CDC",
+        "produits": [
+          "PLS",
+          "FPLS"
+        ],
+        "cle_marge": "PLS",
+        "nature": "construction",
+        "duree_ans": 40,
+        "revisabilite": "DOUBLE",
+        "progressivite": -0.005,
+        "profil_amortissement": "progressif",
+        "differe_ans": 0,
+        "periodicite": 1,
+        "note": "Complementaire au PLS : il nait du plafonnement du PLS a 55 % du prix de revient (R-FIN-8), il ne se saisit pas. Son tarif reprend celui du PLS, l onglet Taux n en portant pas."
+      },
+      {
+        "id": "CDC_PLI_CONSTRUCTION",
+        "libelle": "CDC construction PLI / LLI",
+        "principal": true,
+        "groupe": "Prêts CDC",
+        "produits": [
+          "LOC"
+        ],
+        "cle_marge": "PLI",
+        "nature": "construction",
+        "duree_ans": 35,
+        "revisabilite": "DOUBLE",
+        "progressivite": -0.005,
+        "profil_amortissement": "progressif",
+        "differe_ans": 0,
+        "periodicite": 1,
+        "note": "Pret CDC de construction du logement intermediaire, 35 ans."
+      },
+      {
+        "id": "CDC_PLI_FONCIER",
+        "libelle": "CDC foncier PLI / LLI",
+        "principal": true,
+        "groupe": "Prêts CDC",
+        "produits": [
+          "LOC"
+        ],
+        "cle_marge": "PLI",
+        "nature": "foncier",
+        "duree_ans": 40,
+        "revisabilite": "DOUBLE",
+        "progressivite": -0.005,
+        "profil_amortissement": "progressif",
+        "differe_ans": 0,
+        "periodicite": 1,
+        "note": "Pret CDC foncier du logement intermediaire, 40 ans."
+      },
+      {
+        "id": "CDC_PAM",
+        "libelle": "PAM (rehabilitation)",
+        "principal": true,
+        "groupe": "Prêts CDC",
+        "produits": [
+          "REHAB"
+        ],
+        "cle_marge": "PAM",
+        "nature": "construction",
+        "duree_ans": 25,
+        "revisabilite": "DOUBLE",
+        "progressivite": -0.005,
+        "profil_amortissement": "progressif",
+        "differe_ans": 0,
+        "periodicite": 1,
+        "note": "Pret a l amelioration, marge alignee sur le PLUS a confirmer par le metier."
+      },
+      {
         "id": "AL_PLAI",
         "libelle": "Action Logement PLAI",
         "nature": "autre",
@@ -762,6 +971,8 @@
     ],
     "note_groupe": "Un GROUPE rassemble les declinaisons d un meme preteur, une par produit de financement. L ecran n en propose qu un bouton par tranche et applique la declinaison qui correspond au produit de cette tranche : sur une tranche PLS, Action Logement ne peut etre qu Action Logement PLS.",
     "note_periodicite": "Nombre d echeances par an : 1 annuelle, 2 semestrielle, 4 trimestrielle, 12 mensuelle. Les prets Action Logement sont trimestriels. Le moteur amortit a la periode puis agrege par annee civile, le compte d exploitation restant annuel.",
-    "note_differe": "Les fiches Action Logement annoncent un differe d amortissement de 4 ans au maximum. Il est pose au maximum par defaut, en type 2 : le capital est differe, les interets restent dus."
+    "note_differe": "Les fiches Action Logement annoncent un differe d amortissement de 4 ans au maximum. Il est pose au maximum par defaut, en type 2 : le capital est differe, les interets restent dus.",
+    "note_principal": "Un modele PRINCIPAL decrit un pret structurant de tranche : il ne se supprime pas, il se regle. Sa marge pointe la grille des prets CDC par sa cle, si bien qu une seule valeur sert au modele et au calcul des prets par defaut.",
+    "note_produits_liste": "produits : tranches sur lesquelles le modele est proposable. Vide, il l est partout."
   }
 }

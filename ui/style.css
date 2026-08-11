@@ -1483,6 +1483,43 @@ span.ressource__libelle {
 .grille--presets input[data-type='texte'], .grille--presets td:first-child input { text-align: left; }
 .grille--presets th { white-space: nowrap; }
 .grille--presets td { max-width: 200px; }
+/* Un modele qui ne vise qu'UNE tranche en prend la couleur, comme les lignes de
+   lots : la table se relit alors par familles de produit. Sur plusieurs
+   tranches, aucune couleur ne serait juste. */
+.grille--presets tr.preset--tranche > td {
+  background: color-mix(in srgb, var(--cat-fond, transparent) 26%, transparent);
+}
+.grille--presets tr.preset--tranche > td:first-child {
+  box-shadow: inset 3px 0 0 var(--cat, var(--prod-autre));
+}
+.preset__verrou { color: var(--text-tertiary); font-size: 12px; cursor: help; }
+
+/* Liste des tranches d'un modele : repliee dans un `details`, le resume dit
+   l'essentiel sans qu'on ait a l'ouvrir. `position: absolute` sur le panneau
+   pour qu'il flotte au-dessus du tableau au lieu d'en pousser les lignes. */
+.tranches-choix { position: relative; font-size: 11px; }
+.tranches-choix > summary {
+  cursor: pointer; padding: 4px 8px; list-style: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--text-secondary);
+}
+.tranches-choix > summary::-webkit-details-marker { display: none; }
+.tranches-choix > summary::after { content: ' ▾'; color: var(--text-tertiary); }
+.tranches-choix > summary:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.tranches-choix__liste {
+  position: absolute; z-index: 30; top: 100%; left: 0; min-width: 180px;
+  display: flex; flex-direction: column; gap: 2px; padding: 7px 9px;
+  background: var(--bg-primary); border: 1px solid var(--border-color-strong);
+  border-radius: var(--radius-sm); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+}
+.tranches-choix__liste label {
+  display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap;
+}
+.tranches-choix__liste input { width: auto; }
+.tranches-choix__pastille {
+  width: 9px; height: 9px; border-radius: 50%; flex: none;
+  background: var(--cat, var(--prod-autre));
+}
 .grille input::placeholder { color: var(--text-tertiary); opacity: 0.7; }
 .grille input:focus {
   outline: 2px solid var(--info-accent); outline-offset: -2px;

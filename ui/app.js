@@ -1124,13 +1124,16 @@ function detailPret(p, i) {
    * qui sert justement a comparer des montages, cela compte plus que la place
    * economisee.
    */
-  const segments = (chemin, options, courante, type) => `
+  // `inactif` DESACTIVE vraiment les boutons, il ne fait pas que les grisier :
+  // un groupe eteint mais cliquable dit « sans objet » de l'oeil et accepte le
+  // clic de la main, ce qui est la pire des deux lectures.
+  const segments = (chemin, options, courante, type, inactif = false) => `
     <span class="choix" role="group">
       ${options
         .map(
           (o) => `<button type="button" class="choix__option ${o.v === courante ? 'choix__option--actif' : ''}"
             data-poser-champ="${chemin}" data-valeur="${att(String(o.v))}" data-type-valeur="${type}"
-            ${o.aide ? `title="${att(o.aide)}"` : ''}
+            ${inactif ? 'disabled' : ''} ${o.aide ? `title="${att(o.aide)}"` : ''}
             aria-pressed="${o.v === courante}">${att(o.l)}${
               o.marque ? `<span class="choix__defaut" data-defaut="${o.marque}"></span>` : ''
             }</button>`,
@@ -1222,7 +1225,13 @@ function detailPret(p, i) {
         <input type="number" step="1" min="0" data-champ="${c('differe_ans')}" data-type="nombre"
           value="${valNum(p.differe_ans)}" /></label>
       <div class="champ champ--choix ${p.differe_ans ? '' : 'champ--eteint'}"><span>Pendant le différé</span>
-        ${segments(c('differe_type'), OPTIONS_DIFFERE.map((o) => ({ v: o.v, l: o.l })), p.differe_type ?? 2, 'nombre')}</div>`,
+        ${segments(
+          c('differe_type'),
+          OPTIONS_DIFFERE.map((o) => ({ v: o.v, l: o.l })),
+          p.differe_type ?? 2,
+          'nombre',
+          !p.differe_ans,
+        )}</div>`,
       'calendrier',
     )}
   </div>`;
@@ -2130,11 +2139,32 @@ function rendreValeurs(r) {
       // L'ordre suit celui des jauges qui encadrent l'ecran : le prix de revient
       // a gauche comme la jauge des emplois, les ressources a droite comme la
       // sienne. Ce qui coute et ce qui finance restent du meme cote partout.
+      // Le loyer se lit deja en detail dans son encart, chaine de calcul
+      // comprise : le redire ici prenait deux tuiles sur six pour rien. A leur
+      // place, deux grandeurs qui n'apparaissent NULLE PART ailleurs sur
+      // l'ecran de tranche - le cout unitaire, qui est la mesure a laquelle on
+      // compare deux operations, et l'annuite, qui est ce que la tranche paiera
+      // vraiment chaque annee.
+      const parLogement = t.nb_logements ? (t.prix_revient_ttc_eur ?? 0) / t.nb_logements : null;
+      const parM2 = t.shab_m2 ? (t.prix_revient_ttc_eur ?? 0) / t.shab_m2 : null;
+      const annuite1 = pretsTranche.reduce(
+        (s, a) => s + (a.tableau?.find((x) => x.annuite_eur > 0)?.annuite_eur ?? 0),
+        0,
+      );
+      const nbPrets = pretsTranche.filter((a) => a.montant_eur > 0).length;
       bandeau.innerHTML = [
-        tuile('Prix de revient', eur(t.prix_revient_ttc_eur), 'TTC de la tranche'),
+        tuile('Prix de revient', eur(t.prix_revient_ttc_eur), 'TTC'),
         tuile('Programme', `${nb(t.nb_logements)} lgts`, `${nb(t.su_m2)} m² SU · ${pct(t.quote_part_su, 1)} de l’opération`),
-        tuile('Loyer de sortie', l ? `${nb(l.loyer_pratique_eur_m2)} €` : '-', 'par m² SU et par mois'),
-        tuile('Loyer annuel', l ? eur(l.loyer_annuel_eur) : '-', `coefficient de structure ${l ? nb(l.cs) : '-'}`),
+        tuile(
+          'Coût par logement',
+          parLogement === null ? '-' : eur(parLogement),
+          parM2 === null ? '' : `${eur(parM2)} / m² SHAB`,
+        ),
+        tuile(
+          'Annuité',
+          annuite1 ? eur(annuite1) : '-',
+          nbPrets ? `1re échéance · ${nbPrets} prêt${nbPrets > 1 ? 's' : ''}` : 'aucun prêt mobilisé',
+        ),
         tuile(
           reste > 0 ? 'Reste à financer' : 'Financement',
           reste > 0 ? eur(reste) : 'couvert',

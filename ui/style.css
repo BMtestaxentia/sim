@@ -1277,6 +1277,9 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 }
 .choix__option + .choix__option { border-left: 1px solid var(--border-color); }
 .choix__option:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.choix__option:disabled { cursor: not-allowed; }
+.choix__option:disabled:hover { background: var(--bg-primary); color: var(--text-secondary); }
+.choix__option--actif:disabled:hover { background: var(--info-accent); color: #fff; }
 .choix__option--actif, .choix__option--actif:hover {
   background: var(--info-accent); color: #fff;
 }

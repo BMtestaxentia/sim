@@ -955,6 +955,61 @@ const jeton = (cle, valeur, champ) =>
  * cases a l'ecran : on ne voyait plus le plan de financement, seulement des
  * formulaires.
  */
+/**
+ * Presets proposes sur un pret ajoute, tant qu'il est VIERGE.
+ *
+ * Un pret nait avec des caracteristiques neutres - 2 %, 40 ans, taux fixe - que
+ * personne ne veut vraiment : ce sont des valeurs d'attente, pas un montage. Les
+ * presets posent d'un clic celles d'un produit reel (Action Logement, Booster,
+ * PHB 2.0...) et il ne reste que le montant a saisir.
+ *
+ * Ils disparaissent des que le pret porte un montant : a partir de la, il est
+ * monte, et lui proposer encore d'ecraser ses caracteristiques serait offrir de
+ * defaire ce qu'on vient de faire. Le detail deplie reste modifiable a la main.
+ */
+function presetsDisponibles(p, i) {
+  // Un pret qui PORTE deja un modele n'en propose plus : ses caracteristiques
+  // sont posees, et lui offrir d'en appliquer un autre reviendrait a proposer
+  // d'ecraser ce qu'on vient de choisir. Le detail deplie reste modifiable a la
+  // main, et vider le champ de modele les fait revenir.
+  if (p.preset) return '';
+  const tous = listePresets();
+
+  // Un GROUPE rassemble les declinaisons d'un meme preteur, une par produit.
+  // On n'en propose qu'UNE, celle qui correspond au produit de la tranche : sur
+  // une tranche PLS, « Action Logement » ne peut etre qu'Action Logement PLS.
+  // Offrir les quatre reviendrait a demander a l'utilisateur de retrouver une
+  // information que l'ecran connait deja, avec trois chances sur quatre de se
+  // tromper. Le bouton porte alors le nom du GROUPE, pas celui de la variante.
+  const vus = new Set();
+  const proposes = [];
+  for (const x of tous) {
+    if (!x.groupe) {
+      proposes.push({ id: x.id, libelle: x.libelle, note: x.note });
+      continue;
+    }
+    if (vus.has(x.groupe)) continue;
+    const variante = tous.find((v) => v.groupe === x.groupe && v.produits?.includes(p.produit));
+    if (!variante) continue;
+    vus.add(x.groupe);
+    proposes.push({
+      id: variante.id,
+      libelle: x.groupe,
+      note: `${variante.libelle} — ${variante.note ?? ''}`,
+    });
+  }
+  if (!proposes.length) return '';
+
+  return `<span class="pret__presets" title="Appliquer les caractéristiques d’un produit connu">
+    ${proposes
+      .map(
+        (x) => `<button type="button" class="bouton--preset" data-preset-pret="${i}"
+          data-preset="${att(x.id)}" title="${att(x.note ?? x.libelle)}">${att(x.libelle)}</button>`,
+      )
+      .join('')}
+  </span>`;
+}
+
 function gabaritPret(p, i) {
   const ouvert = pretsDeplies.has(i);
   // Les jetons sont remplis par `remplirCalculs` depuis le resultat : taux,
@@ -965,11 +1020,21 @@ function gabaritPret(p, i) {
     jeton('durée', '-', 'duree'),
     jeton('1re éch.', '-', 'echeance'),
     jeton('révis.', '-', 'revisabilite'),
+    // L'echeance ne se montre que si elle n'est pas annuelle : la rappeler sur
+    // tous les prets CDC ajouterait un jeton constant a chaque ligne.
+    ...(p.periodicite > 1
+      ? [jeton('échéance', PERIODICITES.find((x) => x.v === p.periodicite)?.l ?? `${p.periodicite}/an`)]
+      : []),
     // La progressivite se lit comme le taux et la duree : depuis le RESULTAT,
     // car un pret CDC non saisi la tient du referentiel. La conditionner a la
     // saisie masquait les -0,5 % par defaut, qui pilotent pourtant l'annuite.
     jeton('progr.', '-', 'progressivite'),
-    ...(p.differe_ans ? [jeton('différé', `${p.differe_ans} ans · type ${p.differe_type ?? 2}`)] : []),
+    // Le TYPE de differe ne se met pas dans le jeton : c'est un detail de
+    // mecanique - interets dus ou non - qui se lit dans le detail deplie, la ou
+    // il se saisit. Sur la ligne repliee, il encombrait sans repondre a la
+    // question qu'on se pose, qui est de savoir quand le pret commence a
+    // s'amortir.
+    ...(p.differe_ans ? [jeton('différé', `${p.differe_ans} ans`)] : []),
   ].join('');
 
   // Montant AUTOMATIQUE, reserve aux prets STRUCTURANTS de la tranche - les CDC
@@ -996,8 +1061,15 @@ function gabaritPret(p, i) {
           title="${p.principal ? 'La nature d’un prêt structurant ne se change pas' : ''}">
           ${['construction', 'foncier', 'autre'].map((n) => `<option value="${n}" ${n === p.nature ? 'selected' : ''}>${n}</option>`).join('')}
         </select>
-        <button type="button" class="bouton--auto" data-remettre-auto="${i}"
-          title="Revenir au montant calculé">↺ auto</button>
+        <!-- Le retour au calcul n'existe QUE pour les prets structurants : eux
+             seuls absorbent l'ecart du plan de financement. Un pret ajoute a
+             cote finance un besoin identifie, il n'y a rien a y recalculer. -->
+        ${
+          p.principal
+            ? `<button type="button" class="bouton--auto" data-remettre-auto="${i}"
+                 title="Revenir au montant calculé">↺ auto</button>`
+            : presetsDisponibles(p, i)
+        }
         <span class="pret__actions">
           <button type="button" class="bouton--deplier" data-deplier-pret="${i}"
             aria-expanded="${ouvert}" title="${ouvert ? 'Replier' : 'Déplier'}">${ouvert ? '▴' : '▾'}</button>
@@ -1758,8 +1830,20 @@ function rendreValeurs(r) {
       const el = ligne.querySelector(`[data-jeton="${champ}"]`);
       if (el) el.textContent = v ?? '-';
     };
-    poser('taux', nul(a?.taux) ? '-' : pct(a.taux, 2));
+    // Le taux AFFICHE est celui que le pret paie reellement, donc celui de la
+    // premiere echeance de sa table - plancher applique. Le taux nominal peut
+    // etre negatif sur un pret indexe sous le Livret A : afficher « -0,25 % »
+    // pour un pret qui paie 0,25 % serait faux, et faux dans le sens qui
+    // rassure. La table n'existe que si le pret est mobilise ; sinon on se
+    // rabat sur le nominal, qui est tout ce qu'on sait.
+    const tauxPaye = amorti?.tableau?.[0]?.taux ?? a?.taux_applique ?? a?.taux;
+    poser('taux', nul(tauxPaye) ? '-' : pct(tauxPaye, 2));
     poser('duree', nul(a?.duree_ans) ? '-' : `${a.duree_ans} ans`);
+    // Les modeles ne se proposent que sur un pret qui n'en porte pas encore.
+    // Le rendu de structure le sait deja - appliquer un modele reconstruit la
+    // ligne - mais la garde reste, au cas ou l'etat changerait sans rendu.
+    const presets = ligne.querySelector('.pret__presets');
+    if (presets) presets.hidden = Boolean(p?.preset);
     poser('echeance', amorti?.annee_premiere_echeance ?? p?.annee_premiere_echeance ?? '-');
     poser('revisabilite', a?.revisabilite ?? p?.revisabilite ?? '-');
     const progr = a?.progressivite ?? p?.progressivite;
@@ -3078,6 +3162,20 @@ function modeleParametres() {
       })),
     },
     {
+      // Section a MATRICE UNIQUE : un preset est une ligne, ses caracteristiques
+      // sont les colonnes. La grille de cartes aurait donne sept cartes de dix
+      // champs, illisibles cote a cote alors que c'est justement la comparaison
+      // d'un produit a l'autre qui interesse.
+      id: 'presets',
+      titre: 'Modèles de prêt',
+      resume: 'Action Logement, Booster, PHB 2.0…',
+      aide:
+        'Un modèle pose d’un clic les caractéristiques d’un produit sur un prêt ajouté à une ' +
+        'tranche ; seul le montant reste à saisir. Les valeurs viennent des fiches produit des ' +
+        'prêteurs — modifiez-les si votre convention diffère, ajoutez les vôtres.',
+      presets: true,
+    },
+    {
       id: 'loyers',
       titre: 'Loyers plafonds',
       resume: 'Barèmes par zone, et leur millésime',
@@ -3229,6 +3327,19 @@ function champsDeSection(s) {
 
 /** Nombre de champs surcharges dans une section. */
 function nbModifies(s) {
+  // Les modeles ne se comptent pas champ par champ : c'est la LISTE entiere qui
+  // est surchargee des qu'on y touche. On compte donc les modeles qui different
+  // du referentiel, ajouts et suppressions compris - le nombre repond a « qu'ai
+  // je change ici », pas a « combien de cellules ai-je remplies ».
+  if (s.presets) {
+    const surcharge = surchargeDe('baremes.presets_prets.presets');
+    if (!surcharge) return 0;
+    const base = referentiels.baremes.presets_prets?.presets ?? [];
+    const parId = new Map(base.map((x) => [x.id, JSON.stringify(x)]));
+    const changes = surcharge.filter((x) => parId.get(x.id) !== JSON.stringify(x)).length;
+    const retires = base.filter((x) => !surcharge.some((y) => y.id === x.id)).length;
+    return changes + retires;
+  }
   if (s.trajectoires) {
     return Object.values(parametrageActif().trajectoires?.par_annee ?? {}).reduce(
       (t, postes) => t + Object.values(postes ?? {}).filter((v) => !nul(v)).length,
@@ -3332,6 +3443,108 @@ function coinGrille(coin) {
       data-champ="${coin.chemin}" data-type="nombre"
       title="${att(coin.libelle)}" aria-label="${att(coin.libelle)}"
       placeholder="${att(String(coin.valeur ?? ''))}" value="${valNum(s)}" /></th>`;
+}
+
+/**
+ * Colonnes d'un modele de pret. Le chemin pointe la liste du REFERENTIEL : un
+ * modele modifie devient donc une surcharge de profil, exactement comme un
+ * bareme - changer de profil change les modeles, ce qui est le comportement
+ * attendu d'une convention de prêteur negociee par l'organisme.
+ */
+const COLONNES_PRESET = [
+  { cle: 'libelle', libelle: 'Modèle', type: 'texte', largeur: 190 },
+  // Un groupe rassemble les declinaisons d'un meme preteur : l'ecran de tranche
+  // n'en propose qu'une, celle du produit de la tranche. Laisser la colonne vide
+  // fait du modele un modele autonome, propose partout.
+  { cle: 'groupe', libelle: 'Groupe', type: 'texte', largeur: 130 },
+  { cle: 'spread', libelle: 'Marge / LA', type: 'pourcentage' },
+  { cle: 'taux', libelle: 'Taux fixe', type: 'pourcentage' },
+  { cle: 'taux_plancher', libelle: 'Plancher', type: 'pourcentage' },
+  { cle: 'duree_ans', libelle: 'Durée', type: 'nombre' },
+  { cle: 'differe_ans', libelle: 'Différé', type: 'nombre' },
+  { cle: 'progressivite', libelle: 'Progr.', type: 'pourcentage' },
+  { cle: 'revisabilite', libelle: 'Révisabilité', type: 'revisabilite' },
+  { cle: 'profil_amortissement', libelle: 'Amortissement', type: 'profil' },
+  { cle: 'periodicite', libelle: 'Échéance', type: 'periodicite', largeur: 120 },
+];
+
+/**
+ * Liste EFFECTIVE des modeles de pret : celle du profil actif si elle a ete
+ * touchee, celle du referentiel sinon.
+ *
+ * `referentiels` porte le referentiel BRUT ; les surcharges vivent a cote, dans
+ * le profil, et ne sont fusionnees que pour le moteur. Les autres parametres
+ * s'en accommodent - ils affichent la surcharge comme valeur et le referentiel
+ * en filigrane - mais une LISTE n'a pas de filigrane : on montre celle qui fait
+ * foi, sans quoi ajouter un modele n'aurait aucun effet visible.
+ */
+function listePresets() {
+  return surchargeDe('baremes.presets_prets.presets') ?? referentiels.baremes.presets_prets?.presets ?? [];
+}
+
+/** Nombre d'echeances par an, nomme. Le moteur ne connait que le nombre. */
+const PERIODICITES = [
+  { v: 1, l: 'annuelle' },
+  { v: 2, l: 'semestrielle' },
+  { v: 4, l: 'trimestrielle' },
+  { v: 12, l: 'mensuelle' },
+];
+
+/** Table des modeles de pret : une ligne par modele, ajout et suppression. */
+function tablePresets() {
+  const liste = listePresets();
+  const visibles = liste
+    .map((x, i) => ({ x, i }))
+    .filter(({ x }) => correspond({ libelle: `${x.libelle} ${x.note ?? ''}` }));
+  if (!visibles.length && rechercheParametre) return '';
+
+  const cellule = (x, i, c) => {
+    const chemin = `baremes.presets_prets.presets.${i}.${c.cle}`;
+    const v = x[c.cle];
+    if (c.type === 'periodicite') {
+      return `<td><select data-champ="${chemin}" data-type="nombre">
+        ${PERIODICITES.map((o) => `<option value="${o.v}" ${o.v === (v ?? 1) ? 'selected' : ''}>${o.l}</option>`).join('')}
+      </select></td>`;
+    }
+    if (c.type === 'revisabilite' || c.type === 'profil') {
+      const options =
+        c.type === 'revisabilite' ? OPTIONS_REVISABILITE : ['progressif', 'constant'];
+      return `<td><select data-champ="${chemin}">
+        ${options.map((o) => `<option value="${o}" ${o === v ? 'selected' : ''}>${att(o)}</option>`).join('')}
+      </select></td>`;
+    }
+    if (c.type === 'texte') {
+      return `<td><input type="text" data-champ="${chemin}" value="${att(v ?? '')}" /></td>`;
+    }
+    const aff = c.type === 'pourcentage' ? enPourcent(v) : v;
+    return `<td class="num"><input type="text" inputmode="decimal" data-champ="${chemin}"
+      data-type="${c.type === 'pourcentage' ? 'pourcentage' : 'nombre'}"
+      value="${valNum(aff)}" placeholder="—" /></td>`;
+  };
+
+  return `
+    <div class="para-matrice">
+      <h4>Modèles disponibles
+        <button type="button" class="bouton bouton--ajout" id="btn-ajouter-preset">+ modèle</button>
+      </h4>
+      <div class="table-defilante"><table class="grille grille--presets">
+        <thead><tr>
+          ${COLONNES_PRESET.map((c) => `<th${c.largeur ? ` style="min-width:${c.largeur}px"` : ''}>${att(c.libelle)}</th>`).join('')}
+          <th></th>
+        </tr></thead>
+        <tbody>${visibles
+          .map(
+            ({ x, i }) =>
+              `<tr>${COLONNES_PRESET.map((c) => cellule(x, i, c)).join('')}
+                <td class="col-action"><button type="button" class="bouton--supprimer"
+                  data-supprimer-preset="${i}" data-nom="${att(x.libelle)}" title="Supprimer">×</button></td>
+              </tr>`,
+          )
+          .join('')}</tbody>
+      </table></div>
+      <p class="grille__aide">Une cellule vide vaut « sans objet » : un prêt à taux fixe n’a pas
+        de marge, un prêt indexé n’a pas de taux fixe.</p>
+    </div>`;
 }
 
 /** Rappel des gestes disponibles, une fois par grille. */
@@ -3479,6 +3692,16 @@ function rendreParametres() {
     const champs = (s.champs ?? []).filter(correspond);
     const matrices = (s.matrices ?? []).map(tableMatrice).filter(Boolean);
     const traj = s.trajectoires && !enRecherche ? sectionTrajectoires() : '';
+    if (s.presets) {
+      const t = tablePresets();
+      return t
+        ? `<section class="bloc para-section">
+            <h3>${att(s.titre)}</h3>
+            <p class="para-source">${att(s.aide)}</p>
+            ${t}
+          </section>`
+        : '';
+    }
     if (!champs.length && !matrices.length && !traj) return '';
     return `
       <section class="bloc para-section">
@@ -3536,7 +3759,10 @@ function champsManquants() {
       // (R-AMT-1), et son montant du besoin d'equilibre : exiger leur saisie
       // reclamerait ce que le moteur sait deja. Seul un pret « autre », ou un
       // pret sans tranche, doit etre entierement decrit.
-      const resolu = Boolean(p.produit) && p.nature !== 'autre';
+      // Une MARGE suffit : le taux en decoule (Livret A + marge). Un modele de
+      // pret ne pose souvent que la marge, et reclamer le taux par-dessus
+      // reviendrait a demander deux fois la meme grandeur.
+      const resolu = (Boolean(p.produit) && p.nature !== 'autre') || !nul(p.spread);
       if (nul(p.taux) && !resolu) m.push(`taux du ${nom}`);
       if (nul(p.duree_ans) && !resolu) m.push(`durée du ${nom}`);
       if (nul(p.montant_eur) && p.montant_auto !== true) m.push(`montant du ${nom}`);
@@ -4278,6 +4504,70 @@ document.addEventListener('click', (ev) => {
     delete etat.fonds_propres_par_produit[
       /** @type {HTMLElement} */ (rendreAuto).dataset.apportRendreAuto
     ];
+    rafraichirTout();
+    return;
+  }
+
+  // --- Modeles de pret : ajout et suppression ---
+  // Ils vivent dans le REFERENTIEL, donc toute modification derive un profil,
+  // comme n'importe quel bareme. `ecrireSaisie` s'en charge ; ici on ne fait que
+  // poser la liste modifiee au bon chemin.
+  if (el.id === 'btn-ajouter-preset') {
+    const liste = listePresets();
+    let n = liste.length + 1;
+    while (liste.some((x) => x.id === `MODELE_${n}`)) n++;
+    ecrireSaisie('baremes.presets_prets.presets', [
+      ...liste,
+      {
+        id: `MODELE_${n}`,
+        libelle: `Nouveau modèle ${n}`,
+        nature: 'autre',
+        duree_ans: 40,
+        revisabilite: 'TAUX FIXE',
+        progressivite: 0,
+        profil_amortissement: 'annuite',
+        differe_ans: 0,
+      },
+    ]);
+    rafraichirTout();
+    return;
+  }
+
+  const supPreset = el.closest('[data-supprimer-preset]');
+  if (supPreset) {
+    const i = Number(/** @type {HTMLElement} */ (supPreset).dataset.supprimerPreset);
+    const nom = /** @type {HTMLElement} */ (supPreset).dataset.nom;
+    if (!confirm(`Supprimer le modèle « ${nom} » ?`)) return;
+    const liste = listePresets();
+    ecrireSaisie(
+      'baremes.presets_prets.presets',
+      liste.filter((_, k) => k !== i),
+    );
+    rafraichirTout();
+    return;
+  }
+
+  // Application d'un preset de pret : on pose TOUTES les caracteristiques du
+  // produit d'un coup, sauf le montant. Les champs absents du preset sont
+  // EFFACES et non laisses tels quels - un preset decrit un produit entier, en
+  // garder des morceaux du precedent produirait un pret qui n'existe pas.
+  const preset = el.closest('[data-preset-pret]');
+  if (preset) {
+    const i = Number(/** @type {HTMLElement} */ (preset).dataset.presetPret);
+    const id = /** @type {HTMLElement} */ (preset).dataset.preset;
+    const modele = listePresets().find((x) => x.id === id);
+    const pret = etat.prets[i];
+    if (!modele || !pret) return;
+    for (const cle of [
+      'taux', 'spread', 'cle_marge', 'taux_plancher', 'duree_ans', 'revisabilite',
+      'progressivite', 'profil_amortissement', 'differe_ans', 'differe_type', 'periodicite',
+    ]) {
+      if (modele[cle] === undefined || modele[cle] === null) delete pret[cle];
+      else pret[cle] = modele[cle];
+    }
+    pret.libelle = modele.libelle;
+    pret.nature = modele.nature ?? 'autre';
+    pret.preset = modele.id;
     rafraichirTout();
     return;
   }

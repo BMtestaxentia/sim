@@ -623,5 +623,145 @@
       "lignes": [],
       "note": "Bloc  Credit d impot TFPB LLI  : couples {montant_eur, duree_ans} venant en deduction de l impot du (SimTOTAL_IS colonne J)."
     }
+  },
+  "presets_prets": {
+    "source": "Fiches produit Action Logement du 17/12/2025 (LLS et LLI, dispositif de droit commun) et fiches Banque des Territoires consultees le 11/08/2026.",
+    "usage": "Jeux de caracteristiques pretes a poser sur un pret ajoute a une tranche. Le preset renseigne tout sauf le MONTANT, qui reste la seule saisie.",
+    "presets": [
+      {
+        "id": "AL_PLAI",
+        "libelle": "Action Logement PLAI",
+        "nature": "autre",
+        "cle_marge": null,
+        "taux_plancher": 0.0025,
+        "duree_ans": 40,
+        "revisabilite": "D. LIMITEE",
+        "progressivite": -0.005,
+        "profil_amortissement": "progressif",
+        "differe_ans": 4,
+        "quotite_max_prix_revient": 0.6,
+        "note": "Livret A - 225 pb, plancher 0,25 %, 40 ans, amortissement progressif, differe d amortissement de 4 ans maximum, echeance trimestrielle. Quotite maximale 60 % du prix de revient TTC.",
+        "spread": -0.0225,
+        "groupe": "Action Logement",
+        "produits": [
+          "PLAI",
+          "FPLAI"
+        ],
+        "periodicite": 4,
+        "differe_type": 2
+      },
+      {
+        "id": "AL_PLUS",
+        "libelle": "Action Logement PLUS",
+        "nature": "autre",
+        "cle_marge": null,
+        "taux_plancher": 0.0025,
+        "duree_ans": 40,
+        "revisabilite": "D. LIMITEE",
+        "progressivite": -0.005,
+        "profil_amortissement": "progressif",
+        "differe_ans": 4,
+        "quotite_max_prix_revient": 0.3,
+        "note": "Livret A - 225 pb, plancher 0,25 %, 40 ans, amortissement progressif, differe de 4 ans maximum. Quotite maximale 30 % du prix de revient TTC.",
+        "spread": -0.0225,
+        "groupe": "Action Logement",
+        "produits": [
+          "PLUS",
+          "PLUS33",
+          "FPLUS"
+        ],
+        "periodicite": 4,
+        "differe_type": 2
+      },
+      {
+        "id": "AL_PLS",
+        "libelle": "Action Logement PLS",
+        "nature": "autre",
+        "cle_marge": null,
+        "taux_plancher": 0.0025,
+        "duree_ans": 30,
+        "revisabilite": "D. LIMITEE",
+        "progressivite": -0.005,
+        "profil_amortissement": "progressif",
+        "differe_ans": 4,
+        "quotite_max_prix_revient": 0.3,
+        "note": "Livret A - 175 pb, plancher 0,25 %, 30 ans, amortissement progressif, differe de 4 ans maximum. Quotite maximale 30 % du prix de revient TTC.",
+        "spread": -0.0175,
+        "groupe": "Action Logement",
+        "produits": [
+          "PLS",
+          "FPLS"
+        ],
+        "periodicite": 4,
+        "differe_type": 2
+      },
+      {
+        "id": "AL_LLI",
+        "libelle": "Action Logement LLI",
+        "nature": "autre",
+        "cle_marge": null,
+        "taux_plancher": 0.0025,
+        "duree_ans": 30,
+        "revisabilite": "D. LIMITEE",
+        "progressivite": -0.005,
+        "profil_amortissement": "progressif",
+        "differe_ans": 4,
+        "quotite_max_prix_revient": 0.3,
+        "note": "Logement intermediaire, toutes operations : Livret A - 175 pb, plancher 0,25 %, 30 ans, amortissement progressif, differe de 4 ans maximum. Quotite maximale 30 % du prix de revient TTC.",
+        "spread": -0.0175,
+        "groupe": "Action Logement",
+        "produits": [
+          "LOC"
+        ],
+        "periodicite": 4,
+        "differe_type": 2
+      },
+      {
+        "id": "BOOSTER",
+        "libelle": "Prêt Booster",
+        "nature": "autre",
+        "taux": 0.03,
+        "duree_ans": 40,
+        "revisabilite": "TAUX FIXE",
+        "progressivite": 0,
+        "profil_amortissement": "progressif",
+        "differe_ans": 0,
+        "montant_par_logement_eur": 15000,
+        "note": "Taux FIXE sur ressource BEI, bareme mensuel : le taux pose ici est un ordre de grandeur, a remplacer par celui du bareme du mois. Durees possibles 30, 35 ou 40 ans. 15 000 EUR par logement au maximum.",
+        "periodicite": 1
+      },
+      {
+        "id": "PHB_2_0",
+        "libelle": "PHB 2.0 (neuf)",
+        "nature": "autre",
+        "cle_marge": null,
+        "duree_ans": 40,
+        "differe_ans": 20,
+        "differe_type": 1,
+        "revisabilite": "SIMPLE",
+        "progressivite": 0,
+        "profil_amortissement": "constant",
+        "note": "Deux phases : 20 ans a taux zero en differe total, puis Livret A + 60 pb en amortissement a capital constant sur 20 ans. En rehabilitation la seconde phase tombe a 10 ans, soit 30 ans au total.",
+        "spread": 0.006,
+        "periodicite": 1
+      },
+      {
+        "id": "PLI_BEI",
+        "libelle": "PLI taux fixe BEI",
+        "nature": "autre",
+        "taux": 0.035,
+        "duree_ans": 35,
+        "revisabilite": "TAUX FIXE",
+        "progressivite": 0,
+        "profil_amortissement": "progressif",
+        "differe_ans": 0,
+        "plafond_par_logement_eur": 50000,
+        "note": "Taux FIXE sur ressource BEI : le taux pose ici est un ordre de grandeur. 9 ans minimum, 35 ans sur le bati et jusqu a 50 ans sur le foncier.",
+        "periodicite": 1
+      }
+    ],
+    "note_groupe": "Un GROUPE rassemble les declinaisons d un meme preteur, une par produit de financement. L ecran n en propose qu un bouton par tranche et applique la declinaison qui correspond au produit de cette tranche : sur une tranche PLS, Action Logement ne peut etre qu Action Logement PLS.",
+    "note_periodicite": "Nombre d echeances par an : 1 annuelle, 2 semestrielle, 4 trimestrielle, 12 mensuelle. Les prets Action Logement sont trimestriels. Le moteur amortit a la periode puis agrege par annee civile, le compte d exploitation restant annuel.",
+    "note_differe": "Les fiches Action Logement annoncent un differe d amortissement de 4 ans au maximum. Il est pose au maximum par defaut, en type 2 : le capital est differe, les interets restent dus."
   }
 }

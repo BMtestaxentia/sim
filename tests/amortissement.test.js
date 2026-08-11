@@ -430,3 +430,114 @@ describe('R-AMT-6 amortissement constant', () => {
     expect(t[1].interets_eur).toBeCloseTo(2_700, 6);
   });
 });
+
+// --- R-AMT-7 : taux plancher (prets indexes sous le Livret A) ------------
+describe('R-AMT-7 taux plancher', () => {
+  // Action Logement PLAI : Livret A - 225 pb, plancher 0,25 %. Avec le Livret A
+  // du profil HER 2027 a 1,50 %, le taux nu vaudrait -0,75 %.
+  const base = {
+    montant_eur: 100_000,
+    taux: 0.015 - 0.0225,
+    duree_ans: 40,
+    annee_premiere_echeance: 2028,
+    revisabilite: 'D. LIMITEE',
+    progressivite: -0.005,
+    livret_a_origine: 0.015,
+  };
+
+  it('empeche le taux de passer sous le plancher', () => {
+    const t = tableauAmortissement({ ...base, taux_plancher: 0.0025 });
+    expect(t[0].taux).toBeCloseTo(0.0025, 12);
+    for (const l of t) expect(l.taux).toBeGreaterThanOrEqual(0.0025);
+  });
+
+  it('laisse le taux NEGATIF quand aucun plancher n est pose', () => {
+    // Le plancher est une propriete du contrat, pas une garde du moteur : sans
+    // lui, le taux du pret reste ce qu'il est. C'est ce qui rend visible un
+    // preset mal renseigne plutot que de le corriger en silence.
+    const t = tableauAmortissement(base);
+    expect(t[0].taux).toBeLessThan(0);
+  });
+
+  it('laisse le taux monter au-dessus du plancher quand le Livret A remonte', () => {
+    const t = tableauAmortissement({
+      ...base,
+      taux_plancher: 0.0025,
+      livret_a_par_annee: { 2028: 0.015, 2029: 0.04 },
+    });
+    // +2,50 points de Livret A : -0,75 % + 2,50 % = 1,75 %, bien au-dessus.
+    expect(t[0].taux).toBeCloseTo(0.0025, 12);
+    expect(t[1].taux).toBeGreaterThan(0.0025);
+    expect(t[1].taux).toBeCloseTo(-0.0075 + 0.025, 4);
+  });
+
+  it('solde le pret malgre le plancher', () => {
+    const t = tableauAmortissement({ ...base, taux_plancher: 0.0025 });
+    expect(t.at(-1)?.crd_eur).toBeCloseTo(0, 5);
+    expect(sommeAmortissements(t)).toBeCloseTo(100_000, 5);
+  });
+});
+
+// --- R-AMT-8 : echeances infra-annuelles --------------------------------
+describe('R-AMT-8 periodicite', () => {
+  const base = {
+    montant_eur: 100_000,
+    taux: 0.02,
+    progressivite: 0,
+    duree_ans: 20,
+    annee_premiere_echeance: 2028,
+    revisabilite: 'TAUX FIXE',
+  };
+
+  it('a periodicite 1, reproduit exactement le pret annuel', () => {
+    const annuel = tableauAmortissement(base);
+    const explicite = tableauAmortissement({ ...base, periodicite: 1 });
+    expect(explicite).toEqual(annuel);
+  });
+
+  it('solde exactement le pret en trimestriel', () => {
+    const t = tableauAmortissement({ ...base, periodicite: 4 });
+    expect(t).toHaveLength(20);
+    expect(t.at(-1)?.crd_eur).toBeCloseTo(0, 5);
+    expect(sommeAmortissements(t)).toBeCloseTo(100_000, 5);
+  });
+
+  it('coute MOINS cher en trimestriel : le capital recule quatre fois par an', () => {
+    const annuel = tableauAmortissement(base);
+    const trim = tableauAmortissement({ ...base, periodicite: 4 });
+    const interets = (t) => t.reduce((s, l) => s + l.interets_eur, 0);
+    expect(interets(trim)).toBeLessThan(interets(annuel));
+  });
+
+  it('garde la progression ANNUELLE et non par periode', () => {
+    // -0,5 % par an doit rester -0,5 % par an, pas -2 % : c'est la racine
+    // quatrieme qui repartit la progression sur les trimestres.
+    const t = tableauAmortissement({ ...base, periodicite: 4, progressivite: -0.005 });
+    expect(t[1].annuite_eur / t[0].annuite_eur).toBeCloseTo(0.995, 3);
+  });
+
+  it('respecte le differe en trimestriel', () => {
+    // Differe de type 2 : le capital ne bouge pas, les interets restent dus.
+    const t = tableauAmortissement({ ...base, periodicite: 4, differe_ans: 4, differe_type: 2 });
+    for (const l of t.slice(0, 4)) {
+      expect(l.amortissement_eur).toBe(0);
+      expect(l.crd_eur).toBeCloseTo(100_000, 6);
+      expect(l.interets_eur).toBeCloseTo(2_000, 6); // 4 x (2 %/4) x 100 000
+    }
+    expect(t.at(-1)?.crd_eur).toBeCloseTo(0, 5);
+    expect(sommeAmortissements(t)).toBeCloseTo(100_000, 5);
+  });
+
+  it('applique le plancher de taux en trimestriel aussi', () => {
+    const t = tableauAmortissement({
+      ...base,
+      periodicite: 4,
+      taux: -0.0075,
+      revisabilite: 'D. LIMITEE',
+      livret_a_origine: 0.015,
+      taux_plancher: 0.0025,
+    });
+    expect(t[0].taux).toBeCloseTo(0.0025, 12);
+    expect(t.at(-1)?.crd_eur).toBeCloseTo(0, 5);
+  });
+});

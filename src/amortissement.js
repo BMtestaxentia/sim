@@ -161,6 +161,8 @@ function livretAPourAnnee(livret_a_par_annee, annee, defaut) {
  * @property {number} [livret_a_origine]         LA_0 a l'origine du pret (plage nommee Tx_LA)
  * @property {Record<number, number>} [livret_a_par_annee] trajectoire LA (annee civile -> taux)
  * @property {'annuite'|'constant'} [profil] R-AMT-6 : annuite progressive (defaut) ou capital constant
+ * @property {number} [taux_plancher]        R-AMT-7 : plancher du taux applique (prets indexes sous le LA)
+ * @property {number} [periodicite]          R-AMT-8 : echeances par an (1 annuelle, 4 trimestrielle...)
  *
  * @typedef {Object} LigneAmortissement
  * @property {number} annee             annee civile de l'echeance
@@ -198,6 +200,90 @@ function livretAPourAnnee(livret_a_par_annee, annee, defaut) {
  * @param {PretEntree} pret
  * @returns {LigneAmortissement[]} une ligne par annee de la duree du pret
  */
+/**
+ * R-AMT-8 - Amortissement a echeances INFRA-ANNUELLES, agrege par annee civile.
+ *
+ * Convention de taux : le taux de periode est PROPORTIONNEL, taux annuel divise
+ * par le nombre d'echeances. C'est l'usage des prets reglementes, et la fiche
+ * produit d'Action Logement ne dit rien de plus - le choix est donc documente
+ * ici plutot que suppose ailleurs. La convention actuarielle, (1+t)^(1/m)-1,
+ * donnerait des interets legerement plus faibles.
+ *
+ * Le taux et la progression sont revises UNE FOIS PAR AN, comme sur un pret
+ * annuel : c'est le Livret A qui les commande, et il ne bouge pas au trimestre.
+ *
+ * @param {PretEntree} pret
+ * @param {{rev: Revisabilite, la0: number}} contexte deja normalises par l'appelant
+ * @returns {LigneAmortissement[]}
+ */
+function tableauPeriodique(pret, { rev, la0 }) {
+  const {
+    montant_eur,
+    taux,
+    progressivite = 0,
+    duree_ans,
+    annee_premiere_echeance,
+    differe_ans = 0,
+    differe_type,
+    livret_a_par_annee,
+    profil = 'annuite',
+    taux_plancher,
+    periodicite: m,
+  } = pret;
+
+  /** @type {LigneAmortissement[]} */
+  const lignes = [];
+  let crd = montant_eur;
+  const periodesAmortissantes = (duree_ans - differe_ans) * m;
+
+  for (let k = 0; k < duree_ans; k++) {
+    const annee = annee_premiere_echeance + k;
+    const laN = livretAPourAnnee(livret_a_par_annee, annee, la0);
+    const ecartLA = (laN - la0) / (1 + taux);
+    const txBrut = rev === 'TAUX FIXE' ? taux : (1 + taux) * (1 + ecartLA) - 1;
+    const txAnnuel = taux_plancher === undefined ? txBrut : Math.max(txBrut, taux_plancher);
+    const revBrut = (1 + progressivite) * (1 + ecartLA) - 1;
+    const revAnnuel =
+      rev === 'DOUBLE' ? revBrut : rev === 'D.LIMITEE' ? Math.max(revBrut, 0) : progressivite;
+
+    const txp = txAnnuel / m;
+    // La progression est ANNUELLE : repartie sur les periodes, elle vaut la
+    // racine m-ieme. Sans cette racine, une progression de -0,5 % par an
+    // deviendrait -2 % par an sur un pret trimestriel.
+    const revp = (1 + revAnnuel) ** (1 / m) - 1;
+
+    let interetsAnnee = 0;
+    let amortAnnee = 0;
+    for (let j = 0; j < m; j++) {
+      if (k < differe_ans) {
+        interetsAnnee += differe_type === 1 ? 0 : txp * crd;
+        continue;
+      }
+      if (arrondiCRD(crd) <= 0) continue;
+      const restantes = periodesAmortissantes - ((k - differe_ans) * m + j);
+      const amort =
+        profil === 'constant'
+          ? montant_eur / periodesAmortissantes
+          : (txp === 0 && revp === 0
+              ? montant_eur / periodesAmortissantes
+              : crd * facteurAnnuite(txp, revp, restantes)) - txp * crd;
+      interetsAnnee += txp * crd;
+      amortAnnee += amort;
+      crd -= amort;
+    }
+
+    lignes.push({
+      annee,
+      taux: txAnnuel,
+      annuite_eur: interetsAnnee + amortAnnee,
+      interets_eur: interetsAnnee,
+      amortissement_eur: amortAnnee,
+      crd_eur: crd,
+    });
+  }
+  return lignes;
+}
+
 export function tableauAmortissement(pret) {
   const {
     montant_eur,
@@ -211,6 +297,8 @@ export function tableauAmortissement(pret) {
     livret_a_origine,
     livret_a_par_annee,
     profil = 'annuite',
+    taux_plancher,
+    periodicite = 1,
   } = pret;
 
   if (montant_eur === 0) return [];
@@ -231,6 +319,19 @@ export function tableauAmortissement(pret) {
   const rev = normaliserRevisabilite(String(revisabilite));
   const la0 = livret_a_origine ?? 0;
 
+  // R-AMT-8 - ECHEANCES INFRA-ANNUELLES. Les prets Action Logement s'amortissent
+  // par trimestre. Le compte d'exploitation, lui, reste annuel : on amortit donc
+  // a la PERIODE puis on agrege par annee civile. Un pret trimestriel ne se
+  // ramene pas a un pret annuel de meme taux - le capital recule quatre fois
+  // dans l'annee, donc les interets de l'annee sont plus faibles.
+  //
+  // Chemin separe et non branche dans la boucle annuelle : celle-ci transcrit
+  // SimPLUS!FF117:FN117 et porte tous les golden tests. La laisser intacte
+  // garantit qu'aucun pret annuel ne change de comportement.
+  if (periodicite > 1) {
+    return tableauPeriodique(pret, { rev, la0 });
+  }
+
   /** @type {LigneAmortissement[]} */
   const lignes = [];
   let crd = montant_eur;
@@ -242,7 +343,14 @@ export function tableauAmortissement(pret) {
 
     // [FJ] Le taux d'interet suit le Livret A sauf en taux fixe (garde SimLIB!FH8 ;
     // le bloc CDC de SimPLUS omet cette garde, cf. ECARTS_LEON E-3).
-    const tx = rev === 'TAUX FIXE' ? taux : (1 + taux) * (1 + ecartLA) - 1;
+    //
+    // R-AMT-7 - TAUX PLANCHER. Les prets Action Logement sont indexes SOUS le
+    // Livret A - jusqu'a -225 points de base - et leur fiche produit fixe un
+    // plancher de 0,25 %. Sans lui, un Livret A a 1,50 % donnerait un taux
+    // NEGATIF : le pret rapporterait de l'argent a l'emprunteur, ce qu'aucune
+    // fiche ne prevoit. Le plancher borne le taux applique, jamais la marge.
+    const txBrut = rev === 'TAUX FIXE' ? taux : (1 + taux) * (1 + ecartLA) - 1;
+    const tx = taux_plancher === undefined ? txBrut : Math.max(txBrut, taux_plancher);
 
     // [FF/FI] Revision de la progression de l'annuite selon la revisabilite.
     const revBrut = (1 + progressivite) * (1 + ecartLA) - 1;

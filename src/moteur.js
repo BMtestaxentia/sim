@@ -714,6 +714,18 @@ export function calculer(entrees, referentiels) {
     }
   }
 
+  // R-AMT-1 - Un pret indexe se decrit par sa MARGE, jamais par son taux : le
+  // taux en decoule et changerait tout seul si le Livret A de reference bougeait.
+  // La derivation se fait ici, sur TOUS les prets, et non dans la seule branche
+  // des prets CDC theoriques : un pret « autre » pose depuis un modele - Action
+  // Logement, PHB 2.0 - porte lui aussi une marge et rien d'autre.
+  for (const p of pretsACalculer) {
+    if (p.taux === undefined || p.taux === null) {
+      const spread = Number(p.spread);
+      if (Number.isFinite(spread)) p.taux = (p.livret_a_origine ?? laOrigine) + spread;
+    }
+  }
+
   const amortissements = pretsACalculer
     .filter((p) => p.montant_eur > 0)
     .map((p) => ({
@@ -752,6 +764,10 @@ export function calculer(entrees, referentiels) {
         // profil de la seconde phase du PHB 2.0 ; les prets CDC ordinaires
         // gardent l'annuite, qui reste le defaut.
         profil: p.profil_amortissement ?? 'annuite',
+        // R-AMT-7 : les prets indexes SOUS le Livret A portent un plancher.
+        taux_plancher: p.taux_plancher,
+        // R-AMT-8 : echeances par an. Le compte reste annuel, le pret non.
+        periodicite: p.periodicite ?? 1,
         livret_a_origine: p.livret_a_origine ?? laOrigine,
         livret_a_par_annee: p.livret_a_par_annee ?? laParAnnee,
       }),
@@ -776,6 +792,16 @@ export function calculer(entrees, referentiels) {
     // Nulle sur un pret a taux saisi, qui n'est pas indexe sur le Livret A.
     spread: Number.isFinite(p.spread) && p.taux === p.livret_a_origine + p.spread ? p.spread : null,
     cle_marge: p.cle_marge ?? null,
+    // R-AMT-7 : le taux NOMINAL peut etre negatif sur un pret indexe sous le
+    // Livret A ; ce que le pret paie est le taux plancher. On publie les deux -
+    // le nominal reste la base des revisions, l'applique est ce qui se lit.
+    taux_plancher: p.taux_plancher ?? null,
+    taux_applique:
+      p.taux === undefined || p.taux === null
+        ? null
+        : p.taux_plancher === undefined || p.taux_plancher === null
+          ? p.taux
+          : Math.max(p.taux, p.taux_plancher),
     duree_ans: p.duree_ans ?? null,
     revisabilite: p.revisabilite ?? null,
     progressivite: p.progressivite ?? 0,

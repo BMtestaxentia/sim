@@ -236,3 +236,42 @@ describe('R-LOYER-9 - millesime du bareme de loyers', () => {
     expect(r.loyers[0].loyer_base_eur_m2).toBe(PLAFOND_PLS_B1);
   });
 });
+
+describe('R-PARAM - listes a identifiants', () => {
+  const base = [
+    { id: 'A', libelle: 'Alpha', duree_ans: 40 },
+    { id: 'B', libelle: 'Beta', duree_ans: 30 },
+    { id: 'C', libelle: 'Gamma', duree_ans: 25 },
+  ];
+
+  it('permet de RETIRER un element, ce que la fusion par index interdit', () => {
+    // Par index, la base reapparaitrait au-dela de la longueur de la surcharge
+    // et la suppression serait sans effet.
+    const r = fusionner(base, [base[0], base[2]]);
+    expect(r.map((x) => x.id)).toEqual(['A', 'C']);
+  });
+
+  it('fusionne par IDENTIFIANT et non par rang', () => {
+    // Meme reordonne, chaque element retrouve sa base : une surcharge partielle
+    // sur B ne doit pas aller se poser sur A parce qu'il a change de place.
+    const r = fusionner(base, [{ id: 'B', duree_ans: 35 }, { id: 'A' }]);
+    expect(r[0]).toEqual({ id: 'B', libelle: 'Beta', duree_ans: 35 });
+    expect(r[1]).toEqual({ id: 'A', libelle: 'Alpha', duree_ans: 40 });
+  });
+
+  it('accepte un element entierement nouveau', () => {
+    const r = fusionner(base, [...base, { id: 'D', libelle: 'Delta', duree_ans: 20 }]);
+    expect(r).toHaveLength(4);
+    expect(r[3].libelle).toBe('Delta');
+  });
+
+  it('laisse les tableaux POSITIONNELS fusionner par index', () => {
+    // Un bareme de zones n'a pas d'identifiant : une surcharge partielle doit
+    // continuer de ne toucher que les rangs qu'elle donne.
+    expect(fusionner([7.4, 6.49, 6.01, 7.85], [, , 6.5])).toEqual([7.4, 6.49, 6.5, 7.85]);
+  });
+
+  it('ne laisse pas une surcharge vide effacer la liste', () => {
+    expect(fusionner(base, [])).toEqual(base);
+  });
+});

@@ -32,8 +32,14 @@ function vide(v) {
  * Fusionne une surcharge partielle sur un referentiel, en profondeur.
  *
  * - objet : fusionne cle par cle, les cles absentes de la surcharge restent ;
- * - tableau : fusionne PAR INDEX, ce qui permet de ne redonner qu'une zone
- *   d'un bareme sans recopier les quatre autres ;
+ * - tableau POSITIONNEL : fusionne PAR INDEX, ce qui permet de ne redonner
+ *   qu'une zone d'un bareme sans recopier les quatre autres ;
+ * - tableau A IDENTIFIANTS (chaque element porte un `id`) : c'est une LISTE, pas
+ *   une grille. La surcharge y fait autorite sur la composition - elle peut donc
+ *   en retirer un element, ce qu'une fusion par index ne permet pas : l'element
+ *   de base reapparaitrait au-dela de la longueur de la surcharge. Les elements
+ *   communs se fusionnent par `id`, pour qu'une surcharge partielle reste
+ *   possible sur un element sans recopier tous ses champs ;
  * - valeur simple : remplacee, sauf si elle est vide.
  *
  * Ne modifie jamais ses arguments : le referentiel charge une fois pour toutes
@@ -44,11 +50,28 @@ function vide(v) {
  * @param {any} surcharge  valeur saisie, partielle
  * @returns {T}
  */
+/**
+ * Un tableau est une LISTE, et non une grille positionnelle, quand tous ses
+ * elements sont des objets porteurs d'un `id`. Le vide en est exclu : un
+ * tableau sans element ne dit rien de sa nature, et le traiter en liste
+ * laisserait une surcharge vide effacer toute la base.
+ */
+function listeAIdentifiants(t) {
+  return (
+    t.length > 0 &&
+    t.every((e) => e && typeof e === 'object' && !Array.isArray(e) && typeof e.id === 'string')
+  );
+}
+
 export function fusionner(base, surcharge) {
   if (vide(surcharge)) return base;
 
   if (Array.isArray(base)) {
     if (!Array.isArray(surcharge)) return /** @type {any} */ (surcharge);
+    if (listeAIdentifiants(base) && listeAIdentifiants(surcharge)) {
+      const parId = new Map(base.map((e) => [e.id, e]));
+      return /** @type {any} */ (surcharge.map((e) => fusionner(parId.get(e.id), e)));
+    }
     const long = Math.max(base.length, surcharge.length);
     const out = [];
     for (let i = 0; i < long; i++) out.push(fusionner(base[i], surcharge[i]));

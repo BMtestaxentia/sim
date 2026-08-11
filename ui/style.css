@@ -1109,6 +1109,20 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 .bouton--auto:hover { background: var(--info-accent); color: #fff; }
 /* Rien a remettre en automatique tant qu'on y est deja. */
 .pret--auto .bouton--auto, .fp--auto .bouton--auto { display: none; }
+/* Presets : ils occupent la place laissee libre par le bouton « auto », qui n'a
+   pas cours sur un pret ajoute. Discrets - ce sont des raccourcis, pas des
+   actions - et ils s'effacent des que le pret porte un montant. */
+.pret__presets { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-width: 0; }
+.bouton--preset {
+  appearance: none; cursor: pointer; font-family: inherit; flex: none;
+  font-size: 10px; font-weight: 600; padding: 3px 8px; white-space: nowrap;
+  border: 1px dashed var(--border-color-strong); border-radius: var(--radius-pill);
+  background: transparent; color: var(--text-secondary);
+}
+.bouton--preset:hover {
+  border-style: solid; border-color: var(--info-accent);
+  background: var(--info-bg); color: var(--info-text);
+}
 
 .bouton--deplier {
   appearance: none; border: none; background: transparent; cursor: pointer;
@@ -1308,6 +1322,17 @@ span.ressource__libelle {
   width: 92px; border: none; border-radius: 0; background: transparent;
   padding: 3px 8px; text-align: right; font-variant-numeric: tabular-nums;
 }
+/* Les modeles de pret ont des colonnes de largeurs differentes - un libelle, un
+   groupe, des nombres - la ou un bareme n'a que des nombres de meme calibre. Le
+   champ epouse donc SA cellule au lieu de garder la largeur fixe des grilles de
+   bareme, qui le faisait deborder sur les colonnes de texte. */
+.grille--presets input, .grille--presets select {
+  width: 100%; min-width: 0; box-sizing: border-box;
+  border: none; border-radius: 0; background: transparent; padding: 3px 8px;
+}
+.grille--presets input[data-type='texte'], .grille--presets td:first-child input { text-align: left; }
+.grille--presets th { white-space: nowrap; }
+.grille--presets td { max-width: 200px; }
 .grille input::placeholder { color: var(--text-tertiary); opacity: 0.7; }
 .grille input:focus {
   outline: 2px solid var(--info-accent); outline-offset: -2px;

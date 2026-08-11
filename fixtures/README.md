@@ -18,6 +18,12 @@ les **annexes** LEON (Mulhouse) et la **matrice** LEON complète (Bergerac).
   rémunérée 44 318,74 € (2 % du PR, rémunérée 2,5 %, reconstituée sur 30 ans). Régime **redevance
   forfaitaire**. C'est la fixture la plus complète du dépôt : bilan, plan de financement,
   amortissement, amortissement comptable et compte d'exploitation, tous confrontés.
+- `cazeres_2868_foyer_pls/` : simulation n°2868, **contrôle** de la précédente. Même profil, même
+  annexe, même montage (16 lots, VEFA, PLS, redevance forfaitaire), mais plan de financement
+  opposé : **aucune subvention** et 98 % de prêts. PLS Foncier 469 420 € / 50 ans, PLS Travaux
+  1 830 737 € / 40 ans, avance de trésorerie rémunérée 46 942,28 €. Son rôle n'est pas de
+  re-tester la mécanique mais de vérifier que ce qui a été identifié sur AGDE tient sur des
+  chiffres indépendants.
 - `bergerac_lls6_pls/` — produit **PLS**, VEFA, habitation. Extraite le 04/08/2026 non pas d'une
   annexe mais de la **matrice complète** (131 onglets), en lecture seule via Excel COM.
   Prêts : PLS construction 494 023 EUR (40 ans) et PLS foncier 176 035 EUR (50 ans), tous deux

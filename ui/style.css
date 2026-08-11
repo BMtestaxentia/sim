@@ -1153,10 +1153,73 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
   font-size: 11.5px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.03em;
 }
+/* ---------- Detail d'un pret, groupe par question ----------
+   Trois groupes cote a cote tant que la largeur le permet, empiles ensuite.
+   Dix champs alignes sur deux rangs ne disaient pas lesquels vont ensemble ;
+   ici chaque groupe porte son sujet et, en clair, ce que le reglage produit. */
 .pret__detail {
-  margin-top: 10px; padding-top: 10px;
+  margin-top: 10px; padding-top: 12px;
   border-top: 1px dashed var(--border-color);
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
+.pret__groupe {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px 10px;
+  min-width: 0;
+}
+.pret__groupe-titre {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  margin: 0 0 8px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary);
+}
+.pret__groupe-aide {
+  text-transform: none; letter-spacing: 0; font-weight: 400;
+  font-size: 10.5px; color: var(--text-tertiary);
+}
+.pret__groupe .champs { gap: 8px 10px; }
+.pret__groupe .champ { margin-bottom: 0; flex: 1 1 130px; min-width: 0; }
+/* La phrase de synthese : ce que les reglages ci-dessus PRODUISENT. Elle se lit
+   comme une conclusion, d'ou le filet qui la separe des champs. */
+.pret__synthese {
+  margin: 9px 0 0; padding-top: 7px;
+  border-top: 1px solid var(--border-color);
+  font-size: 11px; line-height: 1.45; color: var(--text-secondary);
+}
+/* Un champ sans objet reste VISIBLE mais eteint : le retirer ferait sauter la
+   mise en page a chaque changement de profil, et masquerait qu'il existe. */
+.pret__groupe .champ input:disabled, .pret__groupe .champ select:disabled,
+.champ--eteint .segments { opacity: 0.45; }
+.pret__groupe .champ input:disabled, .pret__groupe .champ select:disabled { cursor: not-allowed; }
+.champ--large { flex: 1 1 100%; }
+
+/* ---------- Choix en segments ----------
+   Un menu deroulant cache ses options : il faut l'ouvrir pour savoir qu'un pret
+   peut s'amortir a capital constant. En segments, les possibilites se lisent
+   sans clic et le choix courant se voit d'un coup d'oeil - sur un panneau qui
+   sert a comparer des montages, cela vaut mieux que la place economisee. */
+.segments {
+  display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px;
+  background: var(--bg-tertiary); border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm); max-width: 100%;
+}
+.segment {
+  appearance: none; cursor: pointer; font-family: inherit; white-space: nowrap;
+  border: none; background: transparent; color: var(--text-secondary);
+  padding: 4px 9px; border-radius: var(--radius-xs);
+  font-size: 11px; font-weight: 600;
+}
+.segment:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.segment--actif {
+  background: var(--info-bg); color: var(--info-text);
+  box-shadow: inset 0 0 0 1px var(--info-accent);
+}
+.segment--actif:hover { background: var(--info-bg); color: var(--info-text); }
+/* Valeur HERITEE, a cote du libelle du segment : plus legere que lui, parce
+   qu'elle informe sans etre le choix qu'on fait. */
+.segment__defaut { font-weight: 400; opacity: 0.75; }
 @media (max-width: 720px) {
   .pret__entete { flex-wrap: wrap; }
   .pret__montant, .pret__nature { flex: 1 1 120px; }

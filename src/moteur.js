@@ -1127,6 +1127,12 @@ export function calculer(entrees, referentiels) {
     loyers_divers_annuels_eur: exp.loyers_divers_annuels_eur ?? 0,
     frais_gestion_annuels_eur: exp.frais_gestion_annuels_eur ?? 0,
     frais_gestion_pct_loyers: exp.frais_gestion_pct_loyers ?? 0,
+    // Q-17 : assiette de LEON, 0,3 % du prix de revient TTC. Elle vient du
+    // referentiel et se surcharge par simulation, comme tout le reste.
+    frais_gestion_pct_prix_revient:
+      exp.frais_gestion_pct_prix_revient ??
+      baremes.charges_exploitation?.frais_gestion_pct_prix_revient ??
+      0,
     rel_annuel_eur: exp.rel_annuel_eur ?? 0,
     gros_entretien_eur_m2: exp.gros_entretien_eur_m2 ?? 0,
     pge_taux: tauxPGERetenu,

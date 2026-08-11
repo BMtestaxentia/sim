@@ -462,7 +462,9 @@
         "source": "Presentation CA J202 x D79, indexe sur la trajectoire de gestion (annexe SIMTEST_BM_HAB)",
         "note": "Quote-part des frais de siege imputee a l operation. Forfait par logement, indexe comme la gestion. Comme tout poste du catalogue, inactif tant que la saisie ne l active pas."
       }
-    ]
+    ],
+    "frais_gestion_pct_prix_revient": 0.003,
+    "note_frais_gestion": "Q-17, close le 11/08/2026. Les frais de gestion s assoient sur le PRIX DE REVIENT TTC, a 0,3 % (ParaGLOB!C49, identique sur BOURGES, CHAMBERY et AGDE). LEON les AFFICHE en euros par logement (ComPLUS!B150) mais les CALCULE comme taux x PR TTC / nb logements (SimPLUS!A36) : c est un cout de structure rapporte a la taille de l operation, pas une commission sur les recettes."
   },
   "provision_gros_entretien": {
     "source": "SimPLUS!BH12 (taux), SimPLUS!BK31 (assiette), SimPLUS!DX15 (charge annuelle) ; plafond : Presentation CA K82 (PLAFOND PGERC)",

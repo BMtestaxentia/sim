@@ -44,7 +44,12 @@ export function arrondiCS(cs) {
  * @param {number} eur
  */
 export function arrondiEuro(eur) {
-  return arrondi(eur, 0);
+  const v = arrondi(eur, 0);
+  // `+ 0` normalise le ZERO NEGATIF. Un residu de calcul a -1e-13 s'arrondit en
+  // `-0` : economiquement c'est zero, mais `Object.is(-0, 0)` est faux, JSON le
+  // serialise « -0 » et l'ecran affiche « -0 € ». Un solde nul ne doit pas
+  // dependre du sens dans lequel on s'en est approche.
+  return v === 0 ? 0 : v;
 }
 
 /**

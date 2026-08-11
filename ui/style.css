@@ -1494,6 +1494,27 @@ span.ressource__libelle {
 }
 .preset__verrou { color: var(--text-tertiary); font-size: 12px; cursor: help; }
 
+/* ---------- Reordonnancement par glisser-deposer ----------
+   La poignee, et elle seule, est deplacable : rendre la ligne entiere
+   `draggable` empecherait de selectionner du texte dans ses champs, ce qui est
+   l'usage courant sur une table de saisie. */
+.col-poignee { width: 22px; }
+.poignee {
+  cursor: grab; user-select: none; color: var(--text-tertiary);
+  font-size: 12px; line-height: 1; padding: 0 2px; display: inline-block;
+}
+.poignee:active { cursor: grabbing; }
+.poignee:hover { color: var(--text-primary); }
+tr.ligne--glissee > td { opacity: 0.4; }
+/* Le trait dit ou la ligne TOMBERA, au-dessus ou en dessous de celle qu'on
+   survole : sans lui, on lache au jugé et le resultat surprend une fois sur
+   deux. */
+tr.ligne--cible-avant > td { box-shadow: inset 0 2px 0 var(--info-accent); }
+tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
+/* Le lisere de couleur du lot reprend la main quand aucune cible n'est visee. */
+#table-lots tbody tr.ligne--cible-avant > td:first-child,
+#table-lots tbody tr.ligne--cible-apres > td:first-child { box-shadow: none; }
+
 /* Liste des tranches d'un modele : repliee dans un `details`, le resume dit
    l'essentiel sans qu'on ait a l'ouvrir. `position: absolute` sur le panneau
    pour qu'il flotte au-dessus du tableau au lieu d'en pousser les lignes. */

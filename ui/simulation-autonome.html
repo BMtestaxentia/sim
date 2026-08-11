@@ -1508,6 +1508,27 @@ span.ressource__libelle {
 }
 .preset__verrou { color: var(--text-tertiary); font-size: 12px; cursor: help; }
 
+/* ---------- Reordonnancement par glisser-deposer ----------
+   La poignee, et elle seule, est deplacable : rendre la ligne entiere
+   `draggable` empecherait de selectionner du texte dans ses champs, ce qui est
+   l'usage courant sur une table de saisie. */
+.col-poignee { width: 22px; }
+.poignee {
+  cursor: grab; user-select: none; color: var(--text-tertiary);
+  font-size: 12px; line-height: 1; padding: 0 2px; display: inline-block;
+}
+.poignee:active { cursor: grabbing; }
+.poignee:hover { color: var(--text-primary); }
+tr.ligne--glissee > td { opacity: 0.4; }
+/* Le trait dit ou la ligne TOMBERA, au-dessus ou en dessous de celle qu'on
+   survole : sans lui, on lache au jugé et le resultat surprend une fois sur
+   deux. */
+tr.ligne--cible-avant > td { box-shadow: inset 0 2px 0 var(--info-accent); }
+tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
+/* Le lisere de couleur du lot reprend la main quand aucune cible n'est visee. */
+#table-lots tbody tr.ligne--cible-avant > td:first-child,
+#table-lots tbody tr.ligne--cible-apres > td:first-child { box-shadow: none; }
+
 /* Liste des tranches d'un modele : repliee dans un `details`, le resume dit
    l'essentiel sans qu'on ait a l'ouvrir. `position: absolute` sur le panneau
    pour qu'il flotte au-dessus du tableau au lieu d'en pousser les lignes. */
@@ -8715,11 +8736,12 @@ function rendreStructure() {
           // sa colonne au prix de revient et de sa tranche partout ailleurs.
           // Une table de cinquante lots se relit alors par blocs, sans avoir a
           // lire la colonne « Financement » ligne a ligne.
-          ({ lot, i }, l) => `<tr data-lot="${i}"
+          ({ lot, i }, l) => `<tr data-lot="${i}" data-rang="${i}"
              style="--cat:${catProduit(lot.code_produit)};--cat-fond:${catFondProduit(lot.code_produit)}"
              class="lot--tranche ${lotsSelectionnes.has(i) ? 'lot--selectionne' : ''}">
         <td class="col-select"><input type="checkbox" class="lot__select" data-select-lot="${i}"
-          aria-label="Sélectionner le lot ${i + 1}" ${lotsSelectionnes.has(i) ? 'checked' : ''} /></td>
+          aria-label="Sélectionner le lot ${i + 1}" ${lotsSelectionnes.has(i) ? 'checked' : ''} />
+          <span class="poignee" draggable="true" title="Glisser pour réordonner">⠿</span></td>
         <td class="num num-poste">${i + 1}</td>
         <!-- L'ID est la reference du lot au plan de vente ou a l'EDD. Le N° a
              gauche, lui, n'est qu'un rang de saisie : il bouge des qu'on
@@ -8746,6 +8768,15 @@ function rendreStructure() {
     : '<tr><td colspan="12" class="vide">Aucun lot. Utiliser le générateur ci-dessus ou « + lot ».</td></tr>';
   rendreEntetesTriLots();
   rendreSelectionLots();
+  // Reordonnancement des lots. Il agit sur `etat.lots`, l'ordre REEL, et non
+  // sur l'ordre d'affichage : glisser une ligne alors qu'un tri est actif
+  // deplacerait un lot a une place qu'on ne verrait pas. Le tri est donc leve.
+  poserGlisser(document.getElementById('table-lots'), (de, vers) => {
+    if (triLots) triLots = null;
+    etat.lots = deplacer(etat.lots, de, vers);
+    lotsSelectionnes.clear();
+    rafraichirTout();
+  });
 
   // --- Onglets et ecrans de tranche, un par produit present ---
   rendreStructureTranches();
@@ -10756,7 +10787,16 @@ function nbModifies(s) {
     const parId = new Map(base.map((x) => [x.id, JSON.stringify(x)]));
     const changes = surcharge.filter((x) => parId.get(x.id) !== JSON.stringify(x)).length;
     const retires = base.filter((x) => !surcharge.some((y) => y.id === x.id)).length;
-    return champs + changes + retires;
+    // L'ORDRE compte comme une modification a lui seul : reordonner ne change
+    // aucune valeur, mais le profil n'est plus celui du referentiel et le dire
+    // « aucune modification » a cote d'un bouton de sauvegarde actif se
+    // contredisait a l'ecran.
+    const ordre =
+      changes + retires === 0 &&
+      surcharge.map((x) => x.id).join() !== base.map((x) => x.id).join()
+        ? 1
+        : 0;
+    return champs + changes + retires + ordre;
   }
   if (s.trajectoires) {
     return Object.values(parametrageActif().trajectoires?.par_annee ?? {}).reduce(
@@ -10981,8 +11021,9 @@ function tablePresets() {
       <h4>Modèles disponibles
         <button type="button" class="bouton bouton--ajout" id="btn-ajouter-preset">+ modèle</button>
       </h4>
-      <div class="table-defilante"><table class="grille grille--presets">
+      <div class="table-defilante"><table class="grille grille--presets" id="table-presets">
         <thead><tr>
+          <th class="col-poignee"></th>
           ${COLONNES_PRESET.map((c) => `<th${c.largeur ? ` style="min-width:${c.largeur}px"` : ''}>${att(c.libelle)}</th>`).join('')}
           <th></th>
         </tr></thead>
@@ -10997,7 +11038,9 @@ function tablePresets() {
               f.codes.some((cd) => (x.produits ?? []).includes(cd)),
             );
             const cible = viseees.length === 1 ? viseees[0].chef : null;
-            return `<tr ${cible ? `class="preset--tranche" style="--cat-fond:${catFondProduit(cible)};--cat:${catProduit(cible)}"` : ''}>
+            return `<tr data-rang="${i}" ${cible ? `class="preset--tranche" style="--cat-fond:${catFondProduit(cible)};--cat:${catProduit(cible)}"` : ''}>
+              <td class="col-poignee"><span class="poignee" draggable="true"
+                title="Glisser pour réordonner">⠿</span></td>
               ${COLONNES_PRESET.map((c) => cellule(x, i, c)).join('')}
               <td class="col-action">${
                 // Un modele PRINCIPAL decrit un pret structurant : il ne se
@@ -11016,6 +11059,81 @@ function tablePresets() {
         de marge, un prêt indexé n’a pas de taux fixe. La durée d’un prêt foncier se déduit
         de la zone (50 ans en B2 et C, 60 ans ailleurs) : la renseigner ici la fige.</p>
     </div>`;
+}
+
+/**
+ * GLISSER-DEPOSER de lignes, partage par la table des lots et celle des modeles.
+ *
+ * Une seule mecanique pour les deux : la ligne porte son index d'origine, le
+ * survol dit ou elle tomberait, et le depot appelle le reordonnancement de la
+ * table concernee. Deux implementations auraient diverge a la premiere
+ * retouche, et le geste doit se sentir identique d'un tableau a l'autre.
+ *
+ * Le `dragstart` n'est pose que sur la POIGNEE : rendre la ligne entiere
+ * deplacable empecherait de selectionner du texte dans ses champs, ce qui est
+ * l'usage courant sur une table de saisie.
+ */
+let ligneGlissee = null;
+
+function poserGlisser(table, reordonner) {
+  if (!table || table.dataset.glisserPose) return;
+  table.dataset.glisserPose = '1';
+
+  table.addEventListener('dragstart', (ev) => {
+    const tr = /** @type {HTMLElement} */ (ev.target).closest('tr[data-rang]');
+    if (!tr) return;
+    ligneGlissee = Number(tr.dataset.rang);
+    tr.classList.add('ligne--glissee');
+    ev.dataTransfer.effectAllowed = 'move';
+    // Firefox refuse de demarrer un glisser sans donnee attachee.
+    ev.dataTransfer.setData('text/plain', String(ligneGlissee));
+  });
+
+  table.addEventListener('dragover', (ev) => {
+    if (ligneGlissee === null) return;
+    const tr = /** @type {HTMLElement} */ (ev.target).closest('tr[data-rang]');
+    if (!tr) return;
+    ev.preventDefault();
+    // La ligne se pose AVANT ou APRES selon le cote survole : sans ce partage,
+    // deposer sur la moitie basse d'une ligne l'insererait au-dessus d'elle et
+    // le resultat surprendrait une fois sur deux.
+    const r = tr.getBoundingClientRect();
+    const apres = ev.clientY > r.top + r.height / 2;
+    for (const a of table.querySelectorAll('.ligne--cible-avant, .ligne--cible-apres')) {
+      a.classList.remove('ligne--cible-avant', 'ligne--cible-apres');
+    }
+    tr.classList.add(apres ? 'ligne--cible-apres' : 'ligne--cible-avant');
+  });
+
+  table.addEventListener('drop', (ev) => {
+    const tr = /** @type {HTMLElement} */ (ev.target).closest('tr[data-rang]');
+    if (!tr || ligneGlissee === null) return;
+    ev.preventDefault();
+    const r = tr.getBoundingClientRect();
+    const cible = Number(tr.dataset.rang) + (ev.clientY > r.top + r.height / 2 ? 1 : 0);
+    const depart = ligneGlissee;
+    ligneGlissee = null;
+    if (cible === depart || cible === depart + 1) {
+      rafraichirTout();
+      return;
+    }
+    reordonner(depart, cible > depart ? cible - 1 : cible);
+  });
+
+  table.addEventListener('dragend', () => {
+    ligneGlissee = null;
+    for (const a of table.querySelectorAll('.ligne--glissee, .ligne--cible-avant, .ligne--cible-apres')) {
+      a.classList.remove('ligne--glissee', 'ligne--cible-avant', 'ligne--cible-apres');
+    }
+  });
+}
+
+/** Deplace un element d'une liste, du rang `de` au rang `vers`. */
+function deplacer(liste, de, vers) {
+  const copie = [...liste];
+  const [x] = copie.splice(de, 1);
+  copie.splice(vers, 0, x);
+  return copie;
 }
 
 /** Rappel des gestes disponibles, une fois par grille. */
@@ -11217,6 +11335,13 @@ function rendreParametres() {
       ? html
       : `<section class="bloc"><p class="vide">Aucun paramètre ne correspond à « ${att(rechercheParametre)} ».</p></section>`;
   remplirTauxMarges(dernierResultat);
+  // Reordonnancement des modeles. La table est reconstruite a chaque rendu :
+  // les ecouteurs se reposent donc ici, et la garde `data-glisser-pose` evite
+  // de les empiler sur une table qui aurait survecu.
+  poserGlisser(document.getElementById('table-presets'), (de, vers) => {
+    ecrireSaisie('baremes.presets_prets.presets', deplacer(listePresets(), de, vers));
+    rafraichirTout();
+  });
 }
 
 

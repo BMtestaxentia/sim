@@ -1638,12 +1638,23 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
 }
 
 /* ---------- Trésorerie de chantier ----------
-   Trois traces sur la meme echelle : c'est leur ECART qui interesse. L'aire du
-   BESOIN se remplit, les deux cumuls restent des traits - ce qui est plein se
-   lit avant ce qui est trace, et le besoin est ce qu'on vient chercher. */
-.treso__aire { fill: color-mix(in srgb, var(--warning-accent) 22%, transparent); stroke: none; }
-.treso__depenses { fill: none; stroke: var(--cat-1); stroke-width: 2; }
-.treso__tirages { fill: none; stroke: var(--success-accent); stroke-width: 2; stroke-dasharray: 5 3; }
+   Une courbe de SOLDE, pas des cumuls : trois courbes monotones qui montent
+   ensemble n'apprennent rien, alors que la trésorerie disponible dit d'un coup
+   d'oeil si l'operation tient. L'aire se colore de part et d'autre de zero -
+   au-dessus l'operation a de quoi payer, en dessous elle est a decouvert. */
+.graphe__grille { stroke: var(--border-color); stroke-width: 1; }
+.treso__aire--positive { fill: color-mix(in srgb, var(--success-accent) 16%, transparent); stroke: none; }
+.treso__aire--negative { fill: color-mix(in srgb, var(--danger-accent) 16%, transparent); stroke: none; }
+.treso__solde { fill: none; stroke: var(--cat-2); stroke-width: 2.5; stroke-linejoin: round; }
+.treso__besoin {
+  fill: none; stroke: var(--cat-1); stroke-width: 2;
+  stroke-linejoin: round; stroke-dasharray: 5 4;
+}
+/* Points de survol INVISIBLES mais larges : ils ne servent qu'a porter
+   l'infobulle du mois, et un disque visible tous les mois ferait un collier de
+   perles sur trente points. */
+.treso__point { fill: transparent; cursor: help; }
+.treso__point:hover { fill: color-mix(in srgb, var(--cat-2) 35%, transparent); }
 #graphe-tresorerie svg { width: 100%; height: auto; display: block; }
 /* Puces de legende : elles reprennent le trait de leur courbe, pointille
    compris, pour qu'on n'ait pas a deviner laquelle est laquelle. */
@@ -1651,13 +1662,11 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
   display: inline-block; width: 16px; height: 3px; margin: 0 4px 0 12px;
   vertical-align: middle; border-radius: 2px;
 }
-.treso__cle--depenses { background: var(--cat-1); }
-.treso__cle--tirages {
-  background: repeating-linear-gradient(to right, var(--success-accent) 0 5px, transparent 5px 8px);
-}
+.treso__cle--solde { background: var(--cat-2); height: 4px; }
 .treso__cle--besoin {
-  height: 9px; background: color-mix(in srgb, var(--warning-accent) 22%, transparent);
+  background: repeating-linear-gradient(to right, var(--cat-1) 0 5px, transparent 5px 9px);
 }
+.treso__note { margin-left: 14px; font-style: italic; }
 /* La date sous le rang du mois : le rang sert a compter, la date a se reperer. */
 .treso__date { display: block; font-size: 10px; color: var(--text-tertiary); }
 #table-tresorerie th:first-child, #table-tresorerie td:first-child { width: 1%; white-space: nowrap; }

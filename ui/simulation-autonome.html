@@ -1652,12 +1652,23 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
 }
 
 /* ---------- Trésorerie de chantier ----------
-   Trois traces sur la meme echelle : c'est leur ECART qui interesse. L'aire du
-   BESOIN se remplit, les deux cumuls restent des traits - ce qui est plein se
-   lit avant ce qui est trace, et le besoin est ce qu'on vient chercher. */
-.treso__aire { fill: color-mix(in srgb, var(--warning-accent) 22%, transparent); stroke: none; }
-.treso__depenses { fill: none; stroke: var(--cat-1); stroke-width: 2; }
-.treso__tirages { fill: none; stroke: var(--success-accent); stroke-width: 2; stroke-dasharray: 5 3; }
+   Une courbe de SOLDE, pas des cumuls : trois courbes monotones qui montent
+   ensemble n'apprennent rien, alors que la trésorerie disponible dit d'un coup
+   d'oeil si l'operation tient. L'aire se colore de part et d'autre de zero -
+   au-dessus l'operation a de quoi payer, en dessous elle est a decouvert. */
+.graphe__grille { stroke: var(--border-color); stroke-width: 1; }
+.treso__aire--positive { fill: color-mix(in srgb, var(--success-accent) 16%, transparent); stroke: none; }
+.treso__aire--negative { fill: color-mix(in srgb, var(--danger-accent) 16%, transparent); stroke: none; }
+.treso__solde { fill: none; stroke: var(--cat-2); stroke-width: 2.5; stroke-linejoin: round; }
+.treso__besoin {
+  fill: none; stroke: var(--cat-1); stroke-width: 2;
+  stroke-linejoin: round; stroke-dasharray: 5 4;
+}
+/* Points de survol INVISIBLES mais larges : ils ne servent qu'a porter
+   l'infobulle du mois, et un disque visible tous les mois ferait un collier de
+   perles sur trente points. */
+.treso__point { fill: transparent; cursor: help; }
+.treso__point:hover { fill: color-mix(in srgb, var(--cat-2) 35%, transparent); }
 #graphe-tresorerie svg { width: 100%; height: auto; display: block; }
 /* Puces de legende : elles reprennent le trait de leur courbe, pointille
    compris, pour qu'on n'ait pas a deviner laquelle est laquelle. */
@@ -1665,13 +1676,11 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
   display: inline-block; width: 16px; height: 3px; margin: 0 4px 0 12px;
   vertical-align: middle; border-radius: 2px;
 }
-.treso__cle--depenses { background: var(--cat-1); }
-.treso__cle--tirages {
-  background: repeating-linear-gradient(to right, var(--success-accent) 0 5px, transparent 5px 8px);
-}
+.treso__cle--solde { background: var(--cat-2); height: 4px; }
 .treso__cle--besoin {
-  height: 9px; background: color-mix(in srgb, var(--warning-accent) 22%, transparent);
+  background: repeating-linear-gradient(to right, var(--cat-1) 0 5px, transparent 5px 9px);
 }
+.treso__note { margin-left: 14px; font-style: italic; }
 /* La date sous le rang du mois : le rang sert a compter, la date a se reperer. */
 .treso__date { display: block; font-size: 10px; color: var(--text-tertiary); }
 #table-tresorerie th:first-child, #table-tresorerie td:first-child { width: 1%; white-space: nowrap; }
@@ -10693,44 +10702,85 @@ function grapheTresorerie(t) {
   if (l.length < 2) return '<p class="aide">Aucun chantier à représenter.</p>';
 
   const L = 1000;
-  const H = 240;
-  const marge = { haut: 14, bas: 30, gauche: 8, droite: 8 };
+  const H = 300;
+  const marge = { haut: 16, bas: 34, gauche: 74, droite: 14 };
   const largeur = L - marge.gauche - marge.droite;
   const hauteur = H - marge.haut - marge.bas;
-  const maxi = Math.max(...l.map((x) => x.cumul_depenses_eur), 1);
+
+  // Deux series, deux STOCKS en euros : elles partagent donc leur axe. Melanger
+  // un stock et un flux - un solde et une depense mensuelle - aurait demande
+  // deux echelles, et deux echelles sur un meme cadre se lisent de travers.
+  const series = [
+    { cle: 'solde_eur', libelle: 'Trésorerie disponible', classe: 'treso__solde' },
+    { cle: 'besoin_eur', libelle: 'Besoin cumulé de financement', classe: 'treso__besoin' },
+  ];
+  const valeurs = series.flatMap((s) => l.map((p) => p[s.cle]));
+  const brutHaut = Math.max(0, ...valeurs);
+  const brutBas = Math.min(0, ...valeurs);
+  // Echelle arrondie a un pas rond : des graduations a 1 234 567 EUR ne se
+  // comparent pas d'un coup d'oeil, contrairement a des centaines de milliers.
+  const pas = 10 ** Math.floor(Math.log10(Math.max(brutHaut - brutBas, 1))) / 2;
+  const haut = Math.ceil(brutHaut / pas) * pas;
+  const bas = Math.floor(brutBas / pas) * pas;
+  const etendue = haut - bas || 1;
+
   const x = (i) => marge.gauche + (largeur * i) / (l.length - 1);
-  const y = (v) => marge.haut + hauteur * (1 - v / maxi);
+  const y = (v) => marge.haut + hauteur * (1 - (v - bas) / etendue);
+  const yZero = y(0);
 
-  const ligne = (cle, classe) =>
-    `<polyline class="${classe}" points="${l.map((p, i) => `${x(i).toFixed(1)},${y(p[cle]).toFixed(1)}`).join(' ')}" />`;
+  const points = (cle) => l.map((p, i) => `${x(i).toFixed(1)},${y(p[cle]).toFixed(1)}`).join(' ');
 
-  // L'aire du BESOIN est ce que l'on vient chercher : elle se remplit, les deux
-  // autres restent des traits. Ce qui est plein se lit avant ce qui est trace.
+  // L'aire de la tresorerie se colore de part et d'autre de ZERO : au-dessus
+  // l'operation a de quoi payer, en dessous elle est a decouvert. Deux zones de
+  // decoupe sur une meme aire, plutot que deux chemins calcules aux
+  // intersections - le trace reste exact et le code lisible.
   const aire =
-    `M ${x(0).toFixed(1)},${y(0).toFixed(1)} ` +
-    l.map((p, i) => `L ${x(i).toFixed(1)},${y(Math.max(0, p.besoin_eur)).toFixed(1)}`).join(' ') +
-    ` L ${x(l.length - 1).toFixed(1)},${y(0).toFixed(1)} Z`;
+    `M ${x(0).toFixed(1)},${yZero.toFixed(1)} L ${points('solde_eur').replaceAll(' ', ' L ')} ` +
+    `L ${x(l.length - 1).toFixed(1)},${yZero.toFixed(1)} Z`;
 
-  const pic = t.indicateurs.mois_pic;
-  const xPic = x(l.findIndex((p) => p.mois === pic));
+  // Graduations : cinq au plus, sur des multiples du pas.
+  const graduations = [];
+  for (let v = bas; v <= haut + 1e-6; v += pas) graduations.push(v);
+  const echelle = graduations.length > 6 ? graduations.filter((_, i) => i % 2 === 0) : graduations;
+
+  // Une date sur cinq environ, pour que l'axe reste lisible sur trente mois.
+  const pasX = Math.max(1, Math.ceil(l.length / 6));
+  const dates = l.map((p, i) => ({ p, i })).filter(({ i }) => i % pasX === 0 || i === l.length - 1);
+
+  const pic = l.find((p) => p.mois === t.indicateurs.mois_pic);
+  const xPic = x(l.indexOf(pic));
 
   return `<svg viewBox="0 0 ${L} ${H}" role="img"
-      aria-label="Cumul des dépenses, ressources hors prêts et besoin de financement, du mois 0 au mois ${l.at(-1).mois}">
-    <path class="treso__aire" d="${aire}" />
-    ${ligne('cumul_depenses_eur', 'treso__depenses')}
-    ${ligne('cumul_tirages_eur', 'treso__tirages')}
-    <line class="graphe__repere" x1="${xPic.toFixed(1)}" y1="${marge.haut}" x2="${xPic.toFixed(1)}" y2="${marge.haut + hauteur}" />
-    <text class="graphe__texte graphe__texte--repere" x="${xPic.toFixed(1)}" y="${marge.haut - 3}" text-anchor="middle">pic</text>
-    ${[0, Math.floor((l.length - 1) / 2), l.length - 1]
-      .map((i, rang) => {
-        // Les reperes des EXTREMITES s'ancrent par leur bord et non par leur
-        // milieu : centres, la moitie du premier et du dernier sortait du
-        // cadre. Celui du milieu reste centre, il a la place des deux cotes.
-        const ancre = rang === 0 ? 'start' : rang === 2 ? 'end' : 'middle';
-        return `<text class="graphe__texte" x="${x(i).toFixed(1)}" y="${H - 14}" text-anchor="${ancre}">M+${l[i].mois}</text>`;
+      aria-label="Trésorerie disponible et besoin cumulé de financement, de ${l[0].date} à ${l.at(-1).date}">
+    <defs>
+      <clipPath id="treso-haut"><rect x="0" y="${marge.haut}" width="${L}" height="${Math.max(0, yZero - marge.haut).toFixed(1)}" /></clipPath>
+      <clipPath id="treso-bas"><rect x="0" y="${yZero.toFixed(1)}" width="${L}" height="${Math.max(0, marge.haut + hauteur - yZero).toFixed(1)}" /></clipPath>
+    </defs>
+    ${echelle
+      .map(
+        (v) => `<line class="graphe__grille" x1="${marge.gauche}" y1="${y(v).toFixed(1)}" x2="${L - marge.droite}" y2="${y(v).toFixed(1)}" />
+        <text class="graphe__texte" x="${marge.gauche - 8}" y="${(y(v) + 3.5).toFixed(1)}" text-anchor="end">${eur(v)}</text>`,
+      )
+      .join('')}
+    <path class="treso__aire treso__aire--positive" d="${aire}" clip-path="url(#treso-haut)" />
+    <path class="treso__aire treso__aire--negative" d="${aire}" clip-path="url(#treso-bas)" />
+    <line class="graphe__zero" x1="${marge.gauche}" y1="${yZero.toFixed(1)}" x2="${L - marge.droite}" y2="${yZero.toFixed(1)}" />
+    <polyline class="treso__besoin" points="${points('besoin_eur')}" />
+    <polyline class="treso__solde" points="${points('solde_eur')}" />
+    <line class="graphe__repere" x1="${xPic.toFixed(1)}" y1="${marge.haut}" x2="${xPic.toFixed(1)}" y2="${(marge.haut + hauteur).toFixed(1)}" />
+    <text class="graphe__texte graphe__texte--repere" x="${xPic.toFixed(1)}" y="${marge.haut - 4}" text-anchor="middle">besoin maximal</text>
+    ${l
+      .map((p, i) => `<circle class="treso__point" cx="${x(i).toFixed(1)}" cy="${y(p.solde_eur).toFixed(1)}" r="9">
+        <title>${p.date} : trésorerie ${eur(p.solde_eur)}, besoin cumulé ${eur(p.besoin_eur)}, dépense ${eur(p.depenses_eur)}</title></circle>`)
+      .join('')}
+    ${dates
+      .map(({ p, i }) => {
+        // Les dates des EXTREMITES s'ancrent par leur bord : centrees, la
+        // moitie de la premiere et de la derniere sortait du cadre.
+        const ancre = i === 0 ? 'start' : i === l.length - 1 ? 'end' : 'middle';
+        return `<text class="graphe__texte" x="${x(i).toFixed(1)}" y="${H - 12}" text-anchor="${ancre}">${p.date.slice(0, 7)}</text>`;
       })
       .join('')}
-    <text class="graphe__texte" x="${marge.gauche}" y="${H - 2}">Échelle 0 à ${eur(maxi)}</text>
   </svg>`;
 }
 
@@ -10776,9 +10826,9 @@ function rendreTresorerie(r) {
 
   $('#graphe-tresorerie').innerHTML = grapheTresorerie(t);
   $('#legende-tresorerie').innerHTML =
-    '<span class="treso__cle treso__cle--depenses"></span> cumul dépensé ' +
-    '<span class="treso__cle treso__cle--tirages"></span> cumul tiré sur les prêts ' +
-    '<span class="treso__cle treso__cle--besoin"></span> besoin restant à financer';
+    '<span class="treso__cle treso__cle--solde"></span> trésorerie disponible ' +
+    '<span class="treso__cle treso__cle--besoin"></span> besoin cumulé de financement ' +
+    '<span class="treso__note">Survoler un point donne le détail du mois.</span>';
 
   $('#table-tresorerie').querySelector('tbody').innerHTML = t.lignes
     .map(

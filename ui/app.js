@@ -1617,9 +1617,12 @@ function rendreStructure() {
           ({ lot, i }, l) => `<tr data-lot="${i}" data-rang="${i}"
              style="--cat:${catProduit(lot.code_produit)};--cat-fond:${catFondProduit(lot.code_produit)}"
              class="lot--tranche ${lotsSelectionnes.has(i) ? 'lot--selectionne' : ''}">
+        <!-- La poignee a SA colonne, collee au bord : partagee avec la case a
+             cocher, elle passait a la ligne et doublait la hauteur des rangs. -->
+        <td class="col-poignee"><span class="poignee" draggable="true"
+          title="Glisser pour réordonner">⠿</span></td>
         <td class="col-select"><input type="checkbox" class="lot__select" data-select-lot="${i}"
-          aria-label="Sélectionner le lot ${i + 1}" ${lotsSelectionnes.has(i) ? 'checked' : ''} />
-          <span class="poignee" draggable="true" title="Glisser pour réordonner">⠿</span></td>
+          aria-label="Sélectionner le lot ${i + 1}" ${lotsSelectionnes.has(i) ? 'checked' : ''} /></td>
         <td class="num num-poste">${i + 1}</td>
         <!-- L'ID est la reference du lot au plan de vente ou a l'EDD. Le N° a
              gauche, lui, n'est qu'un rang de saisie : il bouge des qu'on
@@ -1643,7 +1646,7 @@ function rendreStructure() {
       </tr>`,
         )
         .join('')
-    : '<tr><td colspan="12" class="vide">Aucun lot. Utiliser le générateur ci-dessus ou « + lot ».</td></tr>';
+    : '<tr><td colspan="13" class="vide">Aucun lot. Utiliser le générateur ci-dessus ou « + lot ».</td></tr>';
   rendreEntetesTriLots();
   rendreSelectionLots();
   // Reordonnancement des lots. Il agit sur `etat.lots`, l'ordre REEL, et non

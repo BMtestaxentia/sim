@@ -1498,7 +1498,9 @@ span.ressource__libelle {
    La poignee, et elle seule, est deplacable : rendre la ligne entiere
    `draggable` empecherait de selectionner du texte dans ses champs, ce qui est
    l'usage courant sur une table de saisie. */
-.col-poignee { width: 22px; }
+/* La poignee a sa colonne, la plus a gauche et la plus etroite possible : elle
+   ne porte qu'un signe, et chaque pixel qu'elle prend est pris aux donnees. */
+.col-poignee { width: 18px; padding: 0 !important; text-align: center; }
 .poignee {
   cursor: grab; user-select: none; color: var(--text-tertiary);
   font-size: 12px; line-height: 1; padding: 0 2px; display: inline-block;

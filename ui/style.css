@@ -157,17 +157,15 @@ html, body {
 }
 
 .entete__marque { display: flex; align-items: center; gap: 10px; flex: none; min-width: 0; }
-.entete__glyphe { width: 26px; height: 26px; flex: none; display: block; }
-.entete__titres { min-width: 0; }
-.entete__titres h1 {
-  margin: 0; font-size: 14.5px; font-weight: 800; letter-spacing: -0.015em;
+/* Monogramme AX, celui d'ExNihilo : hauteur fixe, largeur naturelle. Le
+   PNG est dessine pour un fond clair, la meme legere surbrillance qu'ExNihilo
+   le garde lisible sur le theme sombre - qui est ici le defaut. */
+.entete__logo { height: 26px; width: auto; display: block; flex: none; filter: brightness(1.15); }
+[data-theme='clair'] .entete__logo { filter: none; }
+.entete__nom {
+  margin: 0; font-size: 15px; font-weight: 800; letter-spacing: -0.015em;
   color: var(--text-primary); white-space: nowrap;
 }
-.entete__sous-titre {
-  margin: 0; font-size: 10.5px; color: var(--text-tertiary); white-space: nowrap;
-}
-.entete__sous-titre #version-moteur { font-family: var(--police-nombre); font-size: 10px; }
-.entete__sep { margin: 0 4px; opacity: 0.5; }
 
 /* Les actions forment un SEUL objet : un ilot pilule, filets interieurs, la ou
    trois boutons poses cote a cote se lisaient comme trois decisions sans lien.
@@ -191,9 +189,8 @@ html, body {
   .onglet { padding: 6px 9px; font-size: 12px; }
 }
 @media (max-width: 1150px) {
-  .entete__sous-titre { display: none; }
-  .entete__titres h1 { font-size: 13.5px; }
-  .entete__glyphe { width: 22px; height: 22px; }
+  .entete__nom { font-size: 13.5px; }
+  .entete__logo { height: 22px; }
   .onglet { padding: 6px 7px; font-size: 11.5px; }
   .ecran { padding: 14px 12px 48px; }
 }
@@ -1649,10 +1646,16 @@ span.ressource__libelle {
    l'usage courant sur une table de saisie. */
 /* La poignee a sa colonne, la plus a gauche et la plus etroite possible : elle
    ne porte qu'un signe, et chaque pixel qu'elle prend est pris aux donnees. */
-.col-poignee { width: 18px; padding: 0 !important; text-align: center; }
+.col-poignee { width: 20px; padding: 0 !important; text-align: center; vertical-align: middle; }
 .poignee {
   cursor: grab; user-select: none; color: var(--text-tertiary);
-  font-size: 12px; line-height: 1; padding: 0 2px; display: inline-block;
+  font-size: 12px; line-height: 1;
+  /* Le signe se centre par flex dans TOUTE la case, quel que soit le rendu du
+     caractere braille d'une police a l'autre. Les 3 px de gauche compensent le
+     lisere de tranche pose en inset sur la premiere cellule : le centre
+     optique est celui de la zone libre, pas celui de la cellule. */
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 100%; padding: 4px 0 4px 3px;
 }
 .poignee:active { cursor: grabbing; }
 .poignee:hover { color: var(--text-primary); }

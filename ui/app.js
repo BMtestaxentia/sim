@@ -4629,7 +4629,6 @@ function recalculer() {
     const r = calculer(entrees, referentiels);
     dernierResultat = r;
     erreur.hidden = true;
-    $('#version-moteur').textContent = `v${r.version_moteur}`;
     rendreCalendrier(r);
     rendreFiligraneTFPB(r);
     rendreValeurs(r);

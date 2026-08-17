@@ -355,15 +355,9 @@ const OPTIONS_DIFFERE = [
   { v: 1, l: "1 - rien n'est dû" },
 ];
 /**
- * Taux de TVA qu'une ligne de prix de revient peut porter sur une tranche.
- *
- * Le taux social est propre au PRODUIT : 5,5 % existe sur du PLAI, pas sur du
- * PLS. Proposer la meme liste partout laissait saisir un taux inexistant, et
- * c'est ainsi qu'une tranche PLS se retrouvait a 5,5 %. La regle vit dans le
- * moteur (R-TVA-2), l'ecran ne fait que la lire.
- *
- * Memoise : la liste ne depend que du produit et du referentiel, et la table du
- * prix de revient la redemande une fois par cellule.
+ * Taux de TVA PAR DEFAUT d'une tranche : celui que le moteur resout pour son
+ * produit (R-TVA-2). Il preselectionne la cellule ; la LISTE proposee, elle,
+ * vient de `tauxAdmis` et couvre tout le parametrage, sans filtre par produit.
  */
 function tauxProduit(code) {
   // Le taux resolu par le MOTEUR, qui a deja fusionne le profil de parametres :
@@ -376,10 +370,32 @@ function tauxProduit(code) {
     return referentiels.baremes.tva.taux_normal;
   }
 }
-function tauxAdmis(code) {
-  const normal = referentiels.baremes.tva.taux_normal;
-  if (!code) return [0, normal];
-  return [...new Set([0, normal, tauxProduit(code)])].sort((a, b) => a - b);
+/**
+ * Taux de TVA proposes a la saisie : TOUS ceux que le parametrage connait,
+ * quel que soit le produit de la tranche (decision metier du 17/08/2026 - la
+ * liste par produit obligeait a passer par « hors bareme » pour des cas
+ * legitimes, un PLUS en QPV a 5,5 % par exemple). Zero reste propose, c'est le
+ * poste hors champ. La lecture passe par le profil : un taux regle dans
+ * l'ecran d'administration apparait ici tel quel.
+ */
+function tauxAdmis() {
+  const brut = referentiels.baremes.tva;
+  const lu = (chemin, defaut) => {
+    const s = surchargeDe(`baremes.tva.${chemin}`);
+    return s === undefined || s === null || s === '' ? defaut : Number(s);
+  };
+  const taux = [
+    0,
+    lu('taux_normal', brut.taux_normal),
+    lu('taux_reduit_simulation', brut.taux_reduit_simulation),
+    lu('taux_reduit_social', brut.taux_reduit_social),
+    lu('plus_en_qpv.taux', brut.plus_en_qpv?.taux),
+  ];
+  for (const [code, v] of Object.entries(brut.lasm_par_produit ?? {})) {
+    if (typeof v !== 'number') continue;
+    taux.push(lu(`lasm_par_produit.${code}`, v));
+  }
+  return [...new Set(taux.filter((v) => Number.isFinite(v)))].sort((a, b) => a - b);
 }
 
 // ---------------------------------------------------------------- utilitaires
@@ -1833,12 +1849,11 @@ function rendreTablePrixRevient() {
         : `<td><input type="text" inputmode="decimal" data-champ="postes_bilan.${i}.montant_ht_eur"
              data-type="montant" data-l="${l}" data-c="0" value="${valMontant(p.montant_ht_eur)}" /></td>`;
 
-      // Les taux proposes sont ceux qui EXISTENT pour la tranche visee : le taux
-      // social est propre au produit, 5,5 % n'a pas de sens sur du PLS. Un taux
-      // deja saisi hors liste y est ajoute plutot que perdu en silence - on ne
-      // reecrit pas une saisie sans le dire, la validation le signale.
+      // Tous les taux du parametrage sont proposes, quel que soit le produit
+      // de la tranche. Un taux deja saisi hors liste y est ajoute plutot que
+      // perdu en silence - on ne reecrit pas une saisie sans le dire.
       const selectTVA = (chemin, valeur, col, code) => {
-        const admis = tauxAdmis(code);
+        const admis = tauxAdmis();
         const options = admis.includes(valeur) || nul(valeur) ? admis : [...admis, valeur].sort((a, b) => a - b);
         return `<select data-champ="${chemin}" data-type="nombre"${col === undefined ? '' : ` data-l="${l}" data-c="${col}"`}>
           ${options

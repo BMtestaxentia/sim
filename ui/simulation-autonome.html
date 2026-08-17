@@ -185,9 +185,10 @@ html, body {
 .entete__filet { width: 1px; height: 14px; background: var(--border-color); flex: none; }
 
 /* Densification progressive : sur un portable, la place va aux onglets. Le
-   sous-titre de marque part le premier, il ne porte aucune information d'usage. */
-@media (max-width: 1400px) {
-  .entete { padding: 0 12px; gap: 12px; }
+   seuil haut couvre les portables en echelle 125 %, ou « Paramètres » se
+   faisait tronquer alors que le bandeau semblait avoir de la place. */
+@media (max-width: 1680px) {
+  .entete { padding: 0 14px; gap: 12px; }
   .onglet { padding: 6px 9px; font-size: 12px; }
 }
 @media (max-width: 1150px) {
@@ -204,7 +205,10 @@ html, body {
 .onglets {
   position: relative;
   display: flex; align-items: center; gap: 2px;
-  flex: 0 1 auto; min-width: 0; margin-inline: auto;
+  /* Le rail OCCUPE toute la largeur libre du bandeau. Les onglets se centrent
+     dedans tant qu'ils tiennent (`safe center` : des qu'ils debordent, le
+     defilement repart du bord gauche au lieu de couper les deux bouts). */
+  flex: 1 1 auto; min-width: 0; justify-content: safe center;
   padding: 3px; border-radius: var(--radius-pill);
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);

@@ -144,18 +144,6 @@ html, body {
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border-color);
 }
-/* Fil de palette : les cinq teintes produits, tirees en un fil de deux pixels
-   sur l'arete superieure. C'est la signature de l'application - la meme
-   palette que les onglets de tranche, les lots et les prets - posee la ou
-   aucune donnee ne vit. */
-.entete::before {
-  content: ''; position: absolute; inset: 0 0 auto 0; height: 2px;
-  background: linear-gradient(90deg,
-    var(--prod-plai), var(--prod-plus) 26%, var(--prod-pls) 50%,
-    var(--prod-lli) 74%, var(--prod-libre));
-  opacity: 0.5; pointer-events: none;
-}
-
 .entete__marque { display: flex; align-items: center; gap: 10px; flex: none; min-width: 0; }
 /* Monogramme AX, celui d'ExNihilo : hauteur fixe, largeur naturelle. Le
    PNG est dessine pour un fond clair, la meme legere surbrillance qu'ExNihilo

@@ -37,7 +37,12 @@
   --bg-tertiary: #0f1216;
   --text-primary: #e8e6e1;
   --text-secondary: #aeacaa;
-  --text-tertiary: #707070;
+  /* 8c et non 70 : l'audit de contraste du 17/08/2026 mesurait #707070 entre
+     3,3 et 4,2 sur les fonds sombres, sous le seuil WCAG de 4,5 - et ce jeton
+     porte des libelles d'indicateurs, des en-tetes de tables et les notes
+     d'aide, pas de la decoration. #8c8c8c passe a 4,9 sur le fond le plus
+     clair tout en restant nettement sous --text-secondary. */
+  --text-tertiary: #8c8c8c;
   --border-color: rgba(255, 255, 255, 0.07);
   --border-color-strong: rgba(255, 255, 255, 0.18);
 
@@ -92,7 +97,8 @@
   --bg-tertiary: #f1f3f5;
   --text-primary: #1a1d20;
   --text-secondary: #5f5e5a;
-  --text-tertiary: #9b9994;
+  /* Meme correction qu'en sombre : #9b9994 ne tenait qu'a 2,9 sur blanc. */
+  --text-tertiary: #767370;
   --border-color: rgba(0, 0, 0, 0.08);
   --border-color-strong: rgba(0, 0, 0, 0.18);
 
@@ -609,8 +615,14 @@ td.calc { text-align: right; }
   transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 .bouton:hover { background: var(--bg-tertiary); border-color: var(--info-accent); }
+/* Meme assombrissement de l'accent qu'au segmente actif : blanc sur l'accent
+   nu tenait a 4,1:1 en sombre. Le theme clair garde son accent (6,5:1). */
 .bouton--principal {
-  background: var(--info-accent); border-color: var(--info-accent); color: #fff;
+  background: color-mix(in srgb, var(--info-accent) 80%, black);
+  border-color: transparent; color: #fff;
+}
+[data-theme='clair'] .bouton--principal {
+  background: var(--info-accent); border-color: var(--info-accent);
 }
 .bouton--principal:hover { filter: brightness(1.12); }
 .bouton--discret {
@@ -1159,6 +1171,9 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
   /* Meme filet que sur les jauges verticales, en vertical cette fois. */
   box-shadow: inset -1px 0 0 var(--bg-primary);
 }
+/* Encre sombre posee par `encreSombreSur` quand le segment est clair : le blanc
+   tombait a 1,9:1 sur le jaune PLS et l'ombre portee n'y changeait rien. */
+.segment--encre-sombre { color: rgba(12, 15, 19, 0.92); text-shadow: none; }
 .segment:last-child { box-shadow: none; }
 
 /* Legende en COLONNE sous sa barre : chaque poste sur sa ligne, montant et part
@@ -1408,9 +1423,19 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 .choix__option:hover { background: var(--bg-secondary); color: var(--text-primary); }
 .choix__option:disabled { cursor: not-allowed; }
 .choix__option:disabled:hover { background: var(--bg-primary); color: var(--text-secondary); }
-.choix__option--actif:disabled:hover { background: var(--info-accent); color: #fff; }
+/* En theme sombre, l'accent est assombri de 20 % : du blanc en 11 px sur
+   #3b82c4 plafonnait a 4,1:1, sous le seuil de 4,5. Le theme clair garde son
+   accent tel quel, deja plus profond (6,5:1). */
+.choix__option--actif:disabled:hover {
+  background: color-mix(in srgb, var(--info-accent) 80%, black); color: #fff;
+}
 .choix__option--actif, .choix__option--actif:hover {
-  background: var(--info-accent); color: #fff;
+  background: color-mix(in srgb, var(--info-accent) 80%, black); color: #fff;
+}
+[data-theme='clair'] .choix__option--actif,
+[data-theme='clair'] .choix__option--actif:hover,
+[data-theme='clair'] .choix__option--actif:disabled:hover {
+  background: var(--info-accent);
 }
 /* Valeur HERITEE, a cote du libelle : plus legere que lui, parce qu'elle
    informe sans etre le choix qu'on fait. */
@@ -1501,17 +1526,23 @@ span.ressource__libelle {
    et des tables de mille six cents pixels dont neuf dixiemes de vide. La page
    se lit maintenant en trois zones : une tete qui porte le profil et la
    recherche, un rail de sections, et une seule section a la fois. */
+/* UNE seule ligne : selecteur de profil, etat, actions, recherche. Le
+   selecteur epouse son contenu au lieu de s'etendre - c'est la largeur 100 %
+   des selects de formulaire qui poussait etat et actions a la ligne. */
 .para-tete {
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 16px; flex-wrap: nowrap;
   padding: 10px 14px; margin-bottom: 14px;
   background: var(--bg-secondary); border: 1px solid var(--border-color);
   border-radius: var(--radius); position: sticky; top: 58px; z-index: 20;
 }
-.para-tete__profil { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1; min-width: 0; }
-.para-tete__profil select { min-width: 220px; }
-.para-tete__etat { font-size: 11px; color: var(--text-tertiary); white-space: nowrap; }
+.para-tete__profil { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; flex: 1; min-width: 0; }
+.para-tete__profil select { width: auto; min-width: 0; max-width: 320px; flex: 0 1 auto; }
+.para-tete__etat {
+  font-size: 11px; color: var(--text-tertiary); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
 .para-tete__etat--modifie { color: var(--warning-text); font-weight: 650; }
-.para-tete__actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.para-tete__actions { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; margin-left: auto; }
 .para-tete__recherche { position: relative; display: flex; align-items: center; flex: none; }
 .para-tete__loupe { position: absolute; left: 9px; color: var(--text-tertiary); font-size: 14px; pointer-events: none; }
 .para-tete__recherche input { width: 240px; padding-left: 26px; }
@@ -1736,24 +1767,6 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
 
 .montant--negatif { color: var(--danger-text); }
 
-/* ---------- Boite de dialogue JSON ---------- */
-.dialogue {
-  border: 1px solid var(--border-color); border-radius: var(--radius-lg);
-  background: var(--bg-primary); color: var(--text-primary);
-  padding: 0; width: min(940px, 92vw); max-height: 84vh;
-}
-.dialogue::backdrop { background: rgba(0, 0, 0, 0.62); }
-.dialogue__entete {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 13px 16px; border-bottom: 1px solid var(--border-color);
-}
-.dialogue__entete h2 { margin: 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
-.dialogue pre {
-  margin: 0; padding: 14px 16px; overflow: auto; max-height: 68vh;
-  font-family: var(--police-nombre); font-size: 11.5px; line-height: 1.55;
-  color: var(--text-secondary);
-}
-
 /* ---------- Barres de defilement ---------- */
 * { scrollbar-width: thin; scrollbar-color: var(--border-color-strong) transparent; }
 ::-webkit-scrollbar { width: 9px; height: 9px; }
@@ -1868,8 +1881,6 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
                   title="Effacer la saisie mémorisée et repartir de l'opération de démonstration">Réinitialiser</button>
           <span class="entete__filet" aria-hidden="true"></span>
           <button type="button" id="btn-theme" class="bouton bouton--icone" aria-label="Changer de thème">☀</button>
-          <span class="entete__filet" aria-hidden="true"></span>
-          <button type="button" id="btn-json" class="bouton bouton--discret">JSON</button>
         </div>
       </div>
     </header>
@@ -2429,14 +2440,6 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
         </div>
       </div>
     </main>
-
-    <dialog id="dialogue-json" class="dialogue">
-      <div class="dialogue__entete">
-        <h2>Résultat brut du moteur</h2>
-        <button type="button" id="btn-fermer-json" class="bouton bouton--discret">Fermer</button>
-      </div>
-      <pre id="contenu-json"></pre>
-    </dialog>
 
     <script>
 "use strict";
@@ -10216,12 +10219,33 @@ function rendreValeurs(r) {
   rendreExploitation(r);
 }
 
+/**
+ * Encre noire ou blanche selon la LUMINANCE du fond, au seuil ou les deux
+ * ratios de contraste WCAG s'egalent (~0,19). Les couleurs de segments sont
+ * resolues au rendu et changent avec le theme : en sombre la palette est
+ * pastel et reclame une encre sombre, en clair plusieurs teintes s'assombrissent
+ * et repassent a l'encre blanche. Decider par calcul suit les deux cas - un
+ * blanc code en dur tombait a 1,9:1 sur le jaune PLS.
+ */
+function encreSombreSur(couleurCss) {
+  const m = couleurCss.trim().match(/^#?([0-9a-f]{6})$/i);
+  const [r, g, b] = m
+    ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16))
+    : (couleurCss.match(/[\d.]+/g) ?? ['255', '255', '255']).slice(0, 3).map(Number);
+  const lin = (v) => {
+    const x = v / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b) > 0.19;
+}
+
 function rendreBarre(element, segments, echelle) {
   element.innerHTML = segments
     .filter((s) => s.montant > 0)
     .map((s) => {
       const etiquette = s.montant / echelle > 0.07 ? `<span>${eur(s.montant)}</span>` : '';
-      return `<div class="segment" style="flex-grow:${s.montant};background:${s.couleur}" title="${att(s.libelle)} : ${eur(s.montant)}">${etiquette}</div>`;
+      const encre = encreSombreSur(s.couleur) ? ' segment--encre-sombre' : '';
+      return `<div class="segment${encre}" style="flex-grow:${s.montant};background:${s.couleur}" title="${att(s.libelle)} : ${eur(s.montant)}">${etiquette}</div>`;
     })
     .join('');
   const total = segments.reduce((t, s) => t + Math.max(0, s.montant), 0);
@@ -13406,15 +13430,6 @@ document.addEventListener('click', (ev) => {
     return;
   }
 
-  if (el.id === 'btn-json') {
-    $('#contenu-json').textContent = dernierResultat
-      ? JSON.stringify(dernierResultat, null, 2)
-      : 'Aucun résultat : la saisie est incomplète ou le calcul a échoué.';
-    /** @type {HTMLDialogElement} */ (document.getElementById('dialogue-json')).showModal();
-  }
-  if (el.id === 'btn-fermer-json') {
-    /** @type {HTMLDialogElement} */ (document.getElementById('dialogue-json')).close();
-  }
 });
 
 // ---------------------------------------------------------------- demarrage

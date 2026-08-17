@@ -2547,12 +2547,33 @@ function rendreValeurs(r) {
   rendreExploitation(r);
 }
 
+/**
+ * Encre noire ou blanche selon la LUMINANCE du fond, au seuil ou les deux
+ * ratios de contraste WCAG s'egalent (~0,19). Les couleurs de segments sont
+ * resolues au rendu et changent avec le theme : en sombre la palette est
+ * pastel et reclame une encre sombre, en clair plusieurs teintes s'assombrissent
+ * et repassent a l'encre blanche. Decider par calcul suit les deux cas - un
+ * blanc code en dur tombait a 1,9:1 sur le jaune PLS.
+ */
+function encreSombreSur(couleurCss) {
+  const m = couleurCss.trim().match(/^#?([0-9a-f]{6})$/i);
+  const [r, g, b] = m
+    ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16))
+    : (couleurCss.match(/[\d.]+/g) ?? ['255', '255', '255']).slice(0, 3).map(Number);
+  const lin = (v) => {
+    const x = v / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b) > 0.19;
+}
+
 function rendreBarre(element, segments, echelle) {
   element.innerHTML = segments
     .filter((s) => s.montant > 0)
     .map((s) => {
       const etiquette = s.montant / echelle > 0.07 ? `<span>${eur(s.montant)}</span>` : '';
-      return `<div class="segment" style="flex-grow:${s.montant};background:${s.couleur}" title="${att(s.libelle)} : ${eur(s.montant)}">${etiquette}</div>`;
+      const encre = encreSombreSur(s.couleur) ? ' segment--encre-sombre' : '';
+      return `<div class="segment${encre}" style="flex-grow:${s.montant};background:${s.couleur}" title="${att(s.libelle)} : ${eur(s.montant)}">${etiquette}</div>`;
     })
     .join('');
   const total = segments.reduce((t, s) => t + Math.max(0, s.montant), 0);
@@ -5737,15 +5758,6 @@ document.addEventListener('click', (ev) => {
     return;
   }
 
-  if (el.id === 'btn-json') {
-    $('#contenu-json').textContent = dernierResultat
-      ? JSON.stringify(dernierResultat, null, 2)
-      : 'Aucun résultat : la saisie est incomplète ou le calcul a échoué.';
-    /** @type {HTMLDialogElement} */ (document.getElementById('dialogue-json')).showModal();
-  }
-  if (el.id === 'btn-fermer-json') {
-    /** @type {HTMLDialogElement} */ (document.getElementById('dialogue-json')).close();
-  }
 });
 
 // ---------------------------------------------------------------- demarrage

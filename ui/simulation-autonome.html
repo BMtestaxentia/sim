@@ -1065,27 +1065,24 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 }
 .indicateur__detail { font-size: 10.5px; color: var(--text-tertiary); }
 
-/* Recapitulatif de tranche : ses six tuiles tiennent sur UNE rangee, toujours,
-   sans quoi « Prix de revient » et « Ressources » cesseraient d'etre aux deux
-   bouts - c'est justement leur position qui fait sens, en echo aux deux jauges.
-   Six colonnes FIXES et non `auto-fit` : au-dela d'une certaine etroitesse
-   celui-ci repliait la sixieme tuile, et le bandeau changeait de hauteur d'une
-   tranche a l'autre. Le detail, lui, peut se couper sur deux lignes ; c'est la
-   ligne du dessous, pas la rangee de tuiles. */
-.indicateurs--tranche { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+/* Recapitulatif de tranche : ses quatre tuiles tiennent sur UNE rangee,
+   toujours, sans quoi « Prix de revient » et « Ressources » cesseraient d'etre
+   aux deux bouts - c'est justement leur position qui fait sens, en echo aux
+   deux jauges. Colonnes FIXES et non `auto-fit` : au-dela d'une certaine
+   etroitesse celui-ci repliait la derniere tuile, et le bandeau changeait de
+   hauteur d'une tranche a l'autre. Le detail, lui, peut se couper sur deux
+   lignes ; c'est la ligne du dessous, pas la rangee de tuiles. */
+.indicateurs--tranche { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .indicateurs--tranche .indicateur { min-width: 0; }
-/* Sur un laptop, six tuiles de front n'offrent que ~180 px chacune : les
-   details se coupaient et « Ressources » finissait en points de suspension.
-   On replie en DEUX rangees de trois - Prix de revient ouvre toujours le
-   bandeau, Ressources le ferme toujours, en diagonale plutot qu'aux deux
-   bouts d'une ligne. Chaque tuile double de largeur, le detail respire et le
-   plancher de deux lignes n'a plus de raison d'etre. */
+/* Sur un laptop, la rangee reste UNE rangee - c'est sa raison d'etre, Prix de
+   revient et Ressources aux deux bouts en echo aux jauges - mais elle se
+   densifie : padding et corps de texte reduits, pour que six tuiles de front
+   gardent des details lisibles sur ~1400 px de large. */
 @media (max-width: 1560px) {
-  .indicateurs--tranche { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .indicateurs--tranche .indicateur__detail { min-height: 0; }
-}
-@media (max-width: 900px) {
-  .indicateurs--tranche { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .indicateurs--tranche .indicateur { padding: 8px 9px; }
+  .indicateurs--tranche .indicateur__valeur { font-size: 15px; }
+  .indicateurs--tranche .indicateur__detail { font-size: 10px; }
+  .indicateurs--tranche .indicateur__libelle { font-size: 9px; letter-spacing: 0.04em; }
 }
 /* Le detail fait exactement DEUX lignes, ni plus ni moins : en dessous il est
    complete par du vide, au-dela il est coupe et son texte entier se lit en
@@ -9864,32 +9861,12 @@ function rendreValeurs(r) {
       // L'ordre suit celui des jauges qui encadrent l'ecran : le prix de revient
       // a gauche comme la jauge des emplois, les ressources a droite comme la
       // sienne. Ce qui coute et ce qui finance restent du meme cote partout.
-      // Le loyer se lit deja en detail dans son encart, chaine de calcul
-      // comprise : le redire ici prenait deux tuiles sur six pour rien. A leur
-      // place, deux grandeurs qui n'apparaissent NULLE PART ailleurs sur
-      // l'ecran de tranche - le cout unitaire, qui est la mesure a laquelle on
-      // compare deux operations, et l'annuite, qui est ce que la tranche paiera
-      // vraiment chaque annee.
-      const parLogement = t.nb_logements ? (t.prix_revient_ttc_eur ?? 0) / t.nb_logements : null;
-      const parM2 = t.shab_m2 ? (t.prix_revient_ttc_eur ?? 0) / t.shab_m2 : null;
-      const annuite1 = pretsTranche.reduce(
-        (s, a) => s + (a.tableau?.find((x) => x.annuite_eur > 0)?.annuite_eur ?? 0),
-        0,
-      );
-      const nbPrets = pretsTranche.filter((a) => a.montant_eur > 0).length;
+      // Quatre tuiles et pas plus : le loyer a le detail de son encart, et le
+      // cout unitaire comme l'annuite ont ete retires a la demande du metier -
+      // la rangee tient d'autant mieux sur un ecran de portable.
       bandeau.innerHTML = [
         tuile('Prix de revient', eur(t.prix_revient_ttc_eur), 'TTC'),
         tuile('Programme', `${nb(t.nb_logements)} lgts`, `${nb(t.su_m2)} m² SU · ${pct(t.quote_part_su, 1)} de l’opération`),
-        tuile(
-          'Coût par logement',
-          parLogement === null ? '-' : eur(parLogement),
-          parM2 === null ? '' : `${eur(parM2)} / m² SHAB`,
-        ),
-        tuile(
-          'Annuité',
-          annuite1 ? eur(annuite1) : '-',
-          nbPrets ? `1re échéance · ${nbPrets} prêt${nbPrets > 1 ? 's' : ''}` : 'aucun prêt mobilisé',
-        ),
         tuile(
           reste > 0 ? 'Reste à financer' : 'Financement',
           reste > 0 ? eur(reste) : 'couvert',

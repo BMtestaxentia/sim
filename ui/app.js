@@ -2190,32 +2190,12 @@ function rendreValeurs(r) {
       // L'ordre suit celui des jauges qui encadrent l'ecran : le prix de revient
       // a gauche comme la jauge des emplois, les ressources a droite comme la
       // sienne. Ce qui coute et ce qui finance restent du meme cote partout.
-      // Le loyer se lit deja en detail dans son encart, chaine de calcul
-      // comprise : le redire ici prenait deux tuiles sur six pour rien. A leur
-      // place, deux grandeurs qui n'apparaissent NULLE PART ailleurs sur
-      // l'ecran de tranche - le cout unitaire, qui est la mesure a laquelle on
-      // compare deux operations, et l'annuite, qui est ce que la tranche paiera
-      // vraiment chaque annee.
-      const parLogement = t.nb_logements ? (t.prix_revient_ttc_eur ?? 0) / t.nb_logements : null;
-      const parM2 = t.shab_m2 ? (t.prix_revient_ttc_eur ?? 0) / t.shab_m2 : null;
-      const annuite1 = pretsTranche.reduce(
-        (s, a) => s + (a.tableau?.find((x) => x.annuite_eur > 0)?.annuite_eur ?? 0),
-        0,
-      );
-      const nbPrets = pretsTranche.filter((a) => a.montant_eur > 0).length;
+      // Quatre tuiles et pas plus : le loyer a le detail de son encart, et le
+      // cout unitaire comme l'annuite ont ete retires a la demande du metier -
+      // la rangee tient d'autant mieux sur un ecran de portable.
       bandeau.innerHTML = [
         tuile('Prix de revient', eur(t.prix_revient_ttc_eur), 'TTC'),
         tuile('Programme', `${nb(t.nb_logements)} lgts`, `${nb(t.su_m2)} m² SU · ${pct(t.quote_part_su, 1)} de l’opération`),
-        tuile(
-          'Coût par logement',
-          parLogement === null ? '-' : eur(parLogement),
-          parM2 === null ? '' : `${eur(parM2)} / m² SHAB`,
-        ),
-        tuile(
-          'Annuité',
-          annuite1 ? eur(annuite1) : '-',
-          nbPrets ? `1re échéance · ${nbPrets} prêt${nbPrets > 1 ? 's' : ''}` : 'aucun prêt mobilisé',
-        ),
         tuile(
           reste > 0 ? 'Reste à financer' : 'Financement',
           reste > 0 ? eur(reste) : 'couvert',

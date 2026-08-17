@@ -1074,6 +1074,19 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
    ligne du dessous, pas la rangee de tuiles. */
 .indicateurs--tranche { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .indicateurs--tranche .indicateur { min-width: 0; }
+/* Sur un laptop, six tuiles de front n'offrent que ~180 px chacune : les
+   details se coupaient et « Ressources » finissait en points de suspension.
+   On replie en DEUX rangees de trois - Prix de revient ouvre toujours le
+   bandeau, Ressources le ferme toujours, en diagonale plutot qu'aux deux
+   bouts d'une ligne. Chaque tuile double de largeur, le detail respire et le
+   plancher de deux lignes n'a plus de raison d'etre. */
+@media (max-width: 1560px) {
+  .indicateurs--tranche { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .indicateurs--tranche .indicateur__detail { min-height: 0; }
+}
+@media (max-width: 900px) {
+  .indicateurs--tranche { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 /* Le detail fait exactement DEUX lignes, ni plus ni moins : en dessous il est
    complete par du vide, au-dela il est coupe et son texte entier se lit en
    infobulle. Sans ce plafond, une tranche dont les ressources tiennent en trois
@@ -8579,16 +8592,19 @@ function rendreStructureTranches() {
                 ? subs
                     .map(
                       ({ s, i }) => `<div class="ligne ligne--ressource">
+                <!-- La part du prix de revient vit SUR la ligne, a droite du
+                     montant : c'est la lecture immediate du montant saisi, pas
+                     une metadonnee de second rang. -->
                 <div class="pret__entete">
                   <input type="text" class="ressource__libelle" data-champ="subventions.${i}.libelle" value="${att(s.libelle)}" />
                   <input type="text" inputmode="decimal" class="pret__montant" data-champ="subventions.${i}.montant_eur"
                     data-type="montant" value="${valMontant(s.montant_eur)}" />
+                  <span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-sub="${i}">-</span></span>
                   <span class="pret__actions">
                     <button type="button" class="bouton--supprimer" data-supprimer="subventions" data-index="${i}"
                       data-nom="${att(s.libelle)}" title="Supprimer">×</button>
                   </span>
                 </div>
-                <div class="jetons"><span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-sub="${i}">-</span></span></div>
               </div>`,
                     )
                     .join('')

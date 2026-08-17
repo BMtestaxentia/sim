@@ -918,16 +918,19 @@ function rendreStructureTranches() {
                 ? subs
                     .map(
                       ({ s, i }) => `<div class="ligne ligne--ressource">
+                <!-- La part du prix de revient vit SUR la ligne, a droite du
+                     montant : c'est la lecture immediate du montant saisi, pas
+                     une metadonnee de second rang. -->
                 <div class="pret__entete">
                   <input type="text" class="ressource__libelle" data-champ="subventions.${i}.libelle" value="${att(s.libelle)}" />
                   <input type="text" inputmode="decimal" class="pret__montant" data-champ="subventions.${i}.montant_eur"
                     data-type="montant" value="${valMontant(s.montant_eur)}" />
+                  <span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-sub="${i}">-</span></span>
                   <span class="pret__actions">
                     <button type="button" class="bouton--supprimer" data-supprimer="subventions" data-index="${i}"
                       data-nom="${att(s.libelle)}" title="Supprimer">×</button>
                   </span>
                 </div>
-                <div class="jetons"><span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-sub="${i}">-</span></span></div>
               </div>`,
                     )
                     .join('')

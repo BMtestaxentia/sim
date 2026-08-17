@@ -1536,7 +1536,10 @@ span.ressource__libelle {
   border-radius: var(--radius); position: sticky; top: 58px; z-index: 20;
 }
 .para-tete__profil { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; flex: 1; min-width: 0; }
-.para-tete__profil select { width: auto; min-width: 0; max-width: 320px; flex: 0 1 auto; }
+/* Le selecteur ABSORBE le mou de la ligne, plafonne pour ne pas redevenir
+   demesure sur un grand ecran : assez large pour un nom de profil confortable,
+   sans repousser l etat ni les actions hors de vue. */
+.para-tete__profil select { width: auto; min-width: 220px; max-width: 520px; flex: 1 1 auto; }
 .para-tete__etat {
   font-size: 11px; color: var(--text-tertiary); white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;

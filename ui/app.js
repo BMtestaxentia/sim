@@ -4656,6 +4656,48 @@ function rafraichirTout() {
 /** Derniers taux de TVA par tranche rendus : voir `rafraichirTout`. */
 let empreinteTauxTVA = null;
 
+/**
+ * Positionne le curseur du bandeau sur l'onglet actif.
+ *
+ * Le curseur est un element UNIQUE (#onglets-curseur) qui glisse d'un onglet a
+ * l'autre : le mouvement relie l'ecran quitte a l'ecran atteint, la ou un fond
+ * qui s'eteint ici et se rallume la ne raconte rien. Il est mesure plutot que
+ * stylise parce que les onglets de tranche naissent et meurent avec le
+ * programme : aucune position n'est connue d'avance.
+ *
+ * Sur un onglet de tranche, il prend la couleur de la tranche - la meme
+ * identite que partout ailleurs dans l'application.
+ */
+function positionnerCurseurOnglets() {
+  const nav = document.getElementById('onglets');
+  const curseur = document.getElementById('onglets-curseur');
+  if (!nav || !curseur) return;
+  const actif = /** @type {HTMLElement|null} */ (nav.querySelector('.onglet[aria-selected="true"]'));
+  if (!actif) {
+    curseur.style.opacity = '0';
+    return;
+  }
+  // offsetLeft/offsetTop sont relatifs au rail (position: relative), y compris
+  // pour les onglets de tranche imbriques dans leur span : le curseur suit donc
+  // le defilement horizontal du rail sans correction.
+  curseur.style.opacity = '1';
+  curseur.style.transform = `translate(${actif.offsetLeft}px, ${actif.offsetTop}px)`;
+  curseur.style.width = `${actif.offsetWidth}px`;
+  curseur.style.height = `${actif.offsetHeight}px`;
+  const tranche = actif.classList.contains('onglet--tranche');
+  curseur.classList.toggle('onglets__curseur--tranche', tranche);
+  if (tranche) curseur.style.setProperty('--cat', actif.style.getPropertyValue('--cat'));
+  else curseur.style.removeProperty('--cat');
+  // Un onglet sorti du rail par le defilement doit y revenir : le curseur ne
+  // sert a rien sous un onglet invisible.
+  actif.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+// Le rail change de largeur avec la fenetre et au chargement des polices :
+// dans les deux cas les onglets se deplacent sous un curseur devenu faux.
+window.addEventListener('resize', positionnerCurseurOnglets);
+if (document.fonts?.ready) document.fonts.ready.then(positionnerCurseurOnglets);
+
 /** Bascule l'affichage vers un ecran, onglets et panneaux d'un seul tenant. */
 function afficherEcran(cible) {
   const existe = document.getElementById(`ecran-${cible}`);
@@ -4665,6 +4707,7 @@ function afficherEcran(cible) {
   for (const o of document.querySelectorAll('[data-ecran]')) {
     o.setAttribute('aria-selected', String(/** @type {HTMLElement} */ (o).dataset.ecran === vise));
   }
+  positionnerCurseurOnglets();
   for (const e of document.querySelectorAll('.ecran')) {
     /** @type {HTMLElement} */ (e).hidden = e.id !== `ecran-${vise}`;
   }
@@ -5726,6 +5769,13 @@ rafraichirTout();
 // `afficherEcran` retombe seul sur le programme si l'ecran memorise n'existe
 // plus - une tranche dont le dernier lot a ete supprime, par exemple.
 if (ecranMemorise) afficherEcran(ecranMemorise);
+// Le curseur vient d'etre pose sur l'onglet memorise SANS transition (classe
+// `onglets--muet` du HTML) : il apparait en place au lieu de traverser le rail
+// au chargement. Elle se retire une fois ce premier placement peint - deux
+// trames, la premiere pouvant precede le rendu du style initial.
+requestAnimationFrame(() =>
+  requestAnimationFrame(() => document.getElementById('onglets')?.classList.remove('onglets--muet')),
+);
 // Dire ce qui est a l'ecran. Une saisie qui reapparait sans un mot laisse
 // croire a une operation de demonstration bizarrement remplie.
 if (saisieRestauree) {

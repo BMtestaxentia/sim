@@ -15,19 +15,35 @@
   <body>
     <header class="entete">
       <div class="entete__marque">
-        <h1>Montage d'opération</h1>
-        <p class="entete__sous-titre">
-          Logement social - saisie et plan de financement
-          <span class="entete__sep">·</span>
-          moteur <span id="version-moteur">…</span>
-        </p>
+        <!-- Glyphe : trois tranches empilees dans la palette produits. C'est le
+             programme immobilier lui-meme, dessine avec les couleurs que les
+             onglets, lots et prets portent partout ailleurs. -->
+        <svg class="entete__glyphe" viewBox="0 0 26 26" aria-hidden="true" focusable="false">
+          <rect x="8" y="3.5" width="10" height="5" rx="1.8" fill="var(--prod-plai)" />
+          <rect x="5.5" y="10.5" width="15" height="5" rx="1.8" fill="var(--prod-pls)" />
+          <rect x="3" y="17.5" width="20" height="5" rx="1.8" fill="var(--prod-libre)" />
+        </svg>
+        <div class="entete__titres">
+          <h1>Montage d'opération</h1>
+          <p class="entete__sous-titre">
+            Logement social
+            <span class="entete__sep">·</span>
+            moteur <span id="version-moteur">…</span>
+          </p>
+        </div>
       </div>
 
       <!--
         Les onglets de TRANCHE sont ajoutes dynamiquement entre « Prix de revient »
         et « Plan de financement », un par produit present au programme.
+
+        Le CURSEUR est un element unique qui glisse sous l'onglet actif ; il est
+        positionne par `positionnerCurseurOnglets` (app.js). La classe
+        `onglets--muet` desactive sa transition le temps du premier placement,
+        pour qu'il ne traverse pas l'ecran au chargement.
       -->
-      <nav class="onglets" role="tablist" id="onglets">
+      <nav class="onglets onglets--muet" role="tablist" id="onglets">
+        <span class="onglets__curseur" id="onglets-curseur" aria-hidden="true"></span>
         <button type="button" class="onglet" role="tab" data-ecran="operation" aria-selected="true">
           Opération
         </button>
@@ -57,10 +73,14 @@
         <!-- La saisie survit au rechargement : il faut donc un moyen de revenir
              a l'operation de depart, sans quoi une simulation abandonnee
              resterait en travers du chemin a chaque ouverture. -->
-        <button type="button" id="btn-reinitialiser" class="bouton bouton--discret"
-                title="Effacer la saisie mémorisée et repartir de l'opération de démonstration">Réinitialiser</button>
-        <button type="button" id="btn-theme" class="bouton bouton--icone" aria-label="Changer de thème">☀</button>
-        <button type="button" id="btn-json" class="bouton bouton--discret">JSON</button>
+        <div class="entete__groupe">
+          <button type="button" id="btn-reinitialiser" class="bouton bouton--discret"
+                  title="Effacer la saisie mémorisée et repartir de l'opération de démonstration">Réinitialiser</button>
+          <span class="entete__filet" aria-hidden="true"></span>
+          <button type="button" id="btn-theme" class="bouton bouton--icone" aria-label="Changer de thème">☀</button>
+          <span class="entete__filet" aria-hidden="true"></span>
+          <button type="button" id="btn-json" class="bouton bouton--discret">JSON</button>
+        </div>
       </div>
     </header>
 

@@ -126,61 +126,144 @@ html, body {
 
 /* ============================================================ EN-TETE */
 
+/* Pupitre de montage : la marque a gauche, un RAIL creuse au centre ou un
+   curseur glisse d'un ecran a l'autre, les actions a droite. Le bandeau est
+   legerement translucide : au defilement, le contenu passe dessous en flou,
+   ce qui donne la profondeur sans voler du contraste au texte. */
 .entete {
   position: sticky; top: 0; z-index: 40;
-  display: flex; align-items: center; gap: 18px;
+  display: flex; align-items: center; gap: 16px;
   padding: 0 20px; min-height: 58px;
-  background: var(--bg-primary);
+  background: color-mix(in srgb, var(--bg-primary) 86%, transparent);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border-color);
 }
-.entete__marque { flex: none; min-width: 0; }
-.entete__marque h1 {
-  margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.01em;
+/* Fil de palette : les cinq teintes produits, tirees en un fil de deux pixels
+   sur l'arete superieure. C'est la signature de l'application - la meme
+   palette que les onglets de tranche, les lots et les prets - posee la ou
+   aucune donnee ne vit. */
+.entete::before {
+  content: ''; position: absolute; inset: 0 0 auto 0; height: 2px;
+  background: linear-gradient(90deg,
+    var(--prod-plai), var(--prod-plus) 26%, var(--prod-pls) 50%,
+    var(--prod-lli) 74%, var(--prod-libre));
+  opacity: 0.5; pointer-events: none;
+}
+
+.entete__marque { display: flex; align-items: center; gap: 10px; flex: none; min-width: 0; }
+.entete__glyphe { width: 26px; height: 26px; flex: none; display: block; }
+.entete__titres { min-width: 0; }
+.entete__titres h1 {
+  margin: 0; font-size: 14.5px; font-weight: 800; letter-spacing: -0.015em;
   color: var(--text-primary); white-space: nowrap;
 }
 .entete__sous-titre {
-  margin: 1px 0 0; font-size: 11px; color: var(--text-tertiary); white-space: nowrap;
+  margin: 0; font-size: 10.5px; color: var(--text-tertiary); white-space: nowrap;
 }
+.entete__sous-titre #version-moteur { font-family: var(--police-nombre); font-size: 10px; }
 .entete__sep { margin: 0 4px; opacity: 0.5; }
-.entete__actions { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
+
+/* Les actions forment un SEUL objet : un ilot pilule, filets interieurs, la ou
+   trois boutons poses cote a cote se lisaient comme trois decisions sans lien.
+   Pas de marge auto ici : celles du rail suffisent, et en cumuler deux jeux
+   repartirait l'espace libre en trois tiers - le rail pencherait a gauche. */
+.entete__actions { display: flex; align-items: center; gap: 10px; flex: none; }
+.entete__groupe {
+  display: flex; align-items: center; gap: 1px;
+  padding: 2px; border-radius: var(--radius-pill);
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-secondary) 55%, transparent);
+}
+.entete__groupe > .bouton { border: none; background: transparent; border-radius: var(--radius-pill); }
+.entete__groupe > .bouton:hover { background: var(--bg-secondary); }
+.entete__filet { width: 1px; height: 14px; background: var(--border-color); flex: none; }
 
 /* Densification progressive : sur un portable, la place va aux onglets. Le
    sous-titre de marque part le premier, il ne porte aucune information d'usage. */
 @media (max-width: 1400px) {
   .entete { padding: 0 12px; gap: 12px; }
-  .onglet { padding: 7px 9px; font-size: 12.5px; }
+  .onglet { padding: 6px 9px; font-size: 12px; }
 }
 @media (max-width: 1150px) {
   .entete__sous-titre { display: none; }
-  .entete__marque h1 { font-size: 14px; }
-  .onglet { padding: 7px 7px; font-size: 12px; }
+  .entete__titres h1 { font-size: 13.5px; }
+  .entete__glyphe { width: 22px; height: 22px; }
+  .onglet { padding: 6px 7px; font-size: 11.5px; }
   .ecran { padding: 14px 12px 48px; }
 }
 
-/* ---------- Onglets ---------- */
+/* ---------- Onglets : le rail et son curseur ---------- */
+
+/* Rail creuse, centre quand la place le permet : les ecrans y sont des crans,
+   le curseur montre lequel est enclenche. */
 .onglets {
-  display: flex; align-items: center; gap: 2px; flex: 1; min-width: 0;
+  position: relative;
+  display: flex; align-items: center; gap: 2px;
+  flex: 0 1 auto; min-width: 0; margin-inline: auto;
+  padding: 3px; border-radius: var(--radius-pill);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.22);
   /* Defilement sans rail visible : la barre sous les onglets se lisait comme un
-     soulignement et brouillait l'onglet actif, qui en porte deja un. */
+     soulignement et brouillait l'onglet actif. */
   overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
 }
+[data-theme='clair'] .onglets { box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05); }
 .onglets::-webkit-scrollbar { display: none; }
+
+/* Compartiment des tranches : deux filets verticaux bornent les onglets que le
+   programme fait naitre et mourir, pour que le rail garde une geographie
+   stable - avant les filets la saisie, entre eux les tranches, apres eux la
+   restitution. Vide, il disparait entierement. */
 .onglets__tranches { display: flex; gap: 2px; flex: none; }
+.onglets__tranches:not(:empty) {
+  margin-inline: 5px; padding-inline: 7px;
+  border-inline: 1px solid var(--border-color-strong);
+}
+
+/* Le CURSEUR : un seul element, positionne par app.js sur l'onglet actif, qui
+   GLISSE d'un cran a l'autre au lieu de s'eteindre ici et de se rallumer la.
+   Le mouvement dit d'ou l'on vient ; sa teinte dit ou l'on est - bleu
+   d'information sur les ecrans, couleur de la tranche sur une tranche. */
+.onglets__curseur {
+  position: absolute; top: 0; left: 0; width: 0; height: 0;
+  border-radius: var(--radius-pill);
+  background: var(--info-bg);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--info-accent) 45%, transparent),
+    0 1px 4px rgba(0, 0, 0, 0.22);
+  opacity: 0; z-index: 0; pointer-events: none;
+  transition:
+    transform 0.32s cubic-bezier(0.3, 1.15, 0.35, 1),
+    width 0.32s cubic-bezier(0.3, 1.15, 0.35, 1),
+    background 0.18s ease, box-shadow 0.18s ease;
+}
+.onglets__curseur--tranche {
+  background: color-mix(in srgb, var(--cat, var(--cat-6)) 20%, var(--bg-primary));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--cat, var(--cat-6)) 55%, transparent),
+    0 1px 4px rgba(0, 0, 0, 0.22);
+}
+/* Premier placement : le curseur apparait sur l'onglet memorise, il ne doit pas
+   y VOYAGER depuis l'origine du rail. */
+.onglets--muet .onglets__curseur { transition: none; }
 
 .onglet {
   appearance: none; border: none; background: transparent;
-  font-family: inherit; font-size: 13px; font-weight: 500;
+  font-family: inherit; font-size: 12.5px;
+  /* Graisse CONSTANTE entre repos et selection : un onglet qui grossit en
+     devenant actif decale tous ses voisins, et le curseur glisse alors vers
+     une cible qui bouge encore. */
+  font-weight: 600;
   color: var(--text-secondary); cursor: pointer;
-  padding: 7px 12px; border-radius: var(--radius-md);
-  border-bottom: 2px solid transparent;
+  padding: 6px 12px; border-radius: var(--radius-pill);
   white-space: nowrap; flex: none;
-  transition: background 0.12s ease, color 0.12s ease;
+  position: relative; z-index: 1;
+  transition: color 0.15s ease, background 0.15s ease;
 }
-.onglet:hover { background: var(--bg-secondary); color: var(--text-primary); }
-.onglet[aria-selected='true'] {
-  background: var(--info-bg); color: var(--info-text);
-  border-bottom-color: var(--info-accent); font-weight: 650;
-}
+.onglet:hover { color: var(--text-primary); background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
+.onglet:focus-visible { outline: 2px solid var(--info-accent); outline-offset: -2px; }
+.onglet[aria-selected='true'] { color: var(--info-text); background: transparent; }
 
 /* Onglet de tranche : il porte la couleur de SA tranche, la meme partout
    ailleurs dans l'application. Un code produit se reconnait a sa teinte avant
@@ -189,11 +272,21 @@ html, body {
 .onglet--tranche::before {
   content: ''; width: 7px; height: 7px; border-radius: 50%; flex: none;
   background: var(--cat, var(--cat-6));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--cat, var(--cat-6)) 35%, transparent);
 }
-.onglet--tranche[aria-selected='true'] {
-  background: color-mix(in srgb, var(--cat, var(--cat-6)) 18%, transparent);
-  color: var(--cat, var(--cat-6));
-  border-bottom-color: var(--cat, var(--cat-6));
+.onglet--tranche[aria-selected='true'] { color: var(--cat, var(--cat-6)); background: transparent; }
+
+/* Paramètres, a l'ecart : c'est le reglage du modele, pas une etape du
+   montage. Un filet le separe du flux. */
+.onglet[data-ecran='parametres'] { margin-left: 13px; }
+.onglet[data-ecran='parametres']::before {
+  content: ''; position: absolute; left: -7px; top: 50%;
+  transform: translateY(-50%); width: 1px; height: 14px;
+  background: var(--border-color-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onglets__curseur { transition: none; }
 }
 
 /* ============================================================ ECRANS */
@@ -607,6 +700,28 @@ td.calc { text-align: right; }
 .pastille { display: inline-flex; align-items: center; font-size: 11px; font-weight: 700;
   padding: 2px 9px; border-radius: var(--radius-pill);
   background: var(--neutral-bg); color: var(--neutral-text); }
+
+/* Temoin de calcul du bandeau : un point vivant devant l'etat. « a jour »
+   respire lentement - le moteur veille - la ou « incomplet » et « erreur »
+   figent le point : il n'y a rien a surveiller, il y a quelque chose a faire. */
+.pastille::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%; flex: none;
+  margin-right: 6px; background: currentColor;
+}
+.pastille--ok::before {
+  background: var(--success-accent);
+  animation: pastille-pouls 2.8s ease-out infinite;
+}
+.pastille--calcul { background: var(--warning-bg); color: var(--warning-text); }
+.pastille--calcul::before { background: var(--warning-accent); }
+@keyframes pastille-pouls {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success-accent) 45%, transparent); }
+  60% { box-shadow: 0 0 0 5px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pastille--ok::before { animation: none; }
+}
 
 /* Metadonnee compacte : etiquette en petites capitales, valeur en clair.
    C'est la brique « TAUX TLA · DUREE 50 ans · PREFI 24 mois » d'ExNihilo. */

@@ -1808,7 +1808,11 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
    Le fond est OPAQUE et deborde de 14 px sur les cotes, sans quoi le texte
    des chapitres se verrait passer dessous. */
 .calc-tete {
-  position: sticky; top: 116px; z-index: 15;
+  /* Collee au BAS EXACT de la barre de profil, mesuree a l ecran par
+     calerTeteCalculs : une valeur en dur laissait passer un filet de texte
+     de quelques pixels entre les deux barres, et ce filet changeait de
+     hauteur des que la barre de profil se repliait. */
+  position: sticky; top: var(--haut-calculs, 116px); z-index: 15;
   display: flex; align-items: center; justify-content: space-between;
   gap: 16px; flex-wrap: wrap;
   margin: 0 -14px 12px; padding: 10px 14px;
@@ -11468,7 +11472,7 @@ let sectionParametres = 'prets';
 let rechercheParametre = '';
 
 /**
- * Lecture de la page « Comment les calculs marchent » : `simple` pour tout le
+ * Lecture de la page « Explication des calculs » : `simple` pour tout le
  * monde, `support` pour la maintenance. Un SEUL texte source decrit chaque
  * calcul sous ses deux faces ; l'interrupteur choisit laquelle on lit, il ne
  * change ni l'ordre ni le decoupage. Memorise : on ne rechoisit pas sa lecture
@@ -12983,7 +12987,7 @@ function modeleParametres() {
       // privilege d'administrateur.
       id: 'calculs',
       rubrique: 'calculs',
-      titre: 'Comment les calculs marchent',
+      titre: 'Explication des calculs',
       resume: 'Chaque formule, en clair et en code',
       aide: '',
     },
@@ -13756,7 +13760,7 @@ function rendreBarreProfil() {
 }
 
 /**
- * Rendu de la page « Comment les calculs marchent ».
+ * Rendu de la page « Explication des calculs ».
  *
  * Un SEUL texte source par calcul (MODELE_CALCULS), deux lectures :
  *   - `simple`  : ce que le calcul fait, dans les mots du metier ;
@@ -13765,15 +13769,61 @@ function rendreBarreProfil() {
  * L'interrupteur ne change ni l'ordre ni le decoupage : on lit la meme page
  * sous deux angles, et non deux pages qui pourraient diverger.
  */
+/**
+ * Cale la rangee de tete des calculs sous la barre de profil, au pixel.
+ *
+ * Les deux barres sont collantes : la barre de profil a 58 px du haut, la
+ * rangee de tete juste dessous. Une valeur en dur laissait passer un filet de
+ * texte de cinq pixels entre les deux - et ce filet changeait de hauteur des
+ * que la barre de profil se repliait sur un ecran etroit. On mesure donc sa
+ * hauteur reelle plutot que de la supposer.
+ */
+function calerTeteCalculs() {
+  const tete = document.querySelector('.para-tete');
+  if (!tete) return;
+  // 58 px : la hauteur du bandeau d'application, ou la barre de profil vient
+  // se coller. `getBoundingClientRect` donne la hauteur fractionnaire, que
+  // `offsetHeight` arrondit - et c'est justement l'arrondi qui laissait passer
+  // un demi-pixel de contenu.
+  const haut = 58 + tete.getBoundingClientRect().height;
+  document.documentElement.style.setProperty('--haut-calculs', `${haut}px`);
+}
+window.addEventListener('resize', calerTeteCalculs);
+
+/**
+ * Etape actuellement en tete de fenetre, et sa distance au haut de l'ecran.
+ *
+ * Sert d'ancre au changement de lecture : les deux vues n'ont pas la meme
+ * hauteur, la seule facon de ne pas perdre le lecteur est de reposer SON
+ * etape la ou elle etait. On prend la premiere qui commence sous la barre
+ * collante ; si aucune n'y est - on est tout en bas de la page - on prend la
+ * derniere visible, sans quoi le bas de page n'aurait aucune ancre.
+ */
+function etapeEnTete() {
+  const etapes = [...document.querySelectorAll('[data-calc-etape]')];
+  if (!etapes.length) return null;
+  const tete = document.querySelector('.calc-tete');
+  const plancher = tete ? tete.getBoundingClientRect().bottom : 0;
+  const choisie =
+    etapes.find((e) => e.getBoundingClientRect().bottom > plancher) ?? etapes.at(-1);
+  return {
+    cle: /** @type {HTMLElement} */ (choisie).dataset.calcEtape,
+    decalage: choisie.getBoundingClientRect().top,
+  };
+}
+
 function rendreCalculs() {
   const support = lectureCalculs === 'support';
   const panneau = document.getElementById('para-calculs');
   if (!panneau) return;
 
-  const etape = (e, n) => {
+  // La CLE d une etape est celle de son chapitre et de son rang : elle ne
+  // depend ni de la lecture choisie ni du texte, donc elle survit au changement
+  // de vue. C est l ancre de defilement de etapeEnTete.
+  const etape = (e, n, idChapitre) => {
     const t = e.support ?? {};
     return `
-      <article class="calc-etape">
+      <article class="calc-etape" data-calc-etape="${att(idChapitre)}-${n}">
         <div class="calc-etape__rang">${n}</div>
         <div class="calc-etape__corps">
           <h4>${att(e.titre)}${(e.regles ?? [])
@@ -13852,7 +13902,7 @@ function rendreCalculs() {
         <section class="bloc para-section calc-chapitre">
           <h3>${att(ch.titre)}</h3>
           <p class="para-source">${att(ch.accroche)}</p>
-          <div class="calc-etapes">${etapes.map((e, i) => etape(e, i + 1)).join('')}</div>
+          <div class="calc-etapes">${etapes.map((e, i) => etape(e, i + 1, ch.id)).join('')}</div>
         </section>`,
     )
     .join('');
@@ -13864,7 +13914,7 @@ function rendreCalculs() {
   // l'ecran mangerait la moitie de la hauteur utile.
   panneau.innerHTML =
     `<div class="calc-tete">
-      <h3>Comment les calculs marchent</h3>
+      <h3>Explication des calculs</h3>
       <div class="choix calc-lecture" role="group" aria-label="Niveau de détail">
         <button type="button" class="choix__option ${support ? '' : 'choix__option--actif'}"
           data-lecture="simple">En clair</button>
@@ -14077,7 +14127,13 @@ function rendreParametres() {
   if (panneauCalculs) {
     const visible = enRecherche || sectionParametres === 'calculs';
     panneauCalculs.hidden = !visible;
-    if (visible) rendreCalculs();
+    if (visible) {
+      rendreCalculs();
+      // La barre de profil vient d'etre redessinee : sa hauteur peut avoir
+      // change (un nom de profil plus long, un compteur qui apparait), et la
+      // rangee de tete se cale dessus.
+      calerTeteCalculs();
+    }
     // En recherche, le panneau ne doit pas afficher son en-tete si rien ne
     // repond : `rendreCalculs` a alors produit le message d'absence, que le
     // bloc de resultats porte deja. On masque dans ce cas.
@@ -14875,7 +14931,20 @@ document.addEventListener('click', (ev) => {
     } catch {
       /* voir memoriserSaisie */
     }
+    // La vue support est bien plus longue que la vue claire : re-rendre sans
+    // precaution fait glisser la page sous les yeux et l'on perd l'etape qu'on
+    // etait en train de lire. On repere donc l'etape en tete de fenetre, on
+    // note sa distance au haut de l'ecran, et on la remet exactement la apres
+    // le rendu. C'est le contenu qui reste immobile, pas la position de la
+    // barre de defilement.
+    const repere = etapeEnTete();
     rendreCalculs();
+    if (repere) {
+      const cible = document.querySelector(`[data-calc-etape="${repere.cle}"]`);
+      if (cible) {
+        window.scrollTo({ top: window.scrollY + cible.getBoundingClientRect().top - repere.decalage });
+      }
+    }
     return;
   }
 

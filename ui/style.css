@@ -1794,7 +1794,11 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
    Le fond est OPAQUE et deborde de 14 px sur les cotes, sans quoi le texte
    des chapitres se verrait passer dessous. */
 .calc-tete {
-  position: sticky; top: 116px; z-index: 15;
+  /* Collee au BAS EXACT de la barre de profil, mesuree a l ecran par
+     calerTeteCalculs : une valeur en dur laissait passer un filet de texte
+     de quelques pixels entre les deux barres, et ce filet changeait de
+     hauteur des que la barre de profil se repliait. */
+  position: sticky; top: var(--haut-calculs, 116px); z-index: 15;
   display: flex; align-items: center; justify-content: space-between;
   gap: 16px; flex-wrap: wrap;
   margin: 0 -14px 12px; padding: 10px 14px;

@@ -651,9 +651,9 @@ function rendreSelectDepartement() {
       .join('');
 }
 
-function rendreChampsStatiques() {
-  rendreSelectDepartement();
-  for (const el of document.querySelectorAll('[data-champ]')) {
+function rendreChampsStatiques(racine = document) {
+  if (racine === document) rendreSelectDepartement();
+  for (const el of racine.querySelectorAll('[data-champ]')) {
     const champ = /** @type {HTMLInputElement} */ (el);
     if (champ.closest('tbody') || champ.closest('.liste')) continue;
     const v = lireChemin(etat, champ.dataset.champ ?? '');
@@ -3936,7 +3936,7 @@ function correspond(champ) {
  * a trois colonnes, c'etait mille six cents pixels de large dont neuf dixiemes
  * de vide, et un ecran de defilement pour les lire.
  */
-function carteParametre(c) {
+function carteParametre(c, origine) {
   const s = surchargeDe(c.chemin);
   const modifie = !nul(s);
   const format = (v) =>
@@ -3962,6 +3962,7 @@ function carteParametre(c) {
            value="${valNum(enPct ? enPourcent(s) : s)}" />`;
   return `
     <div class="para-carte ${modifie ? 'para-carte--modifiee' : ''}">
+      ${origine ? `<span class="para-carte__origine">${att(origine)}</span>` : ''}
       <label class="para-carte__libelle">${att(c.libelle)}</label>
       <div class="para-carte__saisie">
         ${saisie}
@@ -4333,7 +4334,10 @@ const AIDE_GRILLE =
   'Un bloc copié depuis un tableur se colle tel quel à partir de la cellule sélectionnée.';
 
 function tableMatrice(m) {
-  const lignes = m.lignes.filter((l) => l.cellules.some(correspond));
+  // Le filtre porte sur les LIBELLES - celui de la ligne et le titre de la
+  // matrice - pas sur les cellules, qui n'en ont pas : l'ancien test les
+  // interrogeait et aucune ligne de matrice ne repondait jamais en recherche.
+  const lignes = m.lignes.filter((l) => correspond({ libelle: `${m.titre} ${l.libelle}` }));
   if (!lignes.length) return '';
   return `
     <div class="para-matrice">
@@ -4447,9 +4451,12 @@ function rendreParametres() {
   const sections = modeleParametres();
   rendreBarreProfil();
 
-  // En recherche, le rail s'efface : on cherche a travers tout, pas dans une
-  // section. Le compteur de resultats prend sa place.
+  // En recherche, le rail s'efface et une VISU TEMPORAIRE prend toute la
+  // largeur : tous les parametres qui repondent au nom tape, quelle que soit
+  // leur categorie, chacun etiquete de sa section d'origine. Vider la barre
+  // ramene la vue par sections exactement ou elle etait.
   const enRecherche = rechercheParametre.trim().length > 0;
+  document.querySelector('.para-corps')?.classList.toggle('para-corps--recherche', enRecherche);
 
   // Le rail est groupe en RUBRIQUES : d'un cote les hypotheses de la
   // simulation, de l'autre les baremes et regles de l'organisme. Les deux se
@@ -4516,25 +4523,117 @@ function rendreParametres() {
       </section>`;
   };
 
-  // Les hypotheses sont du markup statique : on les MONTRE, on ne les regenere
-  // pas. En recherche, elles paraissent si l'un de leurs intitules repond -
-  // les exclure aurait fait mentir le « aucun resultat » affiche a cote.
   const panneauHypotheses = document.getElementById('para-hypotheses');
-  const hypothesesVisees = enRecherche
-    ? [...panneauHypotheses.querySelectorAll('.champ > span, h3, h4')].some((e) =>
-        correspond({ libelle: e.textContent ?? '' }),
-      )
-    : sectionParametres === 'hypotheses';
-  panneauHypotheses.hidden = !hypothesesVisees;
 
-  const affichees = (enRecherche ? sections : sections.filter((s) => s.id === sectionParametres))
-    .filter((s) => s.id !== 'hypotheses');
-  const html = affichees.map(bloc).filter(Boolean).join('');
+  if (enRecherche) {
+    // ---- Visu temporaire de recherche : liste a plat, toutes categories ----
+    // Un titre de section qui repond ramene TOUS ses parametres : chercher
+    // « prêt » doit sortir la grille CDC entiere, pas seulement les champs
+    // dont le libelle porte le mot.
+    const suspendue = (fn) => {
+      const q = rechercheParametre;
+      rechercheParametre = '';
+      const h = fn();
+      rechercheParametre = q;
+      return h;
+    };
+    const morceaux = [];
+    let nbResultats = 0;
+    const origine = (titre) => `<p class="para-resultat__origine">${att(titre)}</p>`;
 
-  $('#contenu-parametres').innerHTML =
-    html || hypothesesVisees
-      ? html
+    for (const s of sections.filter((x) => x.id !== 'hypotheses')) {
+      const titreRepond = correspond({ libelle: s.titre });
+      const champs = (s.champs ?? []).filter((c) => titreRepond || correspond(c));
+      if (champs.length) {
+        nbResultats += champs.length;
+        morceaux.push(
+          `<div class="para-grille">${champs.map((c) => carteParametre(c, s.titre)).join('')}</div>`,
+        );
+      }
+      const matrices = (s.matrices ?? [])
+        .map((m) => (titreRepond ? suspendue(() => tableMatrice(m)) : tableMatrice(m)))
+        .filter(Boolean);
+      if (matrices.length) {
+        nbResultats += (s.matrices ?? []).reduce(
+          (n, m) =>
+            n +
+            (titreRepond
+              ? m.lignes.length
+              : m.lignes.filter((l) => correspond({ libelle: `${m.titre} ${l.libelle}` })).length),
+          0,
+        );
+        morceaux.push(origine(s.titre) + matrices.join(''));
+      }
+      if (s.presets) {
+        const t = titreRepond ? suspendue(tablePresets) : tablePresets();
+        if (t) {
+          nbResultats += titreRepond
+            ? listePresets().length
+            : listePresets().filter((x) => correspond({ libelle: `${x.libelle} ${x.note ?? ''}` })).length;
+          morceaux.push(origine(s.titre) + t);
+        }
+      }
+      if (s.jalons) {
+        const t = titreRepond ? suspendue(tableJalons) : tableJalons();
+        if (t) {
+          nbResultats += titreRepond
+            ? listeJalons().length
+            : listeJalons().filter((x) => correspond({ libelle: x.libelle ?? '' })).length;
+          morceaux.push(origine(s.titre) + t);
+        }
+      }
+      // La table annuelle repond par le nom d'un de ses postes (Livret A,
+      // IRL, TFPB...) ou par le titre de sa section : c'est elle, entiere,
+      // qui est alors le parametre a montrer.
+      if (
+        s.trajectoires &&
+        (titreRepond || POSTES_TRAJECTOIRE.some((p) => correspond({ libelle: p.libelle })))
+      ) {
+        nbResultats += 1;
+        morceaux.push(origine(s.titre) + sectionTrajectoires());
+      }
+    }
+
+    // Les hypotheses d'exploitation sont du markup statique : leurs champs qui
+    // repondent sont CLONES dans les resultats - meme data-champ, donc meme
+    // ecriture par delegation - et le panneau d'origine reste cache. Il est
+    // resynchronise depuis l'etat quand la recherche se vide.
+    panneauHypotheses.hidden = true;
+    const hypos = [...panneauHypotheses.querySelectorAll('label.champ')].filter((ch) => {
+      const libelle = ch.querySelector(':scope > span')?.textContent ?? '';
+      return ch.querySelector('[data-champ]') && correspond({ libelle });
+    });
+    if (hypos.length) {
+      nbResultats += hypos.length;
+      morceaux.push(
+        origine("Hypothèses d'exploitation") +
+          `<div class="champs" id="resultats-hypotheses"></div>`,
+      );
+    }
+
+    $('#contenu-parametres').innerHTML = nbResultats
+      ? `<section class="bloc para-section para-resultats">
+          <h3>${nbResultats} paramètre${nbResultats > 1 ? 's' : ''} pour « ${att(rechercheParametre.trim())} »</h3>
+          ${morceaux.join('')}
+        </section>`
       : `<section class="bloc"><p class="vide">Aucun paramètre ne correspond à « ${att(rechercheParametre)} ».</p></section>`;
+
+    const cible = document.getElementById('resultats-hypotheses');
+    if (cible) {
+      for (const ch of hypos) cible.appendChild(ch.cloneNode(true));
+      // Les valeurs viennent de l'ETAT, pas des champs d'origine : un champ
+      // clone puis modifie laisse son original en retard le temps de la
+      // recherche, et l'etat est la seule source qui ne ment pas.
+      rendreChampsStatiques(cible);
+    }
+  } else {
+    // Les hypotheses sont du markup statique : on les MONTRE, on ne les
+    // regenere pas.
+    panneauHypotheses.hidden = sectionParametres !== 'hypotheses';
+
+    const affichees = sections.filter((s) => s.id === sectionParametres && s.id !== 'hypotheses');
+    $('#contenu-parametres').innerHTML = affichees.map(bloc).filter(Boolean).join('');
+  }
   remplirTauxMarges(dernierResultat);
   // Reordonnancement des modeles. La table est reconstruite a chaque rendu :
   // les ecouteurs se reposent donc ici, et la garde `data-glisser-pose` evite
@@ -4877,8 +4976,15 @@ document.addEventListener('input', (ev) => {
   // l'affichage. Elle passe donc AVANT la garde sur `data-champ`, qu'elle n'a
   // pas - c'est un filtre, pas une saisie.
   if (el.id === 'recherche-parametre') {
+    const etaitEnRecherche = rechercheParametre.trim().length > 0;
     rechercheParametre = el.value;
     rendreParametres();
+    // Sortie de recherche : les champs d'hypotheses ont pu etre modifies via
+    // leurs CLONES de la visu temporaire, leurs originaux sont en retard.
+    // L'etat fait foi, on les y realigne avant de les remontrer.
+    if (etaitEnRecherche && rechercheParametre.trim().length === 0) {
+      rendreChampsStatiques(document.getElementById('para-hypotheses') ?? document);
+    }
     return;
   }
 

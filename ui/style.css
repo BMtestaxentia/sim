@@ -1538,6 +1538,24 @@ span.ressource__libelle {
 .para-tete__recherche input { width: 240px; padding-left: 26px; }
 
 .para-corps { display: grid; grid-template-columns: 232px 1fr; gap: 16px; align-items: start; }
+/* Visu temporaire de recherche : le rail s'efface, les resultats prennent
+   toute la largeur. La vue par sections revient telle quelle quand la barre
+   se vide. */
+.para-corps--recherche { grid-template-columns: 1fr; }
+.para-corps--recherche .para-rail { display: none; }
+/* Etiquette d'origine d'un resultat : de quelle section il vient, puisque la
+   liste les melange volontairement. */
+.para-resultat__origine {
+  margin: 16px 0 6px; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-tertiary);
+}
+.para-resultats > .para-grille:not(:first-of-type) { margin-top: 10px; }
+.para-carte__origine {
+  display: block; font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--info-accent); margin-bottom: 2px;
+}
+/* Les clones d'hypotheses reprennent la grille de champs de leur panneau. */
+.para-resultats .champs { margin-top: 4px; }
 /* Deux panneaux dans la meme colonne : le statique et le genere. `min-width: 0`
    sans quoi une table large pousserait la colonne au-dela de la grille. */
 .para-panneaux { min-width: 0; }

@@ -4,8 +4,12 @@
     {
       "name": "moteur-sim-ui",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "ui"],
-      "port": 4173
+      "runtimeArgs": [
+        "run",
+        "ui"
+      ],
+      "port": 4173,
+      "autoPort": true
     }
   ]
 }

@@ -1786,8 +1786,27 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
 
 /* ---------- Page « Comment les calculs marchent » ---------- */
 
-.calc-lecture { margin-top: 10px; }
-.calc-lecture__aide { margin: 8px 0 0; font-size: 11.5px; color: var(--text-tertiary); }
+/* Rangee de tete : le titre a gauche, l'interrupteur de lecture a droite.
+   Elle COLLE sous la barre de profil au defilement, parce que la page fait
+   plusieurs ecrans et qu'on veut pouvoir basculer entre les deux lectures
+   depuis n'importe quel chapitre. Seule la rangee est collante, pas le
+   bandeau entier : fige, il mangerait la moitie de la hauteur utile.
+   Le fond est OPAQUE et deborde de 14 px sur les cotes, sans quoi le texte
+   des chapitres se verrait passer dessous. */
+.calc-tete {
+  position: sticky; top: 116px; z-index: 15;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  margin: 0 -14px 12px; padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+}
+.calc-tete h3 {
+  margin: 0; font-size: 14px; font-weight: 700; color: var(--text-primary);
+}
+.calc-lecture { flex: none; }
+/* Le premier chapitre remonte sous la rangee de tete, qui porte deja sa marge. */
+.calc-tete + .calc-chapitre { margin-top: 0; }
 
 .calc-chapitre + .calc-chapitre { margin-top: 12px; }
 .calc-etapes { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
@@ -1841,6 +1860,33 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
   color: var(--info-text);
 }
 .calc-source__ou { font-family: var(--police-nombre); font-size: 10.5px; }
+
+/* Fiche de maintenance : cinq lignes cle -> valeur, en vue support seulement.
+   Une liste de definitions plutot qu'une table : les valeurs sont de longueurs
+   tres inegales - une signature tient sur trois lignes, un fichier de test sur
+   quinze caracteres - et une table les aurait toutes alignees sur la pire. */
+.calc-fiche {
+  margin: 8px 0 0; padding: 9px 11px; border-radius: var(--radius-sm);
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  display: grid; grid-template-columns: 92px 1fr; gap: 4px 12px;
+  font-size: 11.5px; line-height: 1.55;
+}
+.calc-fiche dt {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-tertiary);
+  padding-top: 2px;
+}
+.calc-fiche dd { margin: 0; min-width: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+/* Signature, code et chemins de test se lisent en chasse fixe : ce sont des
+   caracteres qu'on RECOPIE, l'espacement compte autant que les lettres. */
+.calc-fiche__mono {
+  font-family: var(--police-nombre); font-size: 10.5px;
+  color: var(--text-primary); white-space: pre-wrap;
+}
+@media (max-width: 720px) {
+  .calc-fiche { grid-template-columns: 1fr; gap: 1px 0; }
+  .calc-fiche dd { margin-bottom: 5px; }
+}
 /* Piege : ce qui surprend si on ne le sait pas. Ambre, comme toute mise en
    garde de l'application. */
 .calc-piege {

@@ -3690,6 +3690,11 @@ const MODELE_CALCULS = [
         formule: 'barème effectif = barème du dépôt, recouvert par les valeurs du profil',
         support: {
           fonction: 'fusionner',
+          signature: "fusionner(base, surcharge) → nouvel objet (n’altère jamais ses arguments)",
+          code: "baremes = fusionner(referentiels.baremes, entrees.parametrage?.baremes)",
+          referentiel: "referentiels/baremes_her_2027.json = base · entrees.parametrage = surcharge",
+          alimente: "tous les modules : chacun ne voit que ce barème effectif",
+          tests: "tests/parametrage.test.js",
           source: 'src/parametrage.js:66',
           texte:
             'Fusion profonde du référentiel et de `entrees.parametrage`. Les objets fusionnent ' +
@@ -3717,6 +3722,11 @@ const MODELE_CALCULS = [
           'année de mise en location = année de cette date',
         support: {
           fonction: 'calendrierOperation',
+          signature: "calendrierOperation(entrees) → { date_livraison, date_mise_en_location, annee_mise_en_location, duree_chantier_mois, origine }",
+          code: "date_livraison = decalerMois(date_debut_travaux, duree_chantier_mois) ; date_mise_en_location = livraison + 1 jour",
+          referentiel: "aucun : tout vient de entrees.dates",
+          alimente: "annee_mise_en_location → anneePremiereEcheance, compteExploitation, exonerationTFPB",
+          tests: "tests/moteur.test.js",
           source: 'src/calendrier.js:83',
           texte:
             'Retourne aussi `origine`, un dictionnaire date → "saisie" | "calcule", que ' +
@@ -3751,6 +3761,11 @@ const MODELE_CALCULS = [
         formule: 'surface utile = surface habitable + 0,5 × surfaces annexes',
         support: {
           fonction: 'surfaceUtile',
+          signature: "surfaceUtile({ shab_m2, surfaces_annexes_m2 = 0, su_forcee_m2, arrondir = true }, referentiels) → m² arrondis à 2 décimales",
+          code: "su = shab_m2 + k * surfaces_annexes_m2   (su_forcee_m2 court-circuite tout)",
+          referentiel: "constantes_reglementaires.coefficient_surface_annexes.valeur → k, soit 0,5",
+          alimente: "coefficientStructure, quotesPartsSU, loyerProduit",
+          tests: "tests/loyers.test.js",
           source: 'src/loyers.js:35',
           texte:
             'Le coefficient 0,5 vient du référentiel (`constantes_reglementaires.' +
@@ -3777,6 +3792,11 @@ const MODELE_CALCULS = [
           'en foyer, le facteur passe de 20 à 38 (chambres bien plus petites)',
         support: {
           fonction: 'coefficientStructure',
+          signature: "coefficientStructure({ nb_logements, su_m2, foyer = false, arrondir = true }, referentiels) → coefficient arrondi à 4 décimales",
+          code: "cs = cfg.metropole_habitat.base * (1 + (facteur * nb_logements) / su_m2)   avec facteur = foyer ? cfg.foyers.facteur_nl : cfg.metropole_habitat.facteur_nl",
+          referentiel: "constantes_reglementaires.coefficient_structure.metropole_habitat.base (0,77) et .facteur_nl (20) · .foyers.facteur_nl (38)",
+          alimente: "loyerProduit → loyer plafond → recettes du compte d’exploitation",
+          tests: "tests/loyers.test.js",
           source: 'src/loyers.js:64',
           texte:
             'Base et facteurs viennent de `constantes_reglementaires.coefficient_structure`. ' +
@@ -3801,6 +3821,11 @@ const MODELE_CALCULS = [
         formule: 'part d’une tranche = sa surface utile ÷ surface utile totale',
         support: {
           fonction: 'quotesPartsSU',
+          signature: "quotesPartsSU(su_par_produit) → { code_produit: part }, somme = 1",
+          code: "qp[code] = total > 0 ? su / total : 0",
+          referentiel: "aucun : clé dérivée des seules surfaces saisies",
+          alimente: "prixDeRevientVentile, agregerSubventions, redresserBesoins, compteExploitation",
+          tests: "tests/loyers.test.js",
           source: 'src/loyers.js:78',
           texte:
             'Fractions exactes, aucun arrondi : la conservation de la somme est assurée plus ' +
@@ -3827,6 +3852,11 @@ const MODELE_CALCULS = [
           'recette annuelle = 12 × surface utile × loyer pratiqué',
         support: {
           fonction: 'loyerDeBase, loyerProduit',
+          signature: "loyerProduit({ code_produit, su_m2, nb_logements, zones, marge_locale_eur_m2, marge_majoration, loyer_sortie_force, foyer, coefficient_millesime }, referentiels) → { cs, loyer_base_eur_m2, loyer_max_base_eur_m2, loyer_pratique_eur_m2, loyer_mensuel_eur, loyer_annuel_eur }",
+          code: "loyer = loyerMaxZone(code_produit, zones, referentiels) * coefficient_millesime + marge_locale_eur_m2",
+          referentiel: "baremes_loyers.PRODUIT.ZONE · constantes_reglementaires.MAJORATION du produit",
+          alimente: "loyer_annuel_eur → compteExploitation (recettes)",
+          tests: "tests/loyers.test.js",
           source: 'src/loyers.js:125 et 186',
           texte:
             'Le zonage applicable est une propriété du PRODUIT : PLUS et PLAI se lisent en ' +
@@ -3856,6 +3886,11 @@ const MODELE_CALCULS = [
           'annexes louées à part : nombre × loyer mensuel unitaire × 12',
         support: {
           fonction: 'loyerProduit (branche loyer_par_convention), loyerAnnexesSeparees',
+          signature: "loyerProduit(...) quand le produit porte loyer_par_convention → cs figé à 1 · loyerAnnexesSeparees(annexes) → euros annuels",
+          code: "plafond = arrondiLoyer(loyer_plafond_convention_eur_m2 ?? 0) ; pratique = arrondiLoyer(loyer_sortie_force ?? plafond)",
+          referentiel: "produits.js → drapeau loyer_par_convention (REHAB) ; aucun barème de zone n’est lu",
+          alimente: "compteExploitation (recettes), au même titre qu’un loyer barémé",
+          tests: "tests/loyers.test.js",
           source: 'src/loyers.js:186 et 256',
           texte:
             'La majoration PLUS 33 % s’applique APRÈS l’ajout de la marge locale : elle ' +
@@ -3894,6 +3929,11 @@ const MODELE_CALCULS = [
           'PLAI 5,5 % · PLUS 10 % (5,5 % en quartier prioritaire) · PLS 10 % · libre 20 %',
         support: {
           fonction: 'tauxLASM',
+          signature: "tauxLASM(code_produit, referentiels, contexte = { qpv }) → taux en fraction. Lève si le produit n’a ni entrée dédiée ni clé de repli",
+          code: "si PLUS et contexte.qpv → tva.plus_en_qpv.taux ; sinon tva.lasm_par_produit[code_produit] ; sinon tva[def.cle_lasm]",
+          referentiel: "tva.lasm_par_produit.PRODUIT · tva.plus_en_qpv.taux · tva.CLE_LASM du produit en repli",
+          alimente: "prixDeRevient et prixDeRevientVentile → prix de revient TTC",
+          tests: "tests/bilan.test.js",
           source: 'src/bilan.js:105',
           texte:
             'Priorité : PLUS + qpv → `tva.plus_en_qpv.taux`, puis `tva.lasm_par_produit[code]`, ' +
@@ -3922,6 +3962,11 @@ const MODELE_CALCULS = [
           'TTC de la tranche     = sa part HT × (1 + son taux de livraison à soi-même)',
         support: {
           fonction: 'prixDeRevientVentile, montantHTPoste, tauxTVAPoste',
+          signature: "prixDeRevientVentile({ postes, quotes_parts, codes_produits, modulation_ttc_eur, qpv }, referentiels) → { par_tranche, total_ht_eur, total_ttc_lasm_eur, cle_ventilation }",
+          code: "montantHTPoste : ht = ttc / (1 + taux) quand seul le TTC est saisi · tauxTVAPoste : taux du poste, sinon taux LASM du produit",
+          referentiel: "tva.lasm_par_produit via tauxLASM · quotes-parts issues de quotesPartsSU",
+          alimente: "soldeAFinancer, foncierFinancable, compteExploitation (assiettes en % du prix de revient)",
+          tests: "tests/bilan.test.js",
           source: 'src/bilan.js:245, 64 et 78',
           texte:
             'Dès que `montants_ht_par_produit` existe, c’est lui qui fait foi et le montant ' +
@@ -3948,6 +3993,11 @@ const MODELE_CALCULS = [
           'peut s’écarter d’un euro de son propre total',
         support: {
           fonction: 'arrondirEnConservantLaSomme (appelée par prixDeRevientVentile)',
+          signature: "arrondirEnConservantLaSomme(valeurs, totalImpose) → entiers de même longueur dont la somme vaut exactement le total",
+          code: "bas = valeurs.map(Math.floor) ; le reliquat va aux plus grands restes, puis à égalité dans l’ordre fourni",
+          referentiel: "aucun",
+          alimente: "toute ventilation affichée : le total à l’écran s’additionne réellement",
+          tests: "tests/bilan.test.js, tests/regressions.test.js",
           source: 'src/bilan.js:245',
           texte:
             'Le croisement chapitre × tranche impose comme total le sous-total de CHAPITRE ' +
@@ -3972,6 +4022,11 @@ const MODELE_CALCULS = [
           'base d’amortissement = prix de revient TTC − valeur comptable du terrain',
         support: {
           fonction: 'prixDeRevient, valeurComptableTerrain, baseAmortissementComptable',
+          signature: "prixDeRevient({ code_produit, postes, modulation_ttc_eur, qpv }, referentiels) → totaux et chapitres · valeurComptableTerrain({ montant_terrain_eur, quotite }) → euros · baseAmortissementComptable({ prix_revient_ttc_eur, valeur_comptable_terrain_eur }) → euros",
+          code: "base = prix_revient_ttc_eur - valeur_comptable_terrain_eur",
+          referentiel: "quotites_foncier_vefa.valeur_comptable_terrain_vefa par zone. Attention : les annexes LEON appliquent 25 % du montant d’acquisition VEFA, pas la table par zone (question Q-26)",
+          alimente: "dotationParComposants → dotation aux amortissements du compte d’exploitation",
+          tests: "tests/bilan.test.js",
           source: 'src/bilan.js:157, 422 et 440',
           texte:
             '`valeurComptableTerrain` LÈVE une exception si la quotité ne lui est pas fournie : ' +
@@ -4010,6 +4065,11 @@ const MODELE_CALCULS = [
           'où q = (1 + progressivité) ÷ (1 + taux)',
         support: {
           fonction: 'facteurAnnuite',
+          signature: "facteurAnnuite(tx, rev, m) → facteur à multiplier par le capital restant dû. tx = taux de la période, rev = progression de l’annuité, m = échéances restantes",
+          code: "q = (1 + rev) / (1 + tx) ; si q vaut 1 → (1 + tx) / m ; sinon ((1 + tx) * (1 - q)) / (1 - q ** m)",
+          referentiel: "aucun : forme fermée pure, aucune itération",
+          alimente: "tableauAmortissement, à chaque échéance",
+          tests: "tests/amortissement.test.js",
           source: 'src/amortissement.js:100',
           texte:
             'Quand q vaut exactement 1 (progressivité égale au taux), la forme générale se ' +
@@ -4042,6 +4102,11 @@ const MODELE_CALCULS = [
           '  capital restant dû = capital restant dû − amortissement',
         support: {
           fonction: 'tableauAmortissement',
+          signature: "tableauAmortissement(pret) → [{ annee, taux, annuite_eur, interets_eur, amortissement_eur, crd_eur }]. pret : { montant_eur, taux, progressivite, duree_ans, annee_premiere_echeance, revisabilite, differe_ans, differe_type, livret_a_origine, livret_a_par_annee, profil, taux_plancher, echeances_par_an }",
+          code: "annuite = crd * facteurAnnuite(tx, rev, m) ; interets = crd * tx ; crd -= (annuite - interets)",
+          referentiel: "prets_cdc.marges pour le taux · trajectoires.par_annee pour le Livret A",
+          alimente: "compteExploitation (charge d’annuités), plan de financement, trésorerie",
+          tests: "tests/amortissement.test.js, tests/golden.test.js",
           source: 'src/amortissement.js:315',
           texte:
             'Correction majeure apportée au dictionnaire v0.1, qui décrivait une progression ' +
@@ -4073,6 +4138,11 @@ const MODELE_CALCULS = [
           'D. LIMITÉE  : les deux suivent, la progression ne descend pas sous zéro',
         support: {
           fonction: 'tableauAmortissement, normaliserRevisabilite',
+          signature: "normaliserRevisabilite(libelle) → DOUBLE, D. LIMITEE, SIMPLE ou TAUX FIXE. Tout libellé inconnu retombe sur SIMPLE",
+          code: "tx = (1 + taux) * (1 + ecartLA) - 1 ; en DOUBLE le même écart s’applique aussi à la progressivité",
+          referentiel: "trajectoires.par_annee.ANNEE.livret_a · le Livret A d’origine vient du profil",
+          alimente: "tableauAmortissement : le taux ET l’annuité de chaque échéance",
+          tests: "tests/amortissement.test.js, tests/golden.test.js",
           source: 'src/amortissement.js:315 et 63',
           texte:
             'La simplification `taux = t + ΔLA` est une identité EXACTE. Celle de la ' +
@@ -4105,6 +4175,11 @@ const MODELE_CALCULS = [
           'taux plancher : taux appliqué = maximum(taux révisé, plancher)',
         support: {
           fonction: 'differeEnPeriodes, tableauAmortissement (branches profil et plancher)',
+          signature: "differeEnPeriodes({ differe_ans, differe_mois, echeances_par_an }) → nombre de périodes différées",
+          code: "type 1 → aucun intérêt appelé, CRD inchangé · type 2 → intérêts payés, capital intact · plancher : tx = Math.max(txBrut, taux_plancher)",
+          referentiel: "presets_prets.presets[].differe_ans, .differe_type, .taux_plancher, .profil",
+          alimente: "tableauAmortissement : décale le début de l’amortissement du capital",
+          tests: "tests/amortissement.test.js",
           source: 'src/amortissement.js:236 et 315',
           texte:
             'Le différé se saisit en mois ou en années, `differe_mois` primant dès qu’il est ' +
@@ -4134,6 +4209,11 @@ const MODELE_CALCULS = [
           'la révision du Livret A reste ANNUELLE',
         support: {
           fonction: 'tableauPeriodique',
+          signature: "tableauPeriodique(pret) → lignes infra-annuelles, agrégées par année civile avant restitution",
+          code: "tx_periode = (1 + taux) ** (1 / echeances_par_an) - 1",
+          referentiel: "presets_prets.presets[].echeances_par_an (4 pour un prêt trimestriel)",
+          alimente: "tableauAmortissement, qui délègue dès que echeances_par_an dépasse 1",
+          tests: "tests/amortissement.test.js",
           source: 'src/amortissement.js:242',
           texte:
             'Chemin de code séparé de la boucle annuelle, laissée intacte pour qu’aucun prêt ' +
@@ -4158,6 +4238,11 @@ const MODELE_CALCULS = [
         formule: 'première échéance = année de mise en location',
         support: {
           fonction: 'anneePremiereEcheance',
+          signature: "anneePremiereEcheance(annee_mise_en_location, _options) → année",
+          code: "return annee_mise_en_location   (mise en location + 0, arbitrage métier du 11/08/2026)",
+          referentiel: "aucun. Le second paramètre est conservé pour ne pas casser les appels si la règle redevenait paramétrable",
+          alimente: "tableauAmortissement : l’année de la première ligne",
+          tests: "tests/amortissement.test.js. Voir la question Q-28 : les quatre annexes LEON disent mise en location + 1",
           source: 'src/amortissement.js:86',
           texte:
             'Arbitrage métier du 11/08/2026 (Q-4, Q-28) contre le dictionnaire v0.1, qui lisait ' +
@@ -4183,6 +4268,11 @@ const MODELE_CALCULS = [
           'intérêts intercalaires = capital constitué − somme des tirages',
         support: {
           fonction: 'prefinancement',
+          signature: "prefinancement({ tirages, taux, date_fin, capitaliser = true }) → { nominal_eur, interets_eur, capital_constitue_eur }",
+          code: "capitalise += montant_eur * (1 + taux) ** ((jourFin - jourTirage) / 365)",
+          referentiel: "aucun : taux et tirages viennent de la saisie et de la trésorerie de chantier",
+          alimente: "pretsCDCTheoriques (le préfinancement se retranche du besoin) et le poste de frais financiers",
+          tests: "tests/amortissement.test.js",
           source: 'src/amortissement.js:496',
           texte:
             'Capitalisation actuarielle en base exact/365, convention lue dans SimPLUS!FA15. ' +
@@ -4219,6 +4309,11 @@ const MODELE_CALCULS = [
           'dépense du mois k = sa part du coût révisé × (1 + taux)^(années entre l’ordre de service et ce mois)',
         support: {
           fonction: 'tresorerieChantier',
+          signature: "tresorerieChantier({ date_debut_travaux, duree_chantier_mois, cout_total_eur, date_valeur_cout, taux_indexation, subventions_eur, fonds_propres_eur, tirer_les_prets, jalons, mode_tirage }) → { flux, indicateurs, echeance_nominale_eur }",
+          code: "cout_indexe = cout_total_eur * (1 + taux_indexation) ** (mois écoulés / 12)",
+          referentiel: "tresorerie.taux_indexation · tresorerie.jalons_vefa.jalons · tresorerie.mode_tirage",
+          alimente: "l’écran Trésorerie et l’échéancier de tirages passé à prefinancement",
+          tests: "tests/tresorerie.test.js",
           source: 'src/tresorerie.js:72',
           texte:
             'Base 365,25 jours, celle du classeur métier « Indexeur coût travaux ». Attention : ' +
@@ -4243,6 +4338,11 @@ const MODELE_CALCULS = [
           'dépense de ce mois = sa part × coût révisé',
         support: {
           fonction: 'tresorerieChantier (branche jalons)',
+          signature: "jalons : [{ libelle, avancement, part }]. L’avancement place le jalon dans le chantier, la part dit combien on appelle",
+          code: "mois = Math.round(avancement * duree_chantier_mois) ; un jalon au-delà de la livraison y est ramené",
+          referentiel: "tresorerie.jalons_vefa.jalons (barème légal VEFA, éditable en admin)",
+          alimente: "la courbe de dépenses de l’écran Trésorerie",
+          tests: "tests/tresorerie.test.js",
           source: 'src/tresorerie.js:72',
           texte:
             'Les jalons d’avancement supérieur ou égal à 1 (réserves, conformité, garantie de ' +
@@ -4271,6 +4371,11 @@ const MODELE_CALCULS = [
           'au fil de l’eau    : chaque mois, juste de quoi ramener le solde à zéro',
         support: {
           fonction: 'tresorerieChantier (boucle des flux)',
+          signature: "flux : [{ mois, date, depense_eur, recette_eur, solde_eur, cumul_eur }], un enregistrement par mois de chantier",
+          code: "cumul += recette_eur - depense_eur   à chaque pas de la boucle mensuelle",
+          referentiel: "tresorerie.mode_tirage : integral tire tout le prêt au premier mois, sinon au fil de l’eau",
+          alimente: "le graphique et le tableau de l’écran Trésorerie",
+          tests: "tests/tresorerie.test.js",
           source: 'src/tresorerie.js:72',
           texte:
             'Le mode par défaut est `integral`. La branche au fil de l’eau se déclenche sur ' +
@@ -4295,6 +4400,11 @@ const MODELE_CALCULS = [
           'besoin maximal = plus fort besoin sur toute la durée du chantier',
         support: {
           fonction: 'tresorerieChantier (indicateurs)',
+          signature: "indicateurs : { besoin_maximal_eur, mois_du_pic, total_depenses_eur, total_recettes_eur }",
+          code: "besoin_maximal_eur = le PIC du cumul négatif, pris en valeur absolue (un Math.min y avait renvoyé 0 sur toute opération normale)",
+          referentiel: "aucun : dérivé des flux",
+          alimente: "les tuiles de l’écran Trésorerie",
+          tests: "tests/tresorerie.test.js",
           source: 'src/tresorerie.js:72',
           texte:
             'Le mois du pic est le PREMIER à atteindre le maximum (comparaison stricte). Sans ' +
@@ -4330,6 +4440,11 @@ const MODELE_CALCULS = [
           'écart      = ressources − emplois',
         support: {
           fonction: 'controleEquilibre',
+          signature: "controleEquilibre({ prix_revient_ttc_module_eur, subventions_eur, fonds_propres_eur, prets_eur, prets_cdc_eur }, referentiels) → { ressources_eur, ecart_eur, alertes }",
+          code: "ressources = subventions_eur + fonds_propres_eur + prets_eur ; ecart = arrondiEuro(ressources - prix_revient_ttc_module_eur)",
+          referentiel: "constantes_reglementaires.quotite_cdc_min pour l’alerte de quotité",
+          alimente: "le bandeau d’équilibre du plan de financement",
+          tests: "tests/moteur.test.js",
           source: 'src/financement.js:287',
           texte:
             'L’équilibre est jugé APRÈS arrondi à l’euro : un écart de 0,40 € est déclaré ' +
@@ -4354,6 +4469,11 @@ const MODELE_CALCULS = [
           'droit à prêt foncier = charge foncière × (1 − subventions ÷ prix de revient) × part de surface utile',
         support: {
           fonction: 'foncierFinancable',
+          signature: "foncierFinancable({ charge_fonciere_eur, subventions_eur, prix_revient_operation_eur, quote_part_su }) → euros",
+          code: "reduction = subventions_eur / prix_revient_operation_eur ; retour = charge_fonciere_eur * (1 - reduction) * quote_part_su",
+          referentiel: "aucun : la formule est celle de la calculette CDC, feuille Construction cellule AT37",
+          alimente: "pretsCDCTheoriques : plafonne le prêt foncier",
+          tests: "tests/moteur.test.js",
           source: 'src/financement.js:206',
           texte:
             'Arbitrage Q-30 du 06/08/2026 : ce sont TOUTES les subventions qui abattent, y ' +
@@ -4380,6 +4500,11 @@ const MODELE_CALCULS = [
           'prêt bâtiment    = solde − intérêts de préfinancement − prêt foncier, au moins zéro',
         support: {
           fonction: 'soldeAFinancer, pretsCDCTheoriques',
+          signature: "soldeAFinancer({ prix_revient_ttc_module_eur, subventions_eur, fonds_propres_eur, autres_prets_eur }) → euros · pretsCDCTheoriques({ solde_eur, foncier_financable_eur, prefinancement_eur, arrondir_milliers, pret_foncier_force_eur, pret_batiment_force_eur }) → { foncier_eur, batiment_eur }",
+          code: "foncier = Math.max(0, Math.min(solde_eur, foncier_financable_eur)) ; batiment = solde_eur - prefinancement_eur - foncier",
+          referentiel: "options.arrondir_prets_milliers_sup",
+          alimente: "tableauAmortissement, quand aucun prêt n’est saisi (mode CDC théorique)",
+          tests: "tests/moteur.test.js",
           source: 'src/financement.js:24 et 245',
           texte:
             'Option `arrondir_milliers` (SimPLUS!AR26) : chaque prêt est arrondi au millier ' +
@@ -4407,6 +4532,11 @@ const MODELE_CALCULS = [
           'LLI  : tous prêts confondus plafonnés à 90 % du prix de revient de la tranche',
         support: {
           fonction: 'scinderPLS, plafondPretsLLI',
+          signature: "scinderPLS({ montant_pls_eur, prix_revient_eur, plafond = 0.55, plancher = 0.51 }) → { pls_eur, cpls_eur, alerte } · plafondPretsLLI({ total_prets_eur, prix_revient_eur, plafond = 0.9 })",
+          code: "au-delà du plafond le surplus bascule en CPLS ; sous le plancher une alerte est levée sans rien corriger",
+          referentiel: "valeurs par défaut portées par la signature elle-même, surchargeables par la saisie",
+          alimente: "le plan de financement et ses alertes",
+          tests: "tests/moteur.test.js",
           source: 'src/financement.js:55 et 89',
           texte:
             'Q-15 et Q-33, closes le 06/08/2026. Le plafond se corrige, le plancher s’alerte. ' +
@@ -4434,6 +4564,11 @@ const MODELE_CALCULS = [
           'au prorata de leur surface utile, trois tours au plus',
         support: {
           fonction: 'redresserBesoins',
+          signature: "redresserBesoins(besoins, quotesParts) → besoins redressés par tranche",
+          code: "chaque besoin est ramené au prorata de la quote-part de surface utile de sa tranche",
+          referentiel: "aucun : les quotes-parts viennent de quotesPartsSU",
+          alimente: "pretsCDCTheoriques, tranche par tranche",
+          tests: "tests/moteur.test.js",
           source: 'src/financement.js:181',
           texte:
             'La borne de trois tours reprend celle de la calculette CDC. Si aucune tranche ' +
@@ -4456,6 +4591,11 @@ const MODELE_CALCULS = [
           'ni l’un ni l’autre        : charge nulle',
         support: {
           fonction: 'annuiteFondsPropres',
+          signature: "annuiteFondsPropres({ montant_eur, taux = 0, duree_ans = 0 }) → euros par an",
+          code: "annuite = (montant_eur * taux) / (1 - (1 + taux) ** -duree_ans)   — taux nul : montant / durée",
+          referentiel: "fonds_propres.remuneration.taux et .duree_reconstitution_ans",
+          alimente: "compteExploitation : charge d’annuité de fonds propres",
+          tests: "tests/moteur.test.js, tests/golden_agde_foyer.test.js",
           source: 'src/financement.js:131',
           texte:
             'Le taux n’est retenu que si `remuneres === true`, la durée que si ' +
@@ -4482,6 +4622,11 @@ const MODELE_CALCULS = [
           '  coefficient 2 en neuf, 0,4 en acquisition-amélioration',
         support: {
           fonction: 'agregerSubventions, surchargeFonciere',
+          signature: "agregerSubventions(subventions, quotes_parts) → { total_eur, par_tranche, gratuites_eur } · surchargeFonciere(...) → droit à surcharge foncière",
+          code: "une subvention affectée va entière à sa tranche ; sans affectation elle se répartit au prorata des quotes-parts",
+          referentiel: "subventions.ssf et ses plafonds par zone",
+          alimente: "soldeAFinancer et foncierFinancable",
+          tests: "tests/moteur.test.js",
           source: 'src/subventions.js:30 et 82',
           texte:
             'Le plafond se resserre quand les collectivités participent PEU : sous 40 % du ' +
@@ -4510,6 +4655,11 @@ const MODELE_CALCULS = [
           '                     + places extérieures × forfait, le tout × (taux commune + taux département)',
         support: {
           fonction: 'exonerationTFPB, taxeAmenagement',
+          signature: "exonerationTFPB({ annee_mise_en_location, duree_exoneration_ans }, referentiels) → { annee_debut_tfpb, duree_exoneration_ans }",
+          code: "annee_debut_tfpb = annee_mise_en_location + duree",
+          referentiel: "constantes_reglementaires.tfpb.duree_exoneration_defaut_ans (25) · taxe_amenagement.valeur_forfaitaire et ses taux",
+          alimente: "compteExploitation : l’année où la taxe foncière entre en charge",
+          tests: "tests/moteur.test.js, tests/golden_agde_foyer.test.js",
           source: 'src/fiscalite.js:26 et 51',
           texte:
             'La durée est une propriété du PRODUIT (Q-14, close) : elle s’applique tranche par ' +
@@ -4550,6 +4700,11 @@ const MODELE_CALCULS = [
           '5. autofinancement, puis résultat comptable',
         support: {
           fonction: 'compteExploitation',
+          signature: "compteExploitation(e) → { lignes, indicateurs }. lignes : une par année, chacune portant produits, charges, annuités et soldes",
+          code: "boucle sur duree_ans depuis annee_mise_en_location ; chaque poste passe par facteurIndexation avant d’entrer dans les totaux",
+          referentiel: "charges_exploitation.postes · trajectoires · impot_societes · amortissement_comptable",
+          alimente: "l’écran Exploitation et tous ses indicateurs",
+          tests: "tests/exploitation.test.js, tests/golden.test.js",
           source: 'src/exploitation.js:113',
           texte:
             'La liste des charges diverses est parcourue DEUX fois : une première passe sépare ' +
@@ -4576,6 +4731,11 @@ const MODELE_CALCULS = [
           'une année absente reconduit le dernier taux connu',
         support: {
           fonction: 'facteurIndexation, adapterTrajectoires',
+          signature: "facteurIndexation(trajectoire, annee_debut, annee) → facteur multiplicatif. trajectoire : un taux constant, ou un dictionnaire année → taux",
+          code: "pour a de annee_debut+1 à annee : si trajectoire[a] existe il devient le taux courant, puis f *= 1 + taux. Une année absente reconduit le dernier taux connu",
+          referentiel: "trajectoires.par_annee.ANNEE.POSTE",
+          alimente: "chaque poste indexé du compte d’exploitation",
+          tests: "tests/exploitation.test.js",
           source: 'src/exploitation.js:34 et src/trajectoires.js:56',
           texte:
             'Quatre clés seulement sont consommées en dur : `loyers_irl`, `gestion`, ' +
@@ -4605,6 +4765,11 @@ const MODELE_CALCULS = [
           'forfait               · montant annuel, indépendant du programme',
         support: {
           fonction: 'resoudreChargesExploitation',
+          signature: "resoudreChargesExploitation(saisie = [], baremes = {}) → [{ code, libelle, assiette, valeur, index, annee_debut, annee_fin }]",
+          code: "la saisie ACTIVE un poste du catalogue ; aucun poste du référentiel n’est actif par défaut, sans quoi ajouter un poste changerait toutes les simulations",
+          referentiel: "charges_exploitation.postes : le catalogue, chaque poste décrit par assiette / valeur / index",
+          alimente: "compteExploitation : la liste des charges diverses de chaque année",
+          tests: "tests/exploitation.test.js",
           source: 'src/exploitation.js:667',
           texte:
             'Une septième voie existe hors typedef : `montants_par_annee`, dictionnaire ' +
@@ -4631,6 +4796,11 @@ const MODELE_CALCULS = [
           '% du prix de revient : 0,3 % × prix de revient TTC (assiette LEON)',
         support: {
           fonction: 'compteExploitation (fraisGestionForfait puis arbitrage final)',
+          signature: "trois assiettes possibles : % du prix de revient TTC, % des loyers, forfait par logement",
+          code: "frais_gestion_pct_prix_revient > 0 ? taux * prix_revient_ttc_eur * index : frais_gestion_annuels_eur * nb_logements * index",
+          referentiel: "charges_exploitation.frais_gestion_pct_prix_revient (0,003) · .frais_gestion_annuels_eur",
+          alimente: "les charges du compte d’exploitation",
+          tests: "tests/exploitation.test.js, tests/golden_agde_foyer.test.js (question Q-17)",
           source: 'src/exploitation.js:311 et 493',
           texte:
             'Q-17, close le 11/08/2026 sur les matrices BOURGES, CHAMBERY et AGDE. La variante ' +
@@ -4660,6 +4830,11 @@ const MODELE_CALCULS = [
           '  k = taux des charges assises sur les produits',
         support: {
           fonction: 'compteExploitation (blocs redevanceForfait et redevanceTransparence)',
+          signature: "mode : loyers ou redevance · mode_redevance : forfaitaire ou transparence",
+          code: "transparence : num = quotePart * (socle + k * connus - tauxNets * vacance * connus) ; den = 1 - quotePart * k ; redevance = num / den",
+          referentiel: "regimes_par_produit.PRODUIT.mode et .mode_redevance",
+          alimente: "les produits du compte d’exploitation, à la place des loyers",
+          tests: "tests/exploitation.test.js, tests/golden_agde_foyer.test.js",
           source: 'src/exploitation.js:380 et 443',
           texte:
             'Q-27, largement close. La forme fermée résout R = Q × (C₀ + k·(L+R) − ' +
@@ -4688,6 +4863,11 @@ const MODELE_CALCULS = [
           'tranche en transparence → sa quote-part de surface utile alimente la forme fermée',
         support: {
           fonction: 'compteExploitation (bloc tranches_produits)',
+          signature: "produits_par_tranche : [{ code, mode, mode_redevance, redevance_annuelle_eur, loyers_annuels_eur, quote_part }]",
+          code: "une tranche en loyers et une tranche en redevance coexistent : chacune apporte ses produits, la quote-part dit quelle part des charges la transparence refacture",
+          referentiel: "regimes_par_produit",
+          alimente: "le total des produits de chaque année",
+          tests: "tests/exploitation.test.js",
           source: 'src/exploitation.js:414',
           texte:
             'Dès que la liste par tranche est non vide, elle écrase complètement les entrées ' +
@@ -4714,6 +4894,11 @@ const MODELE_CALCULS = [
           'un exercice déficitaire ne crée AUCUN crédit reportable',
         support: {
           fonction: 'compteExploitation (bloc IS)',
+          signature: "soumis_is se déduit des produits présents au programme, sauf si la saisie tranche explicitement",
+          code: "resultat_fiscal = produits - charges déductibles - dotations ; impot = taux * Math.max(0, resultat_fiscal)",
+          referentiel: "impot_societes.taux, .produits_soumis, .part_fixe_gros_entretien, .credit_impot_tfpb_lli",
+          alimente: "le solde après impôt et l’autofinancement",
+          tests: "tests/exploitation.test.js",
           source: 'src/exploitation.js:517',
           texte:
             'Absence de report déficitaire calée sur ParaGEN!GD30 = NON. Une clé inconnue dans ' +
@@ -4743,6 +4928,11 @@ const MODELE_CALCULS = [
           '                     dotation entrent',
         support: {
           fonction: 'compteExploitation (bloc des soldes)',
+          signature: "chaque ligne porte total_produits_eur, total_charges_eur, autofinancement_eur et son cumul",
+          code: "autofinancement = total_produits_eur - total_charges_eur ; cumul += autofinancement",
+          referentiel: "aucun : pure agrégation",
+          alimente: "les indicateurs et le graphique de l’écran Exploitation",
+          tests: "tests/exploitation.test.js, tests/golden.test.js",
           source: 'src/exploitation.js:552',
           texte:
             'Le résultat comptable n’est PAS publié si la dotation aux amortissements est ' +
@@ -4769,6 +4959,11 @@ const MODELE_CALCULS = [
           'pour les seuls composants non encore éteints',
         support: {
           fonction: 'dotationParComposants',
+          signature: "dotationParComposants(base_eur, composants, annee_debut, duree, { continuer }) → dotation année par année",
+          code: "chaque composant s’amortit linéairement sur sa durée ; la dotation décroît par paliers à mesure qu’ils s’éteignent",
+          referentiel: "amortissement_comptable.composants.collectif ou .individuel · .duree_defaut_ans en repli",
+          alimente: "la dotation aux amortissements du compte d’exploitation, et par elle le résultat",
+          tests: "tests/exploitation.test.js (question Q-34 sur la grille à retenir)",
           source: 'src/exploitation.js:743',
           texte:
             'Aucune vérification que les quote-parts somment à 1 : une grille incomplète ' +
@@ -4793,6 +4988,11 @@ const MODELE_CALCULS = [
           'd’autofinancement atteint les fonds propres investis',
         support: {
           fonction: 'tauxRentabiliteInterne, indicateursExploitation, anneeReconstitutionFondsPropres',
+          signature: "tauxRentabiliteInterne(flux) → taux, ou null si la série ne change jamais de signe · indicateursExploitation(lignes, contexte) → agrégats · anneeReconstitutionFondsPropres(lignes, fonds_propres_eur) → année ou null",
+          code: "TRI par bissection sur la valeur actuelle nette, bornes -0,99 et 1, 200 itérations",
+          referentiel: "aucun : dérivé des flux du compte",
+          alimente: "les tuiles de l’écran Exploitation",
+          tests: "tests/exploitation.test.js",
           source: 'src/exploitation.js:774, 792 et 708',
           texte:
             'La dernière année est écartée des moyennes de marge : le dernier prêt étant soldé, ' +
@@ -4830,6 +5030,11 @@ const MODELE_CALCULS = [
           'capital restant dû (test de fin de prêt) : 4 décimales',
         support: {
           fonction: 'arrondiSurface, arrondiLoyer, arrondiCS, arrondiEuro, arrondiCRD',
+          signature: "arrondi(valeur, decimales) et ses cinq spécialisations : surface 2 décimales, loyer 2, coefficient 4, euro entier, CRD 4",
+          code: "Math.round((valeur + Number.EPSILON) * f) / f   — l’epsilon neutralise le bruit flottant, 1.005 donne bien 1.01. arrondiEuro normalise en plus le zéro négatif",
+          referentiel: "aucun : la politique d’arrondi est du code, pas une donnée",
+          alimente: "toutes les frontières de calcul du moteur",
+          tests: "tests/fondations.test.js",
           source: 'src/arrondis.js',
           texte:
             'Toutes s’appuient sur `arrondi(valeur, décimales)`, qui ajoute `Number.EPSILON` ' +
@@ -4856,6 +5061,11 @@ const MODELE_CALCULS = [
           'aux parts de plus grand reste, et à égalité dans l’ordre de saisie',
         support: {
           fonction: 'arrondirEnConservantLaSomme',
+          signature: "arrondirEnConservantLaSomme(valeurs, totalImpose) → entiers dont la somme vaut exactement totalImpose, ou l’arrondi de la somme exacte si aucun total n’est imposé",
+          code: "reliquat = total - somme des planchers ; distribué une unité à la fois aux plus grands restes, dans le sens du signe",
+          referentiel: "aucun",
+          alimente: "prixDeRevientVentile, la trésorerie mensuelle, toute série affichée qui doit s’additionner",
+          tests: "tests/fondations.test.js, tests/bilan.test.js",
           source: 'src/arrondis.js:90',
           texte:
             'Méthode du plus grand reste, déterministe à égalité (tri stable sur l’index). ' +
@@ -5751,6 +5961,28 @@ function rendreCalculs() {
                 `<span class="calc-source__ou">${att(t.source)}</span></p>`
               : ''
           }
+          ${
+            // Fiche de maintenance : de quoi MODIFIER le calcul, pas seulement
+            // le comprendre. La signature dit comment l'appeler, le code ce
+            // qu'il fait vraiment, le referentiel ou changer une valeur SANS
+            // toucher au code, la chaine ce qui casse si on s'y trompe, et les
+            // tests le filet a relancer apres coup.
+            support && (t.signature || t.code || t.referentiel || t.alimente || t.tests)
+              ? `<dl class="calc-fiche">${[
+                  ['Signature', t.signature, 'calc-fiche__mono'],
+                  ['Dans le code', t.code, 'calc-fiche__mono'],
+                  ['Référentiel', t.referentiel, ''],
+                  ['Alimente', t.alimente, ''],
+                  ['Tests', t.tests, 'calc-fiche__mono'],
+                ]
+                  .filter(([, v]) => v)
+                  .map(
+                    ([cle, v, classe]) =>
+                      `<dt>${att(cle)}</dt><dd class="${classe}">${att(v)}</dd>`,
+                  )
+                  .join('')}</dl>`
+              : ''
+          }
           ${e.piege ? `<p class="calc-piege">${att(e.piege)}</p>` : ''}
         </div>
       </article>`;
@@ -5771,6 +6003,14 @@ function rendreCalculs() {
         e.support?.texte ?? '',
         e.support?.fonction ?? '',
         e.support?.source ?? '',
+        // La fiche de maintenance est cherchable elle aussi : on trouve une
+        // etape par le nom d'une cle de referentiel ou par son fichier de test,
+        // ce qui est souvent le point d'entree quand on vient du code.
+        e.support?.signature ?? '',
+        e.support?.code ?? '',
+        e.support?.referentiel ?? '',
+        e.support?.alimente ?? '',
+        e.support?.tests ?? '',
         (e.regles ?? []).join(' '),
       ].join(' '),
     });
@@ -5787,24 +6027,21 @@ function rendreCalculs() {
     )
     .join('');
 
+  // Le titre et l'interrupteur sur une seule rangee, et cette rangee COLLE en
+  // haut au defilement : la page fait plusieurs ecrans de long, et c'est en
+  // plein milieu d'un chapitre qu'on veut basculer entre les deux lectures.
+  // Seule la rangee est collante, pas le bandeau : un bandeau entier fige a
+  // l'ecran mangerait la moitie de la hauteur utile.
   panneau.innerHTML =
-    `<section class="bloc para-section calc-tete">
+    `<div class="calc-tete">
       <h3>Comment les calculs marchent</h3>
-      <p class="para-source">Tout ce que le moteur calcule, dans l’ordre où il le calcule.
-        Cette page ne règle rien, elle explique : les valeurs se règlent dans les autres
-        rubriques.</p>
       <div class="choix calc-lecture" role="group" aria-label="Niveau de détail">
         <button type="button" class="choix__option ${support ? '' : 'choix__option--actif'}"
           data-lecture="simple">En clair</button>
         <button type="button" class="choix__option ${support ? 'choix__option--actif' : ''}"
           data-lecture="support">Support technique</button>
       </div>
-      <p class="calc-lecture__aide">${
-        support
-          ? 'Vue de maintenance : chaque calcul cite sa fonction, son fichier et sa ligne, et la règle du dictionnaire qu’il couvre.'
-          : 'Vue métier : chaque calcul est expliqué avec les mots de l’opération, sans jargon informatique.'
-      }</p>
-    </section>` +
+    </div>` +
     (chapitres ||
       `<section class="bloc"><p class="vide">Aucun calcul ne correspond à « ${att(rechercheParametre)} ».</p></section>`);
 }

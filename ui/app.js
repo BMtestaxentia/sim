@@ -6823,7 +6823,13 @@ document.addEventListener('click', (ev) => {
   if (rail) {
     sectionParametres = /** @type {HTMLElement} */ (rail).dataset.section;
     rendreParametres();
-    $('#contenu-parametres').scrollIntoView({ block: 'nearest' });
+    // Changer de rubrique, c'est changer de page : on la prend par le haut.
+    // `scrollIntoView` ne suffisait pas - en `nearest` il ne bouge pas quand la
+    // cible est deja a l'ecran, si bien qu'en arrivant du bas d'une longue
+    // section on tombait au milieu de la suivante. Et le panneau vise n'est
+    // plus toujours `#contenu-parametres` depuis que les calculs et les
+    // hypotheses ont le leur.
+    window.scrollTo({ top: 0 });
     return;
   }
 

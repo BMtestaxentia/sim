@@ -29,7 +29,7 @@ import { tauxLASM } from '../src/bilan.js';
 import {
   listerSimulations, lireSimulation, ecrireSimulation, ajouterSimulation,
   supprimerSimulation, renommerSimulation, simulationCourante, ouvrirSimulation,
-  reprendreHeritage, poidsBibliotheque,
+  reprendreHeritage,
 } from './depot.js';
 
 const $ = (sel) => /** @type {HTMLElement} */ (document.querySelector(sel));
@@ -6398,20 +6398,17 @@ function themeInitial() {
 // ------------------------------------------------------------- persistance
 
 /**
- * Memorisation de la saisie d'une ouverture a l'autre.
+ * Memorisation de la saisie d’une ouverture a l’autre.
  *
- * Le moteur reste pur : rien n'est stocke de son cote, on ne persiste que la
- * SAISIE - l'operation et les profils de parametres. Les resultats se
- * recalculent a l'ouverture, ce qui garantit qu'une saisie memorisee hier ne
- * ressort pas avec les chiffres d'hier si le moteur a change depuis.
+ * Le moteur reste pur : rien n est stocke de son cote, on ne persiste que la
+ * SAISIE - l’operation et les profils de parametres. Les resultats se
+ * recalculent a l’ouverture, ce qui garantit qu’une saisie memorisee hier ne
+ * ressort pas avec les chiffres d’hier si le moteur a change depuis.
  *
- * La cle porte une VERSION. Une saisie memorisee decrit une structure ; quand
- * celle-ci evolue - un poste ajoute a la nomenclature, une entree renommee -
- * la relire telle quelle ferait revivre l'ancienne structure par-dessus la
- * nouvelle, en silence. On prefere repartir de l'operation de demonstration :
- * bumper cette version est le geste qui accompagne un changement de structure.
+ * Le STOCKAGE lui-meme n est plus ici : il appartient au depot (ui/depot.js),
+ * qui porte les cles, leur version et la reprise de l’ancienne simulation
+ * unique. Ce fichier ne connait qu un identifiant de simulation ouverte.
  */
-const CLE_SAISIE = 'moteur-sim.saisie.v1';
 
 /** Ecran affiche. Memorise a part : c'est une position de lecture, pas une donnee. */
 const CLE_ECRAN = 'moteur-sim.ecran';
@@ -6462,7 +6459,11 @@ function memoriserSaisie() {
 /** Le nom de la simulation ouverte, dans la marque de l'en-tete. */
 function majNomSimulationOuverte(nom) {
   const el = document.getElementById('nom-simulation-ouverte');
-  if (el) el.textContent = nom || 'Simulation sans nom';
+  if (!el) return;
+  // Aucune simulation ouverte : le bouton le DIT, plutot que d'afficher le nom
+  // de la derniere - on croirait travailler dessus.
+  el.textContent = idSimulationOuverte ? nom || 'Simulation sans nom' : 'Aucune simulation';
+  el.closest('.entete__dossier')?.classList.toggle('entete__dossier--vide', !idSimulationOuverte);
 }
 
 /**
@@ -6504,6 +6505,7 @@ function ouvrirSimulationDansEcran(id, versEcran = true) {
   }
   idSimulationOuverte = ouvrirSimulation(id);
   majNomSimulationOuverte(sim.identite?.nom);
+  majAccesMontage();
   // Les champs STATIQUES - identite, calendrier, hypotheses - ne sont ecrits
   // que par `rendreChampsStatiques` : `rafraichirTout` ne redessine que les
   // tables. Sans cet appel, ouvrir une simulation laisse a l'ecran le nom, la
@@ -6516,30 +6518,64 @@ function ouvrirSimulationDansEcran(id, versEcran = true) {
   return true;
 }
 
+/**
+ * Au demarrage, AUCUNE simulation n'est ouverte : on arrive sur la
+ * bibliotheque. C'est le comportement d'un outil qui gere un parc et non un
+ * document - on choisit le dossier avant de travailler dessus, on ne se
+ * retrouve pas a modifier celui d'hier sans l'avoir demande.
+ *
+ * L'etat de travail garde ses valeurs de demonstration tant que rien n'est
+ * ouvert, mais rien ne s'ecrit : `memoriserSaisie` ne fait rien sans
+ * simulation ouverte.
+ */
 function restaurerSaisie() {
   // Reprise de l'ancienne cle unique, une seule fois : sans elle, la mise a
   // jour de l'outil ferait disparaitre le travail en cours de chacun.
   reprendreHeritage();
+  fermerSimulation();
+  return false;
+}
 
-  const fiches = listerSimulations();
-  const vise = simulationCourante();
-  const id = fiches.some((f) => f.id === vise) ? vise : fiches[0]?.id;
-  if (!id) return false;
-  const sim = lireSimulation(id);
-  if (!poserSimulation(sim)) return false;
-  idSimulationOuverte = ouvrirSimulation(id);
-  majNomSimulationOuverte(sim.identite?.nom);
-  return true;
+/** Referme la simulation ouverte : plus rien n'est selectionne, rien ne s'ecrit. */
+function fermerSimulation() {
+  clearTimeout(sauvegardeEnAttente);
+  if (idSimulationOuverte) ecrireSimulation(idSimulationOuverte, simulationCourantePayload());
+  idSimulationOuverte = null;
+  ouvrirSimulation(null);
+  majNomSimulationOuverte(null);
+  majAccesMontage();
+}
+
+/**
+ * Les onglets de montage n'ont de sens qu'avec un dossier ouvert.
+ *
+ * Sans cette garde, on saisirait dans le vide : `memoriserSaisie` refuse
+ * d'ecrire sans simulation ouverte, et le travail serait perdu au premier
+ * rechargement sans qu'aucun message ne l'ait annonce.
+ */
+function majAccesMontage() {
+  const actif = Boolean(idSimulationOuverte);
+  document.body.classList.toggle('sans-simulation', !actif);
+  for (const o of document.querySelectorAll('#onglets .onglet')) {
+    const b = /** @type {HTMLButtonElement} */ (o);
+    b.disabled = !actif;
+    b.title = actif ? '' : 'Ouvrez une simulation pour accéder au montage';
+  }
 }
 
 // ---------------------------------------------------------------- bibliotheque
 
 /** Filtre texte de la liste des simulations. */
 let rechercheSimulation = '';
-/** Filtres par colonne, indexes par l'identifiant du select qui les porte. */
-const filtresBiblio = {
-  'filtre-produit': '', 'filtre-type': '', 'filtre-zone': '', 'filtre-commune': '',
-};
+/**
+ * Filtres par colonne, indexes par l'identifiant du select qui les porte.
+ *
+ * Un seul aujourd'hui, le produit : la recherche libre couvre deja le numero,
+ * le nom et la commune, et empiler des menus pour des colonnes deja
+ * cherchables coutait une rangee entiere de bandeau. La forme reste ouverte,
+ * ajouter un filtre n'est qu'une ligne ici et un `select` dans la page.
+ */
+const filtresBiblio = { 'filtre-produit': '' };
 /** Colonne de tri et sens. Par defaut le numero decroissant : le dernier cree en tete. */
 const triBiblio = { colonne: 'numero', ascendant: false };
 let pageBiblio = 0;
@@ -6598,17 +6634,11 @@ function rendreBibliotheque() {
     if (sel.value !== garde) filtresBiblio[id] = '';
   };
   options('filtre-produit', toutes.flatMap((f) => f.produits ?? []), libelleProduit);
-  options('filtre-type', toutes.map((f) => f.type_operation));
-  options('filtre-zone', toutes.map((f) => f.zone_ABC));
-  options('filtre-commune', toutes.map((f) => f.commune));
 
   // --- Filtrage ----------------------------------------------------------
   const q = sansAccent(rechercheSimulation.trim());
   const fiches = toutes.filter((f) => {
     if (filtresBiblio['filtre-produit'] && !(f.produits ?? []).includes(filtresBiblio['filtre-produit'])) return false;
-    if (filtresBiblio['filtre-type'] && f.type_operation !== filtresBiblio['filtre-type']) return false;
-    if (filtresBiblio['filtre-zone'] && f.zone_ABC !== filtresBiblio['filtre-zone']) return false;
-    if (filtresBiblio['filtre-commune'] && f.commune !== filtresBiblio['filtre-commune']) return false;
     if (!q) return true;
     return sansAccent(`${f.numero} ${f.nom} ${f.version} ${f.commune} ${f.type_operation}`).includes(q);
   });
@@ -6642,13 +6672,6 @@ function rendreBibliotheque() {
   const debut = pageBiblio * taillePageBiblio;
   const page = fiches.slice(debut, debut + taillePageBiblio);
 
-  const resume = document.getElementById('biblio-resume');
-  if (resume) {
-    resume.textContent = toutes.length
-      ? `${toutes.length} simulation${toutes.length > 1 ? 's' : ''} · ${poidsLisible(poidsBibliotheque())} au total` +
-        ' · les barèmes et le zonage des communes sont partagés, jamais copiés dans une simulation'
-      : 'Aucune simulation. Créez-en une, ou importez un fichier.';
-  }
   const compte = document.getElementById('biblio-compte');
   if (compte) {
     compte.textContent =
@@ -6656,7 +6679,7 @@ function rendreBibliotheque() {
         ? `${toutes.length} ligne${toutes.length > 1 ? 's' : ''}`
         : `${fiches.length} sur ${toutes.length}`;
   }
-  const pied = document.getElementById('biblio-pied');
+  const pied = document.getElementById('biblio-pagination');
   if (pied) {
     pied.hidden = fiches.length <= taillePageBiblio;
     const p = document.getElementById('biblio-page');
@@ -6752,18 +6775,6 @@ function exporterSimulation(id) {
   a.download = `${nom}.json`;
   a.click();
   URL.revokeObjectURL(url);
-}
-
-/** Efface la memoire et recharge : le plus sur moyen de revenir a l'origine. */
-function reinitialiserSaisie() {
-  if (!confirm('Effacer la saisie mémorisée et repartir de l’opération de démonstration ?')) return;
-  try {
-    if (idSimulationOuverte) supprimerSimulation(idSimulationOuverte);
-    localStorage.removeItem(CLE_SAISIE);
-  } catch {
-    /* voir memoriserSaisie */
-  }
-  location.reload();
 }
 
 // ---------------------------------------------------------------- evenements
@@ -7184,11 +7195,6 @@ document.addEventListener('click', (ev) => {
     if (!d.contains(el)) /** @type {HTMLDetailsElement} */ (d).open = false;
   }
 
-  if (el.closest('#btn-reinitialiser')) {
-    reinitialiserSaisie();
-    return;
-  }
-
   // --- Bibliotheque de simulations ---
   if (el.closest('#btn-bibliotheque')) {
     viderFileDeSauvegarde();
@@ -7203,7 +7209,7 @@ document.addEventListener('click', (ev) => {
     // Une simulation neuve part de la DEMONSTRATION et non d'un objet vide :
     // une page de saisie entierement vierge ne calcule rien et n'apprend rien.
     // Les profils de parametres suivent, ils sont le reglage de l'organisme.
-    const neuve = structuredClone(simulationCourantePayload());
+    const neuve = structuredClone(ETAT_INITIAL);
     neuve.identite = { ...(neuve.identite ?? {}), nom: nom.trim() || 'Nouvelle opération' };
     const id = ajouterSimulation(neuve);
     if (!id) {
@@ -7211,10 +7217,6 @@ document.addEventListener('click', (ev) => {
       return;
     }
     ouvrirSimulationDansEcran(id);
-    return;
-  }
-  if (el.closest('#btn-importer-sim')) {
-    document.getElementById('fichier-import')?.click();
     return;
   }
   if (el.closest('#btn-vider-filtres')) {
@@ -7313,17 +7315,22 @@ document.addEventListener('click', (ev) => {
     if (etaitOuverte) clearTimeout(sauvegardeEnAttente);
     supprimerSimulation(id);
     if (etaitOuverte) {
-      // On ne reste pas sur une simulation qui n'existe plus : on ouvre la
-      // suivante, ou l'on repart de la demonstration s'il n'en reste aucune.
+      // On ne reste pas sur une simulation qui n'existe plus. Aucune n'est
+      // rouverte a sa place : rien ne dit que la suivante de la liste soit
+      // celle qu'on veut, et l'outil sait rester sans dossier ouvert.
       idSimulationOuverte = null;
-      const reste = listerSimulations()[0];
-      if (reste) ouvrirSimulationDansEcran(reste.id, false);
-      else {
-        const neuf = ajouterSimulation(simulationCourantePayload(), 'Nouvelle opération');
-        if (neuf) ouvrirSimulationDansEcran(neuf, false);
-      }
+      ouvrirSimulation(null);
+      majNomSimulationOuverte(null);
+      majAccesMontage();
+      afficherEcran('simulations');
     }
     rendreBibliotheque();
+    return;
+  }
+  if (el.closest('#btn-fermer-sim')) {
+    fermerSimulation();
+    rendreBibliotheque();
+    afficherEcran('simulations');
     return;
   }
 
@@ -7895,35 +7902,22 @@ document.addEventListener('click', (ev) => {
 // ---------------------------------------------------------------- demarrage
 
 appliquerTheme(themeInitial());
-// La saisie memorisee se pose AVANT le premier rendu : la reposer apres
-// ferait clignoter l'operation de demonstration a chaque ouverture.
-const saisieRestauree = restaurerSaisie();
-// L'ecran quitte se lit AVANT le premier rendu : celui-ci reaffiche l'onglet
-// marque dans le HTML, et `afficherEcran` reecrit alors la memoire - on
-// perdrait la position en la relisant apres.
-const ecranMemorise = (() => {
-  try {
-    return localStorage.getItem(CLE_ECRAN);
-  } catch {
-    return null;
-  }
-})();
-// Bibliotheque vide a la toute premiere ouverture : l'operation de
-// demonstration y entre comme premiere simulation. Sans cela, la saisie
-// n'aurait nulle part ou s'ecrire et se perdrait a chaque rechargement.
-if (!idSimulationOuverte) {
-  const premier = ajouterSimulation(simulationCourantePayload(), etat.identite?.nom);
-  if (premier) {
-    idSimulationOuverte = ouvrirSimulation(premier);
-    majNomSimulationOuverte(etat.identite?.nom);
-  }
-}
+/**
+ * Etat de depart FIGE, capture avant toute restauration.
+ *
+ * C'est le modele d'une simulation neuve. Le prendre ici plutot que de cloner
+ * l'etat courant evite qu'une « nouvelle simulation » herite du dossier
+ * consulte juste avant : on en creerait une copie sans l'avoir demande.
+ */
+const ETAT_INITIAL = structuredClone(simulationCourantePayload());
+restaurerSaisie();
 rendreChampsStatiques();
 rafraichirTout();
 rendreBibliotheque();
-// `afficherEcran` retombe seul sur le programme si l'ecran memorise n'existe
-// plus - une tranche dont le dernier lot a ete supprime, par exemple.
-if (ecranMemorise) afficherEcran(ecranMemorise);
+majAccesMontage();
+// Aucune simulation n'est ouverte au demarrage : on arrive sur la
+// bibliotheque, et l'ecran memorise ne sert qu'apres ouverture d'un dossier.
+afficherEcran('simulations');
 // Le curseur vient d'etre pose sur l'onglet memorise SANS transition (classe
 // `onglets--muet` du HTML) : il apparait en place au lieu de traverser le rail
 // au chargement. Elle se retire une fois ce premier placement peint - deux
@@ -7931,9 +7925,3 @@ if (ecranMemorise) afficherEcran(ecranMemorise);
 requestAnimationFrame(() =>
   requestAnimationFrame(() => document.getElementById('onglets')?.classList.remove('onglets--muet')),
 );
-// Dire ce qui est a l'ecran. Une saisie qui reapparait sans un mot laisse
-// croire a une operation de demonstration bizarrement remplie.
-if (saisieRestauree) {
-  const p = document.getElementById('etat-calcul');
-  if (p) p.title = 'Saisie restaurée depuis la dernière session';
-}

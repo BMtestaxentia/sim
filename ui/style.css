@@ -1112,39 +1112,68 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 }
 
 .biblio { max-width: 1720px; margin: 0 auto; }
-.biblio__tete {
-  display: flex; align-items: flex-end; justify-content: space-between;
-  gap: 16px; flex-wrap: wrap; margin-bottom: 12px;
+
+/* UN seul bandeau : titre, compteur, recherche, filtres et actions. Il COLLE
+   sous l en-tete de l application, parce qu on filtre depuis le milieu du
+   tableau et non depuis son debut. */
+.biblio-barre {
+  position: sticky; top: 58px; z-index: 12;
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  padding: 8px 11px; margin-bottom: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color); border-radius: var(--radius-md);
 }
-.biblio__titre { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
-.biblio__resume { margin: 3px 0 0; font-size: 11.5px; color: var(--text-tertiary); max-width: 80ch; }
-.biblio__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.biblio__titre {
+  margin: 0; font-size: 14px; font-weight: 800; letter-spacing: -0.02em;
+  white-space: nowrap; flex: none;
+}
+.biblio-compte {
+  font-size: 11px; font-weight: 700; color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+  padding: 2px 8px; border-radius: var(--radius-pill); background: var(--bg-tertiary);
+}
+/* Pousse les actions a droite : filtres a gauche, creation a droite. */
+.biblio-barre__separateur { flex: 1 1 auto; min-width: 8px; }
+/* Les menus se COMPRESSENT plutot que de passer a la ligne : sur un portable,
+   sept elements et trois boutons ne tiennent qu a ce prix. Le texte coupe se
+   relit en ouvrant le menu, une seconde rangee coute de la hauteur a chaque
+   affichage. */
+.biblio-barre select {
+  width: auto; min-width: 88px; max-width: 132px; flex: 0 1 auto;
+  padding-inline: 7px; font-size: 12px;
+}
 .biblio__recherche { position: relative; display: flex; align-items: center; flex: none; }
 .biblio__loupe {
   position: absolute; left: 9px; color: var(--text-tertiary);
   font-size: 14px; pointer-events: none;
 }
-.biblio__recherche input { width: 240px; padding-left: 26px; }
+.biblio__recherche input { width: 172px; padding-left: 26px; }
 
-/* Barre de filtres : elle COLLE sous le bandeau. Sur cinq mille lignes, on
-   filtre depuis le milieu du tableau, pas depuis le haut. */
-.biblio-filtres {
-  position: sticky; top: 58px; z-index: 12;
-  display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;
-  padding: 10px 12px; margin-bottom: 10px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color); border-radius: var(--radius-md);
+/* Pied : pagination a gauche, poids du parc a droite. Le poids est une
+   information, pas une commande : il n a rien a faire dans le bandeau. */
+.biblio-pied {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-top: 10px;
+  font-size: 11.5px; color: var(--text-tertiary);
 }
-.biblio-filtre { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.biblio-filtre > span {
+.biblio-pied__pages { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.biblio-parpage { display: flex; align-items: center; gap: 6px; }
+.biblio-parpage > span {
   font-size: 9px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.05em; color: var(--text-tertiary);
 }
-.biblio-filtre select { width: auto; min-width: 110px; max-width: 190px; }
-.biblio-filtres__compte {
-  margin-left: auto; font-size: 11.5px; color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums; white-space: nowrap;
-}
+.biblio-parpage select { width: auto; min-width: 62px; }
+.biblio__resume { margin: 0; max-width: 78ch; text-align: right; }
+
+/* Aucune simulation ouverte : le rail DISPARAIT au lieu de rester grise.
+   Des onglets eteints sont une promesse qu on ne tient pas - ils occupent la
+   place et invitent au clic. Sans dossier ouvert, il n y a pas de montage :
+   l en-tete se reduit a la marque et aux actions. */
+body.sans-simulation .onglets { display: none; }
+.biblio-barre .bouton { padding: 5px 10px; }
+#btn-vider-filtres { padding: 5px 8px; }
+
+.entete__dossier--vide { color: var(--warning-text); border-color: var(--warning-accent); }
 
 /* Le tableau. Dense, en chiffres tabulaires, avec sa tête figée : c'est un
    tableur, et il doit s'en tenir aux codes du tableur. */
@@ -1201,7 +1230,13 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 .biblio-table tbody tr:hover .biblio-action,
 .biblio-table tbody tr:focus-within .biblio-action { opacity: 1; }
 .biblio-action:hover { background: var(--info-bg); color: var(--info-text); }
-.biblio-actions .bouton--supprimer { opacity: 0; transition: opacity 0.12s ease; }
+/* `inline-grid` et non `grid` : en bloc, la croix descend a la ligne sous les
+   quatre libelles et double la hauteur de chaque rangee du tableau. */
+.biblio-actions .bouton--supprimer {
+  display: inline-grid; vertical-align: middle;
+  width: 22px; height: 22px; font-size: 14px; margin-left: 2px;
+  opacity: 0; transition: opacity 0.12s ease;
+}
 .biblio-table tbody tr:hover .bouton--supprimer,
 .biblio-table tbody tr:focus-within .bouton--supprimer { opacity: 1; }
 @media (hover: none) {

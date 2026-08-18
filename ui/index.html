@@ -70,13 +70,10 @@
 
       <div class="entete__actions">
         <span id="etat-calcul" class="pastille pastille--ok">à jour</span>
-        <!-- La saisie survit au rechargement : il faut donc un moyen de revenir
-             a l'operation de depart, sans quoi une simulation abandonnee
-             resterait en travers du chemin a chaque ouverture. -->
+        <!-- « Réinitialiser » a disparu avec la simulation unique : on ne repart
+             plus d'une opération de démonstration, on ferme le dossier ou on en
+             ouvre un autre depuis la bibliothèque. -->
         <div class="entete__groupe">
-          <button type="button" id="btn-reinitialiser" class="bouton bouton--discret"
-                  title="Effacer la saisie mémorisée et repartir de l'opération de démonstration">Réinitialiser</button>
-          <span class="entete__filet" aria-hidden="true"></span>
           <button type="button" id="btn-theme" class="bouton bouton--icone" aria-label="Changer de thème">☀</button>
         </div>
       </div>
@@ -90,62 +87,51 @@
          travaille. On y accède par le nom de dossier, dans la marque. -->
     <main class="ecran" id="ecran-simulations" role="tabpanel" hidden>
       <div class="biblio">
-        <div class="biblio__tete">
-          <div>
-            <h2 class="biblio__titre">Simulations</h2>
-            <p class="biblio__resume" id="biblio-resume"></p>
-          </div>
-          <div class="biblio__actions">
-            <button type="button" class="bouton bouton--discret" id="btn-importer-sim"
-              title="Ouvrir un fichier de simulation">Importer</button>
-            <button type="button" class="bouton bouton--principal" id="btn-nouvelle-sim">
-              Nouvelle simulation</button>
-            <input type="file" id="fichier-import" accept="application/json,.json" hidden />
-          </div>
-        </div>
-
-        <!-- Barre de filtres. La recherche porte sur le numéro, le nom et la
-             commune ; les listes déroulantes sont peuplées depuis les fiches
-             elles-mêmes, pour ne proposer que des valeurs qui existent. -->
-        <div class="biblio-filtres">
+        <!-- UN seul bandeau : titre, recherche, filtres et actions sur la même
+             ligne. Les listes déroulantes se passent d'étiquette, leur première
+             option la porte (« Tous les produits ») : deux rangées de libellés
+             au-dessus de quatre menus coûtaient plus de hauteur que les menus
+             eux-mêmes. Les fiches peuplent les options, si bien qu'on ne
+             propose jamais une valeur absente du parc. -->
+        <div class="biblio-barre">
+          <h2 class="biblio__titre">Simulations</h2>
+          <span class="biblio-compte" id="biblio-compte"></span>
           <label class="biblio__recherche">
             <span class="biblio__loupe" aria-hidden="true">⌕</span>
             <input type="search" id="recherche-simulation"
               placeholder="N°, nom, commune…" aria-label="Rechercher une simulation" />
           </label>
-          <label class="biblio-filtre">
-            <span>Produit</span>
-            <select id="filtre-produit"><option value="">Tous</option></select>
-          </label>
-          <label class="biblio-filtre">
-            <span>Type</span>
-            <select id="filtre-type"><option value="">Tous</option></select>
-          </label>
-          <label class="biblio-filtre">
-            <span>Zone</span>
-            <select id="filtre-zone"><option value="">Toutes</option></select>
-          </label>
-          <label class="biblio-filtre">
-            <span>Commune</span>
-            <select id="filtre-commune"><option value="">Toutes</option></select>
-          </label>
-          <button type="button" class="bouton bouton--discret" id="btn-vider-filtres">Réinitialiser</button>
-          <span class="biblio-filtres__compte" id="biblio-compte"></span>
+          <select id="filtre-produit" aria-label="Filtrer par produit">
+            <option value="">Tous les produits</option></select>
+          <button type="button" class="bouton bouton--discret" id="btn-vider-filtres"
+            title="Effacer la recherche et le filtre">Réinitialiser</button>
+          <span class="biblio-barre__separateur" aria-hidden="true"></span>
+          <button type="button" class="bouton bouton--principal" id="btn-nouvelle-sim">
+            Nouvelle simulation</button>
+          <button type="button" class="bouton bouton--discret" id="btn-fermer-sim"
+            title="Se détacher de la simulation ouverte">Fermer</button>
+          <input type="file" id="fichier-import" accept="application/json,.json" hidden />
         </div>
 
         <div id="biblio-liste"></div>
-        <div class="biblio-pied" id="biblio-pied" hidden>
-          <button type="button" class="bouton bouton--discret" id="btn-page-prec">‹ Précédent</button>
-          <span id="biblio-page"></span>
-          <button type="button" class="bouton bouton--discret" id="btn-page-suiv">Suivant ›</button>
-          <label class="biblio-filtre">
-            <span>Par page</span>
-            <select id="taille-page">
-              <option value="50">50</option>
-              <option value="100" selected>100</option>
-              <option value="250">250</option>
-            </select>
-          </label>
+
+        <!-- Pied : pagination à gauche, et le poids du parc à droite. Ce poids
+             est une information, pas une commande : il n'a rien à faire dans le
+             bandeau d'actions. -->
+        <div class="biblio-pied">
+          <span class="biblio-pied__pages" id="biblio-pagination" hidden>
+            <button type="button" class="bouton bouton--discret" id="btn-page-prec">‹ Précédent</button>
+            <span id="biblio-page"></span>
+            <button type="button" class="bouton bouton--discret" id="btn-page-suiv">Suivant ›</button>
+            <label class="biblio-parpage">
+              <span>Par page</span>
+              <select id="taille-page">
+                <option value="50">50</option>
+                <option value="100" selected>100</option>
+                <option value="250">250</option>
+              </select>
+            </label>
+          </span>
         </div>
       </div>
     </main>

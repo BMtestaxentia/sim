@@ -1784,6 +1784,77 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
 
 .montant--negatif { color: var(--danger-text); }
 
+/* ---------- Page « Comment les calculs marchent » ---------- */
+
+.calc-lecture { margin-top: 10px; }
+.calc-lecture__aide { margin: 8px 0 0; font-size: 11.5px; color: var(--text-tertiary); }
+
+.calc-chapitre + .calc-chapitre { margin-top: 12px; }
+.calc-etapes { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
+
+/* Une etape = un rang numerote a gauche, le texte a droite. Le fil vertical
+   qui relie les rangs dit que ces calculs s'ENCHAINENT : la sortie de l'un est
+   l'entree du suivant, ce qu'une simple liste ne montrerait pas. */
+.calc-etape { display: grid; grid-template-columns: 30px 1fr; gap: 12px; position: relative; }
+.calc-etape:not(:last-child)::before {
+  content: ''; position: absolute; left: 14px; top: 30px; bottom: -2px; width: 1px;
+  background: var(--border-color);
+}
+.calc-etape__rang {
+  width: 26px; height: 26px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; margin-top: 2px;
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+  background: var(--bg-tertiary); color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+.calc-etape__corps { min-width: 0; padding-bottom: 14px; }
+.calc-etape__corps h4 {
+  margin: 4px 0 5px; font-size: 13px; font-weight: 700; color: var(--text-primary);
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.calc-etape__texte { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--text-secondary); }
+
+/* Identifiant de regle du dictionnaire : c'est la reference qu'on cite en
+   reunion comme dans un commit, elle doit se reperer d'un coup d'oeil. */
+.calc-regle {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+  padding: 2px 6px; border-radius: var(--radius-pill);
+  background: var(--info-bg); color: var(--info-text);
+  font-family: var(--police-nombre);
+}
+
+/* La formule elle-meme : en chiffres tabulaires, detachee du texte, et
+   defilante plutot que coupee - une formule tronquee ne veut plus rien dire. */
+.calc-formule {
+  margin: 7px 0 0; padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--bg-tertiary); border-left: 2px solid var(--info-accent);
+  font-family: var(--police-nombre); font-size: 11.5px; line-height: 1.6;
+  color: var(--text-primary); overflow-x: auto; white-space: pre-wrap;
+}
+.calc-source {
+  margin: 6px 0 0; font-size: 11px; color: var(--text-tertiary);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.calc-source code {
+  font-family: var(--police-nombre); font-size: 11px;
+  background: var(--bg-tertiary); padding: 2px 6px; border-radius: var(--radius-xs);
+  color: var(--info-text);
+}
+.calc-source__ou { font-family: var(--police-nombre); font-size: 10.5px; }
+/* Piege : ce qui surprend si on ne le sait pas. Ambre, comme toute mise en
+   garde de l'application. */
+.calc-piege {
+  margin: 7px 0 0; padding: 7px 10px; border-radius: var(--radius-sm);
+  background: var(--warning-bg); color: var(--warning-text);
+  font-size: 11.5px; line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .calc-etape { grid-template-columns: 22px 1fr; gap: 9px; }
+  .calc-etape:not(:last-child)::before { left: 10px; }
+  .calc-etape__rang { width: 20px; height: 20px; font-size: 10px; }
+}
+
 /* ---------- Barres de defilement ---------- */
 * { scrollbar-width: thin; scrollbar-color: var(--border-color-strong) transparent; }
 ::-webkit-scrollbar { width: 9px; height: 9px; }

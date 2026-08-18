@@ -1905,6 +1905,29 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
   .calc-fiche { grid-template-columns: 1fr; gap: 1px 0; }
   .calc-fiche dd { margin-bottom: 5px; }
 }
+/* D ou viennent les valeurs : une ligne par terme de la formule, avec le lieu
+   exact ou on le saisit ou le regle. Deux colonnes, le terme a gauche en gras
+   discret, sa provenance a droite - c est un glossaire, pas un tableau de
+   chiffres, et il se lit de haut en bas. */
+.calc-entrees {
+  margin: 8px 0 0; padding: 8px 11px; border-radius: var(--radius-sm);
+  background: var(--bg-tertiary); border: 1px dashed var(--border-color-strong);
+}
+.calc-entrees__titre {
+  margin: 0 0 5px; font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-tertiary);
+}
+.calc-entrees dl {
+  margin: 0; display: grid; grid-template-columns: minmax(120px, 33%) 1fr;
+  gap: 3px 12px; font-size: 11.5px; line-height: 1.5;
+}
+.calc-entrees dt { font-weight: 650; color: var(--text-primary); }
+.calc-entrees dd { margin: 0; color: var(--text-secondary); min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  .calc-entrees dl { grid-template-columns: 1fr; gap: 0; }
+  .calc-entrees dd { margin-bottom: 5px; }
+}
+
 /* Piege : ce qui surprend si on ne le sait pas. Ambre, comme toute mise en
    garde de l'application. */
 .calc-piege {
@@ -11505,1413 +11528,1237 @@ let lectureCalculs = (() => {
  */
 const MODELE_CALCULS = [
   {
-    id: 'chaine',
-    titre: 'La chaîne de calcul',
-    accroche:
-      'Une simulation se calcule toujours dans le même ordre, et cet ordre n’est pas ' +
-      'négociable : chaque étape a besoin du résultat de la précédente. C’est pourquoi une ' +
-      'surface mal saisie ne fausse pas seulement les surfaces, mais tout ce qui suit.',
+    id: "chaine",
+    titre: "La chaîne de calcul",
+    accroche: "Une simulation se calcule toujours dans le même ordre, et cet ordre n’est pas négociable : chaque étape a besoin du résultat de la précédente. C’est pourquoi une surface mal saisie ne fausse pas seulement les surfaces, mais tout ce qui suit.",
     etapes: [
       {
-        titre: 'Le paramétrage se fige',
-        regles: ['R-PARAM'],
-        simple:
-          'Avant tout calcul, le profil choisi vient se poser sur les barèmes du dépôt. Une ' +
-          'valeur laissée vide dans le profil garde celle du barème ; une valeur saisie la ' +
-          'remplace. Le calcul travaille ensuite sur ce barème effectif et sur lui seul, si ' +
-          'bien qu’aucune partie du moteur ne peut aller chercher une autre version du même ' +
-          'chiffre.',
-        formule: 'barème effectif = barème du dépôt, recouvert par les valeurs du profil',
+        titre: "Le paramétrage se fige",
+        regles: ["R-PARAM"],
+        simple: "Rien n’est calculé tant que le jeu de valeurs de référence n’est pas arrêté. Le moteur part des barèmes livrés avec l’outil (loyers plafonds par zone, taux de TVA, marges de prêts, charges d’exploitation), puis il pose par-dessus les valeurs du profil que vous avez choisi dans l’écran Opération. Une case laissée vide dans le profil ne remplace rien : c’est la valeur du barème qui sert. Une case remplie remplace celle du barème, et elle seule. Le résultat de cette superposition s’appelle le barème effectif, et c’est le seul que le calcul verra ensuite : aucun module ne peut aller chercher une autre version du même chiffre ailleurs. C’est ce qui garantit que deux écrans qui affichent « taux de TVA » affichent bien le même.",
+        formule: "valeur retenue = SI(profil renseigné ; valeur du profil ; valeur du barème)\n\nExemple, taux de TVA du PLAI :\n  barème du dépôt ............ 5,50 %\n  profil AXENTIA HER 2027 .... (vide)\n  valeur retenue ............. 5,50 %\n\nExemple, Livret A de référence :\n  barème du dépôt ............ 2,40 %\n  profil AXENTIA HER 2027 .... 1,50 %\n  valeur retenue ............. 1,50 %",
         support: {
-          fonction: 'fusionner',
+          fonction: "fusionner",
           signature: "fusionner(base, surcharge) → nouvel objet (n’altère jamais ses arguments)",
           code: "baremes = fusionner(referentiels.baremes, entrees.parametrage?.baremes)",
           referentiel: "referentiels/baremes_her_2027.json = base · entrees.parametrage = surcharge",
           alimente: "tous les modules : chacun ne voit que ce barème effectif",
           tests: "tests/parametrage.test.js",
-          source: 'src/parametrage.js:66',
-          texte:
-            'Fusion profonde du référentiel et de `entrees.parametrage`. Les objets fusionnent ' +
-            'clé à clé ; les tableaux positionnels par index, ce qui permet de ne redonner ' +
-            'qu’une zone d’un barème ; les tableaux dont tous les éléments portent un `id` sont ' +
-            'traités comme des listes, la surcharge y faisant autorité sur la composition : ' +
-            'c’est ce qui permet de supprimer un modèle de prêt. Ne mute jamais ses arguments.',
-          formule: 'baremes = fusionner(referentiels.baremes, entrees.parametrage?.baremes)',
+          source: "src/parametrage.js:66",
+          texte: "Fusion profonde du référentiel et de `entrees.parametrage`. Les objets fusionnent clé à clé ; les tableaux positionnels par index, ce qui permet de ne redonner qu’une zone d’un barème ; les tableaux dont tous les éléments portent un `id` sont traités comme des listes, la surcharge y faisant autorité sur la composition : c’est ce qui permet de supprimer un modèle de prêt. Ne mute jamais ses arguments.",
+          formule: "baremes = fusionner(referentiels.baremes, entrees.parametrage?.baremes)"
         },
-        piege:
-          'Une valeur vide ne surcharge rien, elle rend la valeur du barème. Effacer une ' +
-          'cellule n’impose donc pas zéro : c’est le seul moyen de revenir au référentiel.',
+        piege: "Une valeur vide ne surcharge rien, elle rend la valeur du barème. Effacer une cellule n’impose donc pas zéro : c’est le seul moyen de revenir au référentiel.",
+        entrees: [
+          [
+            "Barème du dépôt",
+            "referentiels/baremes_her_2027.json, versionné dans le dépôt, jamais modifié depuis l’écran"
+          ],
+          [
+            "Profil de paramètres",
+            "écran Opération > Profil de paramètres, réglé dans Paramètres > Admin"
+          ],
+          [
+            "Valeur vide",
+            "une case effacée revient au barème : c’est le seul moyen d’annuler une surcharge"
+          ]
+        ]
       },
       {
-        titre: 'Le calendrier se déduit',
-        regles: ['R-AMT-3'],
-        simple:
-          'La livraison se déduit du début des travaux décalé de la durée de chantier, et la ' +
-          'mise en location tombe le lendemain de la livraison. Chacune de ces deux dates peut ' +
-          'être saisie pour figer un calendrier contractuel, une VEFA par exemple ; l’écran ' +
-          'distingue alors ce qui a été saisi de ce qui a été calculé.',
-        formule:
-          'livraison = début des travaux + durée de chantier (en mois)\n' +
-          'mise en location = livraison + 1 jour\n' +
-          'année de mise en location = année de cette date',
+        titre: "Le calendrier se déduit",
+        regles: ["R-AMT-3"],
+        simple: "Trois dates commandent toute la simulation, et deux d’entre elles se déduisent de la troisième. Vous saisissez le début des travaux et la durée du chantier en mois. La livraison est le début des travaux décalé d’autant de mois. La mise en location tombe le lendemain de la livraison. L’année de mise en location est simplement l’année de cette date, et c’est elle qui commande trois choses à la fois : la première année du compte d’exploitation, la première échéance des prêts, et le point de départ des 25 ans d’exonération de taxe foncière. Vous pouvez saisir directement la livraison ou la mise en location pour figer un calendrier contractuel, une VEFA par exemple : l’écran grise alors les dates qu’il a calculées et laisse en clair celles que vous avez imposées.",
+        formule: "livraison = début des travaux + durée du chantier (en mois)\nmise en location = livraison + 1 jour\nannée de mise en location = ANNEE(mise en location)\n\nExemple :\n  début des travaux .......... 01/01/2026\n  durée du chantier .......... 24 mois\n  livraison .................. 01/01/2028\n  mise en location ........... 02/01/2028\n  année de mise en location .. 2028",
         support: {
-          fonction: 'calendrierOperation',
+          fonction: "calendrierOperation",
           signature: "calendrierOperation(entrees) → { date_livraison, date_mise_en_location, annee_mise_en_location, duree_chantier_mois, origine }",
           code: "date_livraison = decalerMois(date_debut_travaux, duree_chantier_mois) ; date_mise_en_location = livraison + 1 jour",
           referentiel: "aucun : tout vient de entrees.dates",
           alimente: "annee_mise_en_location → anneePremiereEcheance, compteExploitation, exonerationTFPB",
           tests: "tests/moteur.test.js",
-          source: 'src/calendrier.js:83',
-          texte:
-            'Retourne aussi `origine`, un dictionnaire date → "saisie" | "calcule", que ' +
-            'l’interface lit pour griser les dates dérivées sans réimplémenter la règle. Lève ' +
-            'si ni l’année de mise en location, ni une date de mise en location, ni le couple ' +
-            'début de travaux + durée de chantier ne sont renseignés.',
+          source: "src/calendrier.js:83",
+          texte: "Retourne aussi `origine`, un dictionnaire date → \"saisie\" | \"calcule\", que l’interface lit pour griser les dates dérivées sans réimplémenter la règle. Lève si ni l’année de mise en location, ni une date de mise en location, ni le couple début de travaux + durée de chantier ne sont renseignés."
         },
-        piege:
-          'L’année de mise en location commande l’entrée en exploitation, la première échéance ' +
-          'des prêts et le décompte de l’exonération de taxe foncière. La décaler d’un an ' +
-          'décale trois choses à la fois.',
-      },
-    ],
+        piege: "L’année de mise en location commande l’entrée en exploitation, la première échéance des prêts et le décompte de l’exonération de taxe foncière. La décaler d’un an décale trois choses à la fois.",
+        entrees: [
+          ["Début des travaux", "écran Opération > Calendrier, saisi"],
+          ["Durée du chantier (mois)", "écran Opération > Calendrier, saisi"],
+          ["Livraison", "calculé, ou saisi pour figer une VEFA"],
+          ["Mise en location", "calculé, ou saisi"],
+          [
+            "Durée de simulation (ans)",
+            "écran Opération > Calendrier, saisi : le nombre d’années du compte d’exploitation"
+          ]
+        ]
+      }
+    ]
   },
   {
-    id: 'surfaces',
-    titre: 'Surfaces et loyers',
-    accroche:
-      'Tout part de la surface utile. Elle sert deux fois : à calculer le loyer plafond, et à ' +
-      'partager entre les tranches tout ce qui est commun à l’opération. Une surface fausse ' +
-      'fausse donc à la fois les recettes et la répartition des dépenses.',
+    id: "surfaces",
+    titre: "Surfaces et loyers",
+    accroche: "Tout part de la surface utile. Elle sert deux fois : à calculer le loyer plafond, et à partager entre les tranches tout ce qui est commun à l’opération. Une surface fausse fausse donc à la fois les recettes et la répartition des dépenses.",
     etapes: [
       {
-        titre: 'La surface utile',
-        regles: ['R-SURF-1'],
-        simple:
-          'La surface utile vaut la surface habitable augmentée de la moitié des surfaces ' +
-          'annexes. Un balcon ou une cave comptent, mais pour moitié seulement : ils ne se ' +
-          'louent pas comme une pièce à vivre. On peut aussi imposer directement la surface ' +
-          'utile portée à la convention APL, auquel cas le moteur la reprend sans rien ' +
-          'recalculer.',
-        formule: 'surface utile = surface habitable + 0,5 × surfaces annexes',
+        titre: "La surface utile",
+        regles: ["R-SURF-1"],
+        simple: "La surface utile est la surface sur laquelle le loyer plafond se calcule. Ce n’est pas la surface habitable : la réglementation y ajoute la moitié des surfaces annexes (balcons, celliers, caves, garages dans la limite réglementaire), parce qu’une annexe a de la valeur d’usage mais moins qu’une pièce à vivre. Le coefficient de 0,5 n’est pas un choix de l’outil, c’est la règle. Le résultat est arrondi à deux décimales. Si vous connaissez la surface utile exacte de la convention et voulez l’imposer, vous pouvez la forcer : elle court-circuite alors tout le calcul.",
+        formule: "surface utile = surface habitable + 0,5 × surfaces annexes\n\nExemple, un T3 :\n  surface habitable .......... 65,00 m²\n  balcon ..................... 8,00 m²\n  cave ....................... 4,00 m²\n  surfaces annexes ........... 12,00 m²\n  surface utile .............. 65,00 + 0,5 × 12,00 = 71,00 m²",
         support: {
-          fonction: 'surfaceUtile',
+          fonction: "surfaceUtile",
           signature: "surfaceUtile({ shab_m2, surfaces_annexes_m2 = 0, su_forcee_m2, arrondir = true }, referentiels) → m² arrondis à 2 décimales",
           code: "su = shab_m2 + k * surfaces_annexes_m2   (su_forcee_m2 court-circuite tout)",
           referentiel: "constantes_reglementaires.coefficient_surface_annexes.valeur → k, soit 0,5",
           alimente: "coefficientStructure, quotesPartsSU, loyerProduit",
           tests: "tests/loyers.test.js",
-          source: 'src/loyers.js:35',
-          texte:
-            'Le coefficient 0,5 vient du référentiel (`constantes_reglementaires.' +
-            'coefficient_surface_annexes.valeur`), il n’est pas codé en dur. `su_forcee_m2` ' +
-            'court-circuite le calcul dès qu’elle n’est ni `undefined` ni `null`, donc une ' +
-            'surface forcée à 0 est retenue et donne une surface utile nulle. L’option ' +
-            '`arrondir: false` sert à sommer les lots sans dérive.',
+          source: "src/loyers.js:35",
+          texte: "Le coefficient 0,5 vient du référentiel (`constantes_reglementaires.coefficient_surface_annexes.valeur`), il n’est pas codé en dur. `su_forcee_m2` court-circuite le calcul dès qu’elle n’est ni `undefined` ni `null`, donc une surface forcée à 0 est retenue et donne une surface utile nulle. L’option `arrondir: false` sert à sommer les lots sans dérive."
         },
-        piege:
-          'L’arrondi à deux décimales se fait à la TRANCHE, jamais au lot : six lots de ' +
-          '70,005 m² arrondis un à un donneraient 420,06 m² au lieu de 420 m².',
+        piege: "L’arrondi à deux décimales se fait à la TRANCHE, jamais au lot : six lots de 70,005 m² arrondis un à un donneraient 420,06 m² au lieu de 420 m².",
+        entrees: [
+          ["Surface habitable (SHAB)", "écran Programme, saisie lot par lot"],
+          ["Surfaces annexes", "écran Programme, saisies lot par lot"],
+          [
+            "Coefficient 0,5",
+            "Paramètres > Constantes réglementaires > coefficient_surface_annexes (règle réglementaire, à ne pas modifier sans raison)"
+          ]
+        ]
       },
       {
-        titre: 'Le coefficient de structure',
-        regles: ['R-SURF-2'],
-        simple:
-          'Le coefficient de structure corrige le loyer plafond selon la taille moyenne des ' +
-          'logements. Beaucoup de petits logements coûtent plus cher au mètre carré, car il ' +
-          'faut autant de cuisines, de salles d’eau et de portes palières : le coefficient ' +
-          'monte et autorise un loyer au mètre carré plus élevé. De grands logements le font ' +
-          'au contraire baisser.',
-        formule:
-          'coefficient = 0,77 × (1 + 20 × nombre de logements ÷ surface utile)\n' +
-          'en foyer, le facteur passe de 20 à 38 (chambres bien plus petites)',
+        titre: "Le coefficient de structure",
+        regles: ["R-SURF-2"],
+        simple: "Le coefficient de structure corrige le loyer plafond selon la taille moyenne des logements. Deux opérations de même surface totale n’ont pas le même coût de construction selon qu’elles font dix grands logements ou vingt petits : plus il y a de logements pour une même surface, plus il y a de cuisines, de salles d’eau, de portes palières. Le coefficient monte donc quand les logements sont petits, et il descend quand ils sont grands. Il se calcule sur la tranche entière, jamais lot par lot. Un foyer utilise un facteur de 38 au lieu de 20, parce que ses chambres sont bien plus petites qu’un logement familial. Le résultat est arrondi à quatre décimales.",
+        formule: "coefficient de structure = 0,77 × (1 + 20 × nombre de logements ÷ surface utile)\nen foyer, le 20 devient 38\n\nExemple A, 20 logements pour 1 200 m² (60 m² moyens) :\n  0,77 × (1 + 20 × 20 ÷ 1 200) = 0,77 × 1,3333 = 1,0267\n\nExemple B, 10 logements pour 1 200 m² (120 m² moyens) :\n  0,77 × (1 + 20 × 10 ÷ 1 200) = 0,77 × 1,1667 = 0,8983\n\nÀ surface identique, les petits logements portent un loyer au m² supérieur de 14 %.",
         support: {
-          fonction: 'coefficientStructure',
+          fonction: "coefficientStructure",
           signature: "coefficientStructure({ nb_logements, su_m2, foyer = false, arrondir = true }, referentiels) → coefficient arrondi à 4 décimales",
           code: "cs = cfg.metropole_habitat.base * (1 + (facteur * nb_logements) / su_m2)   avec facteur = foyer ? cfg.foyers.facteur_nl : cfg.metropole_habitat.facteur_nl",
           referentiel: "constantes_reglementaires.coefficient_structure.metropole_habitat.base (0,77) et .facteur_nl (20) · .foyers.facteur_nl (38)",
           alimente: "loyerProduit → loyer plafond → recettes du compte d’exploitation",
           tests: "tests/loyers.test.js",
-          source: 'src/loyers.js:64',
-          texte:
-            'Base et facteurs viennent de `constantes_reglementaires.coefficient_structure`. ' +
-            'En foyer, seul le FACTEUR change : la base 0,77 reste celle de la métropole, le ' +
-            'référentiel ne donnant pas de base propre aux foyers. Arrondi à 4 décimales. ' +
-            'Garde-fou : une surface utile nulle ou négative renvoie 0.',
+          source: "src/loyers.js:64",
+          texte: "Base et facteurs viennent de `constantes_reglementaires.coefficient_structure`. En foyer, seul le FACTEUR change : la base 0,77 reste celle de la métropole, le référentiel ne donnant pas de base propre aux foyers. Arrondi à 4 décimales. Garde-fou : une surface utile nulle ou négative renvoie 0."
         },
-        piege:
-          'Le coefficient se calcule sur la TRANCHE entière, pas ligne à ligne : le calculer ' +
-          'par lot donnerait des coefficients différents selon le découpage de saisie, donc ' +
-          'des loyers faux. Et si la surface utile est nulle, le coefficient vaut 0, ce qui ' +
-          'annule le loyer sans aucune alerte.',
+        piege: "Le coefficient se calcule sur la TRANCHE entière, pas ligne à ligne : le calculer par lot donnerait des coefficients différents selon le découpage de saisie, donc des loyers faux. Et si la surface utile est nulle, le coefficient vaut 0, ce qui annule le loyer sans aucune alerte.",
+        entrees: [
+          [
+            "Nombre de logements",
+            "écran Programme, somme des lots de la tranche"
+          ],
+          [
+            "Surface utile",
+            "calculée à l’étape précédente, somme sur la tranche"
+          ],
+          [
+            "Base 0,77 et facteur 20",
+            "Paramètres > Constantes réglementaires > coefficient_structure.metropole_habitat"
+          ],
+          [
+            "Facteur foyer 38",
+            "Paramètres > Constantes réglementaires > coefficient_structure.foyers"
+          ]
+        ]
       },
       {
-        titre: 'La clé de répartition entre tranches',
-        regles: ['R-SURF-3', 'R-TVA-3'],
-        simple:
-          'Quand une opération mêle plusieurs produits dans le même immeuble, il faut une clé ' +
-          'pour partager tout ce qui est commun : prix de revient, subventions, charge ' +
-          'foncière. Cette clé est la part de surface utile de chaque tranche. Une tranche qui ' +
-          'représente un tiers des surfaces supporte un tiers des dépenses partagées.',
-        formule: 'part d’une tranche = sa surface utile ÷ surface utile totale',
+        titre: "La clé de répartition entre tranches",
+        regles: ["R-SURF-3", "R-TVA-3"],
+        simple: "Une opération porte souvent plusieurs produits : du PLAI, du PLUS, du PLS. Or beaucoup de dépenses se saisissent globalement, pour l’opération entière : le terrain, les honoraires d’architecte, les frais financiers. Il faut donc une clé pour dire quelle part revient à chaque tranche, et cette clé est la surface utile. Une tranche qui représente 30 % de la surface utile de l’opération porte 30 % de chaque dépense commune. La même clé sert aussi à répartir les subventions non affectées et à redresser les besoins de financement, ce qui garantit qu’une opération ne se répartit pas d’une façon dans un écran et d’une autre ailleurs.",
+        formule: "quote-part d’une tranche = surface utile de la tranche ÷ surface utile totale\n\nExemple, opération de 3 000 m² :\n  PLAI ....  600 m² → 600 ÷ 3 000 = 20,0 %\n  PLUS .... 1 800 m² → 1 800 ÷ 3 000 = 60,0 %\n  PLS .....  600 m² → 600 ÷ 3 000 = 20,0 %\n                                    ────────\n                                     100,0 %\n\nUn honoraire global de 150 000 € se répartit alors en 30 000 / 90 000 / 30 000 €.",
         support: {
-          fonction: 'quotesPartsSU',
+          fonction: "quotesPartsSU",
           signature: "quotesPartsSU(su_par_produit) → { code_produit: part }, somme = 1",
           code: "qp[code] = total > 0 ? su / total : 0",
           referentiel: "aucun : clé dérivée des seules surfaces saisies",
           alimente: "prixDeRevientVentile, agregerSubventions, redresserBesoins, compteExploitation",
           tests: "tests/loyers.test.js",
-          source: 'src/loyers.js:78',
-          texte:
-            'Fractions exactes, aucun arrondi : la conservation de la somme est assurée plus ' +
-            'tard par `arrondirEnConservantLaSomme`. Si le total est nul ou négatif, toutes ' +
-            'les parts valent 0 et les montants ventilés tombent à zéro silencieusement.',
+          source: "src/loyers.js:78",
+          texte: "Fractions exactes, aucun arrondi : la conservation de la somme est assurée plus tard par `arrondirEnConservantLaSomme`. Si le total est nul ou négatif, toutes les parts valent 0 et les montants ventilés tombent à zéro silencieusement."
         },
-        piege:
-          'Clé UNIQUE pour toute l’opération, décidée le 05/08/2026 : « on ventile tout en ' +
-          'surface utile ». Il n’existe pas de clé par chapitre ni par poste.',
+        piege: "Clé UNIQUE pour toute l’opération, décidée le 05/08/2026 : « on ventile tout en surface utile ». Il n’existe pas de clé par chapitre ni par poste.",
+        entrees: [
+          ["Surface utile par tranche", "calculée depuis l’écran Programme"],
+          ["Surface utile totale", "somme des tranches"]
+        ]
       },
       {
-        titre: 'Du plafond de zone au loyer pratiqué',
-        regles: ['R-LOYER-1', 'R-LOYER-2', 'R-LOYER-5'],
-        simple:
-          'Le loyer part du plafond de zone du produit, auquel s’ajoute la marge locale ' +
-          'accordée par le département. Ce loyer de base, multiplié par le coefficient de ' +
-          'structure, donne le loyer plafond de l’opération. Les majorations accordées s’y ' +
-          'appliquent enfin pour obtenir le loyer réellement pratiqué, qui devient la recette ' +
-          'annuelle une fois multiplié par la surface utile et par douze mois.',
-        formule:
-          'loyer de base   = plafond de zone × coefficient de millésime + marge locale\n' +
-          'loyer plafond   = coefficient de structure × loyer de base\n' +
-          'loyer pratiqué  = loyer plafond × (1 + majorations plafonnées)\n' +
-          'recette annuelle = 12 × surface utile × loyer pratiqué',
+        titre: "Du plafond de zone au loyer pratiqué",
+        regles: ["R-LOYER-1", "R-LOYER-2", "R-LOYER-5"],
+        simple: "Le loyer se construit en quatre temps, et chaque temps a sa source. On part du plafond de zone : un montant en euros par m² de surface utile et par mois, fixé par arrêté et propre au couple produit/zone. On lui ajoute, s’il y en a une, la marge locale de majoration, plafonnée. On multiplie le tout par le coefficient de structure de la tranche, ce qui donne le loyer plafond réellement applicable. Enfin, vous pouvez pratiquer un loyer inférieur au plafond : c’est le loyer de sortie. Le loyer annuel qui alimente le compte d’exploitation est ce loyer de sortie multiplié par la surface utile et par douze mois.",
+        formule: "loyer de base ....... = plafond de zone × coefficient de millésime + marge locale\nloyer plafond ....... = loyer de base × coefficient de structure\nloyer pratiqué ...... = SI(loyer de sortie saisi ; loyer de sortie ; loyer plafond)\nloyer annuel ........ = loyer pratiqué × surface utile × 12\n\nExemple, PLUS en zone 2, 20 logements, 1 200 m² de SU :\n  plafond de zone ............ 6,49 €/m²/mois\n  marge locale ............... 0,00\n  loyer de base .............. 6,49 €/m²/mois\n  coefficient de structure ... 1,0267\n  loyer plafond .............. 6,49 × 1,0267 = 6,66 €/m²/mois\n  loyer pratiqué ............. 6,66 €/m²/mois\n  loyer annuel ............... 6,66 × 1 200 × 12 = 95 904 €",
         support: {
-          fonction: 'loyerDeBase, loyerProduit',
+          fonction: "loyerDeBase, loyerProduit",
           signature: "loyerProduit({ code_produit, su_m2, nb_logements, zones, marge_locale_eur_m2, marge_majoration, loyer_sortie_force, foyer, coefficient_millesime }, referentiels) → { cs, loyer_base_eur_m2, loyer_max_base_eur_m2, loyer_pratique_eur_m2, loyer_mensuel_eur, loyer_annuel_eur }",
           code: "loyer = loyerMaxZone(code_produit, zones, referentiels) * coefficient_millesime + marge_locale_eur_m2",
           referentiel: "baremes_loyers.PRODUIT.ZONE · constantes_reglementaires.MAJORATION du produit",
           alimente: "loyer_annuel_eur → compteExploitation (recettes)",
           tests: "tests/loyers.test.js",
-          source: 'src/loyers.js:125 et 186',
-          texte:
-            'Le zonage applicable est une propriété du PRODUIT : PLUS et PLAI se lisent en ' +
-            'zones 1/2/3, PLS et intermédiaire en zones A/B/C (`produit().zonage`). Le ' +
-            'coefficient de millésime ne porte que sur le plafond de zone, pas sur la marge ' +
-            'locale, qui est une saisie en euros du jour. Un `loyer_sortie_force` remplace le ' +
-            'loyer pratiqué et lève le drapeau `force`.',
+          source: "src/loyers.js:125 et 186",
+          texte: "Le zonage applicable est une propriété du PRODUIT : PLUS et PLAI se lisent en zones 1/2/3, PLS et intermédiaire en zones A/B/C (`produit().zonage`). Le coefficient de millésime ne porte que sur le plafond de zone, pas sur la marge locale, qui est une saisie en euros du jour. Un `loyer_sortie_force` remplace le loyer pratiqué et lève le drapeau `force`."
         },
-        piege:
-          'Trois arrondis se suivent dans cette chaîne (loyer de base, loyer plafond, loyer ' +
-          'pratiqué), si bien que la recette annuelle n’est pas exactement 12 × surface × le ' +
-          'produit exact des facteurs. L’écart se compte en quelques euros par an sur une ' +
-          'grosse tranche, et il est assumé : c’est ainsi que LEON calcule.',
+        piege: "Trois arrondis se suivent dans cette chaîne (loyer de base, loyer plafond, loyer pratiqué), si bien que la recette annuelle n’est pas exactement 12 × surface × le produit exact des facteurs. L’écart se compte en quelques euros par an sur une grosse tranche, et il est assumé : c’est ainsi que LEON calcule.",
+        entrees: [
+          [
+            "Plafond de zone",
+            "Paramètres > Loyers > loyers_max_zone_123, en €/m² SU/mois. PLUS zone 2 = 6,49 · PLAI zone 2 = 5,77"
+          ],
+          ["Zone 1/2/3", "écran Opération, déduite de la commune ou forcée"],
+          [
+            "Coefficient de millésime",
+            "Paramètres > Loyers, revalorisation si le barème est plus ancien que la mise en location"
+          ],
+          [
+            "Marge locale",
+            "écran de la tranche, saisie, plafonnée par produit"
+          ],
+          ["Coefficient de structure", "calculé à l’étape 2"],
+          [
+            "Loyer de sortie",
+            "écran de la tranche, saisi si l’on pratique sous le plafond"
+          ]
+        ]
       },
       {
-        titre: 'Les cas particuliers du loyer',
-        regles: ['R-LOYER-3', 'R-LOYER-7'],
-        simple:
-          'Le PLUS à 33 % porte une majoration réglementaire multiplicative, et non un ajout ' +
-          'de 33 centimes. En réhabilitation, aucun barème de zone ne s’applique : le plafond ' +
-          'est celui de la convention APL et le moteur le prend tel qu’il lui est donné. Les ' +
-          'garages, parkings et jardins loués séparément, enfin, ne suivent pas le loyer au ' +
-          'mètre carré : ils se louent à l’unité au prix du marché.',
-        formule:
-          'PLUS 33 %       : (plafond × millésime + marge locale) × 1,33\n' +
-          'réhabilitation  : plafond conventionnel saisi, coefficient de structure ignoré\n' +
-          'annexes louées à part : nombre × loyer mensuel unitaire × 12',
+        titre: "Les cas particuliers du loyer",
+        regles: ["R-LOYER-3", "R-LOYER-7"],
+        simple: "Deux situations échappent au barème de zone. La réhabilitation d’abord : son plafond n’est pas celui du logement neuf, c’est celui inscrit dans la convention APL en vigueur, éventuellement majoré de l’impact des travaux. Le moteur prend donc ce plafond tel que vous le saisissez et n’applique aucun coefficient de structure — il le fige à 1 — parce qu’il n’y a pas lieu de corriger d’une taille de logement un loyer déjà négocié. Les annexes ensuite : garages et stationnements peuvent être loués à part, pour un montant forfaitaire mensuel qui ne dépend ni de la surface ni du coefficient. Ces loyers-là s’ajoutent aux recettes sans passer par le calcul au m².",
+        formule: "En réhabilitation :\n  loyer plafond = plafond de la convention APL (saisi tel quel)\n  coefficient de structure = 1 (neutralisé)\n\nAnnexes louées séparément :\n  recette annexes = Σ (nombre × loyer mensuel unitaire × 12)\n\nExemple :\n  12 garages × 45 €/mois × 12 = 6 480 €/an",
         support: {
-          fonction: 'loyerProduit (branche loyer_par_convention), loyerAnnexesSeparees',
+          fonction: "loyerProduit (branche loyer_par_convention), loyerAnnexesSeparees",
           signature: "loyerProduit(...) quand le produit porte loyer_par_convention → cs figé à 1 · loyerAnnexesSeparees(annexes) → euros annuels",
           code: "plafond = arrondiLoyer(loyer_plafond_convention_eur_m2 ?? 0) ; pratique = arrondiLoyer(loyer_sortie_force ?? plafond)",
           referentiel: "produits.js → drapeau loyer_par_convention (REHAB) ; aucun barème de zone n’est lu",
           alimente: "compteExploitation (recettes), au même titre qu’un loyer barémé",
           tests: "tests/loyers.test.js",
-          source: 'src/loyers.js:186 et 256',
-          texte:
-            'La majoration PLUS 33 % s’applique APRÈS l’ajout de la marge locale : elle ' +
-            'multiplie donc aussi la marge. Arbitrage I-6 : ×1,33 partout, jamais +0,33. En ' +
-            'branche conventionnelle, `marge_majoration` et `coefficient_millesime` sont ' +
-            'ignorés et le coefficient de structure est forcé à 1.',
+          source: "src/loyers.js:186 et 256",
+          texte: "La majoration PLUS 33 % s’applique APRÈS l’ajout de la marge locale : elle multiplie donc aussi la marge. Arbitrage I-6 : ×1,33 partout, jamais +0,33. En branche conventionnelle, `marge_majoration` et `coefficient_millesime` sont ignorés et le coefficient de structure est forcé à 1."
         },
-        piege:
-          'Une réhabilitation dont le plafond de convention n’est pas saisi produit une ' +
-          'recette nulle. Le moteur le signale en alerte (`controlesLoyer`) mais ne bloque ' +
-          'pas le calcul. Attention aussi au double compte : une cave peut être à la fois ' +
-          'dans les surfaces annexes et louée séparément.',
-      },
-    ],
+        piege: "Une réhabilitation dont le plafond de convention n’est pas saisi produit une recette nulle. Le moteur le signale en alerte (`controlesLoyer`) mais ne bloque pas le calcul. Attention aussi au double compte : une cave peut être à la fois dans les surfaces annexes et louée séparément.",
+        entrees: [
+          [
+            "Plafond de convention",
+            "écran de la tranche, saisi, en €/m²/mois"
+          ],
+          [
+            "Produit REHAB",
+            "défini dans produits.js avec le drapeau loyer_par_convention"
+          ],
+          [
+            "Annexes séparées",
+            "écran de la tranche, nombre et loyer mensuel unitaire"
+          ]
+        ]
+      }
+    ]
   },
   {
-    id: 'prix-revient',
-    titre: 'Prix de revient et TVA',
-    accroche:
-      'Le même bilan se lit de deux façons. La première est le coût réel, avec la TVA que ' +
-      'l’entreprise facture. La seconde recalcule tout au taux de la livraison à soi-même du ' +
-      'produit : c’est celle que retient l’administration, et c’est elle qui sert d’assiette ' +
-      'au plan de financement.',
+    id: "prix-revient",
+    titre: "Prix de revient et TVA",
+    accroche: "Le même bilan se lit de deux façons. La première est le coût réel, avec la TVA que l’entreprise facture. La seconde recalcule tout au taux de la livraison à soi-même du produit : c’est celle que retient l’administration, et c’est elle qui sert d’assiette au plan de financement.",
     etapes: [
       {
-        titre: 'La livraison à soi-même',
-        regles: ['R-TVA-2'],
-        simple:
-          'Quand un organisme construit des logements sociaux, il se livre à lui-même ' +
-          'l’immeuble et acquitte à ce titre une TVA à taux réduit. Le taux dépend du ' +
-          'produit : 5,5 % pour les opérations les plus sociales, 10 % pour les autres, 20 % ' +
-          'pour le libre. Un PLUS situé en quartier prioritaire bénéficie lui aussi de 5,5 % ; ' +
-          'ce n’est pas un autre produit, seulement une condition de localisation.',
-        formule:
-          'TTC au titre de la livraison à soi-même = HT × (1 + taux du produit)\n' +
-          'PLAI 5,5 % · PLUS 10 % (5,5 % en quartier prioritaire) · PLS 10 % · libre 20 %',
+        titre: "La livraison à soi-même",
+        regles: ["R-TVA-2"],
+        simple: "Un organisme HLM qui construit pour lui-même doit se facturer la TVA à lui-même : c’est la livraison à soi-même. Le taux dépend du produit de financement, pas de la nature de la dépense. Le PLAI relève de 5,5 %, le PLUS et le PLS de 10 %, le logement libre de 20 %. Un cas particulier : le PLUS situé en quartier prioritaire de la ville, ou sous convention de renouvellement urbain, bascule à 5,5 % — ce n’est pas un autre produit, c’est le même PLUS avec la case QPV cochée. Concrètement, ce taux transforme chaque montant hors taxes saisi en montant TTC, et c’est ce TTC qui devient le prix de revient à financer.",
+        formule: "taux LASM = SI(produit = PLUS ET QPV ; 5,5 % ; taux du produit)\nmontant TTC = montant HT × (1 + taux LASM)\n\nBarème :\n  PLAI ................ 5,5 %\n  PLUS ................ 10 %   (5,5 % si QPV)\n  PLS ................. 10 %\n  LLI / PLI ........... 10 %\n  LIBRE ............... 20 %\n\nExemple, 1 000 000 € HT en PLUS hors QPV :\n  1 000 000 × 1,10 = 1 100 000 € TTC",
         support: {
-          fonction: 'tauxLASM',
+          fonction: "tauxLASM",
           signature: "tauxLASM(code_produit, referentiels, contexte = { qpv }) → taux en fraction. Lève si le produit n’a ni entrée dédiée ni clé de repli",
           code: "si PLUS et contexte.qpv → tva.plus_en_qpv.taux ; sinon tva.lasm_par_produit[code_produit] ; sinon tva[def.cle_lasm]",
           referentiel: "tva.lasm_par_produit.PRODUIT · tva.plus_en_qpv.taux · tva.CLE_LASM du produit en repli",
           alimente: "prixDeRevient et prixDeRevientVentile → prix de revient TTC",
           tests: "tests/bilan.test.js",
-          source: 'src/bilan.js:105',
-          texte:
-            'Priorité : PLUS + qpv → `tva.plus_en_qpv.taux`, puis `tva.lasm_par_produit[code]`, ' +
-            'puis `tva[produit().cle_lasm]`, sinon exception. La bascule QPV n’est câblée que ' +
-            'pour le code `PLUS` exactement : ni FPLUS ni PLUS33 n’en bénéficient par ce ' +
-            'chemin.',
+          source: "src/bilan.js:105",
+          texte: "Priorité : PLUS + qpv → `tva.plus_en_qpv.taux`, puis `tva.lasm_par_produit[code]`, puis `tva[produit().cle_lasm]`, sinon exception. La bascule QPV n’est câblée que pour le code `PLUS` exactement : ni FPLUS ni PLUS33 n’en bénéficient par ce chemin."
         },
-        piege:
-          'Un poste marqué hors champ de la livraison à soi-même garde son TTC de saisie : ' +
-          'son taux n’est pas remplacé par celui du produit. C’est ce qui permet de traiter ' +
-          'les postes sans TVA (taxes, certains honoraires).',
+        piege: "Un poste marqué hors champ de la livraison à soi-même garde son TTC de saisie : son taux n’est pas remplacé par celui du produit. C’est ce qui permet de traiter les postes sans TVA (taxes, certains honoraires).",
+        entrees: [
+          ["Taux par produit", "Paramètres > TVA > lasm_par_produit"],
+          ["Taux QPV", "Paramètres > TVA > plus_en_qpv.taux"],
+          ["Case QPV", "écran Opération, propriété de l’opération"],
+          ["Montants HT", "écran Prix de revient, saisis poste par poste"]
+        ]
       },
       {
-        titre: 'Saisir globalement, ventiler au prorata',
-        regles: ['R-TVA-1', 'R-TVA-3'],
-        simple:
-          'Chaque dépense se saisit une seule fois, globalement et hors taxes, puis se ' +
-          'répartit entre les tranches au prorata de leur surface utile. Chaque tranche ' +
-          'applique ensuite SON taux de livraison à soi-même, et c’est tout l’intérêt de la ' +
-          'manœuvre : un PLAI et un logement libre ne portent pas la même TVA finale sur la ' +
-          'même dépense. Une ligne peut aussi être ventilée à la main quand la dépense n’est ' +
-          'pas proportionnelle aux surfaces, un ascenseur qui ne dessert qu’un bâtiment par ' +
-          'exemple.',
-        formule:
-          'part HT d’une tranche = montant HT global × sa part de surface utile\n' +
-          'TTC de la tranche     = sa part HT × (1 + son taux de livraison à soi-même)',
+        titre: "Saisir globalement, ventiler au prorata",
+        regles: ["R-TVA-1", "R-TVA-3"],
+        simple: "Chaque poste de dépense peut se saisir de deux façons. Soit globalement, pour l’opération entière, et le moteur le répartit entre les tranches au prorata de leur surface utile — c’est le cas normal du terrain ou des honoraires. Soit tranche par tranche, quand vous connaissez le détail réel — le bouton de ventilation de la ligne fait passer d’un mode à l’autre. Un point qui surprend souvent : le taux de TVA, lui, reste toujours propre à la tranche, même quand le montant est saisi globalement. La raison est simple : le taux dépend du produit de financement, or une même dépense de terrain sert à la fois du PLAI à 5,5 % et du PLUS à 10 %. Le moteur applique donc à chaque part le taux de sa tranche.",
+        formule: "part d’une tranche = montant global × quote-part de surface utile\nmontant TTC de la tranche = part HT × (1 + taux LASM de la tranche)\n\nExemple, terrain de 500 000 € HT, opération 20 % PLAI / 80 % PLUS :\n  PLAI : 500 000 × 20 % = 100 000 HT → × 1,055 = 105 500 TTC\n  PLUS : 500 000 × 80 % = 400 000 HT → × 1,10  = 440 000 TTC\n                                        ─────────────────────\n  total .............................. 500 000 HT   545 500 TTC\n  taux moyen de l’opération .......... 9,10 %\n\nSi seul le TTC est connu : HT = TTC ÷ (1 + taux).",
         support: {
-          fonction: 'prixDeRevientVentile, montantHTPoste, tauxTVAPoste',
+          fonction: "prixDeRevientVentile, montantHTPoste, tauxTVAPoste",
           signature: "prixDeRevientVentile({ postes, quotes_parts, codes_produits, modulation_ttc_eur, qpv }, referentiels) → { par_tranche, total_ht_eur, total_ttc_lasm_eur, cle_ventilation }",
           code: "montantHTPoste : ht = ttc / (1 + taux) quand seul le TTC est saisi · tauxTVAPoste : taux du poste, sinon taux LASM du produit",
           referentiel: "tva.lasm_par_produit via tauxLASM · quotes-parts issues de quotesPartsSU",
           alimente: "soldeAFinancer, foncierFinancable, compteExploitation (assiettes en % du prix de revient)",
           tests: "tests/bilan.test.js",
-          source: 'src/bilan.js:245, 64 et 78',
-          texte:
-            'Dès que `montants_ht_par_produit` existe, c’est lui qui fait foi et le montant ' +
-            'global en découle. Attention : un objet vide `{}` est truthy, donc un poste ' +
-            'portant `montants_ht_par_produit: {}` renvoie 0 et ignore `montant_ht_eur` en ' +
-            'silence.',
+          source: "src/bilan.js:245, 64 et 78",
+          texte: "Dès que `montants_ht_par_produit` existe, c’est lui qui fait foi et le montant global en découle. Attention : un objet vide `{}` est truthy, donc un poste portant `montants_ht_par_produit: {}` renvoie 0 et ignore `montant_ht_eur` en silence."
         },
-        piege:
-          'Un montant ventilé à la main vers un produit absent du programme est compté dans ' +
-          'le total de la ligne mais dans aucune tranche : le détail cesse alors de ' +
-          's’additionner au total, sans alerte.',
+        piege: "Un montant ventilé à la main vers un produit absent du programme est compté dans le total de la ligne mais dans aucune tranche : le détail cesse alors de s’additionner au total, sans alerte.",
+        entrees: [
+          [
+            "Montant du poste",
+            "écran Prix de revient, saisi en HT ou en TTC"
+          ],
+          [
+            "Mode de saisie",
+            "bouton de ventilation de la ligne : global ou par tranche"
+          ],
+          ["Quote-part de surface utile", "calculée au chapitre Surfaces"],
+          [
+            "Taux de TVA",
+            "proposé selon le produit, modifiable ligne par ligne"
+          ]
+        ]
       },
       {
-        titre: 'Les arrondis de la ventilation',
-        regles: ['R-TVA-3', 'R-CONV'],
-        simple:
-          'Les arrondis sont pilotés pour que la somme des tranches retombe exactement sur le ' +
-          'total de l’opération : une restitution dont les colonnes ne s’additionnent pas ' +
-          'perd toute crédibilité. Un croisement reste toutefois impossible à satisfaire dans ' +
-          'les deux sens à la fois.',
-        formule:
-          'exactitude garantie LIGNE par ligne et sur les totaux ;\n' +
-          'dans le croisement chapitre × tranche, la colonne d’une tranche\n' +
-          'peut s’écarter d’un euro de son propre total',
+        titre: "Les arrondis de la ventilation",
+        regles: ["R-TVA-3", "R-CONV"],
+        simple: "Répartir un montant entre trois tranches et arrondir chaque part à l’euro fait presque toujours perdre ou gagner quelques euros au total. Trois parts de 3,33 € arrondies donnent 9 €, pour un total réel de 10 €. Sur un prix de revient, cet écart se voit immédiatement à l’écran et décrédibilise toute la restitution. Le moteur répartit donc le reliquat : il arrondit chaque part à l’euro inférieur, puis distribue les euros manquants aux parts dont la décimale était la plus grande. Le total affiché est ainsi toujours exactement la somme des lignes affichées. Quand un sous-total a déjà été arrondi ailleurs et fait autorité, c’est lui qu’on impose comme cible, pour que la ligne s’additionne à l’écran.",
+        formule: "1. part arrondie à l’euro inférieur pour chacune\n2. reliquat = total à atteindre − somme des parts arrondies\n3. le reliquat va aux plus grandes décimales, une unité à la fois\n\nExemple, 10 000 € à répartir en 33,33 % / 33,33 % / 33,34 % :\n  parts exactes ....... 3 333,00   3 333,00   3 334,00\n  parts brutes ........ 3 333,33   3 333,33   3 333,34\n  arrondi inférieur ... 3 333      3 333      3 333     → somme 9 999\n  reliquat de 1 € ..... au plus grand reste (le troisième)\n  résultat ............ 3 333      3 333      3 334     → somme 10 000 ✓",
         support: {
-          fonction: 'arrondirEnConservantLaSomme (appelée par prixDeRevientVentile)',
+          fonction: "arrondirEnConservantLaSomme (appelée par prixDeRevientVentile)",
           signature: "arrondirEnConservantLaSomme(valeurs, totalImpose) → entiers de même longueur dont la somme vaut exactement le total",
           code: "bas = valeurs.map(Math.floor) ; le reliquat va aux plus grands restes, puis à égalité dans l’ordre fourni",
           referentiel: "aucun",
           alimente: "toute ventilation affichée : le total à l’écran s’additionne réellement",
           tests: "tests/bilan.test.js, tests/regressions.test.js",
-          source: 'src/bilan.js:245',
-          texte:
-            'Le croisement chapitre × tranche impose comme total le sous-total de CHAPITRE ' +
-            'déjà arrondi, pour que la ligne s’additionne à l’écran. Un même arrondi ne peut ' +
-            'satisfaire la ligne et la colonne simultanément : l’écart d’un euro est ' +
-            'structurel et documenté dans le code.',
+          source: "src/bilan.js:245",
+          texte: "Le croisement chapitre × tranche impose comme total le sous-total de CHAPITRE déjà arrondi, pour que la ligne s’additionne à l’écran. Un même arrondi ne peut satisfaire la ligne et la colonne simultanément : l’écart d’un euro est structurel et documenté dans le code."
         },
-        piege:
-          'Cet écart d’un euro est normal et attendu. Ce n’est pas un bug à signaler.',
+        piege: "Cet écart d’un euro est normal et attendu. Ce n’est pas un bug à signaler.",
+        entrees: [
+          [
+            "Valeurs exactes",
+            "les parts non arrondies issues de la ventilation"
+          ],
+          [
+            "Total imposé",
+            "le sous-total déjà arrondi, quand il fait autorité"
+          ]
+        ]
       },
       {
-        titre: 'La modulation et la base d’amortissement',
-        regles: ['R-TVA-4'],
-        simple:
-          'La modulation est une part non finançable que l’organisme décide d’ajouter au prix ' +
-          'de revient ; elle forme avec lui la référence de l’équilibre du plan de ' +
-          'financement. La base d’amortissement, elle, est la part du prix de revient qui se ' +
-          'déprécie dans le temps : le prix de revient toutes taxes comprises, diminué de la ' +
-          'valeur comptable du terrain, qui ne s’amortit jamais.',
-        formule:
-          'prix de revient de référence = prix de revient TTC + modulation\n' +
-          'base d’amortissement = prix de revient TTC − valeur comptable du terrain',
+        titre: "La modulation et la base d’amortissement",
+        regles: ["R-TVA-4"],
+        simple: "Deux notions se calculent au bout du prix de revient. La modulation d’abord : c’est un ajustement forfaitaire du prix de revient TTC, en plus ou en moins, qu’on utilise pour caler une simulation sur un chiffre connu sans retoucher chaque poste. La base d’amortissement comptable ensuite : le bâtiment s’amortit, le terrain non, puisqu’il ne s’use pas. On retire donc du prix de revient TTC la valeur comptable du terrain, et c’est le reste qui sera étalé sur la durée des composants. Attention sur ce point : les annexes LEON appliquent 25 % du montant d’acquisition en VEFA, là où la table par zone du référentiel donne d’autres quotités. La question reste ouverte, et l’écart peut être important.",
+        formule: "prix de revient TTC = Σ postes TTC + modulation\nvaleur comptable du terrain = montant du terrain × quotité\nbase d’amortissement = prix de revient TTC − valeur comptable du terrain\n\nExemple, VEFA de 2 062 430,70 € TTC, prix de revient 2 215 969,74 € :\n  quotité terrain ............ 25 %\n  valeur comptable terrain ... 2 062 430,70 × 25 % = 515 607,68 €\n  base d’amortissement ....... 2 215 969,74 − 515 607,68 = 1 700 362,06 €",
         support: {
-          fonction: 'prixDeRevient, valeurComptableTerrain, baseAmortissementComptable',
+          fonction: "prixDeRevient, valeurComptableTerrain, baseAmortissementComptable",
           signature: "prixDeRevient({ code_produit, postes, modulation_ttc_eur, qpv }, referentiels) → totaux et chapitres · valeurComptableTerrain({ montant_terrain_eur, quotite }) → euros · baseAmortissementComptable({ prix_revient_ttc_eur, valeur_comptable_terrain_eur }) → euros",
           code: "base = prix_revient_ttc_eur - valeur_comptable_terrain_eur",
           referentiel: "quotites_foncier_vefa.valeur_comptable_terrain_vefa par zone. Attention : les annexes LEON appliquent 25 % du montant d’acquisition VEFA, pas la table par zone (question Q-26)",
           alimente: "dotationParComposants → dotation aux amortissements du compte d’exploitation",
           tests: "tests/bilan.test.js",
-          source: 'src/bilan.js:157, 422 et 440',
-          texte:
-            '`valeurComptableTerrain` LÈVE une exception si la quotité ne lui est pas fournie : ' +
-            'elle refuse délibérément de choisir une valeur par défaut. La modulation est ' +
-            'toujours ventilée au prorata de surface utile, même quand tous les postes ont ' +
-            'été ventilés à la main.',
+          source: "src/bilan.js:157, 422 et 440",
+          texte: "`valeurComptableTerrain` LÈVE une exception si la quotité ne lui est pas fournie : elle refuse délibérément de choisir une valeur par défaut. La modulation est toujours ventilée au prorata de surface utile, même quand tous les postes ont été ventilés à la main."
         },
-        piege:
-          'La quotité de terrain n’est pas tranchée (question Q-26) : les annexes appliquent ' +
-          '25 % du montant d’acquisition, quand la table par zone du référentiel donne 13 % ' +
-          'en B1. Le moteur exige donc qu’on la lui donne explicitement.',
-      },
-    ],
+        piege: "La quotité de terrain n’est pas tranchée (question Q-26) : les annexes appliquent 25 % du montant d’acquisition, quand la table par zone du référentiel donne 13 % en B1. Le moteur exige donc qu’on la lui donne explicitement.",
+        entrees: [
+          ["Modulation", "écran Prix de revient, saisie, en TTC"],
+          [
+            "Montant du terrain",
+            "poste de charge foncière du prix de revient"
+          ],
+          [
+            "Quotité de terrain",
+            "Paramètres > Foncier > quotites_foncier_vefa (question Q-26 : les annexes appliquent 25 %)"
+          ]
+        ]
+      }
+    ]
   },
   {
-    id: 'prets',
-    titre: 'Prêts et amortissement',
-    accroche:
-      'C’est la partie la plus dense du moteur, et celle qui pèse le plus lourd : sur ' +
-      'cinquante ans, une erreur d’un dixième de point sur un taux se compte en dizaines de ' +
-      'milliers d’euros. Le principe tient pourtant en une phrase : chaque année, le moteur ' +
-      'recalcule l’annuité sur le capital qui reste et le temps qui reste.',
+    id: "prets",
+    titre: "Prêts et amortissement",
+    accroche: "C’est la partie la plus dense du moteur, et celle qui pèse le plus lourd : sur cinquante ans, une erreur d’un dixième de point sur un taux se compte en dizaines de milliers d’euros. Le principe tient pourtant en une phrase : chaque année, le moteur recalcule l’annuité sur le capital qui reste et le temps qui reste.",
     etapes: [
       {
-        titre: 'L’annuité, et pourquoi elle progresse',
-        regles: ['R-AMT-2'],
-        simple:
-          'L’annuité est ce que l’opération paie chaque année, capital et intérêts confondus. ' +
-          'Sur un prêt de la Caisse des dépôts elle n’est pas constante : elle évolue d’un ' +
-          'pourcentage fixe appelé progressivité, souvent −0,5 % l’an, ce qui allège la charge ' +
-          'à mesure que les loyers, eux, progressent. Le moteur calcule le facteur qui, ' +
-          'appliqué au capital, éteint le prêt exactement à son terme.',
-        formule:
-          'annuité = capital restant dû × facteur\n' +
-          'facteur = (1 + taux) × (1 − q) ÷ (1 − q^nombre d’échéances)\n' +
-          'où q = (1 + progressivité) ÷ (1 + taux)',
+        titre: "L’annuité, et pourquoi elle progresse",
+        regles: ["R-AMT-2"],
+        simple: "Une annuité de prêt HLM n’est pas constante. Elle progresse d’un petit pourcentage chaque année — souvent −0,5 %, c’est-à-dire qu’elle décroît — pour coller à l’évolution attendue des loyers. Le calcul part du capital restant dû, du taux de la période et du nombre d’échéances qui restent, et cherche l’annuité qui solde exactement le capital sur ces échéances-là en respectant la progression demandée. C’est la même mécanique qu’une mensualité de crédit classique, avec un terme de plus pour la progression. Quand la progression est nulle, la formule redonne exactement l’annuité constante que tout le monde connaît.",
+        formule: "q = (1 + progressivité) ÷ (1 + taux)\nannuité = capital restant dû × (1 + taux) × (1 − q) ÷ (1 − q^échéances restantes)\n\nSi q = 1 (progressivité égale au taux) :\n  annuité = capital × (1 + taux) ÷ échéances restantes\n\nExemple, 1 000 000 € sur 40 ans à 2,61 %, progressivité −0,5 % :\n  q .......................... 0,995 ÷ 1,0261 = 0,96968\n  annuité de la 1re échéance . 44 189 €\n  annuité de la 40e ......... 36 214 €   (elle a décru de 0,5 % par an)",
         support: {
-          fonction: 'facteurAnnuite',
+          fonction: "facteurAnnuite",
           signature: "facteurAnnuite(tx, rev, m) → facteur à multiplier par le capital restant dû. tx = taux de la période, rev = progression de l’annuité, m = échéances restantes",
           code: "q = (1 + rev) / (1 + tx) ; si q vaut 1 → (1 + tx) / m ; sinon ((1 + tx) * (1 - q)) / (1 - q ** m)",
           referentiel: "aucun : forme fermée pure, aucune itération",
           alimente: "tableauAmortissement, à chaque échéance",
           tests: "tests/amortissement.test.js",
-          source: 'src/amortissement.js:100',
-          texte:
-            'Quand q vaut exactement 1 (progressivité égale au taux), la forme générale se ' +
-            'dérobe : le moteur bascule sur la limite mathématique (1+taux)/m, là où LEON ' +
-            'affiche #DIV/0! (écart E-6). À la dernière échéance m vaut 1 et le facteur vaut ' +
-            '(1 + taux) : l’annuité finale solde exactement le capital et ses intérêts, sans ' +
-            'qu’aucun cas particulier n’ait été codé.',
+          source: "src/amortissement.js:100",
+          texte: "Quand q vaut exactement 1 (progressivité égale au taux), la forme générale se dérobe : le moteur bascule sur la limite mathématique (1+taux)/m, là où LEON affiche #DIV/0! (écart E-6). À la dernière échéance m vaut 1 et le facteur vaut (1 + taux) : l’annuité finale solde exactement le capital et ses intérêts, sans qu’aucun cas particulier n’ait été codé."
         },
-        piege:
-          'Quand q est inférieur à 1, l’annuité progresse moins vite que le capital ne coûte, ' +
-          'et le prêt s’amortit. C’est cette comparaison, et non la progressivité seule, qui ' +
-          'décide du profil du prêt.',
+        piege: "Quand q est inférieur à 1, l’annuité progresse moins vite que le capital ne coûte, et le prêt s’amortit. C’est cette comparaison, et non la progressivité seule, qui décide du profil du prêt.",
+        entrees: [
+          [
+            "Capital restant dû",
+            "le montant du prêt la 1re année, puis le solde des années suivantes"
+          ],
+          [
+            "Taux de la période",
+            "Livret A + marge du produit, révisé chaque année"
+          ],
+          [
+            "Progressivité",
+            "vignette du prêt, −0,5 % par défaut sur les prêts CDC"
+          ],
+          [
+            "Échéances restantes",
+            "durée du prêt moins les échéances déjà payées"
+          ]
+        ]
       },
       {
-        titre: 'Le ré-amortissement annuel',
-        regles: ['R-AMT-4'],
-        simple:
-          'Chaque année, le moteur reprend le capital restant dû et le nombre d’années qui ' +
-          'restent, et recalcule l’annuité aux taux de l’année. Ce n’est donc PAS une simple ' +
-          'suite où l’annuité de l’an dernier serait multipliée par la progressivité. Les deux ' +
-          'façons de faire donnent le même résultat tant que le Livret A ne bouge pas ; elles ' +
-          'divergent dès la première révision, et seul le ré-amortissement garantit que le ' +
-          'prêt s’éteint exactement à son terme contractuel.',
-        formule:
-          'pour chaque année N :\n' +
-          '  durée restante = durée totale − années déjà écoulées\n' +
-          '  annuité        = capital restant dû × facteur(taux révisé, progression révisée, durée restante)\n' +
-          '  intérêts       = taux révisé × capital restant dû\n' +
-          '  amortissement  = annuité − intérêts\n' +
-          '  capital restant dû = capital restant dû − amortissement',
+        titre: "Le ré-amortissement annuel",
+        regles: ["R-AMT-4"],
+        simple: "Le moteur ne calcule pas une annuité une fois pour toutes qu’il reconduirait ensuite. Chaque année, il repart du capital effectivement restant dû, du taux de l’année et du nombre d’années qui restent, et il recalcule. C’est important : si le Livret A monte, le taux monte, et l’annuité de l’année suivante est recalculée pour solder quand même le prêt à la date prévue. Ce ré-amortissement est ce qui fait qu’un prêt à taux révisable se termine exactement à son terme, quelle que soit la trajectoire des taux. La dernière année n’est pas un cas particulier codé à part : quand il ne reste qu’une échéance, la formule donne naturellement le capital restant plus ses intérêts.",
+        formule: "Pour chaque année N :\n  taux N ......... = f(Livret A de l’année N)\n  échéances rest. = durée totale − (N − 1)\n  annuité N ...... = CRD × facteur(taux N ; progressivité ; échéances restantes)\n  intérêts N ..... = CRD × taux N\n  amortissement N  = annuité N − intérêts N\n  CRD suivant .... = CRD − amortissement N\n\nDernière échéance (échéances restantes = 1) :\n  annuité = CRD × (1 + taux)  →  le prêt est soldé, CRD = 0",
         support: {
-          fonction: 'tableauAmortissement',
+          fonction: "tableauAmortissement",
           signature: "tableauAmortissement(pret) → [{ annee, taux, annuite_eur, interets_eur, amortissement_eur, crd_eur }]. pret : { montant_eur, taux, progressivite, duree_ans, annee_premiere_echeance, revisabilite, differe_ans, differe_type, livret_a_origine, livret_a_par_annee, profil, taux_plancher, echeances_par_an }",
           code: "annuite = crd * facteurAnnuite(tx, rev, m) ; interets = crd * tx ; crd -= (annuite - interets)",
           referentiel: "prets_cdc.marges pour le taux · trajectoires.par_annee pour le Livret A",
           alimente: "compteExploitation (charge d’annuités), plan de financement, trésorerie",
           tests: "tests/amortissement.test.js, tests/golden.test.js",
-          source: 'src/amortissement.js:315',
-          texte:
-            'Correction majeure apportée au dictionnaire v0.1, qui décrivait une progression ' +
-            'géométrique. Attention : `premiereAnnuite` (R-AMT-2) n’est JAMAIS appelée par ' +
-            '`tableauAmortissement`. S’en servir pour prédire l’annuité 1 d’un prêt révisable ' +
-            'donnerait un chiffre juste seulement si le Livret A n’a pas bougé (Q-5, close).',
+          source: "src/amortissement.js:315",
+          texte: "Correction majeure apportée au dictionnaire v0.1, qui décrivait une progression géométrique. Attention : `premiereAnnuite` (R-AMT-2) n’est JAMAIS appelée par `tableauAmortissement`. S’en servir pour prédire l’annuité 1 d’un prêt révisable donnerait un chiffre juste seulement si le Livret A n’a pas bougé (Q-5, close)."
         },
-        piege:
-          'Aucune valeur du tableau n’est arrondie (règle R-CONV). Seul le test de fin de prêt ' +
-          'arrondit le capital restant dû à quatre décimales, comme LEON.',
+        piege: "Aucune valeur du tableau n’est arrondie (règle R-CONV). Seul le test de fin de prêt arrondit le capital restant dû à quatre décimales, comme LEON.",
+        entrees: [
+          [
+            "Livret A par année",
+            "Paramètres > Trajectoires macro, année par année"
+          ],
+          [
+            "Livret A d’origine",
+            "Paramètres > Prêts, le taux de référence du profil (1,50 % en HER 2027)"
+          ],
+          [
+            "Durée du prêt",
+            "vignette du prêt, 40 ans en travaux et 50 à 60 ans en foncier"
+          ]
+        ]
       },
       {
-        titre: 'Les quatre révisabilités',
-        regles: ['R-AMT-4'],
-        simple:
-          'La révisabilité dit comment un prêt réagit quand le Livret A bouge. En taux fixe, ' +
-          'rien ne bouge. En révisabilité simple, seul le taux d’intérêt suit le Livret A. En ' +
-          'double révisabilité, la progressivité de l’annuité le suit aussi. En double ' +
-          'révisabilité limitée, elle le suit également mais sans jamais passer sous zéro : ' +
-          'une baisse du Livret A ne peut pas rendre l’annuité décroissante, au pire elle la ' +
-          'rend constante.',
-        formule:
-          'taux appliqué = taux d’origine + (Livret A de l’année − Livret A d’origine)\n' +
-          'progression révisée = (1 + progressivité) × (1 + écart relatif) − 1\n' +
-          '  écart relatif = (Livret A de l’année − Livret A d’origine) ÷ (1 + taux d’origine)\n\n' +
-          'TAUX FIXE   : rien ne suit\n' +
-          'SIMPLE      : le taux suit, la progression non\n' +
-          'DOUBLE      : les deux suivent\n' +
-          'D. LIMITÉE  : les deux suivent, la progression ne descend pas sous zéro',
+        titre: "Les quatre révisabilités",
+        regles: ["R-AMT-4"],
+        simple: "Un prêt CDC est indexé sur le Livret A, mais il y a quatre façons de l’être et elles ne donnent pas le même échéancier. En TAUX FIXE, rien ne bouge : le taux du contrat s’applique jusqu’au bout. En SIMPLE, seul le taux suit le Livret A ; la progression de l’annuité, elle, reste celle du contrat. En DOUBLE — le cas des PLAI, PLUS et PLS chez AXENTIA — le taux et la progression de l’annuité suivent tous deux le Livret A. En DURÉE LIMITÉE, c’est comme le DOUBLE mais la révision de l’annuité ne peut jamais être négative. La différence entre SIMPLE et DOUBLE peut représenter plusieurs points de pourcentage sur l’annuité au bout de vingt ans.",
+        formule: "écart = (Livret A de l’année − Livret A d’origine) ÷ (1 + taux du contrat)\n\ntaux appliqué  = (1 + taux du contrat) × (1 + écart) − 1   [sauf TAUX FIXE]\n\nrévision de l’annuité selon la révisabilité :\n  TAUX FIXE ....... taux figé, progression = progressivité du contrat\n  SIMPLE .......... progression = progressivité du contrat\n  DOUBLE .......... progression = (1 + progressivité) × (1 + écart) − 1\n  D. LIMITÉE ...... progression = MAX(formule DOUBLE ; 0)\n\nExemple, contrat à 2,61 %, Livret A d’origine 1,50 %, Livret A 2027 = 2,10 % :\n  écart .......... (2,10 − 1,50) ÷ 1,0261 = +0,585 %\n  taux appliqué .. 2,61 % → 3,21 %",
         support: {
-          fonction: 'tableauAmortissement, normaliserRevisabilite',
+          fonction: "tableauAmortissement, normaliserRevisabilite",
           signature: "normaliserRevisabilite(libelle) → DOUBLE, D. LIMITEE, SIMPLE ou TAUX FIXE. Tout libellé inconnu retombe sur SIMPLE",
           code: "tx = (1 + taux) * (1 + ecartLA) - 1 ; en DOUBLE le même écart s’applique aussi à la progressivité",
           referentiel: "trajectoires.par_annee.ANNEE.livret_a · le Livret A d’origine vient du profil",
           alimente: "tableauAmortissement : le taux ET l’annuité de chaque échéance",
           tests: "tests/amortissement.test.js, tests/golden.test.js",
-          source: 'src/amortissement.js:315 et 63',
-          texte:
-            'La simplification `taux = t + ΔLA` est une identité EXACTE. Celle de la ' +
-            'progression ne l’est pas : `rev = p + (1+p)·ΔLA/(1+t)` et non `p + ΔLA`. Contrôle ' +
-            'numérique du dictionnaire : p = −0,5 %, ΔLA = −0,4 point, t = 2 % donnent ' +
-            '−0,890196 % et non −0,9 %. Écarts LEON E-3 et E-5 : LEON révise parfois le taux ' +
-            'd’un prêt à taux fixe et oublie parfois de tester DOUBLE ; le moteur applique ' +
-            'partout la garde correcte.',
+          source: "src/amortissement.js:315 et 63",
+          texte: "La simplification `taux = t + ΔLA` est une identité EXACTE. Celle de la progression ne l’est pas : `rev = p + (1+p)·ΔLA/(1+t)` et non `p + ΔLA`. Contrôle numérique du dictionnaire : p = −0,5 %, ΔLA = −0,4 point, t = 2 % donnent −0,890196 % et non −0,9 %. Écarts LEON E-3 et E-5 : LEON révise parfois le taux d’un prêt à taux fixe et oublie parfois de tester DOUBLE ; le moteur applique partout la garde correcte."
         },
-        piege:
-          'Tout se joue sur l’ÉCART au Livret A d’origine, jamais sur sa valeur absolue. Si le ' +
-          'Livret A de l’année égale celui d’origine, aucune révision n’a lieu, quelle que soit ' +
-          'la révisabilité. Et si le Livret A d’origine n’est pas renseigné, il vaut zéro : ' +
-          'l’écart devient le Livret A tout entier et la révision est massive.',
+        piege: "Tout se joue sur l’ÉCART au Livret A d’origine, jamais sur sa valeur absolue. Si le Livret A de l’année égale celui d’origine, aucune révision n’a lieu, quelle que soit la révisabilité. Et si le Livret A d’origine n’est pas renseigné, il vaut zéro : l’écart devient le Livret A tout entier et la révision est massive.",
+        entrees: [
+          [
+            "Révisabilité",
+            "vignette du prêt, DOUBLE par défaut sur les prêts CDC"
+          ],
+          [
+            "Livret A d’origine",
+            "Paramètres > Prêts, taux de référence du profil"
+          ],
+          ["Trajectoire du Livret A", "Paramètres > Trajectoires macro"],
+          ["Taux du contrat", "Livret A d’origine + marge du produit"]
+        ]
       },
       {
-        titre: 'Différés, profil constant et taux plancher',
-        regles: ['R-AMT-6', 'R-AMT-7', 'R-AMT-9'],
-        simple:
-          'Un différé repousse le remboursement du capital. De type 1, rien n’est dû pendant ' +
-          'sa durée ; de type 2, seuls les intérêts sont appelés. Dans les deux cas le capital ' +
-          'restant dû ne recule pas d’un euro. Certains prêts s’amortissent à capital constant ' +
-          'plutôt qu’à annuité progressive : la part de capital est alors la même chaque année ' +
-          'et l’annuité décroît. Enfin, un taux plancher empêche un taux révisé de descendre ' +
-          'trop bas, ce qui arrive sur les prêts Action Logement dont la marge est négative.',
-        formule:
-          'différé type 1 : intérêts = 0, capital restant dû inchangé\n' +
-          'différé type 2 : intérêts = taux × capital restant dû, capital restant dû inchangé\n' +
-          'capital constant : amortissement = capital ÷ (durée − différé), annuité décroissante\n' +
-          'taux plancher : taux appliqué = maximum(taux révisé, plancher)',
+        titre: "Différés, profil constant et taux plancher",
+        regles: ["R-AMT-6", "R-AMT-7", "R-AMT-9"],
+        simple: "Trois réglages modifient la forme de l’échéancier sans toucher au capital. Le différé retarde le début du remboursement : en type 2 vous payez les intérêts sans entamer le capital ; en type 1 vous ne payez rien du tout, ce qui n’est pas un bug mais le fonctionnement réel du PHB 2.0, dont les vingt premières années sont à taux zéro. Le profil constant remplace l’annuité progressive par un remboursement de capital constant, l’annuité totale décroissant alors régulièrement. Le taux plancher, enfin, empêche le taux de descendre sous une valeur : les prêts Action Logement en ont besoin, leur marge de −2,25 % appliquée à un Livret A à 1,50 % donnerait un taux négatif de −0,75 %.",
+        formule: "différé type 2 : intérêts payés, capital intact\n  annuité = capital × taux\ndifféré type 1 : rien n’est appelé\n  annuité = 0, capital inchangé\n\nprofil constant :\n  amortissement = capital initial ÷ nombre d’échéances\n  annuité = amortissement + capital restant × taux\n\ntaux plancher :\n  taux appliqué = MAX(taux calculé ; taux plancher)\n\nExemple, Action Logement : Livret A 1,50 % − marge 2,25 % = −0,75 %\n  taux plancher 0,25 % → taux appliqué = 0,25 %",
         support: {
-          fonction: 'differeEnPeriodes, tableauAmortissement (branches profil et plancher)',
+          fonction: "differeEnPeriodes, tableauAmortissement (branches profil et plancher)",
           signature: "differeEnPeriodes({ differe_ans, differe_mois, echeances_par_an }) → nombre de périodes différées",
           code: "type 1 → aucun intérêt appelé, CRD inchangé · type 2 → intérêts payés, capital intact · plancher : tx = Math.max(txBrut, taux_plancher)",
           referentiel: "presets_prets.presets[].differe_ans, .differe_type, .taux_plancher, .profil",
           alimente: "tableauAmortissement : décale le début de l’amortissement du capital",
           tests: "tests/amortissement.test.js",
-          source: 'src/amortissement.js:236 et 315',
-          texte:
-            'Le différé se saisit en mois ou en années, `differe_mois` primant dès qu’il est ' +
-            'défini. Conversion : `Math.round(mois × périodicité / 12)`. Le plancher borne le ' +
-            'TAUX APPLIQUÉ, jamais la marge : sans plancher déclaré, un taux négatif reste ' +
-            'négatif, ce qui rend visible un modèle mal renseigné au lieu de le corriger en ' +
-            'silence.',
+          source: "src/amortissement.js:236 et 315",
+          texte: "Le différé se saisit en mois ou en années, `differe_mois` primant dès qu’il est défini. Conversion : `Math.round(mois × périodicité / 12)`. Le plancher borne le TAUX APPLIQUÉ, jamais la marge : sans plancher déclaré, un taux négatif reste négatif, ce qui rend visible un modèle mal renseigné au lieu de le corriger en silence."
         },
-        piege:
-          'Sur un prêt annuel, un différé de 30 mois devient 3 ans : la demi-échéance n’existe ' +
-          'pas, un prêt annuel ne peut pas commencer à s’amortir en juin. Sur un prêt ' +
-          'trimestriel, les mêmes 30 mois donnent exactement 10 échéances, et c’est tout ' +
-          'l’intérêt de la saisie en mois.',
+        piege: "Sur un prêt annuel, un différé de 30 mois devient 3 ans : la demi-échéance n’existe pas, un prêt annuel ne peut pas commencer à s’amortir en juin. Sur un prêt trimestriel, les mêmes 30 mois donnent exactement 10 échéances, et c’est tout l’intérêt de la saisie en mois.",
+        entrees: [
+          ["Différé (ans ou mois)", "vignette du prêt > Temporalité"],
+          [
+            "Type de différé",
+            "vignette du prêt : 1 (rien n’est dû) ou 2 (intérêts seuls)"
+          ],
+          [
+            "Profil d’amortissement",
+            "vignette du prêt : échéances prioritaires ou capital constant"
+          ],
+          ["Taux plancher", "vignette du prêt, ou modèle de prêt en admin"]
+        ]
       },
       {
-        titre: 'Les échéances infra-annuelles',
-        regles: ['R-AMT-8'],
-        simple:
-          'Les prêts Action Logement s’amortissent par trimestre, alors que le compte ' +
-          'd’exploitation reste annuel. Le moteur amortit donc échéance par échéance, puis ' +
-          'agrège par année civile. Un prêt trimestriel ne se ramène pas à un prêt annuel de ' +
-          'même taux : le capital recule quatre fois dans l’année, donc les intérêts de ' +
-          'l’année sont plus faibles.',
-        formule:
-          'taux de période = taux annuel ÷ nombre d’échéances (convention proportionnelle)\n' +
-          'progression de période = (1 + progression annuelle)^(1÷nombre d’échéances) − 1\n' +
-          'la révision du Livret A reste ANNUELLE',
+        titre: "Les échéances infra-annuelles",
+        regles: ["R-AMT-8"],
+        simple: "Certains prêts ne se remboursent pas une fois par an mais quatre — les prêts Action Logement sont trimestriels. Le moteur calcule alors l’échéancier période par période, avec un taux ramené à la période, puis agrège les quatre échéances d’une même année civile avant de les restituer. Le taux de période n’est pas le taux annuel divisé par quatre : c’est sa racine quatrième, parce que les intérêts se composent. La différence est faible sur une échéance mais elle ne l’est plus sur quarante ans.",
+        formule: "taux de période = (1 + taux annuel) ^ (1 ÷ échéances par an) − 1\nnombre de périodes = durée en années × échéances par an\n\nExemple, 2,61 % annuel en trimestriel :\n  taux trimestriel = 1,0261 ^ 0,25 − 1 = 0,6461 %\n  (et non 2,61 ÷ 4 = 0,6525 %)\n\nL’année civile affichée est la somme des 4 échéances de l’année.",
         support: {
-          fonction: 'tableauPeriodique',
+          fonction: "tableauPeriodique",
           signature: "tableauPeriodique(pret) → lignes infra-annuelles, agrégées par année civile avant restitution",
           code: "tx_periode = (1 + taux) ** (1 / echeances_par_an) - 1",
           referentiel: "presets_prets.presets[].echeances_par_an (4 pour un prêt trimestriel)",
           alimente: "tableauAmortissement, qui délègue dès que echeances_par_an dépasse 1",
           tests: "tests/amortissement.test.js",
-          source: 'src/amortissement.js:242',
-          texte:
-            'Chemin de code séparé de la boucle annuelle, laissée intacte pour qu’aucun prêt ' +
-            'annuel ne change de comportement, c’est elle qui porte les golden tests. Un ' +
-            '`periodicite: 1` explicite reproduit exactement le prêt annuel (vérifié par test).',
+          source: "src/amortissement.js:242",
+          texte: "Chemin de code séparé de la boucle annuelle, laissée intacte pour qu’aucun prêt annuel ne change de comportement, c’est elle qui porte les golden tests. Un `periodicite: 1` explicite reproduit exactement le prêt annuel (vérifié par test)."
         },
-        piege:
-          'Le taux est divisé (convention proportionnelle) mais la progressivité est répartie ' +
-          'en racine (convention actuarielle). Ce n’est pas une incohérence : la progressivité ' +
-          'est contractuellement ANNUELLE, il faut donc qu’elle reste de −0,5 % par an et ne ' +
-          'devienne pas −2 %. La convention proportionnelle du taux, elle, est un choix ' +
-          'documenté que les fiches produit ne précisent pas.',
+        piege: "Le taux est divisé (convention proportionnelle) mais la progressivité est répartie en racine (convention actuarielle). Ce n’est pas une incohérence : la progressivité est contractuellement ANNUELLE, il faut donc qu’elle reste de −0,5 % par an et ne devienne pas −2 %. La convention proportionnelle du taux, elle, est un choix documenté que les fiches produit ne précisent pas.",
+        entrees: [
+          [
+            "Échéances par an",
+            "vignette du prêt > Remboursement, 1 par défaut, 4 en trimestriel"
+          ],
+          ["Taux annuel", "le taux du contrat, révisé selon la révisabilité"]
+        ]
       },
       {
-        titre: 'La première échéance',
-        regles: ['R-AMT-3'],
-        simple:
-          'Chaque prêt porte SA propre année de première échéance. Le moteur la place par ' +
-          'défaut l’année de la mise en location : le prêt est mobilisé à la livraison et ' +
-          's’amortit dans la foulée, les intérêts du chantier étant déjà portés par le ' +
-          'préfinancement.',
-        formule: 'première échéance = année de mise en location',
+        titre: "La première échéance",
+        regles: ["R-AMT-3"],
+        simple: "La première échéance tombe l’année de la mise en location. Le prêt est mobilisé à la livraison et s’amortit dans la foulée, les intérêts de la période de chantier étant déjà portés par le préfinancement. Cette règle a été arbitrée par le métier le 11 août 2026. Il faut savoir qu’elle diverge de ce que font les annexes LEON : sur les quatre annexes dont nous disposons, l’amortissement démarre en réalité la première année civile complète, soit un an plus tard quand la mise en location ne tombe pas un 1er janvier. Sur une opération livrée en décembre, cela signifie que le moteur porte une annuité pleine sur une année qui ne compte qu’un mois de loyer. La question reste ouverte sous la référence Q-28.",
+        formule: "année de la 1re échéance = année de mise en location\n\nExemples :\n  mise en location 02/01/2028 → 1re échéance en 2028\n  mise en location 01/12/2026 → 1re échéance en 2026\n\nCe que font les annexes LEON (règle non retenue) :\n  1re année civile complète, soit 2027 dans le second cas",
         support: {
-          fonction: 'anneePremiereEcheance',
+          fonction: "anneePremiereEcheance",
           signature: "anneePremiereEcheance(annee_mise_en_location, _options) → année",
           code: "return annee_mise_en_location   (mise en location + 0, arbitrage métier du 11/08/2026)",
           referentiel: "aucun. Le second paramètre est conservé pour ne pas casser les appels si la règle redevenait paramétrable",
           alimente: "tableauAmortissement : l’année de la première ligne",
           tests: "tests/amortissement.test.js. Voir la question Q-28 : les quatre annexes LEON disent mise en location + 1",
-          source: 'src/amortissement.js:86',
-          texte:
-            'Arbitrage métier du 11/08/2026 (Q-4, Q-28) contre le dictionnaire v0.1, qui lisait ' +
-            '« année(DAT) + 1 ». Le décalage de démembrement est devenu sans objet ; la ' +
-            'signature le tolère encore pour ne pas casser les appelants.',
+          source: "src/amortissement.js:86",
+          texte: "Arbitrage métier du 11/08/2026 (Q-4, Q-28) contre le dictionnaire v0.1, qui lisait « année(DAT) + 1 ». Le décalage de démembrement est devenu sans objet ; la signature le tolère encore pour ne pas casser les appelants."
         },
-        piege:
-          'Question Q-28 rouverte le 11/08/2026 : les quatre annexes LEON disponibles ' +
-          'démarrent en réalité à la première année civile COMPLÈTE, ce qui vaut mise en ' +
-          'location + 1 sauf quand elle tombe un 1ᵉʳ janvier. La règle appliquée ici reste ' +
-          'MEL + 0 tant que l’arbitrage n’a pas été revu.',
+        piege: "Question Q-28 rouverte le 11/08/2026 : les quatre annexes LEON disponibles démarrent en réalité à la première année civile COMPLÈTE, ce qui vaut mise en location + 1 sauf quand elle tombe un 1ᵉʳ janvier. La règle appliquée ici reste MEL + 0 tant que l’arbitrage n’a pas été revu.",
+        entrees: [
+          [
+            "Année de mise en location",
+            "calculée au calendrier, ou forcée sur le prêt"
+          ],
+          [
+            "Année de 1re échéance",
+            "vignette du prêt > Temporalité, saisissable pour forcer"
+          ]
+        ]
       },
       {
-        titre: 'Le préfinancement',
-        regles: ['R-FIN-6'],
-        simple:
-          'Pendant le chantier, l’opération tire son prêt par acomptes et paie des intérêts ' +
-          'sur chaque euro déjà tiré : ce sont les intérêts intercalaires. Chaque tirage est ' +
-          'capitalisé depuis sa propre date jusqu’à la fin de la période, si bien qu’un tirage ' +
-          'précoce coûte plus cher qu’un tirage tardif, au prorata exact du temps écoulé.',
-        formule:
-          'capital constitué = Σ montant du tirage × (1 + taux)^(nombre de jours ÷ 365)\n' +
-          'intérêts intercalaires = capital constitué − somme des tirages',
+        titre: "Le préfinancement",
+        regles: ["R-FIN-6"],
+        simple: "Pendant le chantier, l’organisme décaisse sans percevoir de loyer. Le préfinancement couvre ce décalage : les fonds sont tirés au fur et à mesure des besoins, et les intérêts courent depuis chaque tirage jusqu’à la fin de la période. Ces intérêts ne sont pas payés au fil de l’eau, ils sont capitalisés — ajoutés au capital — et c’est ce capital gonflé qui sera amorti ensuite. Chaque tirage est capitalisé sur sa propre durée, en base 365 jours réels : un tirage du premier mois porte deux ans d’intérêts, un tirage du dernier mois presque aucun.",
+        formule: "pour chaque tirage :\n  capitalisé = montant × (1 + taux) ^ (jours jusqu’à la fin ÷ 365)\n\nnominal ............... = Σ montants tirés\ncapital constitué ..... = Σ capitalisés\nintérêts intercalaires  = capital constitué − nominal\n\nExemple, 2 tirages, taux 2,61 %, fin au 31/12/2027 :\n  500 000 € le 01/01/2026 → 730 j → 500 000 × 1,0261^2,00 = 526 428 €\n  500 000 € le 01/01/2027 → 365 j → 500 000 × 1,0261^1,00 = 513 050 €\n  nominal 1 000 000 € · capital constitué 1 039 478 € · intérêts 39 478 €",
         support: {
-          fonction: 'prefinancement',
+          fonction: "prefinancement",
           signature: "prefinancement({ tirages, taux, date_fin, capitaliser = true }) → { nominal_eur, interets_eur, capital_constitue_eur }",
           code: "capitalise += montant_eur * (1 + taux) ** ((jourFin - jourTirage) / 365)",
           referentiel: "aucun : taux et tirages viennent de la saisie et de la trésorerie de chantier",
           alimente: "pretsCDCTheoriques (le préfinancement se retranche du besoin) et le poste de frais financiers",
           tests: "tests/amortissement.test.js",
-          source: 'src/amortissement.js:496',
-          texte:
-            'Capitalisation actuarielle en base exact/365, convention lue dans SimPLUS!FA15. ' +
-            'La date de fin par défaut est celle du DERNIER tirage (Q-3, close) et non la mise ' +
-            'en location : le dernier tirage ne porte donc aucun intérêt sauf à passer une ' +
-            'date de fin explicite.',
+          source: "src/amortissement.js:496",
+          texte: "Capitalisation actuarielle en base exact/365, convention lue dans SimPLUS!FA15. La date de fin par défaut est celle du DERNIER tirage (Q-3, close) et non la mise en location : le dernier tirage ne porte donc aucun intérêt sauf à passer une date de fin explicite."
         },
-        piege:
-          'Ne pas capitaliser les intérêts ne les supprime pas : le coût existe toujours, il ' +
-          'n’est simplement pas incorporé au capital du prêt.',
-      },
-    ],
+        piege: "Ne pas capitaliser les intérêts ne les supprime pas : le coût existe toujours, il n’est simplement pas incorporé au capital du prêt.",
+        entrees: [
+          [
+            "Échéancier des tirages",
+            "issu de la trésorerie de chantier, mois par mois"
+          ],
+          [
+            "Taux de préfinancement",
+            "vignette du prêt, ou taux du prêt lui-même"
+          ],
+          [
+            "Date de fin",
+            "fin de la période de préfinancement, en principe la mise en location"
+          ]
+        ]
+      }
+    ]
   },
   {
-    id: 'tresorerie',
-    titre: 'Trésorerie de chantier',
-    accroche:
-      'Le compte d’exploitation démarre à la mise en location. Entre l’ordre de service et la ' +
-      'livraison, l’opération ne fait que dépenser, et ses financements n’arrivent pas au même ' +
-      'rythme. Ce module répond à une seule question : l’opération a-t-elle de quoi payer ses ' +
-      'factures pendant les travaux ?',
+    id: "tresorerie",
+    titre: "Trésorerie de chantier",
+    accroche: "Le compte d’exploitation démarre à la mise en location. Entre l’ordre de service et la livraison, l’opération ne fait que dépenser, et ses financements n’arrivent pas au même rythme. Ce module répond à une seule question : l’opération a-t-elle de quoi payer ses factures pendant les travaux ?",
     etapes: [
       {
-        titre: 'Deux indexations qui se suivent',
-        regles: ['R-TRESO-2'],
-        simple:
-          'Le coût est d’abord révisé de sa date de valeur jusqu’à l’ordre de service : un ' +
-          'chiffrage d’il y a deux ans ne vaut plus le même prix au démarrage. Chaque ' +
-          'mensualité est ensuite indexée de sa propre durée. Seules les sommes dues sont ' +
-          'indexées : une facture payée le premier mois ne subit pas l’indexation du ' +
-          'trentième.',
-        formule:
-          'coût révisé = coût saisi × (1 + taux)^(années entre la date de valeur et l’ordre de service)\n' +
-          'dépense du mois k = sa part du coût révisé × (1 + taux)^(années entre l’ordre de service et ce mois)',
+        titre: "Deux indexations qui se suivent",
+        regles: ["R-TRESO-2"],
+        simple: "Le coût des travaux que vous saisissez a une date de valeur : c’est le prix à un moment donné. Entre cette date et le chantier réel, les prix montent. Le moteur applique donc deux indexations qui se suivent. La première amène le coût de sa date de valeur jusqu’au démarrage du chantier. La seconde continue de l’indexer mois après mois pendant le chantier, puisqu’une dépense du 24e mois se paie plus cher qu’une du 1er. Les deux utilisent le même taux annuel, ramené au prorata du temps écoulé. Sans cette double indexation, une opération étudiée deux ans à l’avance serait systématiquement sous-évaluée.",
+        formule: "coût au démarrage = coût saisi × (1 + taux) ^ (mois entre date de valeur et OS ÷ 12)\ndépense du mois M = dépense de base × (1 + taux) ^ (M ÷ 12)\n\nExemple, 2 000 000 € valeur 01/01/2025, chantier 01/01/2026 → 24 mois, taux 2 % :\n  révision jusqu’à l’OS ... 2 000 000 × 1,02^1,00 = 2 040 000 €\n  dépense du mois 1 ....... 85 000 × 1,02^0,08 = 85 142 €\n  dépense du mois 24 ...... 85 000 × 1,02^2,00 = 88 434 €",
         support: {
-          fonction: 'tresorerieChantier',
+          fonction: "tresorerieChantier",
           signature: "tresorerieChantier({ date_debut_travaux, duree_chantier_mois, cout_total_eur, date_valeur_cout, taux_indexation, subventions_eur, fonds_propres_eur, tirer_les_prets, jalons, mode_tirage }) → { flux, indicateurs, echeance_nominale_eur }",
           code: "cout_indexe = cout_total_eur * (1 + taux_indexation) ** (mois écoulés / 12)",
           referentiel: "tresorerie.taux_indexation · tresorerie.jalons_vefa.jalons · tresorerie.mode_tirage",
           alimente: "l’écran Trésorerie et l’échéancier de tirages passé à prefinancement",
           tests: "tests/tresorerie.test.js",
-          source: 'src/tresorerie.js:72',
-          texte:
-            'Base 365,25 jours, celle du classeur métier « Indexeur coût travaux ». Attention : ' +
-            'le préfinancement (R-FIN-6) utilise 365. Les deux bases coexistent volontairement, ' +
-            'ne pas les uniformiser sans arbitrage métier.',
+          source: "src/tresorerie.js:72",
+          texte: "Base 365,25 jours, celle du classeur métier « Indexeur coût travaux ». Attention : le préfinancement (R-FIN-6) utilise 365. Les deux bases coexistent volontairement, ne pas les uniformiser sans arbitrage métier."
         },
-        piege:
-          'La première échéance tombe un mois APRÈS l’ordre de service : un chantier ne facture ' +
-          'pas le jour où il commence.',
+        piege: "La première échéance tombe un mois APRÈS l’ordre de service : un chantier ne facture pas le jour où il commence.",
+        entrees: [
+          [
+            "Coût total de l’opération",
+            "prix de revient TTC, ou montant saisi dans l’écran Trésorerie"
+          ],
+          ["Date de valeur du coût", "écran Trésorerie, saisie"],
+          [
+            "Taux d’indexation",
+            "Paramètres > Trésorerie > taux_indexation (2 % par défaut)"
+          ],
+          ["Durée du chantier", "écran Opération > Calendrier"]
+        ]
       },
       {
-        titre: 'Le barème d’appels de fonds en VEFA',
-        regles: ['R-TRESO-3'],
-        simple:
-          'En vente en l’état futur d’achèvement, le promoteur appelle les fonds à ' +
-          'l’avancement selon un barème légal : une part à la signature, une part aux ' +
-          'fondations, et ainsi de suite. Répartir à parts égales serait faux d’un quart dès ' +
-          'le premier mois. Hors VEFA, le moteur répartit simplement le coût en mensualités ' +
-          'égales.',
-        formule:
-          'mois d’un jalon = plafond( son avancement × durée du chantier ), ramené entre 1 et la durée\n' +
-          'dépense de ce mois = sa part × coût révisé',
+        titre: "Le barème d’appels de fonds en VEFA",
+        regles: ["R-TRESO-3"],
+        simple: "En VEFA, on ne paie pas le promoteur mois par mois : on l’appelle à des jalons d’avancement, selon un barème légal. Le moteur retient ce barème par défaut — 25 % à l’achèvement des fondations, puis les paliers réglementaires jusqu’à la livraison — et vous pouvez le modifier dans l’écran d’administration, y compris insérer, supprimer et réordonner des jalons. Chaque jalon porte un avancement, exprimé en pourcentage du chantier, et une part, exprimée en pourcentage du coût. L’avancement se convertit en mois : un jalon à 50 % d’avancement d’un chantier de 24 mois tombe au mois 12. Un jalon posé au-delà de la livraison y est ramené, la trésorerie de chantier s’arrêtant là. Le total des parts doit faire 100 %, et l’écran le signale en rouge si ce n’est pas le cas.",
+        formule: "mois du jalon = ARRONDI(avancement × durée du chantier)\nappel du jalon = coût indexé × part\n\nBarème par défaut (VEFA) :\n  fondations ......... avancement  25 %  →  part 25 %\n  mise hors d’eau .... avancement  50 %  →  part 25 %\n  achèvement ......... avancement  75 %  →  part 25 %\n  livraison .......... avancement 100 %  →  part 25 %\n                                          ─────────\n                                            100 %\n\nChantier de 24 mois : appels aux mois 6, 12, 18 et 24.",
         support: {
-          fonction: 'tresorerieChantier (branche jalons)',
+          fonction: "tresorerieChantier (branche jalons)",
           signature: "jalons : [{ libelle, avancement, part }]. L’avancement place le jalon dans le chantier, la part dit combien on appelle",
           code: "mois = Math.round(avancement * duree_chantier_mois) ; un jalon au-delà de la livraison y est ramené",
           referentiel: "tresorerie.jalons_vefa.jalons (barème légal VEFA, éditable en admin)",
           alimente: "la courbe de dépenses de l’écran Trésorerie",
           tests: "tests/tresorerie.test.js",
-          source: 'src/tresorerie.js:72',
-          texte:
-            'Les jalons d’avancement supérieur ou égal à 1 (réserves, conformité, garantie de ' +
-            'parfait achèvement) sont ramenés au dernier mois : les ignorer ferait manquer ' +
-            'environ 5 % du prix de revient. Plusieurs jalons de même rang s’additionnent sur ' +
-            'le même mois.',
+          source: "src/tresorerie.js:72",
+          texte: "Les jalons d’avancement supérieur ou égal à 1 (réserves, conformité, garantie de parfait achèvement) sont ramenés au dernier mois : les ignorer ferait manquer environ 5 % du prix de revient. Plusieurs jalons de même rang s’additionnent sur le même mois."
         },
-        piege:
-          'Rien ne vérifie que les parts du barème somment à 100 %. Un barème incomplet fait ' +
-          'que le total des dépenses n’atteint pas le coût révisé, sans erreur ni alerte. Sous ' +
-          'barème, certains mois portent aussi une dépense nulle, ce qui n’arrive jamais à ' +
-          'parts égales.',
+        piege: "Rien ne vérifie que les parts du barème somment à 100 %. Un barème incomplet fait que le total des dépenses n’atteint pas le coût révisé, sans erreur ni alerte. Sous barème, certains mois portent aussi une dépense nulle, ce qui n’arrive jamais à parts égales.",
+        entrees: [
+          [
+            "Jalons",
+            "Paramètres > Admin > Appels de fonds, tableau modifiable"
+          ],
+          [
+            "Type d’opération",
+            "écran Opération : les jalons ne s’appliquent qu’en VEFA"
+          ],
+          ["Durée du chantier", "écran Opération > Calendrier"]
+        ]
       },
       {
-        titre: 'Tirer le prêt en une fois ou au fil de l’eau',
-        regles: ['R-TRESO-4'],
-        simple:
-          'Les deux modes financent exactement la même chose, mais pas au même prix. Tirer le ' +
-          'prêt entier dès le premier mois laisse dormir de l’argent en caisse, sur lequel ' +
-          'courent des intérêts intercalaires alors qu’il ne finance encore rien. Tirer au fil ' +
-          'de l’eau ne comble que le manque du mois. Le premier mode est celui de l’organisme, ' +
-          'et c’est le plus coûteux.',
-        formule:
-          'à emprunter = dépenses totales − subventions − fonds propres, borné à zéro\n' +
-          'tirage intégral    : tout au premier mois, avant la première dépense\n' +
-          'au fil de l’eau    : chaque mois, juste de quoi ramener le solde à zéro',
+        titre: "Tirer le prêt en une fois ou au fil de l’eau",
+        regles: ["R-TRESO-4"],
+        simple: "Deux façons de mobiliser les prêts pendant le chantier, et elles ne coûtent pas la même chose. Le tirage intégral encaisse tout le prêt dès le premier mois après l’ordre de service : la trésorerie est confortable, mais les intérêts courent sur la totalité pendant toute la durée du chantier. Le tirage au fil de l’eau n’appelle que ce dont on a besoin chaque mois : les intérêts intercalaires sont bien plus faibles, mais il faut suivre les appels. Les subventions, elles, sont toujours mobilisables dès l’ordre de service. Ce choix se règle dans les paramètres et change directement le montant des frais financiers.",
+        formule: "mode intégral :\n  recette du mois 1 = montant total des prêts\n  recette des mois suivants = 0\n\nmode au fil de l’eau :\n  recette du mois M = dépense du mois M − subventions déjà perçues\n\nDans les deux cas :\n  subventions perçues intégralement au mois 0 (ordre de service)",
         support: {
-          fonction: 'tresorerieChantier (boucle des flux)',
+          fonction: "tresorerieChantier (boucle des flux)",
           signature: "flux : [{ mois, date, depense_eur, recette_eur, solde_eur, cumul_eur }], un enregistrement par mois de chantier",
           code: "cumul += recette_eur - depense_eur   à chaque pas de la boucle mensuelle",
           referentiel: "tresorerie.mode_tirage : integral tire tout le prêt au premier mois, sinon au fil de l’eau",
           alimente: "le graphique et le tableau de l’écran Trésorerie",
           tests: "tests/tresorerie.test.js",
-          source: 'src/tresorerie.js:72',
-          texte:
-            'Le mode par défaut est `integral`. La branche au fil de l’eau se déclenche sur ' +
-            '`mode_tirage !== "integral"` : toute valeur inconnue y bascule silencieusement. ' +
-            'L’échéancier `tirages` produit ici est directement consommable par ' +
-            '`prefinancement()`.',
+          source: "src/tresorerie.js:72",
+          texte: "Le mode par défaut est `integral`. La branche au fil de l’eau se déclenche sur `mode_tirage !== \"integral\"` : toute valeur inconnue y bascule silencieusement. L’échéancier `tirages` produit ici est directement consommable par `prefinancement()`."
         },
-        piege:
-          'Subventions et fonds propres sont réputés mobilisables dès l’ordre de service, donc ' +
-          'comptés avant la première dépense. C’est un arbitrage métier, pas une règle ' +
-          'comptable.',
+        piege: "Subventions et fonds propres sont réputés mobilisables dès l’ordre de service, donc comptés avant la première dépense. C’est un arbitrage métier, pas une règle comptable.",
+        entrees: [
+          ["Mode de tirage", "Paramètres > Trésorerie > mode_tirage"],
+          ["Montant des prêts", "plan de financement de l’opération"],
+          ["Subventions", "écran de la tranche, mobilisables dès l’OS"]
+        ]
       },
       {
-        titre: 'Le besoin de préfinancement',
-        regles: ['R-TRESO'],
-        simple:
-          'Le point bas du solde est le besoin de préfinancement : c’est lui qui portera les ' +
-          'intérêts intercalaires, et c’est le chiffre à retenir de cet écran. Le besoin peut ' +
-          'être négatif les premiers mois quand l’apport dépasse les dépenses engagées.',
-        formule:
-          'besoin du mois = dépenses cumulées − subventions − fonds propres\n' +
-          'besoin maximal = plus fort besoin sur toute la durée du chantier',
+        titre: "Le besoin de préfinancement",
+        regles: ["R-TRESO"],
+        simple: "Mois après mois, le moteur cumule ce qui sort et ce qui rentre. Le cumul devient négatif dès que les dépenses dépassent les recettes, et c’est ce creux qu’il faut financer. Le besoin maximal de préfinancement est le point le plus bas de cette courbe, pris en valeur absolue — c’est le montant qu’il faut avoir mobilisé pour ne jamais être à découvert. L’écran affiche aussi le mois où ce pic tombe, parce que c’est là que se joue la négociation du préfinancement. Ce besoin alimente ensuite directement le calcul des intérêts intercalaires.",
+        formule: "cumul du mois M = cumul du mois M−1 + recettes M − dépenses M\nbesoin maximal = |MIN(tous les cumuls)|  si ce minimum est négatif, sinon 0\nmois du pic = le mois où ce minimum est atteint\n\nExemple :\n  mois  6 : cumul  −180 000 €\n  mois 12 : cumul  −420 000 €  ← pic\n  mois 18 : cumul  −310 000 €\n  mois 24 : cumul       0 €\n  besoin maximal = 420 000 €, atteint au mois 12",
         support: {
-          fonction: 'tresorerieChantier (indicateurs)',
+          fonction: "tresorerieChantier (indicateurs)",
           signature: "indicateurs : { besoin_maximal_eur, mois_du_pic, total_depenses_eur, total_recettes_eur }",
           code: "besoin_maximal_eur = le PIC du cumul négatif, pris en valeur absolue (un Math.min y avait renvoyé 0 sur toute opération normale)",
           referentiel: "aucun : dérivé des flux",
           alimente: "les tuiles de l’écran Trésorerie",
           tests: "tests/tresorerie.test.js",
-          source: 'src/tresorerie.js:72',
-          texte:
-            'Le mois du pic est le PREMIER à atteindre le maximum (comparaison stricte). Sans ' +
-            'jalons ni indexation, le pic tombe toujours au dernier mois, le besoin cumulé ' +
-            'étant croissant. `besoin_maximal_eur` est borné à zéro.',
+          source: "src/tresorerie.js:72",
+          texte: "Le mois du pic est le PREMIER à atteindre le maximum (comparaison stricte). Sans jalons ni indexation, le pic tombe toujours au dernier mois, le besoin cumulé étant croissant. `besoin_maximal_eur` est borné à zéro."
         },
-        piege:
-          'Le surcoût d’indexation affiché se compte par rapport au coût INITIAL : il inclut ' +
-          'donc la révision de départ, et sera toujours supérieur à celle-ci.',
-      },
-    ],
+        piege: "Le surcoût d’indexation affiché se compte par rapport au coût INITIAL : il inclut donc la révision de départ, et sera toujours supérieur à celle-ci.",
+        entrees: [
+          ["Dépenses mensuelles", "calculées aux étapes 1 et 2"],
+          ["Recettes mensuelles", "calculées à l’étape 3"],
+          ["Fonds propres", "écran de la tranche, mobilisables dès l’OS"]
+        ]
+      }
+    ]
   },
   {
-    id: 'financement',
-    titre: 'Plan de financement',
-    accroche:
-      'Deux colonnes qui doivent s’égaler à l’euro près : d’un côté les emplois, ce que ' +
-      'l’opération coûte ; de l’autre les ressources, ce qui la finance. L’écart entre les ' +
-      'deux est toujours affiché, jamais absorbé en douce par une variable d’ajustement.',
+    id: "financement",
+    titre: "Plan de financement",
+    accroche: "Deux colonnes qui doivent s’égaler à l’euro près : d’un côté les emplois, ce que l’opération coûte ; de l’autre les ressources, ce qui la finance. L’écart entre les deux est toujours affiché, jamais absorbé en douce par une variable d’ajustement.",
     etapes: [
       {
-        titre: 'L’équilibre, et le sens de l’écart',
-        regles: ['R-FIN-1'],
-        simple:
-          'Les emplois valent le prix de revient toutes taxes comprises, modulation incluse. ' +
-          'Les ressources additionnent les subventions, les fonds propres et tous les prêts. ' +
-          'Un écart positif signifie que l’opération est surfinancée, on a mobilisé plus ' +
-          'd’argent qu’elle ne coûte ; un écart négatif qu’elle est sous-financée, il manque ' +
-          'de quoi boucler.',
-        formule:
-          'ressources = subventions + fonds propres + prêts\n' +
-          'emplois    = prix de revient TTC modulé\n' +
-          'écart      = ressources − emplois',
+        titre: "L’équilibre, et le sens de l’écart",
+        regles: ["R-FIN-1"],
+        simple: "Une opération est équilibrée quand ce qu’elle coûte est exactement couvert par ce qui la finance. Les ressources sont la somme de trois choses : les subventions, les fonds propres et les prêts. On les compare au prix de revient TTC. Le signe de l’écart se lit dans un sens précis : un écart positif signifie qu’on a mobilisé plus de ressources que nécessaire, un écart négatif qu’il manque de l’argent. Le moteur signale aussi si la part des prêts CDC descend sous le minimum réglementaire. Un écart d’un euro ou moins est de l’arrondi de présentation et n’est pas signalé.",
+        formule: "ressources = subventions + fonds propres + prêts\nécart = ressources − prix de revient TTC\n\n  écart > 0 ...... surfinancement, il faut réduire une ressource\n  écart = 0 ...... équilibre\n  écart < 0 ...... reste à financer\n\nExemple, opération AGDE :\n  prêts PLS ................ 1 978 651 €   (89,3 %)\n  subventions .............. 193 000 €     ( 8,7 %)\n  avance de trésorerie ..... 44 319 €      ( 2,0 %)\n                             ───────────\n  ressources ............... 2 215 970 €\n  prix de revient TTC ...... 2 215 970 €\n  écart .................... 0 € ✓",
         support: {
-          fonction: 'controleEquilibre',
+          fonction: "controleEquilibre",
           signature: "controleEquilibre({ prix_revient_ttc_module_eur, subventions_eur, fonds_propres_eur, prets_eur, prets_cdc_eur }, referentiels) → { ressources_eur, ecart_eur, alertes }",
           code: "ressources = subventions_eur + fonds_propres_eur + prets_eur ; ecart = arrondiEuro(ressources - prix_revient_ttc_module_eur)",
           referentiel: "constantes_reglementaires.quotite_cdc_min pour l’alerte de quotité",
           alimente: "le bandeau d’équilibre du plan de financement",
           tests: "tests/moteur.test.js",
-          source: 'src/financement.js:287',
-          texte:
-            'L’équilibre est jugé APRÈS arrondi à l’euro : un écart de 0,40 € est déclaré ' +
-            'équilibré. Un second contrôle vérifie que les prêts CDC atteignent au moins 50 % ' +
-            'du prix de revient (`controle_ratio_prets_cdc_min`), mais seulement si des prêts ' +
-            'CDC existent.',
+          source: "src/financement.js:287",
+          texte: "L’équilibre est jugé APRÈS arrondi à l’euro : un écart de 0,40 € est déclaré équilibré. Un second contrôle vérifie que les prêts CDC atteignent au moins 50 % du prix de revient (`controle_ratio_prets_cdc_min`), mais seulement si des prêts CDC existent."
         },
-        piege:
-          'Deux sources d’écart résiduel sont normales : l’arrondi au millier supérieur des ' +
-          'prêts théoriques, qui peut surfinancer de près de 2 000 €, et un excédent de ' +
-          'tranche que le moteur n’a pas su redistribuer.',
+        piege: "Deux sources d’écart résiduel sont normales : l’arrondi au millier supérieur des prêts théoriques, qui peut surfinancer de près de 2 000 €, et un excédent de tranche que le moteur n’a pas su redistribuer.",
+        entrees: [
+          ["Prix de revient TTC", "calculé au chapitre Prix de revient"],
+          ["Subventions", "écran de la tranche, ligne par ligne"],
+          ["Fonds propres", "écran de la tranche"],
+          [
+            "Prêts",
+            "écran de la tranche, saisis ou calculés en mode CDC théorique"
+          ],
+          ["Quotité CDC minimale", "Paramètres > Constantes réglementaires"]
+        ]
       },
       {
-        titre: 'Le droit à prêt foncier',
-        regles: ['R-FIN-2'],
-        simple:
-          'La Caisse des dépôts ne finance par un prêt foncier que la part de la charge ' +
-          'foncière qui n’est pas déjà couverte par des subventions. On calcule donc quelle ' +
-          'fraction du coût total les subventions représentent, et on abat la charge foncière ' +
-          'de cette même fraction.',
-        formule:
-          'droit à prêt foncier = charge foncière × (1 − subventions ÷ prix de revient) × part de surface utile',
+        titre: "Le droit à prêt foncier",
+        regles: ["R-FIN-2"],
+        simple: "Le prêt foncier de la Caisse des Dépôts ne peut pas dépasser un plafond, et ce plafond n’est pas la charge foncière brute. La règle du prêteur : on part de la charge foncière, on en retire la part déjà couverte par les subventions, et on applique la quote-part de la tranche. Le point important est que la réduction se calcule sur l’opération ENTIÈRE, puis se répartit : une subvention fléchée sur une seule tranche réduit donc le droit à prêt foncier de toutes les tranches. C’est contre-intuitif mais c’est bien la formule de la calculette CDC, et c’est le prêteur qui fixe la règle de son propre prêt.",
+        formule: "réduction = subventions totales ÷ prix de revient de l’opération\nfoncier finançable = charge foncière × (1 − réduction) × quote-part de la tranche\n\nExemple :\n  charge foncière ............ 800 000 €\n  subventions ................ 193 000 €\n  prix de revient opération .. 2 215 970 €\n  réduction .................. 193 000 ÷ 2 215 970 = 8,71 %\n  foncier finançable ......... 800 000 × 91,29 % = 730 320 €\n  (× quote-part si plusieurs tranches)",
         support: {
-          fonction: 'foncierFinancable',
+          fonction: "foncierFinancable",
           signature: "foncierFinancable({ charge_fonciere_eur, subventions_eur, prix_revient_operation_eur, quote_part_su }) → euros",
           code: "reduction = subventions_eur / prix_revient_operation_eur ; retour = charge_fonciere_eur * (1 - reduction) * quote_part_su",
           referentiel: "aucun : la formule est celle de la calculette CDC, feuille Construction cellule AT37",
           alimente: "pretsCDCTheoriques : plafonne le prêt foncier",
           tests: "tests/moteur.test.js",
-          source: 'src/financement.js:206',
-          texte:
-            'Arbitrage Q-30 du 06/08/2026 : ce sont TOUTES les subventions qui abattent, y ' +
-            'compris la surcharge foncière, et non les seuls financements gratuits comme ' +
-            'l’annonçait le dictionnaire. C’est le prêteur qui fixe la règle de son propre ' +
-            'prêt, et la calculette CDC le confirme (Construction!AT37).',
+          source: "src/financement.js:206",
+          texte: "Arbitrage Q-30 du 06/08/2026 : ce sont TOUTES les subventions qui abattent, y compris la surcharge foncière, et non les seuls financements gratuits comme l’annonçait le dictionnaire. C’est le prêteur qui fixe la règle de son propre prêt, et la calculette CDC le confirme (Construction!AT37)."
         },
-        piege:
-          'Le calcul est GLOBAL puis réparti au prorata des surfaces utiles : une subvention ' +
-          'fléchée sur une seule tranche réduit le droit à prêt foncier de toute l’opération, ' +
-          'pas seulement celui de la tranche qui la reçoit.',
+        piege: "Le calcul est GLOBAL puis réparti au prorata des surfaces utiles : une subvention fléchée sur une seule tranche réduit le droit à prêt foncier de toute l’opération, pas seulement celui de la tranche qui la reçoit.",
+        entrees: [
+          ["Charge foncière", "chapitre I du prix de revient"],
+          [
+            "Subventions totales",
+            "toutes les subventions du plan, gratuites ou non (arbitrage Q-30)"
+          ],
+          ["Prix de revient de l’opération", "toutes tranches confondues"],
+          ["Quote-part de surface utile", "calculée au chapitre Surfaces"]
+        ]
       },
       {
-        titre: 'Les prêts CDC théoriques',
-        regles: ['R-FIN-4'],
-        simple:
-          'Quand aucun prêt n’est saisi, le moteur reconstitue les deux prêts de la Caisse des ' +
-          'dépôts. Le prêt foncier prend en priorité le besoin, dans la limite du droit à prêt ' +
-          'calculé plus haut ; le prêt bâtiment ramasse le reste, diminué des intérêts de ' +
-          'préfinancement. Dès qu’un prêt est saisi à la main, ce calcul ne s’applique plus.',
-        formule:
-          'solde à financer = prix de revient − subventions − fonds propres − autres prêts\n' +
-          'prêt foncier     = minimum(solde, droit à prêt foncier), au moins zéro\n' +
-          'prêt bâtiment    = solde − intérêts de préfinancement − prêt foncier, au moins zéro',
+        titre: "Les prêts CDC théoriques",
+        regles: ["R-FIN-4"],
+        simple: "Quand vous ne saisissez aucun prêt, le moteur les calcule pour vous. Il part du solde à financer — le prix de revient moins tout ce qui n’est pas du prêt — puis le partage en deux : un prêt foncier, plafonné au droit calculé à l’étape précédente, et un prêt travaux qui prend le reste. Le préfinancement se retranche du prêt travaux, puisqu’il a déjà servi à couvrir une partie du besoin. Vous pouvez forcer l’un ou l’autre montant, et une option arrondit les prêts au millier supérieur, comme le fait le prêteur.",
+        formule: "solde à financer = prix de revient TTC − subventions − fonds propres − autres prêts\n\nprêt foncier  = MIN(solde à financer ; foncier finançable)\nprêt travaux  = solde à financer − préfinancement − prêt foncier\n\n(les deux sont bornés à zéro, et arrondis au millier supérieur si l’option est active)\n\nExemple :\n  prix de revient TTC ........ 2 215 970 €\n  − subventions .............. 193 000 €\n  − fonds propres ............ 44 319 €\n  = solde à financer ......... 1 978 651 €\n  foncier finançable ......... 606 891 €\n  → prêt foncier ............. 606 891 €\n  → prêt travaux ............. 1 371 760 €",
         support: {
-          fonction: 'soldeAFinancer, pretsCDCTheoriques',
+          fonction: "soldeAFinancer, pretsCDCTheoriques",
           signature: "soldeAFinancer({ prix_revient_ttc_module_eur, subventions_eur, fonds_propres_eur, autres_prets_eur }) → euros · pretsCDCTheoriques({ solde_eur, foncier_financable_eur, prefinancement_eur, arrondir_milliers, pret_foncier_force_eur, pret_batiment_force_eur }) → { foncier_eur, batiment_eur }",
           code: "foncier = Math.max(0, Math.min(solde_eur, foncier_financable_eur)) ; batiment = solde_eur - prefinancement_eur - foncier",
           referentiel: "options.arrondir_prets_milliers_sup",
           alimente: "tableauAmortissement, quand aucun prêt n’est saisi (mode CDC théorique)",
           tests: "tests/moteur.test.js",
-          source: 'src/financement.js:24 et 245',
-          texte:
-            'Option `arrondir_milliers` (SimPLUS!AR26) : chaque prêt est arrondi au millier ' +
-            'SUPÉRIEUR, d’où un surfinancement possible de près de 2 000 € sur les deux. Des ' +
-            'montants forcés court-circuitent le bornage ET l’arrondi. L’option PLUS Horizen ' +
-            'n’est pas implémentée (Q-12, hors périmètre V1).',
+          source: "src/financement.js:24 et 245",
+          texte: "Option `arrondir_milliers` (SimPLUS!AR26) : chaque prêt est arrondi au millier SUPÉRIEUR, d’où un surfinancement possible de près de 2 000 € sur les deux. Des montants forcés court-circuitent le bornage ET l’arrondi. L’option PLUS Horizen n’est pas implémentée (Q-12, hors périmètre V1)."
         },
-        piege:
-          'Les intérêts de préfinancement sont déduits du seul prêt bâtiment, jamais du ' +
-          'foncier.',
+        piege: "Les intérêts de préfinancement sont déduits du seul prêt bâtiment, jamais du foncier.",
+        entrees: [
+          [
+            "Mode de prêts",
+            "écran de la tranche : saisis, ou CDC théoriques"
+          ],
+          ["Foncier finançable", "calculé à l’étape précédente"],
+          ["Préfinancement", "calculé au chapitre Prêts"],
+          ["Arrondi au millier", "option de la simulation"]
+        ]
       },
       {
-        titre: 'Les quotités réglementaires',
-        regles: ['R-FIN-5', 'R-FIN-8', 'R-FIN-9'],
-        simple:
-          'Le prêt PLS doit représenter entre 51 % et 55 % du prix de revient de sa tranche. ' +
-          'Au-delà de 55 %, l’excès n’est plus du PLS : il bascule automatiquement en CPLS, un ' +
-          'prêt complémentaire sur ressource libre. En dessous de 51 %, rien n’est corrigé, le ' +
-          'moteur se contente de le signaler : un PLS trop faible veut dire que l’opération ' +
-          'n’en avait pas besoin, pas qu’il faut gonfler l’emprunt. Le logement intermédiaire, ' +
-          'lui, ne peut pas être financé par de la dette au-delà de 90 % du prix de revient.',
-        formule:
-          'PLS  : plafond 55 % du prix de revient de la tranche, l’excès bascule en CPLS\n' +
-          '       plancher 51 %, signalé mais jamais corrigé\n' +
-          'LLI  : tous prêts confondus plafonnés à 90 % du prix de revient de la tranche',
+        titre: "Les quotités réglementaires",
+        regles: ["R-FIN-5", "R-FIN-8", "R-FIN-9"],
+        simple: "Deux quotités encadrent les prêts, et elles ne se comportent pas pareil. Pour le PLS, la Caisse des Dépôts impose une fourchette de 51 à 55 % du prix de revient. Au-dessus de 55 %, le surplus bascule automatiquement en CPLS, un prêt complémentaire. En dessous de 51 %, le moteur lève une alerte mais ne corrige rien : c’est un choix de montage qui vous appartient. Pour le logement intermédiaire, la règle est un plafond simple : l’ensemble des prêts ne peut dépasser 90 % du prix de revient de la tranche, le solde devant venir en fonds propres ou en subventions. Le dépassement est chiffré et signalé.",
+        formule: "PLS :\n  plafond = 55 % × prix de revient de la tranche\n  plancher = 51 % × prix de revient de la tranche\n  si PLS > plafond  →  PLS = plafond, et CPLS = PLS saisi − plafond\n  si PLS < plancher →  alerte, aucune correction\n\nLLI :\n  plafond = 90 % × prix de revient de la tranche\n  si total des prêts > plafond → dépassement chiffré et signalé\n\nExemple, tranche PLS de 2 000 000 € financée à 1 200 000 € :\n  55 % = 1 100 000 € → PLS = 1 100 000 €, CPLS = 100 000 €",
         support: {
-          fonction: 'scinderPLS, plafondPretsLLI',
+          fonction: "scinderPLS, plafondPretsLLI",
           signature: "scinderPLS({ montant_pls_eur, prix_revient_eur, plafond = 0.55, plancher = 0.51 }) → { pls_eur, cpls_eur, alerte } · plafondPretsLLI({ total_prets_eur, prix_revient_eur, plafond = 0.9 })",
           code: "au-delà du plafond le surplus bascule en CPLS ; sous le plancher une alerte est levée sans rien corriger",
           referentiel: "valeurs par défaut portées par la signature elle-même, surchargeables par la saisie",
           alimente: "le plan de financement et ses alertes",
           tests: "tests/moteur.test.js",
-          source: 'src/financement.js:55 et 89',
-          texte:
-            'Q-15 et Q-33, closes le 06/08/2026. Le plafond se corrige, le plancher s’alerte. ' +
-            'L’excès PLS se prélève d’abord sur le prêt construction, puis sur le foncier. Le ' +
-            'plafond LLI porte sur TOUS les prêts de la tranche, y compris hors CDC (contrôle ' +
-            'AT32 de la calculette).',
+          source: "src/financement.js:55 et 89",
+          texte: "Q-15 et Q-33, closes le 06/08/2026. Le plafond se corrige, le plancher s’alerte. L’excès PLS se prélève d’abord sur le prêt construction, puis sur le foncier. Le plafond LLI porte sur TOUS les prêts de la tranche, y compris hors CDC (contrôle AT32 de la calculette)."
         },
-        piege:
-          'Le contrôle de 50 % de l’équilibre et le plancher PLS de 51 % sont deux règles ' +
-          'DIFFÉRENTES : le premier est un ratio global sur l’ensemble des prêts CDC, le ' +
-          'second est propre au PLS de sa tranche. Leurs valeurs proches prêtent à confusion.',
+        piege: "Le contrôle de 50 % de l’équilibre et le plancher PLS de 51 % sont deux règles DIFFÉRENTES : le premier est un ratio global sur l’ensemble des prêts CDC, le second est propre au PLS de sa tranche. Leurs valeurs proches prêtent à confusion.",
+        entrees: [
+          [
+            "Fourchette PLS 51-55 %",
+            "calculette CDC production LS, guide d’utilisation"
+          ],
+          ["Plafond LLI 90 %", "règle du produit intermédiaire"],
+          [
+            "Prix de revient de la tranche",
+            "calculé au chapitre Prix de revient"
+          ]
+        ]
       },
       {
-        titre: 'Le redressement des tranches surfinancées',
-        regles: ['R-FIN-3'],
-        simple:
-          'Sur une opération mixte, une tranche peut être surfinancée à elle seule : sa ' +
-          'subvention fléchée et ses fonds propres dépassent son propre prix de revient. Cet ' +
-          'excédent ne s’évapore pas, il finance les autres tranches, réparti au prorata de ' +
-          'leur surface utile. L’opération se répète, car une redistribution peut à son tour ' +
-          'rendre une tranche excédentaire.',
-        formule:
-          'les besoins négatifs sont remis à zéro,\n' +
-          'leur excédent est retiré des tranches encore emprunteuses,\n' +
-          'au prorata de leur surface utile, trois tours au plus',
+        titre: "Le redressement des tranches surfinancées",
+        regles: ["R-FIN-3"],
+        simple: "Quand plusieurs tranches se partagent une opération, il arrive qu’une tranche se retrouve surfinancée et une autre sous-financée, simplement parce que les subventions et les fonds propres ne se répartissent pas selon la même clé que les dépenses. Le redressement remet chaque besoin au prorata de la quote-part de surface utile de sa tranche, pour qu’aucune ne porte plus que sa part. Sans cela, on obtiendrait des prêts théoriques négatifs sur une tranche et excessifs sur l’autre.",
+        formule: "besoin redressé d’une tranche = besoin total de l’opération × quote-part de surface utile\n\nExemple, besoin total 1 000 000 €, opération 30 % PLAI / 70 % PLUS :\n  PLAI ... 300 000 €\n  PLUS ... 700 000 €\n\n(et non le besoin brut de chaque tranche, qui pourrait être négatif)",
         support: {
-          fonction: 'redresserBesoins',
+          fonction: "redresserBesoins",
           signature: "redresserBesoins(besoins, quotesParts) → besoins redressés par tranche",
           code: "chaque besoin est ramené au prorata de la quote-part de surface utile de sa tranche",
           referentiel: "aucun : les quotes-parts viennent de quotesPartsSU",
           alimente: "pretsCDCTheoriques, tranche par tranche",
           tests: "tests/moteur.test.js",
-          source: 'src/financement.js:181',
-          texte:
-            'La borne de trois tours reprend celle de la calculette CDC. Si aucune tranche ' +
-            'positive ne subsiste, l’excédent reste acquis à l’opération et ressort en ' +
-            'surfinancement dans le contrôle d’équilibre.',
+          source: "src/financement.js:181",
+          texte: "La borne de trois tours reprend celle de la calculette CDC. Si aucune tranche positive ne subsiste, l’excédent reste acquis à l’opération et ressort en surfinancement dans le contrôle d’équilibre."
         },
+        entrees: [
+          ["Besoins par tranche", "solde à financer de chaque tranche"],
+          ["Quotes-parts", "calculées au chapitre Surfaces"]
+        ]
       },
       {
-        titre: 'Les fonds propres ont un coût',
-        regles: ['R-FIN-7'],
-        simple:
-          'Les fonds propres apportés par l’organisme ne sont pas gratuits pour l’opération. ' +
-          'Selon la politique retenue, ils peuvent être rémunérés (l’opération verse des ' +
-          'intérêts) et reconstitués (elle rembourse le capital sur une durée). Les deux ' +
-          'options sont indépendantes, et les quatre combinaisons existent.',
-        formule:
-          'rémunérés et reconstitués : annuité classique = montant × taux ÷ (1 − (1 + taux)^−durée)\n' +
-          'rémunérés seulement       : montant × taux, sans fin\n' +
-          'reconstitués seulement    : montant ÷ durée\n' +
-          'ni l’un ni l’autre        : charge nulle',
+        titre: "Les fonds propres ont un coût",
+        regles: ["R-FIN-7"],
+        simple: "Les fonds propres ne sont pas gratuits. Dans un montage en redevance, on les apporte sous forme d’avance de trésorerie rémunérée : l’organisme se paie un intérêt sur l’argent qu’il a immobilisé, et il reconstitue le capital sur une durée donnée. Le calcul est exactement celui d’un prêt : une annuité constante qui rembourse le capital et sert l’intérêt sur la durée de reconstitution. Cette annuité entre dans les charges du compte d’exploitation, au même titre qu’une annuité de prêt. Quand le taux est nul, l’annuité est simplement le capital divisé par la durée.",
+        formule: "annuité = capital × taux ÷ (1 − (1 + taux) ^ −durée)\nsi taux = 0 :\n  annuité = capital ÷ durée\n\nExemple, opération AGDE :\n  avance de trésorerie ....... 44 318,74 €\n  taux de rémunération ....... 2,50 %\n  durée de reconstitution .... 30 ans\n  annuité .................... 44 318,74 × 2,5 % ÷ (1 − 1,025^−30)\n                             = 2 117,44 € par an pendant 30 ans",
         support: {
-          fonction: 'annuiteFondsPropres',
+          fonction: "annuiteFondsPropres",
           signature: "annuiteFondsPropres({ montant_eur, taux = 0, duree_ans = 0 }) → euros par an",
           code: "annuite = (montant_eur * taux) / (1 - (1 + taux) ** -duree_ans)   — taux nul : montant / durée",
           referentiel: "fonds_propres.remuneration.taux et .duree_reconstitution_ans",
           alimente: "compteExploitation : charge d’annuité de fonds propres",
           tests: "tests/moteur.test.js, tests/golden_agde_foyer.test.js",
-          source: 'src/financement.js:131',
-          texte:
-            'Le taux n’est retenu que si `remuneres === true`, la durée que si ' +
-            '`reconstitues === true` (comparaisons strictes) : un taux saisi sans cocher la ' +
-            'case est ignoré silencieusement.',
+          source: "src/financement.js:131",
+          texte: "Le taux n’est retenu que si `remuneres === true`, la durée que si `reconstitues === true` (comparaisons strictes) : un taux saisi sans cocher la case est ignoré silencieusement."
         },
-        piege:
-          'Une durée de zéro ne veut pas dire « durée nulle » mais « pas de reconstitution » : ' +
-          'la charge devient un intérêt perpétuel, pas une division par zéro.',
+        piege: "Une durée de zéro ne veut pas dire « durée nulle » mais « pas de reconstitution » : la charge devient un intérêt perpétuel, pas une division par zéro.",
+        entrees: [
+          [
+            "Montant des fonds propres",
+            "écran de la tranche, 2 % du prix de revient en redevance, 5 % en loyers"
+          ],
+          [
+            "Taux de rémunération",
+            "Paramètres > Fonds propres > remuneration.taux"
+          ],
+          [
+            "Durée de reconstitution",
+            "Paramètres > Fonds propres, 30 ans par défaut"
+          ]
+        ]
       },
       {
-        titre: 'Subventions et surcharge foncière',
-        regles: ['R-SUB-1', 'R-SUB-2', 'R-SUB-3'],
-        simple:
-          'Une subvention fléchée sur un produit lui est intégralement affectée ; une ' +
-          'subvention non fléchée se répartit au prorata des surfaces utiles. Quand le terrain ' +
-          'coûte nettement plus cher que la valeur de référence admise par l’État, une ' +
-          'subvention de surcharge foncière peut être accordée : elle part du dépassement, ' +
-          'plafonné, auquel s’applique un coefficient.',
-        formule:
-          'valeur de référence = valeur de base au m² × surface utile retenue\n' +
-          'dépassement         = valeur foncière réelle − valeur de référence\n' +
-          'subvention          = coefficient × dépassement plafonné\n' +
-          '  coefficient 2 en neuf, 0,4 en acquisition-amélioration',
+        titre: "Subventions et surcharge foncière",
+        regles: ["R-SUB-1", "R-SUB-2", "R-SUB-3"],
+        simple: "Une subvention affectée à une tranche lui revient en totalité. Une subvention non affectée se répartit entre les tranches au prorata de leur surface utile, comme n’importe quelle ressource commune. Le moteur distingue par ailleurs les subventions dites gratuites, qui n’appellent aucune contrepartie, des autres. La surcharge foncière est un cas à part : c’est une subvention destinée à compenser un foncier anormalement cher, plafonnée selon la zone et selon l’écart entre le prix du terrain et une valeur de référence.",
+        formule: "subvention affectée .... → intégralement à sa tranche\nsubvention non affectée  → × quote-part de surface utile de chaque tranche\n\ntotal des subventions = Σ affectées + Σ non affectées réparties\n\nExemple :\n  AGGLO 48 000 € affectée au PLS ........ PLS : 48 000 €\n  État 100 000 € non affectée ........... PLAI : 20 000 € · PLUS : 80 000 €\n  (opération 20 % PLAI / 80 % PLUS)",
         support: {
-          fonction: 'agregerSubventions, surchargeFonciere',
+          fonction: "agregerSubventions, surchargeFonciere",
           signature: "agregerSubventions(subventions, quotes_parts) → { total_eur, par_tranche, gratuites_eur } · surchargeFonciere(...) → droit à surcharge foncière",
           code: "une subvention affectée va entière à sa tranche ; sans affectation elle se répartit au prorata des quotes-parts",
           referentiel: "subventions.ssf et ses plafonds par zone",
           alimente: "soldeAFinancer et foncierFinancable",
           tests: "tests/moteur.test.js",
-          source: 'src/subventions.js:30 et 82',
-          texte:
-            'Le plafond se resserre quand les collectivités participent PEU : sous 40 % du ' +
-            'dépassement, on retient le plus petit des deux plafonds. Une affectation ' +
-            '« PLUS-PLAI » n’est pas reconnue comme une clé de produit et se ventile donc sur ' +
-            'TOUS les produits présents, contrairement à ce que laisse entendre la JSDoc.',
+          source: "src/subventions.js:30 et 82",
+          texte: "Le plafond se resserre quand les collectivités participent PEU : sous 40 % du dépassement, on retient le plus petit des deux plafonds. Une affectation « PLUS-PLAI » n’est pas reconnue comme une clé de produit et se ventile donc sur TOUS les produits présents, contrairement à ce que laisse entendre la JSDoc."
         },
-        piege:
-          'Le coefficient de 2 en neuf n’est pas un pourcentage : la subvention vaut deux fois ' +
-          'le dépassement plafonné. Et le plafonnement joue à l’inverse de l’intuition, c’est ' +
-          'quand les collectivités participent peu qu’il se resserre.',
+        piege: "Le coefficient de 2 en neuf n’est pas un pourcentage : la subvention vaut deux fois le dépassement plafonné. Et le plafonnement joue à l’inverse de l’intuition, c’est quand les collectivités participent peu qu’il se resserre.",
+        entrees: [
+          [
+            "Subventions",
+            "écran de la tranche, avec libellé, montant et affectation"
+          ],
+          ["Quotes-parts", "calculées au chapitre Surfaces"],
+          [
+            "Plafonds de surcharge foncière",
+            "Paramètres > Subventions, par zone"
+          ]
+        ]
       },
       {
-        titre: 'Fiscalité : exonération et taxe d’aménagement',
-        regles: ['R-FISC-1', 'R-FISC-2'],
-        simple:
-          'Un logement social neuf est exonéré de taxe foncière pendant une durée qui dépend ' +
-          'du produit : 25 ans en logement social, 20 ans en intermédiaire, aucune en libre. ' +
-          'La première année taxée est l’année de mise en location augmentée de cette durée, ' +
-          'et c’est une bascule majeure du compte d’exploitation. La taxe d’aménagement, elle, ' +
-          'est due à l’autorisation de construire et bénéficie d’un abattement de moitié en ' +
-          'logement social.',
-        formule:
-          'première année taxée = année de mise en location + durée d’exonération\n' +
-          'taxe d’aménagement = surface de plancher × (1 − 50 %) × valeur forfaitaire\n' +
-          '                     + places extérieures × forfait, le tout × (taux commune + taux département)',
+        titre: "Fiscalité : exonération et taxe d’aménagement",
+        regles: ["R-FISC-1", "R-FISC-2"],
+        simple: "Le logement social neuf est exonéré de taxe foncière sur les propriétés bâties pendant 25 ans à compter de la mise en location. La 26e année, la taxe entre en charge d’un coup dans le compte d’exploitation, et le saut est brutal : la ligne quadruple, parce que jusque-là elle ne portait que la taxe d’enlèvement des ordures ménagères. Le moteur compte les 25 ans à partir de l’année de mise en location, conformément au CGI. À noter que la matrice LEON est incohérente sur ce point : elle en compte 26 sur l’opération de Bergerac et 25 sur celle d’Agde. C’est la règle du CGI qui a été retenue. La taxe d’aménagement, elle, se paie une fois, au moment du permis, et entre au prix de revient.",
+        formule: "année d’entrée en TFPB = année de mise en location + durée d’exonération\n\nExemple, mise en location en 2026 :\n  2026 + 25 = 2051  →  première année taxée\n  de 2026 à 2050, seule la TEOM est due\n\nDurées par produit :\n  logement social (PLAI, PLUS, PLS) ... 25 ans (CGI art. 1384 A)\n  logement intermédiaire .............. 20 ans (CGI art. 1384-0 A)\n  logement libre ...................... 0 an",
         support: {
-          fonction: 'exonerationTFPB, taxeAmenagement',
+          fonction: "exonerationTFPB, taxeAmenagement",
           signature: "exonerationTFPB({ annee_mise_en_location, duree_exoneration_ans }, referentiels) → { annee_debut_tfpb, duree_exoneration_ans }",
           code: "annee_debut_tfpb = annee_mise_en_location + duree",
           referentiel: "constantes_reglementaires.tfpb.duree_exoneration_defaut_ans (25) · taxe_amenagement.valeur_forfaitaire et ses taux",
           alimente: "compteExploitation : l’année où la taxe foncière entre en charge",
           tests: "tests/moteur.test.js, tests/golden_agde_foyer.test.js",
-          source: 'src/fiscalite.js:26 et 51',
-          texte:
-            'La durée est une propriété du PRODUIT (Q-14, close) : elle s’applique tranche par ' +
-            'tranche via une série annuelle, une opération mixte n’ayant pas UNE fin ' +
-            'd’exonération. Valeurs forfaitaires : 892 €/m² hors Île-de-France, 1 011 € en ' +
-            'Île-de-France, lues au référentiel et non codées en dur.',
+          source: "src/fiscalite.js:26 et 51",
+          texte: "La durée est une propriété du PRODUIT (Q-14, close) : elle s’applique tranche par tranche via une série annuelle, une opération mixte n’ayant pas UNE fin d’exonération. Valeurs forfaitaires : 892 €/m² hors Île-de-France, 1 011 € en Île-de-France, lues au référentiel et non codées en dur."
         },
-        piege:
-          'L’abattement de 50 % ne porte que sur la surface de plancher, jamais sur le forfait ' +
-          'par place de stationnement. Et si les taux de la commune et du département ne sont ' +
-          'pas saisis, la taxe ressort à zéro alors que son assiette ne l’est pas.',
-      },
-    ],
+        piege: "L’abattement de 50 % ne porte que sur la surface de plancher, jamais sur le forfait par place de stationnement. Et si les taux de la commune et du département ne sont pas saisis, la taxe ressort à zéro alors que son assiette ne l’est pas.",
+        entrees: [
+          ["Année de mise en location", "calculée au calendrier"],
+          [
+            "Durée d’exonération",
+            "propriété du produit, dans produits.js ; une durée saisie sur la simulation prime"
+          ],
+          [
+            "Montant de TFPB",
+            "Paramètres > Charges d’exploitation, 345 €/logement par défaut"
+          ],
+          [
+            "Taxe d’aménagement",
+            "Paramètres > Fiscalité, valeur forfaitaire et taux communal"
+          ]
+        ]
+      }
+    ]
   },
   {
-    id: 'exploitation',
-    titre: 'Compte d’exploitation',
-    accroche:
-      'Cinquante à soixante exercices déroulés année par année. Chaque poste porte sa propre ' +
-      'trajectoire d’indexation, et aucune n’est figée dans le code : ce sont des données. Le ' +
-      'compte produit deux soldes qui ne disent pas la même chose, et les confondre est ' +
-      'l’erreur de lecture la plus fréquente.',
+    id: "exploitation",
+    titre: "Compte d’exploitation",
+    accroche: "Cinquante à soixante exercices déroulés année par année. Chaque poste porte sa propre trajectoire d’indexation, et aucune n’est figée dans le code : ce sont des données. Le compte produit deux soldes qui ne disent pas la même chose, et les confondre est l’erreur de lecture la plus fréquente.",
     etapes: [
       {
-        titre: 'L’ordre d’une année',
-        regles: ['R-EXP'],
-        simple:
-          'Contre l’intuition, le moteur calcule d’abord les charges qui ne dépendent pas des ' +
-          'recettes : échéances de prêts, taxe foncière, provision de gros entretien, ' +
-          'entretien locatif, rémunération des fonds propres. La raison est simple : en régime ' +
-          'de transparence, ce sont elles qui déterminent la redevance. Les produits viennent ' +
-          'ensuite, puis les charges assises sur ces produits, puis l’impôt, puis les soldes.',
-        formule:
-          '1. charges indépendantes des recettes\n' +
-          '2. produits : loyers ou redevance, moins vacance et impayés\n' +
-          '3. charges assises sur les produits (gestion en % des loyers, cotisations)\n' +
-          '4. impôt sur les sociétés\n' +
-          '5. autofinancement, puis résultat comptable',
+        titre: "L’ordre d’une année",
+        regles: ["R-EXP"],
+        simple: "Chaque année du compte se calcule dans un ordre qui n’est pas négociable, parce que certaines charges dépendent des produits et que les produits, en mode transparence, dépendent des charges. Le moteur commence donc par ce qui ne dépend de rien : les annuités de prêts, la taxe foncière, le gros entretien, les charges au forfait. Il calcule ensuite les produits — loyers ou redevance — desquels il retire la vacance et les impayés. Il peut alors calculer les charges assises sur ces produits : les frais de gestion quand ils sont en pourcentage des loyers, les cotisations CGLLS et ANCOLS. Vient l’impôt sur les sociétés, qui a besoin du résultat. Et enfin les deux soldes.",
+        formule: "Ordre de calcul d’une année :\n\n  1. charges fixes ...... annuités + TFPB + TEOM + gros entretien + assurance\n  2. produits bruts ..... loyers (ou redevance) + annexes + divers\n     produits nets ...... produits bruts × (1 − taux de vacance et impayés)\n  3. charges assises .... frais de gestion en % + CGLLS + ANCOLS\n     (calculées sur les produits, donc après l’étape 2)\n  4. impôt .............. taux × MAX(0 ; résultat fiscal)\n  5. soldes ............. autofinancement, puis résultat comptable\n\nExemple, année 2 d’AGDE :\n  redevance ............... 101 504 €\n  − annuités .............. 84 779 €\n  − TFPB et TEOM .......... 1 957 €\n  − assurance ............. 304 €\n  − frais de structure .... 2 075 €\n  = autofinancement ....... 12 389 €",
         support: {
-          fonction: 'compteExploitation',
+          fonction: "compteExploitation",
           signature: "compteExploitation(e) → { lignes, indicateurs }. lignes : une par année, chacune portant produits, charges, annuités et soldes",
           code: "boucle sur duree_ans depuis annee_mise_en_location ; chaque poste passe par facteurIndexation avant d’entrer dans les totaux",
           referentiel: "charges_exploitation.postes · trajectoires · impot_societes · amortissement_comptable",
           alimente: "l’écran Exploitation et tous ses indicateurs",
           tests: "tests/exploitation.test.js, tests/golden.test.js",
-          source: 'src/exploitation.js:113',
-          texte:
-            'La liste des charges diverses est parcourue DEUX fois : une première passe sépare ' +
-            'ce qui est chiffrable sans connaître les produits (`chargesFixes`, qui ne sert ' +
-            'qu’au socle de transparence) d’un taux à appliquer plus tard ; la seconde ' +
-            'recalcule tout et produit la valeur publiée.',
+          source: "src/exploitation.js:113",
+          texte: "La liste des charges diverses est parcourue DEUX fois : une première passe sépare ce qui est chiffrable sans connaître les produits (`chargesFixes`, qui ne sert qu’au socle de transparence) d’un taux à appliquer plus tard ; la seconde recalcule tout et produit la valeur publiée."
         },
-        piege:
-          'Les arrondis à l’euro ne sont posés qu’à la sortie de chaque ligne. Tous les ' +
-          'enchaînements internes, y compris le cumul d’autofinancement d’une année sur ' +
-          'l’autre, travaillent en pleine précision.',
+        piege: "Les arrondis à l’euro ne sont posés qu’à la sortie de chaque ligne. Tous les enchaînements internes, y compris le cumul d’autofinancement d’une année sur l’autre, travaillent en pleine précision.",
+        entrees: [
+          [
+            "Annuités",
+            "calculées au chapitre Prêts, agrégées sur tous les prêts de la tranche"
+          ],
+          [
+            "Taux de vacance et impayés",
+            "Paramètres > Hypothèses d’exploitation"
+          ],
+          [
+            "Postes de charges",
+            "Paramètres > Charges d’exploitation, activés par la saisie"
+          ],
+          [
+            "Durée de simulation",
+            "écran Opération > Calendrier, 50 à 60 ans"
+          ]
+        ]
       },
       {
-        titre: 'L’indexation par trajectoire',
-        regles: ['R-EXP'],
-        simple:
-          'Chaque poste est revalorisé par son propre indice, et les taux annuels s’enchaînent ' +
-          'les uns après les autres : 2 % puis 2,1 % ne font pas 4,1 % mais 4,142 %. Une année ' +
-          'absente de la table reconduit le dernier taux connu, ce qui permet à une table de ' +
-          'dix ans de couvrir une simulation de soixante. L’année de référence n’est jamais ' +
-          'indexée.',
-        formule:
-          'facteur = produit des (1 + taux de chaque année) depuis l’année de référence\n' +
-          'une année absente reconduit le dernier taux connu',
+        titre: "L’indexation par trajectoire",
+        regles: ["R-EXP"],
+        simple: "Aucun montant du compte d’exploitation n’est constant sur soixante ans. Chaque poste suit sa propre trajectoire d’indexation, année par année : les loyers suivent l’IRL, les frais de gestion leur propre indice, la taxe foncière le sien. Le moteur multiplie donc le montant de la première année par le produit des taux de toutes les années écoulées depuis. Un point à connaître : une année absente de la trajectoire reconduit le dernier taux connu, elle ne remet pas l’indexation à zéro. C’est ce qui permet de saisir une trajectoire détaillée sur dix ans puis de laisser le moteur prolonger.",
+        formule: "montant de l’année N = montant de l’année 1 × Π (1 + taux de chaque année écoulée)\n\nExemple, redevance de 101 504 € en 2027, trajectoire +1,7 % puis +1,8 % :\n  2028 ... 101 504 × 1,017 = 103 229 €\n  2029 ... 103 229 × 1,017 = 104 984 €\n  2030 ... 104 984 × 1,018 = 106 874 €\n  2031 ... 106 874 × 1,018 = 108 798 €   (le 1,8 % se reconduit)",
         support: {
-          fonction: 'facteurIndexation, adapterTrajectoires',
+          fonction: "facteurIndexation, adapterTrajectoires",
           signature: "facteurIndexation(trajectoire, annee_debut, annee) → facteur multiplicatif. trajectoire : un taux constant, ou un dictionnaire année → taux",
           code: "pour a de annee_debut+1 à annee : si trajectoire[a] existe il devient le taux courant, puis f *= 1 + taux. Une année absente reconduit le dernier taux connu",
           referentiel: "trajectoires.par_annee.ANNEE.POSTE",
           alimente: "chaque poste indexé du compte d’exploitation",
           tests: "tests/exploitation.test.js",
-          source: 'src/exploitation.js:34 et src/trajectoires.js:56',
-          texte:
-            'Quatre clés seulement sont consommées en dur : `loyers_irl`, `gestion`, ' +
-            '`gros_entretien`, `tfpb`. Les autres postes de la liste (rel, vacance_impayes, ' +
-            'crl…) ne le sont que via le champ `index` d’une charge diverse. Le REL est indexé ' +
-            'par `gestion`, pas par une trajectoire `rel`.',
+          source: "src/exploitation.js:34 et src/trajectoires.js:56",
+          texte: "Quatre clés seulement sont consommées en dur : `loyers_irl`, `gestion`, `gros_entretien`, `tfpb`. Les autres postes de la liste (rel, vacance_impayes, crl…) ne le sont que via le champ `index` d’une charge diverse. Le REL est indexé par `gestion`, pas par une trajectoire `rel`."
         },
-        piege:
-          'La reconduction ne fonctionne que VERS L’AVANT. Si les premières années suivant la ' +
-          'mise en location manquent dans la table, elles sont indexées à 0 % et non au ' +
-          'premier taux connu. Et une clé mal orthographiée donne un facteur 1, sans alerte.',
+        piege: "La reconduction ne fonctionne que VERS L’AVANT. Si les premières années suivant la mise en location manquent dans la table, elles sont indexées à 0 % et non au premier taux connu. Et une clé mal orthographiée donne un facteur 1, sans alerte.",
+        entrees: [
+          [
+            "Trajectoires par poste",
+            "Paramètres > Trajectoires macro, année par année"
+          ],
+          [
+            "Montant de l’année 1",
+            "loyer calculé, redevance saisie, ou valeur de barème du poste"
+          ],
+          ["Année de départ", "année de mise en location"]
+        ]
       },
       {
-        titre: 'Les six assiettes de charges',
-        regles: ['R-EXP'],
-        simple:
-          'Aucune charge d’exploitation n’est écrite dans le code. Chacune déclare son ' +
-          'assiette, sa valeur et son indice, si bien qu’ajouter la TEOM, une assurance ou une ' +
-          'cotisation ne demande pas de toucher au moteur. Une charge peut aussi n’exister que ' +
-          'sur une plage d’années.',
-        formule:
-          'par logement          · valeur en € par logement et par an\n' +
-          'par m² habitable      · valeur en € par m² et par an\n' +
-          '% des produits bruts  · taux appliqué avant vacance et impayés\n' +
-          '% des produits nets   · taux appliqué après vacance et impayés\n' +
-          '% du prix de revient  · taux appliqué au prix de revient TTC\n' +
-          'forfait               · montant annuel, indépendant du programme',
+        titre: "Les six assiettes de charges",
+        regles: ["R-EXP"],
+        simple: "Un poste de charge n’est pas codé en dur dans le moteur : il est décrit par une assiette, une valeur et une trajectoire d’indexation, et le moteur ne connaît que les assiettes. Il y en a six. Par logement : une valeur en euros multipliée par le nombre de logements, c’est le cas de la TEOM à 117 € et de l’assurance à 75 €. Par m² de surface habitable : le gros entretien. En pourcentage des produits bruts : les cotisations, avant vacance. En pourcentage des produits nets : après vacance. En pourcentage du prix de revient TTC : les frais de gestion. En forfait : un montant annuel indépendant du programme. Ajouter un poste ne demande donc pas de toucher au code. Important : aucun poste du catalogue n’est actif par défaut, c’est votre saisie qui l’active.",
+        formule: "selon l’assiette du poste :\n\n  logement ................. montant = valeur × nombre de logements\n  shab ..................... montant = valeur × surface habitable\n  produits_locatifs_bruts .. montant = taux × produits avant vacance\n  produits_locatifs_nets ... montant = taux × produits après vacance\n  prix_revient_ttc ......... montant = taux × prix de revient TTC\n  forfait .................. montant = valeur\n\npuis, dans tous les cas :\n  montant de l’année N = montant × facteur d’indexation\n\nCatalogue livré :\n  TEOM ................ 117 €/logement\n  Assurance PNO ....... 75 €/logement\n  CGLLS ............... 0,34 % des produits bruts\n  ANCOLS .............. taux des produits bruts\n  Frais de structure .. par logement",
         support: {
-          fonction: 'resoudreChargesExploitation',
+          fonction: "resoudreChargesExploitation",
           signature: "resoudreChargesExploitation(saisie = [], baremes = {}) → [{ code, libelle, assiette, valeur, index, annee_debut, annee_fin }]",
           code: "la saisie ACTIVE un poste du catalogue ; aucun poste du référentiel n’est actif par défaut, sans quoi ajouter un poste changerait toutes les simulations",
           referentiel: "charges_exploitation.postes : le catalogue, chaque poste décrit par assiette / valeur / index",
           alimente: "compteExploitation : la liste des charges diverses de chaque année",
           tests: "tests/exploitation.test.js",
-          source: 'src/exploitation.js:667',
-          texte:
-            'Une septième voie existe hors typedef : `montants_par_annee`, dictionnaire ' +
-            'année → montant qui prime sur tout, assiette comprise, et ne s’indexe pas. C’est ' +
-            'la réponse à Q-20, la colonne « autres dépenses » de LEON faite de 51 valeurs ' +
-            'saisies sans formule. Une assiette inconnue lève une erreur en première passe.',
+          source: "src/exploitation.js:667",
+          texte: "Une septième voie existe hors typedef : `montants_par_annee`, dictionnaire année → montant qui prime sur tout, assiette comprise, et ne s’indexe pas. C’est la réponse à Q-20, la colonne « autres dépenses » de LEON faite de 51 valeurs saisies sans formule. Une assiette inconnue lève une erreur en première passe."
         },
-        piege:
-          'Aucun poste n’est actif par défaut : c’est la saisie qui les active. Sans quoi ' +
-          'ajouter un poste au référentiel changerait le résultat de toutes les simulations ' +
-          'existantes.',
+        piege: "Aucun poste n’est actif par défaut : c’est la saisie qui les active. Sans quoi ajouter un poste au référentiel changerait le résultat de toutes les simulations existantes.",
+        entrees: [
+          [
+            "Catalogue des postes",
+            "Paramètres > Charges d’exploitation > postes"
+          ],
+          [
+            "Activation",
+            "écran de la tranche : un poste non coché n’est pas appliqué"
+          ],
+          [
+            "Bornes de période",
+            "année de début et de fin, pour un poste temporaire"
+          ]
+        ]
       },
       {
-        titre: 'Les trois assiettes des frais de gestion',
-        regles: ['R-EXP'],
-        simple:
-          'Les frais de gestion se calculent de trois façons, et une seule est juste pour une ' +
-          'opération donnée. En pourcentage du prix de revient, c’est l’assiette de LEON : un ' +
-          'coût de structure proportionnel à la taille de l’opération, affiché par logement ' +
-          'mais jamais calculé ainsi. En pourcentage des loyers, c’est une commission sur les ' +
-          'recettes. En forfait, c’est un montant négocié par logement.',
-        formule:
-          'priorité : % des loyers > % du prix de revient TTC > forfait par logement\n' +
-          '% du prix de revient : 0,3 % × prix de revient TTC (assiette LEON)',
+        titre: "Les trois assiettes des frais de gestion",
+        regles: ["R-EXP"],
+        simple: "Les frais de gestion peuvent se calculer de trois façons, et le choix change beaucoup le résultat. En pourcentage du prix de revient TTC : c’est la règle retenue, 0,3 % du prix de revient, ce que fait réellement LEON. En pourcentage des loyers : une commission sur les recettes. En forfait par logement : un montant fixe. Le point de confusion vient de ce que LEON AFFICHE les frais de gestion en euros par logement — 415,49 € par lot sur l’opération d’Agde — mais ne les CALCULE jamais ainsi : c’est 0,3 % du prix de revient divisé par le nombre de lots. C’est un coût de structure rapporté à la taille de l’opération, pas une commission sur les recettes.",
+        formule: "assiette prix de revient (retenue) :\n  frais de gestion = 0,3 % × prix de revient TTC × facteur d’indexation\n\nassiette loyers :\n  frais de gestion = taux × produits locatifs\n\nassiette forfait :\n  frais de gestion = valeur × nombre de logements\n\nExemple, AGDE, 16 lots, prix de revient 2 215 969,74 € :\n  0,003 × 2 215 969,74 = 6 647,91 € pour l’opération\n  6 647,91 ÷ 16 = 415,49 € par lot  ← la valeur affichée par LEON",
         support: {
-          fonction: 'compteExploitation (fraisGestionForfait puis arbitrage final)',
+          fonction: "compteExploitation (fraisGestionForfait puis arbitrage final)",
           signature: "trois assiettes possibles : % du prix de revient TTC, % des loyers, forfait par logement",
           code: "frais_gestion_pct_prix_revient > 0 ? taux * prix_revient_ttc_eur * index : frais_gestion_annuels_eur * nb_logements * index",
           referentiel: "charges_exploitation.frais_gestion_pct_prix_revient (0,003) · .frais_gestion_annuels_eur",
           alimente: "les charges du compte d’exploitation",
           tests: "tests/exploitation.test.js, tests/golden_agde_foyer.test.js (question Q-17)",
-          source: 'src/exploitation.js:311 et 493',
-          texte:
-            'Q-17, close le 11/08/2026 sur les matrices BOURGES, CHAMBERY et AGDE. La variante ' +
-            'en % des loyers n’est PAS multipliée par l’indice de gestion : son indexation ' +
-            'vient de celle des loyers. Les trois assiettes ne suivent donc pas la même ' +
-            'inflation.',
+          source: "src/exploitation.js:311 et 493",
+          texte: "Q-17, close le 11/08/2026 sur les matrices BOURGES, CHAMBERY et AGDE. La variante en % des loyers n’est PAS multipliée par l’indice de gestion : son indexation vient de celle des loyers. Les trois assiettes ne suivent donc pas la même inflation."
         },
-        piege:
-          'Les tests de sélection portent sur « strictement positif » : un taux à zéro fait ' +
-          'basculer sur l’assiette suivante. Il n’est donc pas possible de forcer des frais de ' +
-          'gestion nuls par un taux à zéro.',
+        piege: "Les tests de sélection portent sur « strictement positif » : un taux à zéro fait basculer sur l’assiette suivante. Il n’est donc pas possible de forcer des frais de gestion nuls par un taux à zéro.",
+        entrees: [
+          [
+            "Taux de 0,3 %",
+            "Paramètres > Charges d’exploitation > frais_gestion_pct_prix_revient"
+          ],
+          ["Prix de revient TTC", "calculé au chapitre Prix de revient"],
+          ["Nombre de logements", "écran Programme"]
+        ]
       },
       {
-        titre: 'Redevance forfaitaire ou en transparence',
-        regles: ['R-EXP-7'],
-        simple:
-          'Pour les foyers et résidences, le bailleur perçoit une redevance du gestionnaire ' +
-          'plutôt que des loyers au mètre carré. En régime forfaitaire, c’est un montant ' +
-          'négocié revalorisé chaque année. En transparence, le bailleur ne fixe pas un prix : ' +
-          'il refacture ses charges. Difficulté, certaines cotisations sont elles-mêmes ' +
-          'assises sur les produits, donc sur la redevance qu’on cherche à calculer. Plutôt ' +
-          'que de tourner en boucle, le moteur résout l’équation directement.',
-        formule:
-          'forfaitaire  : montant négocié × indexation depuis son année de valeur\n\n' +
-          'transparence : redevance = quote-part × (socle de charges + k × loyers connus)\n' +
-          '                           ÷ (1 − quote-part × k)\n' +
-          '  k = taux des charges assises sur les produits',
+        titre: "Redevance forfaitaire ou en transparence",
+        regles: ["R-EXP-7"],
+        simple: "Un foyer ne perçoit pas un loyer au m² mais une redevance, et il y a deux façons de la fixer. La redevance forfaitaire est un montant négocié : vous le saisissez pour la première année et il s’indexe ensuite, sans aucun lien avec les charges. C’est le cas des opérations d’Agde et de Cazères. La redevance en transparence, au contraire, se recompose depuis les charges : on refacture au gestionnaire ce que l’opération coûte. Le calcul est alors circulaire, puisque certaines charges se calculent en pourcentage des produits — donc de la redevance qu’on cherche. Le moteur résout cette circularité par une formule fermée, il n’itère pas.",
+        formule: "redevance forfaitaire :\n  redevance de l’année N = montant saisi × facteur d’indexation\n\nredevance en transparence :\n  socle .... = annuités + TFPB + gros entretien + charges fixes\n  k ........ = somme des taux assis sur les produits\n  redevance = quote-part × (socle + k × produits connus)\n              ÷ (1 − quote-part × k)\n\nLa division par (1 − quote-part × k) est la résolution de la circularité :\nsans elle, il faudrait itérer jusqu’à convergence.",
         support: {
-          fonction: 'compteExploitation (blocs redevanceForfait et redevanceTransparence)',
+          fonction: "compteExploitation (blocs redevanceForfait et redevanceTransparence)",
           signature: "mode : loyers ou redevance · mode_redevance : forfaitaire ou transparence",
           code: "transparence : num = quotePart * (socle + k * connus - tauxNets * vacance * connus) ; den = 1 - quotePart * k ; redevance = num / den",
           referentiel: "regimes_par_produit.PRODUIT.mode et .mode_redevance",
           alimente: "les produits du compte d’exploitation, à la place des loyers",
           tests: "tests/exploitation.test.js, tests/golden_agde_foyer.test.js",
-          source: 'src/exploitation.js:380 et 443',
-          texte:
-            'Q-27, largement close. La forme fermée résout R = Q × (C₀ + k·(L+R) − ' +
-            'tauxNets·v·L). Le socle n’inclut PAS l’impôt sur les sociétés, calculé après et ' +
-            'donc jamais refacturé. Si le dénominateur devient négatif ou nul, le moteur ' +
-            'retombe silencieusement sur quote-part × socle : la valeur publiée n’est alors ' +
-            'plus la solution de l’équation.',
+          source: "src/exploitation.js:380 et 443",
+          texte: "Q-27, largement close. La forme fermée résout R = Q × (C₀ + k·(L+R) − tauxNets·v·L). Le socle n’inclut PAS l’impôt sur les sociétés, calculé après et donc jamais refacturé. Si le dénominateur devient négatif ou nul, le moteur retombe silencieusement sur quote-part × socle : la valeur publiée n’est alors plus la solution de l’équation."
         },
-        piege:
-          'La vacance et les impayés ne s’appliquent PAS à la part en transparence : le ' +
-          'gestionnaire doit ces frais que les places soient occupées ou non. La redevance ' +
-          'forfaitaire, elle, y est bien soumise.',
+        piege: "La vacance et les impayés ne s’appliquent PAS à la part en transparence : le gestionnaire doit ces frais que les places soient occupées ou non. La redevance forfaitaire, elle, y est bien soumise.",
+        entrees: [
+          [
+            "Mode de redevance",
+            "écran de la tranche : forfaitaire ou transparence"
+          ],
+          [
+            "Montant de l’année 1",
+            "écran de la tranche, saisi en forfaitaire"
+          ],
+          [
+            "Quote-part de transparence",
+            "part des charges refacturée, 100 % en transparence totale"
+          ],
+          ["Trajectoire d’indexation", "Paramètres > Trajectoires macro"]
+        ]
       },
       {
-        titre: 'Un régime par tranche',
-        regles: ['R-EXP-7'],
-        simple:
-          'Une opération n’est pas toujours d’un seul tenant : un foyer en redevance peut ' +
-          'côtoyer des logements familiaux en loyers dans le même programme. Chaque tranche ' +
-          'déclare donc son régime, et le compte les additionne. Pour une tranche en ' +
-          'transparence, c’est sa quote-part de surface utile qui dit quelle part des charges ' +
-          'elle refacture.',
-        formule:
-          'tranche en loyers      → ses loyers annuels, indexés\n' +
-          'tranche en forfaitaire → sa redevance négociée, indexée\n' +
-          'tranche en transparence → sa quote-part de surface utile alimente la forme fermée',
+        titre: "Un régime par tranche",
+        regles: ["R-EXP-7"],
+        simple: "Une opération peut mélanger les régimes : une tranche en loyers classiques et une tranche de foyer en redevance, dans le même compte d’exploitation. Chaque tranche déclare donc son régime, et le compte agrège. La quote-part de surface utile joue ici un rôle précis : elle dit quelle part des charges communes une tranche en transparence refacture. Une tranche en transparence à 40 % de la surface utile ne refacture que 40 % des annuités et de la taxe foncière, le reste restant à la charge de l’organisme.",
+        formule: "produits totaux de l’année = Σ sur les tranches :\n  si mode = loyers      → loyer annuel indexé\n  si mode = redevance   → redevance forfaitaire ou en transparence\n\nla quote-part de la tranche pondère les charges qu’elle refacture\n\nExemple, opération mixte :\n  tranche PLUS (60 % SU) en loyers ....... 95 904 €\n  tranche FPLS (40 % SU) en redevance .... 68 000 €\n  produits totaux ........................ 163 904 €",
         support: {
-          fonction: 'compteExploitation (bloc tranches_produits)',
+          fonction: "compteExploitation (bloc tranches_produits)",
           signature: "produits_par_tranche : [{ code, mode, mode_redevance, redevance_annuelle_eur, loyers_annuels_eur, quote_part }]",
           code: "une tranche en loyers et une tranche en redevance coexistent : chacune apporte ses produits, la quote-part dit quelle part des charges la transparence refacture",
           referentiel: "regimes_par_produit",
           alimente: "le total des produits de chaque année",
           tests: "tests/exploitation.test.js",
-          source: 'src/exploitation.js:414',
-          texte:
-            'Dès que la liste par tranche est non vide, elle écrase complètement les entrées ' +
-            'globales de mode et de redevance. Toute valeur de `mode` autre que la chaîne ' +
-            'exacte `redevance` est traitée comme des loyers.',
+          source: "src/exploitation.js:414",
+          texte: "Dès que la liste par tranche est non vide, elle écrase complètement les entrées globales de mode et de redevance. Toute valeur de `mode` autre que la chaîne exacte `redevance` est traitée comme des loyers."
         },
-        piege:
-          'Bascule de comportement à connaître : en mode global foyer, les loyers d’annexes et ' +
-          'les loyers divers sont annulés ; en mode par tranche, ils sont toujours comptés, ' +
-          'même si toutes les tranches sont en redevance.',
+        piege: "Bascule de comportement à connaître : en mode global foyer, les loyers d’annexes et les loyers divers sont annulés ; en mode par tranche, ils sont toujours comptés, même si toutes les tranches sont en redevance.",
+        entrees: [
+          [
+            "Régime par tranche",
+            "écran de la tranche, interrupteur loyer / redevance"
+          ],
+          ["Quotes-parts", "calculées au chapitre Surfaces"]
+        ]
       },
       {
-        titre: 'L’impôt sur les sociétés',
-        regles: ['R-EXP-4'],
-        simple:
-          'Le logement social conventionné relève du service d’intérêt général et en est ' +
-          'exonéré ; le logement intermédiaire ne l’est pas. Une seule tranche imposable suffit ' +
-          'à rendre l’impôt dû. Son assiette est un résultat FISCAL, plus étroit que le ' +
-          'résultat comptable : LEON n’y déduit que quelques lignes, ce pourquoi la liste des ' +
-          'charges déductibles vient du référentiel et non du code.',
-        formule:
-          'base = loyers nets − charges déductibles listées au référentiel\n' +
-          'impôt = maximum(0, base × taux − crédits d’impôt de l’année)\n' +
-          'un exercice déficitaire ne crée AUCUN crédit reportable',
+        titre: "L’impôt sur les sociétés",
+        regles: ["R-EXP-4"],
+        simple: "Le logement social conventionné relève du service d’intérêt général et n’est pas soumis à l’impôt sur les sociétés. Le logement intermédiaire, lui, l’est. C’est donc une propriété des produits présents au programme, pas un réglage d’opération : une seule tranche imposable suffit à rendre l’impôt dû. Le calcul part du résultat comptable, retire les charges déductibles et les dotations aux amortissements, et applique le taux. Un résultat négatif ne génère pas d’impôt négatif : l’impôt est borné à zéro. Des crédits d’impôt de taxe foncière peuvent venir en déduction sur les premières années.",
+        formule: "soumis à l’IS = VRAI si au moins un produit du programme y est soumis\n\nrésultat fiscal = produits − charges déductibles − dotations aux amortissements\nimpôt = taux × MAX(0 ; résultat fiscal) − crédits d’impôt\n\nExemple :\n  résultat fiscal .... 40 000 €\n  taux ............... 25 %\n  impôt .............. 10 000 €\n\n  résultat fiscal .... −15 000 €\n  impôt .............. 0 €   (jamais négatif)",
         support: {
-          fonction: 'compteExploitation (bloc IS)',
+          fonction: "compteExploitation (bloc IS)",
           signature: "soumis_is se déduit des produits présents au programme, sauf si la saisie tranche explicitement",
           code: "resultat_fiscal = produits - charges déductibles - dotations ; impot = taux * Math.max(0, resultat_fiscal)",
           referentiel: "impot_societes.taux, .produits_soumis, .part_fixe_gros_entretien, .credit_impot_tfpb_lli",
           alimente: "le solde après impôt et l’autofinancement",
           tests: "tests/exploitation.test.js",
-          source: 'src/exploitation.js:517',
-          texte:
-            'Absence de report déficitaire calée sur ParaGEN!GD30 = NON. Une clé inconnue dans ' +
-            'la liste des déductibles est silencieusement ignorée, ce qui gonfle l’impôt sans ' +
-            'signal. Attention : `gros_entretien` et `part_fixe_gros_entretien` sont deux clés ' +
-            'distinctes, les lister toutes deux déduit deux fois.',
+          source: "src/exploitation.js:517",
+          texte: "Absence de report déficitaire calée sur ParaGEN!GD30 = NON. Une clé inconnue dans la liste des déductibles est silencieusement ignorée, ce qui gonfle l’impôt sans signal. Attention : `gros_entretien` et `part_fixe_gros_entretien` sont deux clés distinctes, les lister toutes deux déduit deux fois."
         },
-        piege:
-          'L’assiette part des loyers NETS, pas des produits totaux : la quote-part de ' +
-          'subventions et les produits financiers n’y entrent pas. Et l’impôt est traité comme ' +
-          'une charge ordinaire, il pèse donc sur les deux soldes.',
+        piege: "L’assiette part des loyers NETS, pas des produits totaux : la quote-part de subventions et les produits financiers n’y entrent pas. Et l’impôt est traité comme une charge ordinaire, il pèse donc sur les deux soldes.",
+        entrees: [
+          [
+            "Produits soumis",
+            "Paramètres > Impôt sur les sociétés > produits_soumis"
+          ],
+          ["Taux d’IS", "Paramètres > Impôt sur les sociétés > taux"],
+          [
+            "Part fixe de gros entretien",
+            "Paramètres > Impôt sur les sociétés, part déductible"
+          ],
+          [
+            "Crédits d’impôt TFPB",
+            "Paramètres > Impôt sur les sociétés, pour le logement intermédiaire"
+          ]
+        ]
       },
       {
-        titre: 'Les deux soldes',
-        regles: ['R-EXP-2'],
-        simple:
-          'L’autofinancement déduit les annuités de prêt : c’est de la trésorerie, ce que ' +
-          'l’opération dégage réellement une fois ses échéances payées. Le résultat comptable ' +
-          'remplace ces annuités par les seuls intérêts et y ajoute la dotation aux ' +
-          'amortissements : le remboursement du capital n’est pas une charge, mais l’usure du ' +
-          'bien en est une. Une opération peut afficher un autofinancement positif et un ' +
-          'résultat négatif pendant vingt ans, et c’est même le cas courant.',
-        formule:
-          'autofinancement    = produits − charges (annuités comprises)\n' +
-          'résultat comptable = produits − charges + annuités − intérêts − dotation\n' +
-          '                     autrement dit : les annuités sortent, les intérêts et la\n' +
-          '                     dotation entrent',
+        titre: "Les deux soldes",
+        regles: ["R-EXP-2"],
+        simple: "Le compte produit deux soldes qui ne disent pas la même chose et qu’il ne faut pas confondre. L’autofinancement est un solde de TRÉSORERIE : ce qui reste en caisse une fois les recettes encaissées et les charges payées, annuités comprises. C’est lui qui dit si l’opération tient financièrement. Le résultat comptable est un solde de COMPTABILITÉ : il ignore le remboursement du capital, qui n’est pas une charge, mais il intègre la dotation aux amortissements, qui n’est pas un décaissement. Une opération peut très bien afficher un autofinancement positif et un résultat comptable négatif pendant des années : c’est même le cas normal du logement social neuf.",
+        formule: "autofinancement = produits − charges (annuités comprises)\ncumul = cumul de l’année précédente + autofinancement\n\nrésultat comptable = produits\n                   − charges hors remboursement de capital\n                   − dotation aux amortissements\n                   + quote-part de subventions virée au résultat\n\nExemple, année 2 d’AGDE :\n  autofinancement ....... +12 389 €   (la trésorerie tient)\n  résultat comptable .... −15 588 €   (les amortissements pèsent)",
         support: {
-          fonction: 'compteExploitation (bloc des soldes)',
+          fonction: "compteExploitation (bloc des soldes)",
           signature: "chaque ligne porte total_produits_eur, total_charges_eur, autofinancement_eur et son cumul",
           code: "autofinancement = total_produits_eur - total_charges_eur ; cumul += autofinancement",
           referentiel: "aucun : pure agrégation",
           alimente: "les indicateurs et le graphique de l’écran Exploitation",
           tests: "tests/exploitation.test.js, tests/golden.test.js",
-          source: 'src/exploitation.js:552',
-          texte:
-            'Le résultat comptable n’est PAS publié si la dotation aux amortissements est ' +
-            'inconnue : les champs valent null plutôt qu’un nombre qui ne voudrait rien dire. ' +
-            'La disponibilité est décidée une fois pour tout le compte, jamais année par ' +
-            'année.',
+          source: "src/exploitation.js:552",
+          texte: "Le résultat comptable n’est PAS publié si la dotation aux amortissements est inconnue : les champs valent null plutôt qu’un nombre qui ne voudrait rien dire. La disponibilité est décidée une fois pour tout le compte, jamais année par année."
         },
-        piege:
-          'Les produits financiers d’une année reposent sur le cumul d’autofinancement arrêté ' +
-          'à la FIN de l’année précédente : ils sont donc nuls en année 1. Un cumul négatif ne ' +
-          'produit pas d’intérêts débiteurs, le moteur ne modélise pas de coût de portage.',
+        piege: "Les produits financiers d’une année reposent sur le cumul d’autofinancement arrêté à la FIN de l’année précédente : ils sont donc nuls en année 1. Un cumul négatif ne produit pas d’intérêts débiteurs, le moteur ne modélise pas de coût de portage.",
+        entrees: [
+          ["Produits", "calculés aux étapes 5 et 6"],
+          ["Charges", "calculées aux étapes 1, 3 et 4"],
+          ["Annuités", "chapitre Prêts"],
+          ["Dotation aux amortissements", "étape suivante"]
+        ]
       },
       {
-        titre: 'L’amortissement par composants',
-        regles: ['R-EXP-5'],
-        simple:
-          'Un immeuble ne s’use pas d’un seul tenant : la structure court sur cinquante ans ' +
-          'quand les menuiseries en font quinze. Chaque composant reçoit une quote-part de la ' +
-          'base amortissable et sa propre durée, et sa dotation cesse à sa fin de vie. La ' +
-          'dotation totale n’est donc pas constante : elle décroît par paliers, et cela se voit ' +
-          'sur la base de l’impôt dès la quinzième année.',
-        formule:
-          'dotation d’une année = Σ (base amortissable × quote-part du composant ÷ sa durée)\n' +
-          'pour les seuls composants non encore éteints',
+        titre: "L’amortissement par composants",
+        regles: ["R-EXP-5"],
+        simple: "Un immeuble ne s’amortit pas d’un bloc, parce que ses parties n’ont pas la même durée de vie. La structure tient cinquante ans, la toiture et les menuiseries vingt-cinq, les équipements et agencements quinze. Chaque composant reçoit donc une quote-part de la base d’amortissement et s’amortit linéairement sur sa propre durée. La dotation totale décroît par paliers : elle chute une première fois quand les équipements s’éteignent à quinze ans, une seconde à vingt-cinq. Cette dotation n’est pas un décaissement, elle n’entre que dans le résultat comptable, jamais dans l’autofinancement.",
+        formule: "pour chaque composant :\n  dotation annuelle = base d’amortissement × quote-part ÷ durée\n\ndotation totale de l’année N = Σ des composants encore en cours\n\nGrille collectif :\n  structure ....... 50 % sur 50 ans\n  toiture ......... 8 %  sur 25 ans\n  menuiseries ..... 12 % sur 25 ans\n  équipements ..... 15 % sur 15 ans\n  agencements ..... 15 % sur 15 ans\n\nExemple, base de 1 700 000 € :\n  années 1 à 15 ... 17 000 + 5 440 + 8 160 + 17 000 + 17 000 = 64 600 €\n  années 16 à 25 .. 17 000 + 5 440 + 8 160 = 30 600 €\n  années 26 à 50 .. 17 000 €",
         support: {
-          fonction: 'dotationParComposants',
+          fonction: "dotationParComposants",
           signature: "dotationParComposants(base_eur, composants, annee_debut, duree, { continuer }) → dotation année par année",
           code: "chaque composant s’amortit linéairement sur sa durée ; la dotation décroît par paliers à mesure qu’ils s’éteignent",
           referentiel: "amortissement_comptable.composants.collectif ou .individuel · .duree_defaut_ans en repli",
           alimente: "la dotation aux amortissements du compte d’exploitation, et par elle le résultat",
           tests: "tests/exploitation.test.js (question Q-34 sur la grille à retenir)",
-          source: 'src/exploitation.js:743',
-          texte:
-            'Aucune vérification que les quote-parts somment à 1 : une grille incomplète ' +
-            'sous-amortit sans alerte. L’option `continuer` remet le composant à neuf ' +
-            'indéfiniment, si bien que le cumul des dotations dépasse alors la base ' +
-            'amortissable.',
+          source: "src/exploitation.js:743",
+          texte: "Aucune vérification que les quote-parts somment à 1 : une grille incomplète sous-amortit sans alerte. L’option `continuer` remet le composant à neuf indéfiniment, si bien que le cumul des dotations dépasse alors la base amortissable."
         },
+        entrees: [
+          ["Base d’amortissement", "calculée au chapitre Prix de revient"],
+          [
+            "Grille de composants",
+            "Paramètres > Amortissement comptable, selon collectif ou individuel"
+          ],
+          [
+            "Durée par défaut",
+            "Paramètres > Amortissement comptable, en repli si aucune grille"
+          ]
+        ]
       },
       {
-        titre: 'Les indicateurs de synthèse',
-        regles: ['R-EXP-3'],
-        simple:
-          'Le taux de rentabilité interne est le taux qui annule la valeur actuelle nette des ' +
-          'flux. Il est résolu par dichotomie et non par la méthode de Newton, parce que la ' +
-          'série d’une opération de logement social commence par un flux très négatif suivi de ' +
-          'cinquante flux faibles, là où Newton diverge. Si aucun taux n’existe dans ' +
-          'l’intervalle, le moteur ne renvoie rien : une opération qui ne rembourse jamais sa ' +
-          'mise n’a pas de taux de rentabilité, et en inventer un serait pire.',
-        formule:
-          'TRI : taux qui annule Σ flux ÷ (1 + taux)^rang, cherché entre −99 % et +100 %\n' +
-          'année de reconstitution des fonds propres : premier exercice où le cumul\n' +
-          'd’autofinancement atteint les fonds propres investis',
+        titre: "Les indicateurs de synthèse",
+        regles: ["R-EXP-3"],
+        simple: "Trois indicateurs résument soixante ans de compte. Le taux de rentabilité interne est le taux qui annule la valeur actuelle nette de la série des flux : c’est le rendement de l’opération, tous flux confondus. Le moteur le cherche par dichotomie, en resserrant un intervalle jusqu’à trouver le taux qui équilibre, et il renvoie une absence de valeur si la série ne change jamais de signe — un TRI n’a alors pas de sens. L’année de reconstitution des fonds propres est la première année où l’autofinancement cumulé repasse au-dessus du montant apporté : c’est la date à laquelle l’organisme a récupéré sa mise. Le cumul d’autofinancement, enfin, dit ce que l’opération aura rapporté au total.",
+        formule: "TRI : le taux r tel que  Σ flux(N) ÷ (1 + r)^N = 0\n  cherché par dichotomie entre −99 % et +100 %, 200 itérations\n  renvoie « non calculable » si tous les flux ont le même signe\n\nannée de reconstitution = première année où :\n  autofinancement cumulé ≥ fonds propres apportés\n\nExemple, AGDE :\n  TRI sur 60 ans ......................... 2,40 %\n  fonds propres apportés ................. 44 319 €\n  cumul d’autofinancement à 60 ans ....... 5 843 784 €",
         support: {
-          fonction: 'tauxRentabiliteInterne, indicateursExploitation, anneeReconstitutionFondsPropres',
+          fonction: "tauxRentabiliteInterne, indicateursExploitation, anneeReconstitutionFondsPropres",
           signature: "tauxRentabiliteInterne(flux) → taux, ou null si la série ne change jamais de signe · indicateursExploitation(lignes, contexte) → agrégats · anneeReconstitutionFondsPropres(lignes, fonds_propres_eur) → année ou null",
           code: "TRI par bissection sur la valeur actuelle nette, bornes -0,99 et 1, 200 itérations",
           referentiel: "aucun : dérivé des flux du compte",
           alimente: "les tuiles de l’écran Exploitation",
           tests: "tests/exploitation.test.js",
-          source: 'src/exploitation.js:774, 792 et 708',
-          texte:
-            'La dernière année est écartée des moyennes de marge : le dernier prêt étant soldé, ' +
-            'elle affiche une marge exceptionnelle sans aucun sens économique. Le taux de marge ' +
-            'moyen est une moyenne ARITHMÉTIQUE des taux annuels, pas une marge pondérée.',
+          source: "src/exploitation.js:774, 792 et 708",
+          texte: "La dernière année est écartée des moyennes de marge : le dernier prêt étant soldé, elle affiche une marge exceptionnelle sans aucun sens économique. Le taux de marge moyen est une moyenne ARITHMÉTIQUE des taux annuels, pas une marge pondérée."
         },
-        piege:
-          'Question Q-33 non arbitrée : l’année de reconstitution des fonds propres retient le ' +
-          'PREMIER franchissement du seuil. Le cumul n’étant pas monotone (il peut redescendre ' +
-          'après une rupture comme la fin d’exonération), deux autres définitions sont ' +
-          'défendables et donneraient une autre année.',
-      },
-    ],
+        piege: "Question Q-33 non arbitrée : l’année de reconstitution des fonds propres retient le PREMIER franchissement du seuil. Le cumul n’étant pas monotone (il peut redescendre après une rupture comme la fin d’exonération), deux autres définitions sont défendables et donneraient une autre année.",
+        entrees: [
+          [
+            "Série des flux",
+            "produite par le compte d’exploitation, année par année"
+          ],
+          ["Fonds propres apportés", "plan de financement de la tranche"],
+          ["Durée de simulation", "écran Opération > Calendrier"]
+        ]
+      }
+    ]
   },
   {
-    id: 'conventions',
-    titre: 'Arrondis et conventions',
-    accroche:
-      'Les arrondis ne sont pas un détail de présentation : appliqués au mauvais endroit, ils ' +
-      'font dériver un total de plusieurs euros sur une opération entière. Le moteur les ' +
-      'concentre donc en un seul module, et ne les applique qu’aux frontières que le ' +
-      'dictionnaire désigne.',
+    id: "conventions",
+    titre: "Arrondis et conventions",
+    accroche: "Les arrondis ne sont pas un détail de présentation : appliqués au mauvais endroit, ils font dériver un total de plusieurs euros sur une opération entière. Le moteur les concentre donc en un seul module, et ne les applique qu’aux frontières que le dictionnaire désigne.",
     etapes: [
       {
-        titre: 'Où le moteur arrondit',
-        regles: ['R-CONV'],
-        simple:
-          'Chaque grandeur a sa précision : un loyer au mètre carré et un coefficient de ' +
-          'structure ne s’arrondissent pas comme un montant de bilan. Les calculs ' +
-          'intermédiaires, eux, gardent toute leur précision : arrondir à chaque étape ferait ' +
-          'accumuler l’erreur.',
-        formule:
-          'surface : 2 décimales · loyer au m² : 2 décimales\n' +
-          'coefficient de structure : 4 décimales · montant : euro entier\n' +
-          'capital restant dû (test de fin de prêt) : 4 décimales',
+        titre: "Où le moteur arrondit",
+        regles: ["R-CONV"],
+        simple: "Le moteur arrondit à des endroits précis et toujours les mêmes, et jamais au milieu d’un calcul. Une surface s’arrondit à deux décimales, un loyer au m² à deux décimales, un coefficient de structure à quatre, un montant du bilan à l’euro entier, un capital restant dû à quatre décimales pour le test d’extinction du prêt. Tous ces arrondis vivent dans un seul fichier, ce qui permet de vérifier d’un coup d’œil la politique entière. Une subtilité : l’arrondi ajoute un epsilon avant d’arrondir, sinon la représentation binaire des décimaux ferait que 1,005 s’arrondirait à 1,00 au lieu de 1,01. Une autre : un montant nul est normalisé, pour qu’un solde à zéro ne s’affiche jamais « −0 € » selon le sens d’où il vient.",
+        formule: "arrondi(valeur ; décimales) = ARRONDI(valeur + ε ; décimales)\n\n  surface ................... 2 décimales\n  loyer au m² ............... 2 décimales\n  coefficient de structure .. 4 décimales\n  montant du bilan .......... 0 décimale (euro entier)\n  capital restant dû ........ 4 décimales\n  prêt au millier supérieur . ARRONDI.SUP(montant ÷ 1000) × 1000\n\nSans l’epsilon : 1,005 → 1,00 (car stocké 1,00499999…)\nAvec l’epsilon : 1,005 → 1,01 ✓",
         support: {
-          fonction: 'arrondiSurface, arrondiLoyer, arrondiCS, arrondiEuro, arrondiCRD',
+          fonction: "arrondiSurface, arrondiLoyer, arrondiCS, arrondiEuro, arrondiCRD",
           signature: "arrondi(valeur, decimales) et ses cinq spécialisations : surface 2 décimales, loyer 2, coefficient 4, euro entier, CRD 4",
           code: "Math.round((valeur + Number.EPSILON) * f) / f   — l’epsilon neutralise le bruit flottant, 1.005 donne bien 1.01. arrondiEuro normalise en plus le zéro négatif",
           referentiel: "aucun : la politique d’arrondi est du code, pas une donnée",
           alimente: "toutes les frontières de calcul du moteur",
           tests: "tests/fondations.test.js",
-          source: 'src/arrondis.js',
-          texte:
-            'Toutes s’appuient sur `arrondi(valeur, décimales)`, qui ajoute `Number.EPSILON` ' +
-            'avant `Math.round` pour neutraliser le bruit flottant (1.005 → 1.01 et non 1.00). ' +
-            '`arrondiEuro` normalise en outre le zéro négatif : un résidu à −1e−13 s’arrondirait ' +
-            'en `-0`, que JSON sérialise « -0 » et que l’écran afficherait « -0 € ».',
+          source: "src/arrondis.js",
+          texte: "Toutes s’appuient sur `arrondi(valeur, décimales)`, qui ajoute `Number.EPSILON` avant `Math.round` pour neutraliser le bruit flottant (1.005 → 1.01 et non 1.00). `arrondiEuro` normalise en outre le zéro négatif : un résidu à −1e−13 s’arrondirait en `-0`, que JSON sérialise « -0 » et que l’écran afficherait « -0 € »."
         },
-        piege:
-          'La surface utile est arrondie à la TRANCHE et non au lot : arrondir lot par lot ' +
-          'ferait dériver le total de l’opération.',
+        piege: "La surface utile est arrondie à la TRANCHE et non au lot : arrondir lot par lot ferait dériver le total de l’opération.",
+        entrees: [
+          [
+            "Politique d’arrondi",
+            "src/arrondis.js — c’est du code, pas une donnée paramétrable"
+          ],
+          [
+            "Arrondi des prêts",
+            "option de la simulation : arrondir au millier supérieur"
+          ]
+        ]
       },
       {
-        titre: 'Répartir sans perdre un euro',
-        regles: ['R-CONV', 'R-TVA-3'],
-        simple:
-          'Quand un montant se répartit entre plusieurs tranches, arrondir chaque part ' +
-          'séparément fait que la somme des parts ne vaut plus le total : trois parts de ' +
-          '3,33 € donnent 9 € pour un total de 10 €. Le moteur distribue donc le reliquat aux ' +
-          'parts dont la décimale est la plus forte, si bien que la somme affichée tombe ' +
-          'toujours exactement sur le total affiché.',
-        formule:
-          'chaque part est descendue à l’euro inférieur,\n' +
-          'puis le reliquat est distribué une unité à la fois,\n' +
-          'aux parts de plus grand reste, et à égalité dans l’ordre de saisie',
+        titre: "Répartir sans perdre un euro",
+        regles: ["R-CONV", "R-TVA-3"],
+        simple: "Le même problème que celui de la ventilation du prix de revient se pose partout où une somme se répartit : mensualités de trésorerie, ventilation par tranche, séries annuelles. Arrondir chaque part indépendamment fait dériver le total, et l’écart se voit à l’écran. La règle est unique dans tout le moteur : on arrondit à l’entier inférieur, on calcule ce qui manque, et on distribue les unités manquantes aux parts qui avaient la plus grande décimale. À égalité de décimale, on suit l’ordre d’origine, ce qui rend le résultat parfaitement reproductible d’un calcul à l’autre. La méthode fonctionne aussi sur des valeurs négatives, le reliquat se distribuant alors dans l’autre sens.",
+        formule: "1. planchers = ENT(chaque valeur)\n2. reliquat = total visé − Σ planchers\n3. trier par décimale décroissante, puis par ordre d’origine\n4. ajouter 1 (ou retirer 1 si le reliquat est négatif) aux premiers\n\nExemple, 2 000 000 € sur 24 mois :\n  2 000 000 ÷ 24 = 83 333,33 par mois\n  24 × 83 333 = 1 999 992  →  il manque 8 €\n  les 8 premiers mois portent 83 334 €, les 16 autres 83 333 €\n  total = 2 000 000 € ✓",
         support: {
-          fonction: 'arrondirEnConservantLaSomme',
+          fonction: "arrondirEnConservantLaSomme",
           signature: "arrondirEnConservantLaSomme(valeurs, totalImpose) → entiers dont la somme vaut exactement totalImpose, ou l’arrondi de la somme exacte si aucun total n’est imposé",
           code: "reliquat = total - somme des planchers ; distribué une unité à la fois aux plus grands restes, dans le sens du signe",
           referentiel: "aucun",
           alimente: "prixDeRevientVentile, la trésorerie mensuelle, toute série affichée qui doit s’additionner",
           tests: "tests/fondations.test.js, tests/bilan.test.js",
-          source: 'src/arrondis.js:90',
-          texte:
-            'Méthode du plus grand reste, déterministe à égalité (tri stable sur l’index). ' +
-            'Accepte un `totalImpose` quand la somme à respecter a déjà été arrondie ailleurs ' +
-            'et fait autorité : ventiler un sous-total de chapitre doit retomber sur le ' +
-            'sous-total AFFICHÉ, pas sur l’arrondi de la somme exacte. Gère les reliquats ' +
-            'négatifs en distribuant dans l’autre sens.',
+          source: "src/arrondis.js:90",
+          texte: "Méthode du plus grand reste, déterministe à égalité (tri stable sur l’index). Accepte un `totalImpose` quand la somme à respecter a déjà été arrondie ailleurs et fait autorité : ventiler un sous-total de chapitre doit retomber sur le sous-total AFFICHÉ, pas sur l’arrondi de la somme exacte. Gère les reliquats négatifs en distribuant dans l’autre sens."
         },
-      },
-    ],
-  },
-];
+        entrees: [
+          ["Valeurs à répartir", "les parts exactes, non arrondies"],
+          [
+            "Total visé",
+            "la somme à respecter, imposée si elle a déjà été arrondie ailleurs"
+          ]
+        ]
+      }
+    ]
+  }
+];;
 
 /** Postes de trajectoire, dans l'ordre d'affichage. */
 const POSTES_TRAJECTOIRE = [
@@ -13836,6 +13683,23 @@ function rendreCalculs() {
               : ''
           }
           ${
+            // D'ou viennent les valeurs. Present dans les DEUX lectures : c'est
+            // la question que tout le monde se pose devant un chiffre, et la
+            // reponse - « ecran Programme », « Parametres > TVA » - est aussi
+            // utile au gestionnaire qu'au developpeur.
+            (e.entrees ?? []).length
+              ? `<div class="calc-entrees">
+                  <p class="calc-entrees__titre">D’où viennent les valeurs</p>
+                  <dl>${e.entrees
+                    .map(
+                      ([terme, source]) =>
+                        `<dt>${att(terme)}</dt><dd>${att(source)}</dd>`,
+                    )
+                    .join('')}</dl>
+                </div>`
+              : ''
+          }
+          ${
             support && t.source
               ? `<p class="calc-source"><code>${att(t.fonction ?? '')}</code>` +
                 `<span class="calc-source__ou">${att(t.source)}</span></p>`
@@ -13891,6 +13755,7 @@ function rendreCalculs() {
         e.support?.referentiel ?? '',
         e.support?.alimente ?? '',
         e.support?.tests ?? '',
+        (e.entrees ?? []).flat().join(' '),
         (e.regles ?? []).join(' '),
       ].join(' '),
     });

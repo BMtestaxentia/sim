@@ -121,7 +121,10 @@ for (const m of lire('ui', 'app.js').matchAll(/referentiels\/([\w.]+)\.json/g)) 
 // L'UI est concatenee dans la MEME portee que le moteur : ses noms racine
 // entrent donc en collision avec les siens. On verifie l'ensemble d'un bloc,
 // et pas seulement les modules entre eux.
-const app = aplatir(lire('ui', 'app.js')).replace(
+// Les modules d'UI sont concatenes dans l'ordre de dependance, comme ceux du
+// moteur : `depot.js` avant `app.js`, qui l'importe.
+const UI_MODULES = ['depot.js', 'app.js'];
+const app = aplatir(UI_MODULES.map((n) => lire('ui', n)).join('\n')).replace(
   /\/\/ __REFERENTIELS_DEBUT__[\s\S]*?\/\/ __REFERENTIELS_FIN__/,
   `const referentiels = ${JSON.stringify(referentiels)};`,
 );
@@ -132,7 +135,7 @@ if (/\bawait\b/.test(app.split('\n').filter((l) => !l.trim().startsWith('*')).jo
   throw new Error('`await` de premier niveau restant : le script classique ne peut pas le porter');
 }
 
-verifierCollisions([...morceaux, { nom: 'ui/app.js', code: app }]);
+verifierCollisions([...morceaux, { nom: 'ui/' + UI_MODULES.join(' + ui/'), code: app }]);
 
 // Le script assemble est du texte pour cet outil : une faute de syntaxe passe
 // sans bruit et n'apparait qu'a l'ouverture, sous la forme d'une page qui

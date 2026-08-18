@@ -23,6 +23,14 @@ import { produitsOrdonnes, ORDRE_PRODUITS } from '../src/produits.js';
 import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
 import { ecartsParametrage } from '../src/parametrage.js';
 import { tauxLASM } from '../src/bilan.js';
+// Le depot est importe par NOMS et non en bloc : le generateur de la version
+// autonome concatene les modules dans une portee unique, ou un espace de noms
+// (`depot.lister`) n'existerait plus. Les noms y sont donc prefixes.
+import {
+  listerSimulations, lireSimulation, ecrireSimulation, ajouterSimulation,
+  supprimerSimulation, renommerSimulation, simulationCourante, ouvrirSimulation,
+  reprendreHeritage, poidsBibliotheque,
+} from './depot.js';
 
 const $ = (sel) => /** @type {HTMLElement} */ (document.querySelector(sel));
 
@@ -6423,18 +6431,38 @@ let sauvegardeEnAttente = null;
  * serait un acces disque par touche pour un etat qui n'aura de sens qu'une fois
  * le nombre entier.
  */
+/** La simulation ouverte : c'est elle que la saisie ecrit. */
+let idSimulationOuverte = null;
+
+/** Ce qui part au depot : la saisie, et rien d'autre. */
+function simulationCourantePayload() {
+  return Object.fromEntries(RACINES_PERSISTEES.map((c) => [c, etat[c]]));
+}
+
 function memoriserSaisie() {
   clearTimeout(sauvegardeEnAttente);
   sauvegardeEnAttente = setTimeout(() => {
-    try {
-      const aGarder = Object.fromEntries(RACINES_PERSISTEES.map((c) => [c, etat[c]]));
-      localStorage.setItem(CLE_SAISIE, JSON.stringify(aGarder));
-    } catch {
-      // Stockage indisponible ou plein : la session continue normalement, seule
-      // la memoire d'une ouverture a l'autre est perdue. Ce n'est pas une raison
-      // d'interrompre une saisie en cours.
+    if (!idSimulationOuverte) return;
+    const fiche = ecrireSimulation(idSimulationOuverte, simulationCourantePayload());
+    // Le depot rend null quand le stockage a refuse - quota depasse, navigation
+    // privee. On le DIT : une saisie qu'on croit enregistree et qui ne l'est
+    // pas est la pire des issues.
+    if (!fiche) {
+      const e = $('#erreur');
+      e.hidden = false;
+      e.textContent =
+        'Enregistrement impossible : le stockage du navigateur est plein ou indisponible. ' +
+        'Exportez la simulation pour ne rien perdre.';
+      return;
     }
+    majNomSimulationOuverte(fiche.nom);
   }, 400);
+}
+
+/** Le nom de la simulation ouverte, dans la marque de l'en-tete. */
+function majNomSimulationOuverte(nom) {
+  const el = document.getElementById('nom-simulation-ouverte');
+  if (el) el.textContent = nom || 'Simulation sans nom';
 }
 
 /**
@@ -6442,38 +6470,295 @@ function memoriserSaisie() {
  * REMPLACEES et non fusionnees : une liste de prets memorisee doit rester celle
  * qui a ete saisie, pas se melanger a celle de la demonstration.
  */
+/**
+ * Pose une simulation du depot sur l'etat de travail.
+ *
+ * Les racines sont REMPLACEES et non fusionnees : les prets d'une simulation
+ * ouverte doivent etre les siens, pas un melange avec ceux de la precedente.
+ * Les racines absentes gardent leur valeur de demonstration, ce qui permet
+ * d'ouvrir une simulation ancienne a laquelle une racine a ete ajoutee depuis.
+ */
+function poserSimulation(sim) {
+  if (!sim || typeof sim !== 'object' || !sim.identite) return false;
+  for (const cle of RACINES_PERSISTEES) {
+    if (sim[cle] !== undefined) etat[cle] = sim[cle];
+  }
+  // Un profil actif qui ne designe plus rien laisserait l'ecran sans
+  // parametres : on retombe sur le premier profil connu.
+  if (!etat.profils?.some((p) => p.id === etat.profil_actif)) {
+    etat.profil_actif = etat.profils?.[0]?.id ?? 'referentiel';
+  }
+  return true;
+}
+
+/**
+ * Ouvre une simulation : elle devient celle que la saisie ecrit.
+ * @param {string} id
+ * @param {boolean} [versEcran] basculer sur l'ecran Operation apres ouverture
+ */
+function ouvrirSimulationDansEcran(id, versEcran = true) {
+  const sim = lireSimulation(id);
+  if (!poserSimulation(sim)) {
+    alert('Cette simulation est illisible et n’a pas pu être ouverte.');
+    return false;
+  }
+  idSimulationOuverte = ouvrirSimulation(id);
+  majNomSimulationOuverte(sim.identite?.nom);
+  // Les champs STATIQUES - identite, calendrier, hypotheses - ne sont ecrits
+  // que par `rendreChampsStatiques` : `rafraichirTout` ne redessine que les
+  // tables. Sans cet appel, ouvrir une simulation laisse a l'ecran le nom, la
+  // version et les dates de la PRECEDENTE, et la premiere frappe les recopie
+  // dans la nouvelle. C'est une corruption silencieuse, pas un defaut
+  // d'affichage.
+  rendreChampsStatiques();
+  rafraichirTout();
+  if (versEcran) afficherEcran('operation');
+  return true;
+}
+
 function restaurerSaisie() {
-  let brut;
-  try {
-    brut = localStorage.getItem(CLE_SAISIE);
-  } catch {
-    return false;
-  }
-  if (!brut) return false;
-  try {
-    const lu = JSON.parse(brut);
-    // Une saisie sans identite n'en est pas une : plutot que de restaurer un
-    // objet a moitie forme, on repart proprement de la demonstration.
-    if (!lu || typeof lu !== 'object' || !lu.identite) return false;
-    for (const cle of RACINES_PERSISTEES) {
-      if (lu[cle] !== undefined) etat[cle] = lu[cle];
+  // Reprise de l'ancienne cle unique, une seule fois : sans elle, la mise a
+  // jour de l'outil ferait disparaitre le travail en cours de chacun.
+  reprendreHeritage();
+
+  const fiches = listerSimulations();
+  const vise = simulationCourante();
+  const id = fiches.some((f) => f.id === vise) ? vise : fiches[0]?.id;
+  if (!id) return false;
+  const sim = lireSimulation(id);
+  if (!poserSimulation(sim)) return false;
+  idSimulationOuverte = ouvrirSimulation(id);
+  majNomSimulationOuverte(sim.identite?.nom);
+  return true;
+}
+
+// ---------------------------------------------------------------- bibliotheque
+
+/** Filtre texte de la liste des simulations. */
+let rechercheSimulation = '';
+/** Filtres par colonne, indexes par l'identifiant du select qui les porte. */
+const filtresBiblio = {
+  'filtre-produit': '', 'filtre-type': '', 'filtre-zone': '', 'filtre-commune': '',
+};
+/** Colonne de tri et sens. Par defaut le numero decroissant : le dernier cree en tete. */
+const triBiblio = { colonne: 'numero', ascendant: false };
+let pageBiblio = 0;
+let taillePageBiblio = 100;
+
+/** Date et heure de derniere modification : « 19/08/2026 à 14:32 ». */
+function dateHeureLisible(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '-';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} à ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** Poids lisible : une simulation se compte en kilo-octets, la bibliotheque parfois en mega. */
+function poidsLisible(octets) {
+  if (octets < 1024) return `${octets} o`;
+  if (octets < 1024 * 1024) return `${(octets / 1024).toFixed(1)} Ko`;
+  return `${(octets / (1024 * 1024)).toFixed(2)} Mo`;
+}
+
+/**
+ * La bibliotheque : un TABLEAU, pas une grille de cartes.
+ *
+ * Le parc vise quelques milliers de dossiers. A cette echelle, une carte par
+ * simulation est illisible - on ne compare pas, on ne trie pas, on defile
+ * pendant des minutes. Un tableau dense, filtrable et triable est la seule
+ * forme qui tienne : c'est le tableur que les gestionnaires connaissent deja.
+ *
+ * Trois mecanismes portent l'echelle :
+ *   - les FILTRES reduisent l'ensemble avant tout rendu ;
+ *   - le TRI se fait sur les fiches, jamais sur le DOM ;
+ *   - la PAGINATION borne le nombre de lignes reellement construites. Cinq
+ *     mille lignes de douze colonnes feraient soixante mille noeuds : le
+ *     navigateur tient, mais chaque frappe dans la recherche coute alors une
+ *     seconde. On n'en construit qu'une page.
+ */
+function rendreBibliotheque() {
+  const zone = document.getElementById('biblio-liste');
+  if (!zone) return;
+  const toutes = listerSimulations();
+
+  // --- Listes deroulantes peuplees depuis les fiches ---------------------
+  // Ne proposer que des valeurs qui existent : un filtre « Commune » offrant
+  // les 35 000 communes de France serait inutilisable, et proposer un produit
+  // absent du parc fait chercher pour rien.
+  const options = (id, valeurs, libelle = (v) => v) => {
+    const sel = /** @type {HTMLSelectElement} */ (document.getElementById(id));
+    if (!sel) return;
+    const garde = sel.value;
+    const listees = [...new Set(valeurs.filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+    const premier = sel.options[0]?.outerHTML ?? '';
+    sel.innerHTML = premier + listees.map((v) => `<option value="${att(v)}">${att(libelle(v))}</option>`).join('');
+    // Une valeur filtree qui n'existe plus - dernier dossier de cette commune
+    // supprime - laisserait une liste vide sans rien dire.
+    sel.value = listees.includes(garde) ? garde : '';
+    if (sel.value !== garde) filtresBiblio[id] = '';
+  };
+  options('filtre-produit', toutes.flatMap((f) => f.produits ?? []), libelleProduit);
+  options('filtre-type', toutes.map((f) => f.type_operation));
+  options('filtre-zone', toutes.map((f) => f.zone_ABC));
+  options('filtre-commune', toutes.map((f) => f.commune));
+
+  // --- Filtrage ----------------------------------------------------------
+  const q = sansAccent(rechercheSimulation.trim());
+  const fiches = toutes.filter((f) => {
+    if (filtresBiblio['filtre-produit'] && !(f.produits ?? []).includes(filtresBiblio['filtre-produit'])) return false;
+    if (filtresBiblio['filtre-type'] && f.type_operation !== filtresBiblio['filtre-type']) return false;
+    if (filtresBiblio['filtre-zone'] && f.zone_ABC !== filtresBiblio['filtre-zone']) return false;
+    if (filtresBiblio['filtre-commune'] && f.commune !== filtresBiblio['filtre-commune']) return false;
+    if (!q) return true;
+    return sansAccent(`${f.numero} ${f.nom} ${f.version} ${f.commune} ${f.type_operation}`).includes(q);
+  });
+
+  // --- Tri ---------------------------------------------------------------
+  const valeurTri = (f) => {
+    switch (triBiblio.colonne) {
+      case 'numero': return Number(f.numero) || 0;
+      case 'nom': return sansAccent(f.nom);
+      case 'commune': return sansAccent(f.commune);
+      case 'type': return sansAccent(f.type_operation);
+      case 'zone': return sansAccent(f.zone_ABC);
+      case 'logements': return Number(f.nb_logements) || 0;
+      case 'lots': return Number(f.nb_lots) || 0;
+      case 'poids': return Number(f.octets) || 0;
+      case 'modifie': return String(f.modifie_le);
+      default: return Number(f.numero) || 0;
     }
-    // Un profil actif qui ne designe plus rien laisserait l'ecran sans
-    // parametres : on retombe sur le premier profil connu.
-    if (!etat.profils?.some((p) => p.id === etat.profil_actif)) {
-      etat.profil_actif = etat.profils?.[0]?.id ?? 'referentiel';
-    }
-    return true;
-  } catch {
-    // Contenu illisible (ecriture interrompue, cle ecrasee par un autre outil).
-    return false;
+  };
+  fiches.sort((a, b) => {
+    const x = valeurTri(a);
+    const y = valeurTri(b);
+    const c = typeof x === 'number' ? x - y : String(x).localeCompare(String(y));
+    return triBiblio.ascendant ? c : -c;
+  });
+
+  // --- Pagination --------------------------------------------------------
+  const pages = Math.max(1, Math.ceil(fiches.length / taillePageBiblio));
+  if (pageBiblio >= pages) pageBiblio = pages - 1;
+  if (pageBiblio < 0) pageBiblio = 0;
+  const debut = pageBiblio * taillePageBiblio;
+  const page = fiches.slice(debut, debut + taillePageBiblio);
+
+  const resume = document.getElementById('biblio-resume');
+  if (resume) {
+    resume.textContent = toutes.length
+      ? `${toutes.length} simulation${toutes.length > 1 ? 's' : ''} · ${poidsLisible(poidsBibliotheque())} au total` +
+        ' · les barèmes et le zonage des communes sont partagés, jamais copiés dans une simulation'
+      : 'Aucune simulation. Créez-en une, ou importez un fichier.';
   }
+  const compte = document.getElementById('biblio-compte');
+  if (compte) {
+    compte.textContent =
+      fiches.length === toutes.length
+        ? `${toutes.length} ligne${toutes.length > 1 ? 's' : ''}`
+        : `${fiches.length} sur ${toutes.length}`;
+  }
+  const pied = document.getElementById('biblio-pied');
+  if (pied) {
+    pied.hidden = fiches.length <= taillePageBiblio;
+    const p = document.getElementById('biblio-page');
+    if (p) p.textContent = `page ${pageBiblio + 1} sur ${pages} · lignes ${debut + 1} à ${Math.min(debut + taillePageBiblio, fiches.length)}`;
+  }
+
+  if (!fiches.length) {
+    zone.innerHTML = toutes.length
+      ? '<p class="vide">Aucune simulation ne correspond aux filtres.</p>'
+      : '<p class="vide">La bibliothèque est vide.</p>';
+    return;
+  }
+
+  // --- Rendu -------------------------------------------------------------
+  const fleche = (col) =>
+    triBiblio.colonne === col ? `<span class="biblio-tri">${triBiblio.ascendant ? '▲' : '▼'}</span>` : '';
+  const th = (col, libelle, classe = '') =>
+    `<th class="${classe}" data-tri-biblio="${col}" role="button" tabindex="0"
+       aria-sort="${triBiblio.colonne === col ? (triBiblio.ascendant ? 'ascending' : 'descending') : 'none'}">${att(libelle)}${fleche(col)}</th>`;
+
+  const ligne = (f) => {
+    const ouverte = f.id === idSimulationOuverte;
+    const pastilles = (f.produits ?? [])
+      .map(
+        (c) =>
+          `<span class="biblio-produit" style="--cat:${catProduit(c)};--cat-fond:${catFondProduit(c)}"
+             title="${att(libelleProduit(c))}">${att(libelleProduit(c))}</span>`,
+      )
+      .join('');
+    return `<tr class="${ouverte ? 'biblio-ligne--ouverte' : ''}" data-sim="${att(f.id)}">
+      <td class="num biblio-num">${nb(f.numero)}</td>
+      <td class="biblio-nom" data-sim-ouvrir="${att(f.id)}" role="button" tabindex="0" title="Ouvrir">
+        <span class="biblio-nom__texte">${att(f.nom)}</span>
+        ${ouverte ? '<span class="pastille pastille--ok">ouverte</span>' : ''}
+      </td>
+      <td class="biblio-discret">${att(f.version)}</td>
+      <td>${att(f.commune)}</td>
+      <td class="biblio-discret">${att(f.zone_ABC)}</td>
+      <td class="biblio-discret">${att(f.type_operation)}</td>
+      <td class="biblio-produits">${pastilles}</td>
+      <td class="num">${nb(f.nb_logements)}</td>
+      <td class="num">${nb(f.nb_lots)}</td>
+      <td class="num biblio-discret">${poidsLisible(f.octets ?? 0)}</td>
+      <td class="biblio-discret">${att(dateHeureLisible(f.modifie_le))}</td>
+      <td class="biblio-actions">
+        <button type="button" class="biblio-action" data-sim-ouvrir="${att(f.id)}" title="Ouvrir">Ouvrir</button>
+        <button type="button" class="biblio-action" data-sim-renommer="${att(f.id)}" title="Renommer">Renommer</button>
+        <button type="button" class="biblio-action" data-sim-dupliquer="${att(f.id)}" title="Dupliquer">Dupliquer</button>
+        <button type="button" class="biblio-action" data-sim-exporter="${att(f.id)}" title="Exporter en JSON">Exporter</button>
+        <button type="button" class="bouton--supprimer" data-sim-supprimer="${att(f.id)}"
+          data-nom="${att(f.nom)}" title="Supprimer">×</button>
+      </td>
+    </tr>`;
+  };
+
+  zone.innerHTML = `
+    <div class="table-defilante biblio-table">
+      <table class="tableau tableau--entete-figee">
+        <thead><tr>
+          ${th('numero', 'N°', 'num')}
+          ${th('nom', 'Simulation')}
+          <th>Version</th>
+          ${th('commune', 'Commune')}
+          ${th('zone', 'Zone')}
+          ${th('type', 'Type')}
+          <th>Produits</th>
+          ${th('logements', 'Lgts', 'num')}
+          ${th('lots', 'Lots', 'num')}
+          ${th('poids', 'Poids', 'num')}
+          ${th('modifie', 'Modifiée le')}
+          <th></th>
+        </tr></thead>
+        <tbody>${page.map(ligne).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+/** Enregistre l'etat courant AVANT de changer de simulation : rien ne se perd. */
+function viderFileDeSauvegarde() {
+  clearTimeout(sauvegardeEnAttente);
+  if (idSimulationOuverte) ecrireSimulation(idSimulationOuverte, simulationCourantePayload());
+}
+
+/** Telecharge une simulation en JSON : le format d'echange, et la sauvegarde de secours. */
+function exporterSimulation(id) {
+  const sim = lireSimulation(id);
+  if (!sim) return;
+  const nom = (sim.identite?.nom || 'simulation').replace(/[^\w\-. ]+/g, '_').trim();
+  const blob = new Blob([JSON.stringify(sim, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${nom}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /** Efface la memoire et recharge : le plus sur moyen de revenir a l'origine. */
 function reinitialiserSaisie() {
   if (!confirm('Effacer la saisie mémorisée et repartir de l’opération de démonstration ?')) return;
   try {
+    if (idSimulationOuverte) supprimerSimulation(idSimulationOuverte);
     localStorage.removeItem(CLE_SAISIE);
   } catch {
     /* voir memoriserSaisie */
@@ -6489,6 +6774,15 @@ document.addEventListener('input', (ev) => {
   // La recherche de parametre ne touche pas a l'etat : elle ne fait que filtrer
   // l'affichage. Elle passe donc AVANT la garde sur `data-champ`, qu'elle n'a
   // pas - c'est un filtre, pas une saisie.
+  if (el.id === 'recherche-simulation') {
+    rechercheSimulation = el.value;
+    // Toute reduction de l'ensemble ramene en premiere page : rester page 7
+    // d'une liste qui n'en compte plus que deux afficherait un vide.
+    pageBiblio = 0;
+    rendreBibliotheque();
+    return;
+  }
+
   if (el.id === 'recherche-parametre') {
     const etaitEnRecherche = rechercheParametre.trim().length > 0;
     rechercheParametre = el.value;
@@ -6820,6 +7114,55 @@ document.addEventListener('change', (ev) => {
   const id = /** @type {HTMLElement} */ (ev.target).id;
   // Les deux selecteurs de profil - barre admin et ecran Operation - font le
   // meme geste : le profil actif est un reglage d'operation, pas d'ecran.
+  // Filtres de la bibliotheque, et taille de page.
+  if (Object.prototype.hasOwnProperty.call(filtresBiblio, id)) {
+    filtresBiblio[id] = /** @type {HTMLSelectElement} */ (ev.target).value;
+    pageBiblio = 0;
+    rendreBibliotheque();
+    return;
+  }
+  if (id === 'taille-page') {
+    taillePageBiblio = Number(/** @type {HTMLSelectElement} */ (ev.target).value) || 100;
+    pageBiblio = 0;
+    rendreBibliotheque();
+    return;
+  }
+
+  // Import d'un fichier de simulation. Le fichier est la monnaie d'echange
+  // entre postes tant que le serveur d'entreprise n'existe pas, et il restera
+  // le format de sauvegarde de secours ensuite.
+  if (id === 'fichier-import') {
+    const fichier = /** @type {HTMLInputElement} */ (ev.target).files?.[0];
+    if (!fichier) return;
+    const lecteur = new FileReader();
+    lecteur.onload = () => {
+      let sim;
+      try {
+        sim = JSON.parse(String(lecteur.result));
+      } catch {
+        alert('Ce fichier n’est pas un JSON lisible.');
+        return;
+      }
+      if (!sim || typeof sim !== 'object' || !sim.identite) {
+        alert('Ce fichier ne contient pas une simulation : la section « identite » est absente.');
+        return;
+      }
+      viderFileDeSauvegarde();
+      const nouvel = ajouterSimulation(sim);
+      if (!nouvel) {
+        alert('Import impossible : le stockage du navigateur est plein ou indisponible.');
+        return;
+      }
+      rendreBibliotheque();
+      ouvrirSimulationDansEcran(nouvel);
+    };
+    lecteur.readAsText(fichier);
+    // Le champ est vide apres coup, sinon reimporter le MEME fichier ne
+    // declencherait aucun evenement.
+    /** @type {HTMLInputElement} */ (ev.target).value = '';
+    return;
+  }
+
   if (id === 'select-profil' || /** @type {HTMLElement} */ (ev.target).matches?.('[data-selecteur-profil]')) {
     etat.profil_actif = /** @type {HTMLSelectElement} */ (ev.target).value;
     rafraichirTout();
@@ -6843,6 +7186,144 @@ document.addEventListener('click', (ev) => {
 
   if (el.closest('#btn-reinitialiser')) {
     reinitialiserSaisie();
+    return;
+  }
+
+  // --- Bibliotheque de simulations ---
+  if (el.closest('#btn-bibliotheque')) {
+    viderFileDeSauvegarde();
+    rendreBibliotheque();
+    afficherEcran('simulations');
+    return;
+  }
+  if (el.closest('#btn-nouvelle-sim')) {
+    const nom = prompt('Nom de la nouvelle simulation ?', 'Nouvelle opération');
+    if (nom === null) return;
+    viderFileDeSauvegarde();
+    // Une simulation neuve part de la DEMONSTRATION et non d'un objet vide :
+    // une page de saisie entierement vierge ne calcule rien et n'apprend rien.
+    // Les profils de parametres suivent, ils sont le reglage de l'organisme.
+    const neuve = structuredClone(simulationCourantePayload());
+    neuve.identite = { ...(neuve.identite ?? {}), nom: nom.trim() || 'Nouvelle opération' };
+    const id = ajouterSimulation(neuve);
+    if (!id) {
+      alert('Création impossible : le stockage du navigateur est plein ou indisponible.');
+      return;
+    }
+    ouvrirSimulationDansEcran(id);
+    return;
+  }
+  if (el.closest('#btn-importer-sim')) {
+    document.getElementById('fichier-import')?.click();
+    return;
+  }
+  if (el.closest('#btn-vider-filtres')) {
+    rechercheSimulation = '';
+    for (const c of Object.keys(filtresBiblio)) filtresBiblio[c] = '';
+    const r = /** @type {HTMLInputElement} */ (document.getElementById('recherche-simulation'));
+    if (r) r.value = '';
+    for (const c of Object.keys(filtresBiblio)) {
+      const s = /** @type {HTMLSelectElement} */ (document.getElementById(c));
+      if (s) s.value = '';
+    }
+    pageBiblio = 0;
+    rendreBibliotheque();
+    return;
+  }
+  if (el.closest('#btn-page-prec')) {
+    pageBiblio = Math.max(0, pageBiblio - 1);
+    rendreBibliotheque();
+    return;
+  }
+  if (el.closest('#btn-page-suiv')) {
+    pageBiblio += 1;
+    rendreBibliotheque();
+    return;
+  }
+  // Tri : un clic sur la colonne deja triee inverse le sens.
+  const enTeteTri = el.closest('[data-tri-biblio]');
+  if (enTeteTri) {
+    const col = /** @type {HTMLElement} */ (enTeteTri).dataset.triBiblio;
+    if (triBiblio.colonne === col) triBiblio.ascendant = !triBiblio.ascendant;
+    else {
+      triBiblio.colonne = col;
+      // Un tri neuf part dans le sens le plus utile : croissant sur du texte,
+      // decroissant sur un nombre ou une date - on cherche le plus gros, le
+      // plus recent, le dernier numero.
+      triBiblio.ascendant = ['nom', 'commune', 'type', 'zone'].includes(col);
+    }
+    rendreBibliotheque();
+    return;
+  }
+
+  const aOuvrir = el.closest('[data-sim-ouvrir]');
+  if (aOuvrir) {
+    viderFileDeSauvegarde();
+    ouvrirSimulationDansEcran(/** @type {HTMLElement} */ (aOuvrir).dataset.simOuvrir);
+    return;
+  }
+  const aRenommer = el.closest('[data-sim-renommer]');
+  if (aRenommer) {
+    const id = /** @type {HTMLElement} */ (aRenommer).dataset.simRenommer;
+    const fiche = listerSimulations().find((f) => f.id === id);
+    const nom = prompt('Nouveau nom de la simulation ?', fiche?.nom ?? '');
+    if (nom === null || !nom.trim()) return;
+    // Si c'est la simulation OUVERTE, l'etat en memoire porte le nom actuel :
+    // le renommer au depot seul serait ecrase a la premiere frappe.
+    if (id === idSimulationOuverte) {
+      etat.identite.nom = nom.trim();
+      rendreChampsStatiques();
+      majNomSimulationOuverte(nom.trim());
+      viderFileDeSauvegarde();
+    } else {
+      renommerSimulation(id, nom.trim());
+    }
+    rendreBibliotheque();
+    return;
+  }
+  const aDupliquer = el.closest('[data-sim-dupliquer]');
+  if (aDupliquer) {
+    const id = /** @type {HTMLElement} */ (aDupliquer).dataset.simDupliquer;
+    // La simulation ouverte peut porter des frappes non encore ecrites : on
+    // vide la file avant de la relire, sinon la copie serait en retard.
+    if (id === idSimulationOuverte) viderFileDeSauvegarde();
+    const sim = lireSimulation(id);
+    if (!sim) return;
+    const copie = ajouterSimulation(sim, `${sim.identite?.nom ?? 'Simulation'} (copie)`);
+    if (!copie) {
+      alert('Duplication impossible : le stockage du navigateur est plein ou indisponible.');
+      return;
+    }
+    rendreBibliotheque();
+    return;
+  }
+  const aExporter = el.closest('[data-sim-exporter]');
+  if (aExporter) {
+    const id = /** @type {HTMLElement} */ (aExporter).dataset.simExporter;
+    if (id === idSimulationOuverte) viderFileDeSauvegarde();
+    exporterSimulation(id);
+    return;
+  }
+  const aSupprimerSim = el.closest('[data-sim-supprimer]');
+  if (aSupprimerSim) {
+    const cible = /** @type {HTMLElement} */ (aSupprimerSim);
+    const id = cible.dataset.simSupprimer;
+    if (!confirm(`Supprimer définitivement la simulation « ${cible.dataset.nom} » ?`)) return;
+    const etaitOuverte = id === idSimulationOuverte;
+    if (etaitOuverte) clearTimeout(sauvegardeEnAttente);
+    supprimerSimulation(id);
+    if (etaitOuverte) {
+      // On ne reste pas sur une simulation qui n'existe plus : on ouvre la
+      // suivante, ou l'on repart de la demonstration s'il n'en reste aucune.
+      idSimulationOuverte = null;
+      const reste = listerSimulations()[0];
+      if (reste) ouvrirSimulationDansEcran(reste.id, false);
+      else {
+        const neuf = ajouterSimulation(simulationCourantePayload(), 'Nouvelle opération');
+        if (neuf) ouvrirSimulationDansEcran(neuf, false);
+      }
+    }
+    rendreBibliotheque();
     return;
   }
 
@@ -7427,8 +7908,19 @@ const ecranMemorise = (() => {
     return null;
   }
 })();
+// Bibliotheque vide a la toute premiere ouverture : l'operation de
+// demonstration y entre comme premiere simulation. Sans cela, la saisie
+// n'aurait nulle part ou s'ecrire et se perdrait a chaque rechargement.
+if (!idSimulationOuverte) {
+  const premier = ajouterSimulation(simulationCourantePayload(), etat.identite?.nom);
+  if (premier) {
+    idSimulationOuverte = ouvrirSimulation(premier);
+    majNomSimulationOuverte(etat.identite?.nom);
+  }
+}
 rendreChampsStatiques();
 rafraichirTout();
+rendreBibliotheque();
 // `afficherEcran` retombe seul sur le programme si l'ecran memorise n'existe
 // plus - une tranche dont le dernier lot a ete supprime, par exemple.
 if (ecranMemorise) afficherEcran(ecranMemorise);

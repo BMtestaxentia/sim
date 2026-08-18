@@ -1086,6 +1086,124 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
   overflow: hidden;
 }
 
+/* ============================================================ BIBLIOTHÈQUE */
+
+/* Nom du dossier ouvert, dans la marque : il dit sur QUOI l'on travaille, là
+   où le rail dit à quelle étape. Cliquable, il ouvre la bibliothèque. */
+.entete__dossier {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  margin-left: 10px; padding: 4px 8px 4px 9px;
+  appearance: none; cursor: pointer;
+  font-family: inherit; font-size: 12px; font-weight: 650;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color); border-radius: var(--radius-pill);
+  max-width: 260px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.entete__dossier:hover { color: var(--text-primary); border-color: var(--border-color-strong); }
+.entete__dossier__icone { font-size: 11px; opacity: 0.75; flex: none; }
+.entete__dossier__nom {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.entete__dossier__chevron { font-size: 9px; opacity: 0.6; flex: none; }
+@media (max-width: 1150px) {
+  .entete__dossier { max-width: 150px; }
+}
+
+.biblio { max-width: 1720px; margin: 0 auto; }
+.biblio__tete {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.biblio__titre { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
+.biblio__resume { margin: 3px 0 0; font-size: 11.5px; color: var(--text-tertiary); max-width: 80ch; }
+.biblio__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.biblio__recherche { position: relative; display: flex; align-items: center; flex: none; }
+.biblio__loupe {
+  position: absolute; left: 9px; color: var(--text-tertiary);
+  font-size: 14px; pointer-events: none;
+}
+.biblio__recherche input { width: 240px; padding-left: 26px; }
+
+/* Barre de filtres : elle COLLE sous le bandeau. Sur cinq mille lignes, on
+   filtre depuis le milieu du tableau, pas depuis le haut. */
+.biblio-filtres {
+  position: sticky; top: 58px; z-index: 12;
+  display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; margin-bottom: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color); border-radius: var(--radius-md);
+}
+.biblio-filtre { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.biblio-filtre > span {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-tertiary);
+}
+.biblio-filtre select { width: auto; min-width: 110px; max-width: 190px; }
+.biblio-filtres__compte {
+  margin-left: auto; font-size: 11.5px; color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+/* Le tableau. Dense, en chiffres tabulaires, avec sa tête figée : c'est un
+   tableur, et il doit s'en tenir aux codes du tableur. */
+.biblio-table { max-height: calc(100vh - 260px); }
+.biblio-table table { font-size: 12px; }
+.biblio-table thead th { white-space: nowrap; }
+.biblio-table th[data-tri-biblio] { cursor: pointer; user-select: none; }
+.biblio-table th[data-tri-biblio]:hover { color: var(--text-primary); }
+.biblio-tri { margin-left: 3px; font-size: 8px; opacity: 0.8; }
+.biblio-table tbody tr:hover > td { background: var(--bg-secondary); }
+/* La simulation ouverte : un liseré d'accent sur son bord gauche. Dans une
+   liste de cinq mille lignes, il faut la retrouver sans lire. */
+.biblio-ligne--ouverte > td:first-child { box-shadow: inset 3px 0 0 var(--info-accent); }
+.biblio-ligne--ouverte > td { background: color-mix(in srgb, var(--info-accent) 7%, transparent) !important; }
+
+.biblio-num { font-weight: 700; color: var(--text-primary); width: 1%; }
+.biblio-nom {
+  cursor: pointer; font-weight: 650; color: var(--text-primary);
+  max-width: 320px; min-width: 160px;
+}
+.biblio-nom:hover .biblio-nom__texte { text-decoration: underline; }
+.biblio-nom:focus-visible { outline: 2px solid var(--info-accent); outline-offset: -2px; }
+.biblio-nom .pastille { margin-left: 6px; }
+.biblio-discret { color: var(--text-tertiary); white-space: nowrap; }
+.biblio-produits { white-space: nowrap; }
+.biblio-produit {
+  display: inline-block; font-size: 9px; font-weight: 700;
+  padding: 1px 6px; border-radius: var(--radius-pill); margin-right: 3px;
+  color: var(--cat, var(--cat-6));
+  background: color-mix(in srgb, var(--cat-fond, var(--prod-autre-fond)) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cat, var(--cat-6)) 35%, transparent);
+}
+
+/* Actions : discrètes au repos, lisibles au survol de la ligne. Cinq boutons
+   pleins sur chaque ligne d'un tableau de cent feraient un mur. */
+.biblio-actions { white-space: nowrap; text-align: right; width: 1%; }
+.biblio-action {
+  appearance: none; border: 1px solid transparent; background: transparent;
+  font-family: inherit; font-size: 10.5px; font-weight: 600;
+  color: var(--text-tertiary); cursor: pointer;
+  padding: 2px 6px; border-radius: var(--radius-xs);
+  opacity: 0; transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.biblio-table tbody tr:hover .biblio-action,
+.biblio-table tbody tr:focus-within .biblio-action { opacity: 1; }
+.biblio-action:hover { background: var(--info-bg); color: var(--info-text); }
+.biblio-actions .bouton--supprimer { opacity: 0; transition: opacity 0.12s ease; }
+.biblio-table tbody tr:hover .bouton--supprimer,
+.biblio-table tbody tr:focus-within .bouton--supprimer { opacity: 1; }
+@media (hover: none) {
+  .biblio-action, .biblio-actions .bouton--supprimer { opacity: 1; }
+}
+
+.biblio-pied {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 10px; font-size: 11.5px; color: var(--text-tertiary);
+}
+.biblio-pied .biblio-filtre { margin-left: auto; flex-direction: row; align-items: center; gap: 6px; }
+
 /* ============================================================ BANDEAUX */
 
 .bandeau {

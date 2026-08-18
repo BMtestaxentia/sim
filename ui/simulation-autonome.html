@@ -1162,9 +1162,19 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 
 /* Le tableau. Dense, en chiffres tabulaires, avec sa tête figée : c'est un
    tableur, et il doit s'en tenir aux codes du tableur. */
-.biblio-table { max-height: calc(100vh - 260px); }
+/* Le tableau est son PROPRE conteneur de defilement : la barre de filtres
+   reste en place et seules les lignes bougent. `.table-defilante` ne gere que
+   le debordement horizontal ; sans `overflow-y` ici, la hauteur maximale
+   coupait les lignes sans les faire defiler, et l'en-tete - collee a la PAGE
+   a 58 px - venait se poser au milieu du tableau. */
+.biblio-table {
+  max-height: calc(100vh - 300px); min-height: 220px;
+  overflow-y: auto; overscroll-behavior: contain;
+  border: 1px solid var(--border-color); border-radius: var(--radius-md);
+}
 .biblio-table table { font-size: 12px; }
-.biblio-table thead th { white-space: nowrap; }
+/* Collee au haut de SON conteneur, et non de la page. */
+.biblio-table thead th { position: sticky; top: 0; z-index: 5; white-space: nowrap; }
 .biblio-table th[data-tri-biblio] { cursor: pointer; user-select: none; }
 .biblio-table th[data-tri-biblio]:hover { color: var(--text-primary); }
 .biblio-tri { margin-left: 3px; font-size: 8px; opacity: 0.8; }

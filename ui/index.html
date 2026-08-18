@@ -85,6 +85,10 @@
               <span>Nom de l'opération</span>
               <input type="text" data-champ="identite.nom" />
             </label>
+            <!-- Deux rangees, deux logiques : d'abord CE QU'EST la simulation
+                 (version, profil de calcul, type de montage), ensuite OU elle
+                 se pose (commune, departement, zonage). Les zonages se
+                 deduisent de la commune : ils la suivent, dans sa rangee. -->
             <label class="champ">
               <span>Version simulation</span>
               <input type="text" data-champ="identite.version" placeholder="V1 - Faisabilité" />
@@ -98,14 +102,6 @@
                 aria-label="Profil de paramètres"></select>
             </label>
             <label class="champ">
-              <span>Commune</span>
-              <select data-champ="identite.commune" id="select-commune"></select>
-            </label>
-            <label class="champ">
-              <span>Département</span>
-              <select data-champ="identite.departement" id="select-departement"></select>
-            </label>
-            <label class="champ">
               <span>Type d'opération</span>
               <select data-champ="identite.type_operation">
                 <option>VEFA</option>
@@ -115,25 +111,36 @@
               </select>
             </label>
             <label class="champ">
-              <span>Zone 1/2/3</span>
-              <select data-champ="identite.zone_123" data-type="nombre">
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-              </select>
+              <span>Commune</span>
+              <select data-champ="identite.commune" id="select-commune"></select>
             </label>
             <label class="champ">
-              <span>Zone A/B/C</span>
-              <!-- La VALEUR suit l'ecriture de l'arrete (« Abis ») pour que la
-                   deduction depuis la commune trouve son option ; le libelle
-                   reste lisible. Le moteur accepte les deux graphies. -->
-              <select data-champ="identite.zone_ABC">
-                <option value="A">A</option>
-                <option value="Abis">A bis</option>
-                <option value="B1">B1</option>
-                <option value="B2">B2</option>
-                <option value="C">C</option>
-              </select>
+              <span>Département</span>
+              <select data-champ="identite.departement" id="select-departement"></select>
+            </label>
+            <!-- Les deux zonages dans UNE case : c'est une seule information,
+                 le classement reglementaire du lieu, sous ses deux ecritures
+                 (fiscale A/B/C, loyers 1/2/3). Separes, l'un finissait orphelin
+                 sur sa propre rangee. -->
+            <label class="champ">
+              <span>Zonage A/B/C · 1/2/3</span>
+              <div class="champ__paire">
+                <!-- La VALEUR suit l'ecriture de l'arrete (« Abis ») pour que la
+                     deduction depuis la commune trouve son option ; le libelle
+                     reste lisible. Le moteur accepte les deux graphies. -->
+                <select data-champ="identite.zone_ABC" aria-label="Zone A/B/C">
+                  <option value="A">A</option>
+                  <option value="Abis">A bis</option>
+                  <option value="B1">B1</option>
+                  <option value="B2">B2</option>
+                  <option value="C">C</option>
+                </select>
+                <select data-champ="identite.zone_123" data-type="nombre" aria-label="Zone 1/2/3">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                </select>
+              </div>
             </label>
           </div>
         </section>

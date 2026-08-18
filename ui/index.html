@@ -89,6 +89,14 @@
               <span>Version simulation</span>
               <input type="text" data-champ="identite.version" placeholder="V1 - Faisabilité" />
             </label>
+            <!-- Le CHOIX du profil appartient a tout utilisateur ; son
+                 PARAMETRAGE reste dans l'onglet admin. Les options sont
+                 remplies par `remplirSelectsProfil` (app.js). -->
+            <label class="champ">
+              <span>Profil de paramètres</span>
+              <select id="select-profil-operation" data-selecteur-profil
+                aria-label="Profil de paramètres"></select>
+            </label>
             <label class="champ">
               <span>Commune</span>
               <select data-champ="identite.commune" id="select-commune"></select>

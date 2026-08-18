@@ -1920,6 +1920,14 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
               <span>Version simulation</span>
               <input type="text" data-champ="identite.version" placeholder="V1 - Faisabilité" />
             </label>
+            <!-- Le CHOIX du profil appartient a tout utilisateur ; son
+                 PARAMETRAGE reste dans l'onglet admin. Les options sont
+                 remplies par `remplirSelectsProfil` (app.js). -->
+            <label class="champ">
+              <span>Profil de paramètres</span>
+              <select id="select-profil-operation" data-selecteur-profil
+                aria-label="Profil de paramètres"></select>
+            </label>
             <label class="champ">
               <span>Commune</span>
               <select data-champ="identite.commune" id="select-commune"></select>
@@ -11253,6 +11261,30 @@ function profilActif() {
   return etat.profils.find((p) => p.id === etat.profil_actif) ?? etat.profils[0];
 }
 
+/**
+ * Remplit les selecteurs de profil DISSEMINES dans l'application - celui de
+ * l'ecran Operation aujourd'hui, d'autres demain. Le choix du profil
+ * appartient a tout utilisateur, son parametrage reste a l'onglet admin ; le
+ * meme geste ecrit au meme endroit (`etat.profil_actif`).
+ *
+ * Appele a chaque recalcul : c'est l'unique point de passage de tous les
+ * changements d'etat, renommages et duplications de profils compris. La
+ * signature evite de reconstruire des options identiques, et un selecteur
+ * tenu par le focus n'est jamais reecrit sous les doigts de l'utilisateur.
+ */
+function remplirSelectsProfil() {
+  const actif = profilActif()?.id ?? '';
+  const signature = JSON.stringify([actif, etat.profils.map((p) => [p.id, p.nom])]);
+  for (const sel of document.querySelectorAll('select[data-selecteur-profil]')) {
+    const s = /** @type {HTMLSelectElement} */ (sel);
+    if (s.dataset.signature === signature || document.activeElement === s) continue;
+    s.innerHTML = etat.profils
+      .map((p) => `<option value="${att(p.id)}" ${p.id === actif ? 'selected' : ''}>${att(p.nom)}</option>`)
+      .join('');
+    s.dataset.signature = signature;
+  }
+}
+
 /** Surcharges du profil actif : c'est ce que le moteur recoit. */
 function parametrageActif() {
   return profilActif()?.parametrage ?? {};
@@ -12390,6 +12422,7 @@ function recalculer() {
   // etre reevalue a chaque frappe, et non au seul rendu de structure. Il doit
   // aussi l'etre AVANT le calcul, puisqu'il en change les loyers plafonds.
   rendreZonage();
+  remplirSelectsProfil();
 
   const manquants = champsManquants();
   if (manquants.length) {
@@ -12995,7 +13028,9 @@ document.addEventListener('paste', (ev) => {
 document.addEventListener('change', (ev) => {
   // L'interrupteur de masquage change la STRUCTURE de la table, pas l'etat.
   const id = /** @type {HTMLElement} */ (ev.target).id;
-  if (id === 'select-profil') {
+  // Les deux selecteurs de profil - barre admin et ecran Operation - font le
+  // meme geste : le profil actif est un reglage d'operation, pas d'ecran.
+  if (id === 'select-profil' || /** @type {HTMLElement} */ (ev.target).matches?.('[data-selecteur-profil]')) {
     etat.profil_actif = /** @type {HTMLSelectElement} */ (ev.target).value;
     rafraichirTout();
     return;

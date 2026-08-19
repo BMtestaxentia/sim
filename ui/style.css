@@ -1177,7 +1177,10 @@ body.sans-simulation #btn-fermer-sim + .entete__filet { display: none; }
 .biblio-barre .bouton { padding: 5px 10px; }
 #btn-vider-filtres { padding: 5px 8px; }
 
-.entete__dossier--vide { color: var(--warning-text); border-color: var(--warning-accent); }
+/* Sans dossier ouvert, le bouton n'a rien a nommer et rien a offrir : la
+   bibliotheque est deja a l'ecran. Il disparait donc, comme le rail et le
+   bouton Fermer - l'en-tete se reduit a la marque et au theme. */
+body.sans-simulation .entete__dossier { display: none; }
 
 /* Le tableau. Dense, en chiffres tabulaires, avec sa tête figée : c'est un
    tableur, et il doit s'en tenir aux codes du tableur. */

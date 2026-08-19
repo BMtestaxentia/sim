@@ -39,13 +39,6 @@ const PREFIXE = 'moteur-sim.depot.v1';
 const CLE_INDEX = `${PREFIXE}.index`;
 const CLE_COURANT = `${PREFIXE}.courant`;
 const CLE_SIM = (id) => `${PREFIXE}.sim.${id}`;
-/**
- * Compteur de numeros. Il s'incremente et ne se reutilise JAMAIS : le numero
- * d'une simulation est sa reference, on la cite dans un courriel ou en reunion,
- * elle ne doit pas designer un autre dossier six mois plus tard. Supprimer la
- * simulation 412 ne libere donc pas le 412.
- */
-const CLE_COMPTEUR = `${PREFIXE}.compteur`;
 
 /** Cle de l'ancienne simulation unique, reprise a la premiere ouverture. */
 const CLE_HERITEE = 'moteur-sim.saisie.v1';
@@ -107,18 +100,19 @@ function depotNouvelId(index) {
 }
 
 /**
- * Numero suivant, attribue a la creation et jamais reattribue.
+ * Numero suivant : le plus grand des numeros existants, plus un.
  *
- * Le compteur est borne par le plus grand numero deja attribue : si la cle du
- * compteur disparait - stockage nettoye a la main, migration - on repart
- * au-dessus du dernier connu plutot que de recreer des doublons.
+ * Aucun compteur n'est conserve, et c'est voulu. Supprimer la DERNIERE
+ * simulation doit rendre son numero disponible - avec 1, 2, 3, effacer la 3
+ * ramene la prochaine a 3, et non a 4 qui laisserait un trou permanent en fin
+ * de liste. Supprimer une simulation du MILIEU, en revanche, laisse son numero
+ * vacant : avec 1, 2, 4, la prochaine est la 5. Combler le 3 obligerait soit a
+ * renumeroter les suivantes - donc a changer la reference d'un dossier qu'on a
+ * peut-etre deja cite ailleurs - soit a rendre l'ordre des numeros incoherent
+ * avec l'ordre de creation.
  */
 function depotProchainNumero(index) {
-  const compteur = Number(depotLireJSON(CLE_COMPTEUR, 0)) || 0;
-  const plusHaut = index.reduce((m, f) => Math.max(m, Number(f.numero) || 0), 0);
-  const suivant = Math.max(compteur, plusHaut) + 1;
-  depotEcrireJSON(CLE_COMPTEUR, suivant);
-  return suivant;
+  return index.reduce((m, f) => Math.max(m, Number(f.numero) || 0), 0) + 1;
 }
 
 /** Fiche deduite d'une simulation : ce que la liste affiche sans ouvrir le fichier. */

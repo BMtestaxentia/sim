@@ -74,6 +74,12 @@
              plus d'une opération de démonstration, on ferme le dossier ou on en
              ouvre un autre depuis la bibliothèque. -->
         <div class="entete__groupe">
+          <!-- « Fermer » vit ici, au bout du rail d'onglets : il termine le
+               travail sur le dossier ouvert. Il ne paraît que dans une
+               simulation - sans dossier ouvert, il n'a rien à fermer. -->
+          <button type="button" id="btn-fermer-sim" class="bouton bouton--discret"
+                  title="Fermer la simulation ouverte">Fermer</button>
+          <span class="entete__filet" aria-hidden="true"></span>
           <button type="button" id="btn-theme" class="bouton bouton--icone" aria-label="Changer de thème">☀</button>
         </div>
       </div>
@@ -101,6 +107,8 @@
             <input type="search" id="recherche-simulation"
               placeholder="N°, nom, commune…" aria-label="Rechercher une simulation" />
           </label>
+          <select id="filtre-groupe" aria-label="Filtrer par groupe">
+            <option value="">Tous les groupes</option></select>
           <select id="filtre-produit" aria-label="Filtrer par produit">
             <option value="">Tous les produits</option></select>
           <button type="button" class="bouton bouton--discret" id="btn-vider-filtres"
@@ -108,8 +116,6 @@
           <span class="biblio-barre__separateur" aria-hidden="true"></span>
           <button type="button" class="bouton bouton--principal" id="btn-nouvelle-sim">
             Nouvelle simulation</button>
-          <button type="button" class="bouton bouton--discret" id="btn-fermer-sim"
-            title="Se détacher de la simulation ouverte">Fermer</button>
           <input type="file" id="fichier-import" accept="application/json,.json" hidden />
         </div>
 
@@ -150,9 +156,16 @@
                  (version, profil de calcul, type de montage), ensuite OU elle
                  se pose (commune, departement, zonage). Les zonages se
                  deduisent de la commune : ils la suivent, dans sa rangee. -->
+            <!-- Groupe : le PROJET. Plusieurs simulations d'une même opération
+                 - variantes de programme, de montage, d'hypothèses - se
+                 rassemblent sous un même groupe. La liste `groupes-connus` est
+                 alimentée par les groupes déjà saisis, pour qu'on ne crée pas
+                 deux orthographes du même projet. -->
             <label class="champ">
-              <span>Version simulation</span>
-              <input type="text" data-champ="identite.version" placeholder="V1 - Faisabilité" />
+              <span>Groupe</span>
+              <input type="text" data-champ="identite.groupe" list="groupes-connus"
+                placeholder="Projet de rattachement" />
+              <datalist id="groupes-connus"></datalist>
             </label>
             <!-- Le CHOIX du profil appartient a tout utilisateur ; son
                  PARAMETRAGE reste dans l'onglet admin. Les options sont
@@ -708,6 +721,21 @@
         </div>
       </div>
     </main>
+
+    <!-- Fermeture avec modifications en attente. Trois issues, parce qu'un
+         choix binaire entre « perdre » et « garder » sans porte de sortie fait
+         cliquer au hasard. -->
+    <dialog id="dialogue-fermeture" class="dialogue-fermeture">
+      <h2>Fermer <span id="fermeture-nom"></span> ?</h2>
+      <p>Cette simulation a été modifiée depuis son ouverture.</p>
+      <div class="dialogue-fermeture__actions">
+        <button type="button" class="bouton bouton--discret" data-fermeture="annuler">Annuler</button>
+        <button type="button" class="bouton bouton--danger" data-fermeture="abandonner">
+          Abandonner les modifications</button>
+        <button type="button" class="bouton bouton--principal" data-fermeture="enregistrer">
+          Enregistrer et fermer</button>
+      </div>
+    </dialog>
 
     <script type="module" src="app.js"></script>
   </body>

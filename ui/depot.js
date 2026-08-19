@@ -54,7 +54,7 @@ const CLE_HERITEE = 'moteur-sim.saisie.v1';
  * @typedef {Object} Fiche
  * @property {string} id
  * @property {string} nom
- * @property {string} version           « V1 - Faisabilité », etc.
+ * @property {string} groupe            le projet auquel la simulation appartient
  * @property {string} commune
  * @property {string} zone_ABC
  * @property {string} type_operation
@@ -130,7 +130,7 @@ export function ficheSimulation(sim, base = {}) {
     id: base.id ?? '',
     numero: base.numero ?? 0,
     nom: sim?.identite?.nom || 'Simulation sans nom',
-    version: sim?.identite?.version || '',
+    groupe: sim?.identite?.groupe || '',
     commune: sim?.identite?.commune || '',
     zone_ABC: sim?.identite?.zone_ABC || '',
     type_operation: sim?.identite?.type_operation || '',

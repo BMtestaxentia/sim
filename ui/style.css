@@ -1170,6 +1170,10 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
    place et invitent au clic. Sans dossier ouvert, il n y a pas de montage :
    l en-tete se reduit a la marque et aux actions. */
 body.sans-simulation .onglets { display: none; }
+/*  Fermer  n a rien a fermer sans dossier ouvert : il disparait avec le rail,
+   et le filet qui le separe du basculeur de theme avec lui. */
+body.sans-simulation #btn-fermer-sim,
+body.sans-simulation #btn-fermer-sim + .entete__filet { display: none; }
 .biblio-barre .bouton { padding: 5px 10px; }
 #btn-vider-filtres { padding: 5px 8px; }
 
@@ -2136,3 +2140,17 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
 /* La date sous le rang du mois : le rang sert a compter, la date a se reperer. */
 .treso__date { display: block; font-size: 10px; color: var(--text-tertiary); }
 #table-tresorerie th:first-child, #table-tresorerie td:first-child { width: 1%; white-space: nowrap; }
+
+/* Boite de fermeture : trois issues, la plus sure a droite. */
+.dialogue-fermeture {
+  border: 1px solid var(--border-color); border-radius: var(--radius-lg);
+  background: var(--bg-primary); color: var(--text-primary);
+  padding: 18px 20px; max-width: min(460px, 92vw);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+.dialogue-fermeture::backdrop { background: rgba(0, 0, 0, 0.55); }
+.dialogue-fermeture h2 { margin: 0 0 6px; font-size: 15px; font-weight: 800; }
+.dialogue-fermeture p { margin: 0 0 16px; font-size: 12.5px; color: var(--text-secondary); }
+.dialogue-fermeture__actions {
+  display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
+}

@@ -142,7 +142,10 @@ const LIBELLES_ASSIETTE = {
 const etat = {
   identite: {
     nom: 'Opération de test',
-    version: 'V1 - Faisabilité',
+    // Groupe : le PROJET auquel la simulation appartient. Une meme operation
+    // se simule souvent plusieurs fois - variantes de programme, de montage,
+    // d'hypotheses - et ces essais n'ont de sens que rassembles.
+    groupe: 'Bergerac LLS 6',
     commune: 'Bergerac',
     departement: 'Dordogne (24)',
     produit: 'PLS',
@@ -6431,6 +6434,23 @@ let sauvegardeEnAttente = null;
 /** La simulation ouverte : c'est elle que la saisie ecrit. */
 let idSimulationOuverte = null;
 
+/**
+ * La simulation TELLE QU'ELLE ETAIT a l'ouverture.
+ *
+ * La saisie s'enregistre toute seule, ce qui protege d'une fermeture d'onglet
+ * ou d'une coupure. Mais « enregistre en continu » et « valide » ne sont pas
+ * la meme chose : on essaie une variante, on veut pouvoir la jeter. Cet
+ * instantane est le point de retour, et c'est lui qui rend « abandonner les
+ * modifications » possible sans renoncer a l'enregistrement automatique.
+ */
+let etatAuChargement = null;
+
+/** Y a-t-il des modifications depuis l'ouverture du dossier ? */
+function modificationsEnAttente() {
+  if (!idSimulationOuverte || !etatAuChargement) return false;
+  return JSON.stringify(simulationCourantePayload()) !== etatAuChargement;
+}
+
 /** Ce qui part au depot : la saisie, et rien d'autre. */
 function simulationCourantePayload() {
   return Object.fromEntries(RACINES_PERSISTEES.map((c) => [c, etat[c]]));
@@ -6504,6 +6524,9 @@ function ouvrirSimulationDansEcran(id, versEcran = true) {
     return false;
   }
   idSimulationOuverte = ouvrirSimulation(id);
+  // Point de retour du dossier : ce a quoi  abandonner les modifications 
+  // ramenera. Pose APRES la mise en etat, pour refleter ce qui est a l ecran.
+  etatAuChargement = JSON.stringify(simulationCourantePayload());
   majNomSimulationOuverte(sim.identite?.nom);
   majAccesMontage();
   // Les champs STATIQUES - identite, calendrier, hypotheses - ne sont ecrits
@@ -6536,14 +6559,55 @@ function restaurerSaisie() {
   return false;
 }
 
-/** Referme la simulation ouverte : plus rien n'est selectionne, rien ne s'ecrit. */
-function fermerSimulation() {
+/**
+ * Referme la simulation ouverte.
+ *
+ * @param {'enregistrer'|'abandonner'} issue ce qu'on fait des modifications
+ */
+function fermerSimulation(issue = 'enregistrer') {
   clearTimeout(sauvegardeEnAttente);
-  if (idSimulationOuverte) ecrireSimulation(idSimulationOuverte, simulationCourantePayload());
+  if (idSimulationOuverte) {
+    // « Abandonner » reecrit l'instantane d'ouverture par-dessus ce que
+    // l'enregistrement automatique a depose entre-temps : c'est le seul moyen
+    // de defaire des modifications deja ecrites.
+    const aEcrire =
+      issue === 'abandonner' && etatAuChargement
+        ? JSON.parse(etatAuChargement)
+        : simulationCourantePayload();
+    ecrireSimulation(idSimulationOuverte, aEcrire);
+  }
   idSimulationOuverte = null;
+  etatAuChargement = null;
   ouvrirSimulation(null);
   majNomSimulationOuverte(null);
   majAccesMontage();
+}
+
+/**
+ * Ferme en demandant quoi faire des modifications, s'il y en a.
+ *
+ * Trois issues et non deux : enregistrer, abandonner, ou renoncer a fermer.
+ * Un `confirm` n'en offre que deux, et forcer le choix entre « perdre » et
+ * « garder » sans porte de sortie fait cliquer au hasard.
+ */
+function fermerSimulationAvecConfirmation() {
+  if (!idSimulationOuverte) return;
+  if (!modificationsEnAttente()) {
+    fermerSimulation('enregistrer');
+    rendreBibliotheque();
+    afficherEcran('simulations');
+    return;
+  }
+  const boite = /** @type {HTMLDialogElement} */ (document.getElementById('dialogue-fermeture'));
+  if (!boite) {
+    fermerSimulation('enregistrer');
+    rendreBibliotheque();
+    afficherEcran('simulations');
+    return;
+  }
+  const nom = document.getElementById('fermeture-nom');
+  if (nom) nom.textContent = etat.identite?.nom ?? 'cette simulation';
+  boite.showModal();
 }
 
 /**
@@ -6575,7 +6639,7 @@ let rechercheSimulation = '';
  * cherchables coutait une rangee entiere de bandeau. La forme reste ouverte,
  * ajouter un filtre n'est qu'une ligne ici et un `select` dans la page.
  */
-const filtresBiblio = { 'filtre-produit': '' };
+const filtresBiblio = { 'filtre-groupe': '', 'filtre-produit': '' };
 /** Colonne de tri et sens. Par defaut le numero decroissant : le dernier cree en tete. */
 const triBiblio = { colonne: 'numero', ascendant: false };
 let pageBiblio = 0;
@@ -6633,14 +6697,28 @@ function rendreBibliotheque() {
     sel.value = listees.includes(garde) ? garde : '';
     if (sel.value !== garde) filtresBiblio[id] = '';
   };
+  options('filtre-groupe', toutes.map((f) => f.groupe));
   options('filtre-produit', toutes.flatMap((f) => f.produits ?? []), libelleProduit);
+
+  // Liste d'autocompletion du champ Groupe de l'ecran Operation. Sans elle,
+  // rattacher une simulation a un projet existant demande de retaper son
+  // nom a l’identique : deux orthographes couperaient le projet en deux,
+  // et le regroupement ne servirait plus a rien.
+  const connus = document.getElementById('groupes-connus');
+  if (connus) {
+    connus.innerHTML = [...new Set(toutes.map((f) => f.groupe).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b))
+      .map((g) => `<option value="${att(g)}"></option>`)
+      .join('');
+  }
 
   // --- Filtrage ----------------------------------------------------------
   const q = sansAccent(rechercheSimulation.trim());
   const fiches = toutes.filter((f) => {
+    if (filtresBiblio['filtre-groupe'] && f.groupe !== filtresBiblio['filtre-groupe']) return false;
     if (filtresBiblio['filtre-produit'] && !(f.produits ?? []).includes(filtresBiblio['filtre-produit'])) return false;
     if (!q) return true;
-    return sansAccent(`${f.numero} ${f.nom} ${f.version} ${f.commune} ${f.type_operation}`).includes(q);
+    return sansAccent(`${f.numero} ${f.nom} ${f.groupe} ${f.commune} ${f.type_operation}`).includes(q);
   });
 
   // --- Tri ---------------------------------------------------------------
@@ -6648,6 +6726,7 @@ function rendreBibliotheque() {
     switch (triBiblio.colonne) {
       case 'numero': return Number(f.numero) || 0;
       case 'nom': return sansAccent(f.nom);
+      case 'groupe': return sansAccent(f.groupe);
       case 'commune': return sansAccent(f.commune);
       case 'type': return sansAccent(f.type_operation);
       case 'zone': return sansAccent(f.zone_ABC);
@@ -6715,7 +6794,9 @@ function rendreBibliotheque() {
         <span class="biblio-nom__texte">${att(f.nom)}</span>
         ${ouverte ? '<span class="pastille pastille--ok">ouverte</span>' : ''}
       </td>
-      <td class="biblio-discret">${att(f.version)}</td>
+      <td class="biblio-groupe">${
+        f.groupe ? `<span class="biblio-groupe__jeton">${att(f.groupe)}</span>` : ''
+      }</td>
       <td>${att(f.commune)}</td>
       <td class="biblio-discret">${att(f.zone_ABC)}</td>
       <td class="biblio-discret">${att(f.type_operation)}</td>
@@ -6741,7 +6822,7 @@ function rendreBibliotheque() {
         <thead><tr>
           ${th('numero', 'N°', 'num')}
           ${th('nom', 'Simulation')}
-          <th>Version</th>
+          ${th('groupe', 'Groupe')}
           ${th('commune', 'Commune')}
           ${th('zone', 'Zone')}
           ${th('type', 'Type')}
@@ -7252,7 +7333,7 @@ document.addEventListener('click', (ev) => {
       // Un tri neuf part dans le sens le plus utile : croissant sur du texte,
       // decroissant sur un nombre ou une date - on cherche le plus gros, le
       // plus recent, le dernier numero.
-      triBiblio.ascendant = ['nom', 'commune', 'type', 'zone'].includes(col);
+      triBiblio.ascendant = ['nom', 'groupe', 'commune', 'type', 'zone'].includes(col);
     }
     rendreBibliotheque();
     return;
@@ -7328,7 +7409,15 @@ document.addEventListener('click', (ev) => {
     return;
   }
   if (el.closest('#btn-fermer-sim')) {
-    fermerSimulation();
+    fermerSimulationAvecConfirmation();
+    return;
+  }
+  const issue = el.closest('[data-fermeture]');
+  if (issue) {
+    const quoi = /** @type {HTMLElement} */ (issue).dataset.fermeture;
+    /** @type {HTMLDialogElement} */ (document.getElementById('dialogue-fermeture'))?.close();
+    if (quoi === 'annuler') return;
+    fermerSimulation(quoi === 'abandonner' ? 'abandonner' : 'enregistrer');
     rendreBibliotheque();
     afficherEcran('simulations');
     return;

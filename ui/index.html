@@ -722,19 +722,18 @@
       </div>
     </main>
 
-    <!-- Fermeture avec modifications en attente. Trois issues, parce qu'un
-         choix binaire entre « perdre » et « garder » sans porte de sortie fait
-         cliquer au hasard. -->
-    <dialog id="dialogue-fermeture" class="dialogue-fermeture">
-      <h2>Fermer <span id="fermeture-nom"></span> ?</h2>
-      <p>Cette simulation a été modifiée depuis son ouverture.</p>
-      <div class="dialogue-fermeture__actions">
-        <button type="button" class="bouton bouton--discret" data-fermeture="annuler">Annuler</button>
-        <button type="button" class="bouton bouton--danger" data-fermeture="abandonner">
-          Abandonner les modifications</button>
-        <button type="button" class="bouton bouton--principal" data-fermeture="enregistrer">
-          Enregistrer et fermer</button>
-      </div>
+    <!-- Boîte de dialogue UNIQUE de l'application : confirmations, saisies et
+         messages y passent tous. Les boîtes natives du navigateur n'ont ni la
+         charte, ni plus de deux issues, ni la possibilité d'expliquer ce qu'on
+         s'apprête à faire. Son contenu est construit par `ouvrirBoite`. -->
+    <dialog id="boite-dialogue" class="boite">
+      <h2 id="boite-titre"></h2>
+      <p id="boite-texte"></p>
+      <label class="boite__champ" id="boite-champ" hidden>
+        <span id="boite-libelle"></span>
+        <input type="text" id="boite-saisie" />
+      </label>
+      <div class="boite__actions" id="boite-actions"></div>
     </dialog>
 
     <script type="module" src="app.js"></script>

@@ -131,23 +131,30 @@ const app = aplatir(UI_MODULES.map((n) => lire('ui', n)).join('\n')).replace(
 if (app.includes('__REFERENTIELS_DEBUT__')) {
   throw new Error("Le bloc de referentiels n'a pas ete remplace : marqueurs absents de ui/app.js");
 }
-if (/\bawait\b/.test(app.split('\n').filter((l) => !l.trim().startsWith('*')).join('\n'))) {
-  throw new Error('`await` de premier niveau restant : le script classique ne peut pas le porter');
-}
-
 verifierCollisions([...morceaux, { nom: 'ui/' + UI_MODULES.join(' + ui/'), code: app }]);
 
 // Le script assemble est du texte pour cet outil : une faute de syntaxe passe
 // sans bruit et n'apparait qu'a l'ouverture, sous la forme d'une page qui
 // s'affiche mais ou plus rien ne repond - les ecouteurs n'ayant jamais ete
 // poses. On la fait donc echouer ICI, ou le message est lisible.
+//
+// Ce controle couvre AUSSI le `await` de premier niveau, que la version
+// autonome ne peut pas porter : elle enveloppe tout dans une fonction ordinaire
+// et non dans un module. Un `await` hors fonction asynchrone y est une faute de
+// syntaxe, donc detecte ici. Une recherche textuelle de `await` faisait le meme
+// travail en moins bien : elle refusait aussi les `await` legitimes, ceux qui
+// vivent a l'interieur d'une fonction `async`.
 try {
   new Function(`"use strict";\n${moteur}\n${app}`);
 } catch (e) {
+  const message = /** @type {Error} */ (e).message;
   throw new Error(
-    `Le script assemble ne compile pas : ${/** @type {Error} */ (e).message}. ` +
-      'Verifier ui/app.js et src/*.js (piege frequent : une apostrophe inverse dans un ' +
-      'commentaire place a l\'interieur d\'un litteral de gabarit, qui ferme la chaine).',
+    `Le script assemble ne compile pas : ${message}. ` +
+      (/await/i.test(message)
+        ? '`await` de premier niveau : le script classique ne peut pas le porter, ' +
+          'placez-le dans une fonction `async`.'
+        : 'Verifier ui/app.js et src/*.js (piege frequent : une apostrophe inverse dans un ' +
+          "commentaire place a l'interieur d'un litteral de gabarit, qui ferme la chaine)."),
   );
 }
 

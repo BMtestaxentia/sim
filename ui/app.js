@@ -1021,21 +1021,28 @@ function apportTheoriqueFP(code) {
  * elles qui pourraient surprendre, et ce sont les seules sur lesquelles on
  * propose quelque chose. Refuser les laisse telles quelles.
  */
-function proposerReajustementApports(ancienTaux) {
+async function proposerReajustementApports(ancienTaux) {
   const nouveauTaux = tauxApportFP();
   if (nouveauTaux === ancienTaux) return;
   const saisies = Object.keys(etat.fonds_propres_par_produit).filter(
     (c) => !nul(etat.fonds_propres_par_produit[c]) && apportTheoriqueFP(c) !== null,
   );
   if (!saisies.length) return;
-  const ok = confirm(
-    `L’apport en fonds propres passe de ${pct(ancienTaux, 1)} à ${pct(nouveauTaux, 1)} ` +
-      `du prix de revient.\n\n` +
+  const ok = await confirmerBoite(
+    'Montants saisis en fonds propres',
+    `L’apport passe de ${pct(ancienTaux, 1)} à ${pct(nouveauTaux, 1)} du prix de revient. ` +
       `${saisies.length} tranche(s) portent un montant saisi, qui ne suivra pas. ` +
       `Les remettre au montant calculé ? Annuler les laisse tels quels.`,
+    'Recalculer',
+    false,
   );
   if (!ok) return;
   for (const c of saisies) delete etat.fonds_propres_par_produit[c];
+  // Le rafraichissement se fait ICI et non chez l'appelant : la boite est
+  // asynchrone, l'appelant a deja redessine l'ecran depuis longtemps quand la
+  // reponse arrive. Sans cela les montants remis en automatique resteraient
+  // affiches a leur ancienne valeur jusqu'a la frappe suivante.
+  rafraichirTout();
 }
 
 /**
@@ -6520,7 +6527,7 @@ function poserSimulation(sim) {
 function ouvrirSimulationDansEcran(id, versEcran = true) {
   const sim = lireSimulation(id);
   if (!poserSimulation(sim)) {
-    alert('Cette simulation est illisible et n’a pas pu être ouverte.');
+    informerBoite('Simulation illisible', 'Son contenu est corrompu ou incomplet : elle n’a pas pu être ouverte.');
     return false;
   }
   idSimulationOuverte = ouvrirSimulation(id);
@@ -6590,24 +6597,27 @@ function fermerSimulation(issue = 'enregistrer') {
  * Un `confirm` n'en offre que deux, et forcer le choix entre « perdre » et
  * « garder » sans porte de sortie fait cliquer au hasard.
  */
-function fermerSimulationAvecConfirmation() {
+async function fermerSimulationAvecConfirmation() {
   if (!idSimulationOuverte) return;
-  if (!modificationsEnAttente()) {
-    fermerSimulation('enregistrer');
-    rendreBibliotheque();
-    afficherEcran('simulations');
-    return;
+  // Rien de modifie : on ferme sans rien demander. Une confirmation qui
+  // n'a aucun enjeu apprend a cliquer sans lire.
+  let issue = "enregistrer";
+  if (modificationsEnAttente()) {
+    const r = await ouvrirBoite({
+      titre: `Fermer « ${etat.identite?.nom ?? 'cette simulation'} » ?`,
+      texte: 'Cette simulation a été modifiée depuis son ouverture.',
+      actions: [
+        { cle: 'annuler', libelle: 'Annuler', style: 'discret' },
+        { cle: 'abandonner', libelle: 'Abandonner les modifications', style: 'danger' },
+        { cle: 'enregistrer', libelle: 'Enregistrer et fermer', style: 'principal' },
+      ],
+    });
+    if (r === null) return;
+    issue = r;
   }
-  const boite = /** @type {HTMLDialogElement} */ (document.getElementById('dialogue-fermeture'));
-  if (!boite) {
-    fermerSimulation('enregistrer');
-    rendreBibliotheque();
-    afficherEcran('simulations');
-    return;
-  }
-  const nom = document.getElementById('fermeture-nom');
-  if (nom) nom.textContent = etat.identite?.nom ?? 'cette simulation';
-  boite.showModal();
+  fermerSimulation(issue === "abandonner" ? "abandonner" : "enregistrer");
+  rendreBibliotheque();
+  afficherEcran('simulations');
 }
 
 /**
@@ -6856,6 +6866,137 @@ function exporterSimulation(id) {
   a.download = `${nom}.json`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ---------------------------------------------------------------- dialogues
+
+/**
+ * La boite de dialogue de l'application, en remplacement de `confirm`,
+ * `prompt` et `alert`.
+ *
+ * Les boites natives ont trois defauts qui comptent ici : elles ignorent la
+ * charte, elles n'offrent jamais plus de deux issues, et elles ne laissent pas
+ * la place d'EXPLIQUER ce qu'on s'apprete a faire. Or la plupart des
+ * confirmations de cet outil detruisent quelque chose - un profil, un lot, une
+ * simulation - et meritent une phrase.
+ *
+ * Elle rend une promesse : la cle de l'action choisie, ou `null` si
+ * l'utilisateur a renonce (Echap, clic sur Annuler, fermeture). Quand la boite
+ * porte un champ de saisie, la promesse rend la valeur saisie a la place.
+ *
+ * @param {Object} p
+ * @param {string} p.titre
+ * @param {string} [p.texte]
+ * @param {{cle: string, libelle: string, style?: 'principal'|'danger'|'discret'}[]} p.actions
+ * @param {{libelle?: string, valeur?: string, liste?: string}} [p.saisie]
+ * @returns {Promise<string|null>}
+ */
+function ouvrirBoite({ titre, texte = '', actions, saisie }) {
+  const boite = /** @type {HTMLDialogElement} */ (document.getElementById('boite-dialogue'));
+  // Pas de boite dans le document : on ne bloque pas l'action pour autant, on
+  // retombe sur la premiere issue non destructrice.
+  if (!boite) return Promise.resolve(actions[actions.length - 1]?.cle ?? null);
+
+  document.getElementById('boite-titre').textContent = titre;
+  const pTexte = document.getElementById('boite-texte');
+  pTexte.textContent = texte;
+  pTexte.hidden = !texte;
+
+  const champ = document.getElementById('boite-champ');
+  const entree = /** @type {HTMLInputElement} */ (document.getElementById('boite-saisie'));
+  champ.hidden = !saisie;
+  if (saisie) {
+    document.getElementById('boite-libelle').textContent = saisie.libelle ?? '';
+    entree.value = saisie.valeur ?? '';
+    // Une liste d'autocompletion se passe par son identifiant, comme sur un
+    // champ ordinaire : la boite ne duplique pas les valeurs, elle pointe.
+    if (saisie.liste) entree.setAttribute('list', saisie.liste);
+    else entree.removeAttribute('list');
+  }
+
+  const zone = document.getElementById('boite-actions');
+  zone.innerHTML = actions
+    .map(
+      (a) =>
+        `<button type="button" class="bouton bouton--${a.style ?? 'discret'}" data-boite="${att(a.cle)}">${att(a.libelle)}</button>`,
+    )
+    .join('');
+
+  return new Promise((resoudre) => {
+    const conclure = (valeur) => {
+      boite.removeEventListener('click', surClic);
+      boite.removeEventListener('cancel', surEchap);
+      boite.removeEventListener('submit', surEnvoi);
+      boite.close();
+      resoudre(valeur);
+    };
+    const surClic = (ev) => {
+      const b = /** @type {HTMLElement} */ (ev.target).closest('[data-boite]');
+      if (!b) return;
+      const cle = /** @type {HTMLElement} */ (b).dataset.boite;
+      // Une action d'annulation rend toujours `null`, saisie ou pas : c'est ce
+      // que l'appelant teste pour ne rien faire.
+      if (cle === 'annuler') return conclure(null);
+      conclure(saisie ? entree.value : cle);
+    };
+    const surEchap = (ev) => {
+      ev.preventDefault();
+      conclure(null);
+    };
+    // Entree valide : sur un champ de saisie, taper puis appuyer sur Entree est
+    // le geste naturel, et il ne doit pas fermer la boite sans rien faire.
+    const surEnvoi = (ev) => {
+      ev.preventDefault();
+      const principale = actions.find((a) => a.style === 'principal') ?? actions[actions.length - 1];
+      if (principale) conclure(saisie ? entree.value : principale.cle);
+    };
+    boite.addEventListener('click', surClic);
+    boite.addEventListener('cancel', surEchap);
+    boite.addEventListener('submit', surEnvoi);
+    boite.showModal();
+    if (saisie) {
+      entree.focus();
+      entree.select();
+    }
+  });
+}
+
+/**
+ * Confirmation a deux issues. `danger` colore l'action de rouge : elle detruit.
+ * @returns {Promise<boolean>}
+ */
+async function confirmerBoite(titre, texte, libelle = 'Confirmer', danger = true) {
+  const r = await ouvrirBoite({
+    titre,
+    texte,
+    actions: [
+      { cle: 'annuler', libelle: 'Annuler', style: 'discret' },
+      { cle: 'ok', libelle, style: danger ? 'danger' : 'principal' },
+    ],
+  });
+  return r === 'ok';
+}
+
+/**
+ * Saisie d'une valeur. Rend `null` si l'utilisateur renonce - et non une
+ * chaine vide, qu'on ne saurait pas distinguer d'un champ volontairement vide.
+ * @returns {Promise<string|null>}
+ */
+function saisirBoite(titre, { texte = '', libelle = '', valeur = '', liste, action = 'Valider' } = {}) {
+  return ouvrirBoite({
+    titre,
+    texte,
+    saisie: { libelle, valeur, liste },
+    actions: [
+      { cle: 'annuler', libelle: 'Annuler', style: 'discret' },
+      { cle: 'ok', libelle: action, style: 'principal' },
+    ],
+  });
+}
+
+/** Message sans alternative : on a compris, on ferme. */
+function informerBoite(titre, texte) {
+  return ouvrirBoite({ titre, texte, actions: [{ cle: 'ok', libelle: 'Fermer', style: 'principal' }] });
 }
 
 // ---------------------------------------------------------------- evenements
@@ -7193,7 +7334,8 @@ document.addEventListener('paste', (ev) => {
   if (reconstruite) allerEnGrille(reconstruite, l0, c0);
 
   if (hors) {
-    alert(
+    informerBoite(
+      'Collage partiel',
       `${posees} valeur${posees > 1 ? 's' : ''} collée${posees > 1 ? 's' : ''}. ` +
         `${hors} valeur${hors > 1 ? 's' : ''} débordai${hors > 1 ? 'ent' : 't'} de la grille, ` +
         `${hors > 1 ? 'elles ont' : 'elle a'} été ignorée${hors > 1 ? 's' : ''}.`,
@@ -7201,7 +7343,7 @@ document.addEventListener('paste', (ev) => {
   }
 });
 
-document.addEventListener('change', (ev) => {
+document.addEventListener('change', async (ev) => {
   // L'interrupteur de masquage change la STRUCTURE de la table, pas l'etat.
   const id = /** @type {HTMLElement} */ (ev.target).id;
   // Les deux selecteurs de profil - barre admin et ecran Operation - font le
@@ -7232,17 +7374,17 @@ document.addEventListener('change', (ev) => {
       try {
         sim = JSON.parse(String(lecteur.result));
       } catch {
-        alert('Ce fichier n’est pas un JSON lisible.');
+        informerBoite('Fichier illisible', 'Ce fichier n’est pas un JSON valide.');
         return;
       }
       if (!sim || typeof sim !== 'object' || !sim.identite) {
-        alert('Ce fichier ne contient pas une simulation : la section « identite » est absente.');
+        informerBoite('Ce n’est pas une simulation', 'La section « identite » est absente du fichier.');
         return;
       }
       viderFileDeSauvegarde();
       const nouvel = ajouterSimulation(sim);
       if (!nouvel) {
-        alert('Import impossible : le stockage du navigateur est plein ou indisponible.');
+        informerBoite('Import impossible', 'Le stockage du navigateur est plein ou indisponible.');
         return;
       }
       rendreBibliotheque();
@@ -7264,7 +7406,7 @@ document.addEventListener('change', (ev) => {
   if (id === 'masquer-vides' || id === 'afficher-tva') rafraichirTout();
 });
 
-document.addEventListener('click', (ev) => {
+document.addEventListener('click', async (ev) => {
   const el = /** @type {HTMLElement} */ (ev.target);
 
   // Un menu de tranches ouvert se ferme des qu'on clique AILLEURS. `details`
@@ -7284,7 +7426,9 @@ document.addEventListener('click', (ev) => {
     return;
   }
   if (el.closest('#btn-nouvelle-sim')) {
-    const nom = prompt('Nom de la nouvelle simulation ?', 'Nouvelle opération');
+    const nom = await saisirBoite('Nouvelle simulation', {
+      libelle: 'Nom', valeur: 'Nouvelle opération', action: 'Créer',
+    });
     if (nom === null) return;
     viderFileDeSauvegarde();
     // Une simulation neuve part de la DEMONSTRATION et non d'un objet vide :
@@ -7294,7 +7438,7 @@ document.addEventListener('click', (ev) => {
     neuve.identite = { ...(neuve.identite ?? {}), nom: nom.trim() || 'Nouvelle opération' };
     const id = ajouterSimulation(neuve);
     if (!id) {
-      alert('Création impossible : le stockage du navigateur est plein ou indisponible.');
+      await informerBoite('Création impossible', 'Le stockage du navigateur est plein ou indisponible.');
       return;
     }
     ouvrirSimulationDansEcran(id);
@@ -7349,7 +7493,9 @@ document.addEventListener('click', (ev) => {
   if (aRenommer) {
     const id = /** @type {HTMLElement} */ (aRenommer).dataset.simRenommer;
     const fiche = listerSimulations().find((f) => f.id === id);
-    const nom = prompt('Nouveau nom de la simulation ?', fiche?.nom ?? '');
+    const nom = await saisirBoite('Renommer la simulation', {
+      libelle: 'Nom', valeur: fiche?.nom ?? '', action: 'Renommer',
+    });
     if (nom === null || !nom.trim()) return;
     // Si c'est la simulation OUVERTE, l'etat en memoire porte le nom actuel :
     // le renommer au depot seul serait ecrase a la premiere frappe.
@@ -7374,7 +7520,7 @@ document.addEventListener('click', (ev) => {
     if (!sim) return;
     const copie = ajouterSimulation(sim, `${sim.identite?.nom ?? 'Simulation'} (copie)`);
     if (!copie) {
-      alert('Duplication impossible : le stockage du navigateur est plein ou indisponible.');
+      await informerBoite('Duplication impossible', 'Le stockage du navigateur est plein ou indisponible.');
       return;
     }
     rendreBibliotheque();
@@ -7391,7 +7537,12 @@ document.addEventListener('click', (ev) => {
   if (aSupprimerSim) {
     const cible = /** @type {HTMLElement} */ (aSupprimerSim);
     const id = cible.dataset.simSupprimer;
-    if (!confirm(`Supprimer définitivement la simulation « ${cible.dataset.nom} » ?`)) return;
+    const ok = await confirmerBoite(
+      'Supprimer la simulation',
+      `« ${cible.dataset.nom} » sera définitivement effacée. Cette action est irréversible.`,
+      'Supprimer',
+    );
+    if (!ok) return;
     const etaitOuverte = id === idSimulationOuverte;
     if (etaitOuverte) clearTimeout(sauvegardeEnAttente);
     supprimerSimulation(id);
@@ -7410,16 +7561,6 @@ document.addEventListener('click', (ev) => {
   }
   if (el.closest('#btn-fermer-sim')) {
     fermerSimulationAvecConfirmation();
-    return;
-  }
-  const issue = el.closest('[data-fermeture]');
-  if (issue) {
-    const quoi = /** @type {HTMLElement} */ (issue).dataset.fermeture;
-    /** @type {HTMLDialogElement} */ (document.getElementById('dialogue-fermeture'))?.close();
-    if (quoi === 'annuler') return;
-    fermerSimulation(quoi === 'abandonner' ? 'abandonner' : 'enregistrer');
-    rendreBibliotheque();
-    afficherEcran('simulations');
     return;
   }
 
@@ -7570,7 +7711,10 @@ document.addEventListener('click', (ev) => {
   if (poste) {
     const cle = /** @type {HTMLElement} */ (poste).dataset.appliquerPoste;
     const libelle = POSTES_TRAJECTOIRE.find((p) => p.cle === cle)?.libelle ?? cle;
-    const saisi = prompt(`${libelle} : taux à appliquer à toutes les années (%), vide pour revenir au référentiel`);
+    const saisi = await saisirBoite(`Appliquer un taux : ${libelle}`, {
+      texte: 'Ce taux remplacera la valeur de toutes les années. Laissez vide pour revenir au référentiel.',
+      libelle: 'Taux (%)', action: 'Appliquer',
+    });
     if (saisi === null) return;
     const v = saisi.trim() === '' ? null : Number(saisi.replace(',', '.')) / 100;
     if (v !== null && !Number.isFinite(v)) return;
@@ -7602,15 +7746,23 @@ document.addEventListener('click', (ev) => {
       etat.profils.push(copie);
       etat.profil_actif = copie.id;
     } else if (action === 'renommer') {
-      const nom = prompt('Nom du profil', p.nom);
+      const nom = await saisirBoite('Renommer le profil', {
+        libelle: 'Nom', valeur: p.nom, action: 'Renommer',
+      });
       if (!nom) return;
       p.nom = nom;
     } else if (action === 'reinitialiser') {
-      if (!confirm(`Rendre au profil « ${p.nom} » toutes les valeurs du référentiel ?`)) return;
+      const ok = await confirmerBoite(
+        'Réinitialiser le profil',
+        `Toutes les valeurs de « ${p.nom} » reviendront à celles du référentiel.`,
+        'Réinitialiser',
+      );
+      if (!ok) return;
       p.parametrage = { baremes: {}, trajectoires: { par_annee: {} } };
       p.parametrage_sauve = structuredClone(p.parametrage);
     } else if (action === 'supprimer') {
-      if (!confirm(`Supprimer le profil « ${p.nom} » ?`)) return;
+      const ok = await confirmerBoite('Supprimer le profil', `« ${p.nom} » sera effacé.`, 'Supprimer');
+      if (!ok) return;
       etat.profils = etat.profils.filter((x) => x.id !== p.id);
       etat.profil_actif = PROFIL_REFERENTIEL;
     }
@@ -7720,7 +7872,7 @@ document.addEventListener('click', (ev) => {
   if (supJalon) {
     const i = Number(/** @type {HTMLElement} */ (supJalon).dataset.supprimerJalon);
     const nom = /** @type {HTMLElement} */ (supJalon).dataset.nom;
-    if (!confirm(`Supprimer le jalon « ${nom} » ?`)) return;
+    if (!(await confirmerBoite('Supprimer le jalon', `« ${nom} » sera retiré du barème d’appels de fonds.`, 'Supprimer'))) return;
     ecrireSaisie(
       'baremes.tresorerie.jalons_vefa.jalons',
       listeJalons().filter((_, k) => k !== i),
@@ -7758,7 +7910,7 @@ document.addEventListener('click', (ev) => {
   if (supPreset) {
     const i = Number(/** @type {HTMLElement} */ (supPreset).dataset.supprimerPreset);
     const nom = /** @type {HTMLElement} */ (supPreset).dataset.nom;
-    if (!confirm(`Supprimer le modèle « ${nom} » ?`)) return;
+    if (!(await confirmerBoite('Supprimer le modèle', `« ${nom} » sera retiré des modèles de prêt.`, 'Supprimer'))) return;
     const liste = listePresets();
     ecrireSaisie(
       'baremes.presets_prets.presets',
@@ -7815,11 +7967,13 @@ document.addEventListener('click', (ev) => {
     if (
       estVentile(p) &&
       ventilationSurMesure(p, qp) &&
-      !confirm(
+      !(await confirmerBoite(
+        'Répartition saisie à la main',
         `« ${p.libelle} » porte une répartition saisie à la main. La regrouper la remplacera ` +
-          'par un montant unique, et une nouvelle ventilation repartirait au prorata de surface ' +
-          'utile. Continuer ?',
-      )
+          'par un montant unique, et une nouvelle ventilation repartirait au prorata de ' +
+          'surface utile.',
+        'Regrouper',
+      ))
     ) {
       return;
     }
@@ -7838,12 +7992,14 @@ document.addEventListener('click', (ev) => {
     if (
       !vers &&
       aPerdre.length &&
-      !confirm(
+      !(await confirmerBoite(
+        'Répartitions saisies à la main',
         `${aPerdre.length} ligne${aPerdre.length > 1 ? 's portent' : ' porte'} une répartition ` +
           `saisie à la main (${aPerdre.slice(0, 3).map((p) => p.libelle).join(', ')}` +
           `${aPerdre.length > 3 ? '…' : ''}). ${aPerdre.length > 1 ? 'Les' : 'La'} regrouper ` +
-          `${aPerdre.length > 1 ? 'les' : 'la'} remplacera par un montant unique. Continuer ?`,
-      )
+          `${aPerdre.length > 1 ? 'les' : 'la'} remplacera par un montant unique.`,
+        'Regrouper',
+      ))
     ) {
       return;
     }
@@ -7898,7 +8054,7 @@ document.addEventListener('click', (ev) => {
     const lire = (id) => /** @type {HTMLInputElement} */ (document.getElementById(id)).value;
     const nombre = Number(lire('gen-nombre'));
     if (!(nombre > 0)) {
-      window.alert('Indiquer un nombre de lots supérieur à zéro.');
+      await informerBoite('Nombre de lots invalide', 'Indiquez un nombre de lots supérieur à zéro.');
       return;
     }
     etat.lots.push(
@@ -7918,7 +8074,7 @@ document.addEventListener('click', (ev) => {
   if (el.id === 'btn-supprimer-lots') {
     const cibles = [...lotsSelectionnes].sort((a, b) => b - a);
     if (!cibles.length) return;
-    if (!window.confirm(`Supprimer les ${cibles.length} lots sélectionnés ?`)) return;
+    if (!(await confirmerBoite('Supprimer les lots sélectionnés', `${cibles.length} lots seront retirés du programme.`, 'Supprimer'))) return;
     // Du DERNIER index vers le premier : supprimer par le debut decalerait les
     // suivants et l'on effacerait des lots voisins de ceux qu'on visait.
     for (const i of cibles) etat.lots.splice(i, 1);
@@ -7929,7 +8085,12 @@ document.addEventListener('click', (ev) => {
   }
 
   if (el.id === 'btn-vider-lots') {
-    if (etat.lots.length && !window.confirm(`Supprimer les ${etat.lots.length} lots du programme ?`)) return;
+    if (
+      etat.lots.length &&
+      !(await confirmerBoite('Vider le programme', `Les ${etat.lots.length} lots seront retirés.`, 'Vider'))
+    ) {
+      return;
+    }
     etat.lots = [];
     rafraichirTout();
     return;
@@ -7979,7 +8140,7 @@ document.addEventListener('click', (ev) => {
     if (aSupprimer !== 'lots') {
       const nom = el.dataset.nom || cible?.libelle || `élément ${i + 1}`;
       const quoi = aSupprimer === 'prets' ? 'le prêt' : 'la subvention';
-      if (!confirm(`Supprimer ${quoi} « ${nom} » ?`)) return;
+      if (!(await confirmerBoite('Supprimer', `${quoi.charAt(0).toUpperCase()}${quoi.slice(1)} « ${nom} » sera retiré.`, 'Supprimer'))) return;
     }
     etat[aSupprimer].splice(i, 1);
     rafraichirTout();

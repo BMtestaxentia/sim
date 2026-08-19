@@ -173,7 +173,15 @@ html, body {
    trois boutons poses cote a cote se lisaient comme trois decisions sans lien.
    Pas de marge auto ici : celles du rail suffisent, et en cumuler deux jeux
    repartirait l'espace libre en trois tiers - le rail pencherait a gauche. */
-.entete__actions { display: flex; align-items: center; gap: 10px; flex: none; }
+/* Colle au bord DROIT, toujours. Le rail d'onglets absorbe normalement
+   l'espace libre du bandeau, ce qui suffisait a repousser les actions - mais
+   quand aucune simulation n'est ouverte le rail disparait, plus rien n'absorbe
+   rien, et les actions venaient se coller a la marque. `margin-left: auto` les
+   tient a droite dans les deux cas : sans effet quand le rail est la, decisif
+   quand il n'y est pas. */
+.entete__actions {
+  display: flex; align-items: center; gap: 10px; flex: none; margin-left: auto;
+}
 .entete__groupe {
   display: flex; align-items: center; gap: 1px;
   padding: 2px; border-radius: var(--radius-pill);

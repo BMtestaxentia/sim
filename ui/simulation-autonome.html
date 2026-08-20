@@ -8513,7 +8513,21 @@ function calculer(entrees, referentiels) {
   // consolide reste calcule d un seul tenant tant que la somme des tranches
   // n'a pas ete confrontee a lui sur des operations reelles.
   exploitation.par_tranche = Object.fromEntries(
-    codesPresents.map((c) => [c, compteExploitation(contexteExploitation(c))]),
+    codesPresents.map((c) => {
+      const compte = compteExploitation(contexteExploitation(c));
+      // Les memes indicateurs que le consolide, sur le meme horizon : une vue
+      // par tranche qui ne saurait pas dire son TRI ou son creux de cumul ne
+      // serait qu une table de chiffres.
+      compte.indicateurs = indicateursExploitation(compte.lignes, {
+        prix_revient_ttc_eur: bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0,
+      });
+      compte.indicateurs.annee_reconstitution_fonds_propres = anneeReconstitutionFondsPropres(
+        compte.lignes,
+        fondsPropresParTranche[c]?.montant_eur ?? 0,
+      );
+      compte.fonds_propres_eur = fondsPropresParTranche[c]?.montant_eur ?? 0;
+      return [c, compte];
+    }),
   );
   exploitation.fonds_propres_par_tranche = fondsPropresParTranche;
   exploitation.annuite_fonds_propres_eur = annuiteFPTotale;

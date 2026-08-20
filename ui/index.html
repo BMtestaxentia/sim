@@ -459,9 +459,14 @@
            financement. Une operation mixte n'a pas un plan de financement mais
            autant de plans qu'elle porte de produits. Rempli par le rendu, les
            tranches n'etant connues qu'apres calcul. -->
-      <div class="bascule bascule--perimetre" id="vue-financement" data-ecran-seul></div>
-
-      <div id="bandeau-controle" data-restitution data-ecran-seul class="bandeau"></div>
+      <!-- Le perimetre et son verdict sur UNE ligne : ils parlent de la meme
+           chose - « voici ce que je regarde, voici ce qu il vaut ». Deux lignes
+           separaient la question de sa reponse et volaient un centimetre de
+           haut a la balance. -->
+      <div class="barre-perimetre">
+        <div class="bascule bascule--perimetre" id="vue-financement" data-ecran-seul></div>
+        <div id="bandeau-controle" data-restitution data-ecran-seul class="bandeau"></div>
+      </div>
 
       <div class="colonnes colonnes--balance">
         <section class="bloc">

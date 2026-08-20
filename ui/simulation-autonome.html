@@ -1330,6 +1330,19 @@ body.sans-simulation .entete__dossier { display: none; }
   border: 1px solid transparent; border-left-width: 3px;
   background: var(--neutral-bg); margin-bottom: 12px;
 }
+/* Perimetre et verdict cote a cote. `stretch` egalise les hauteurs : le
+   selecteur est plus court que le bandeau, il se laisse etirer plutot que de
+   flotter au-dessus de lui. Le bandeau prend ce qui reste. */
+.barre-perimetre {
+  display: flex; align-items: stretch; gap: 10px; margin-bottom: 12px;
+}
+/* La marge basse de la bascule doit tomber : dans une barre etiree, une marge
+   se retranche de la hauteur de l element. Elle mesurait 46,75 px contre 58,75
+   au bandeau - exactement les douze pixels de marge. */
+.barre-perimetre .bascule { align-items: center; margin-bottom: 0; }
+.barre-perimetre .bandeau { flex: 1; margin-bottom: 0; justify-content: center; }
+.barre-perimetre .bascule[hidden] { display: none; }
+
 .bandeau__principal { font-size: 13px; font-weight: 700; }
 .bandeau__detail { font-size: 11.5px; color: var(--text-secondary); }
 .bandeau--ok { background: var(--success-bg); border-left-color: var(--success-accent); }
@@ -2957,9 +2970,14 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
            financement. Une operation mixte n'a pas un plan de financement mais
            autant de plans qu'elle porte de produits. Rempli par le rendu, les
            tranches n'etant connues qu'apres calcul. -->
-      <div class="bascule bascule--perimetre" id="vue-financement" data-ecran-seul></div>
-
-      <div id="bandeau-controle" data-restitution data-ecran-seul class="bandeau"></div>
+      <!-- Le perimetre et son verdict sur UNE ligne : ils parlent de la meme
+           chose - « voici ce que je regarde, voici ce qu il vaut ». Deux lignes
+           separaient la question de sa reponse et volaient un centimetre de
+           haut a la balance. -->
+      <div class="barre-perimetre">
+        <div class="bascule bascule--perimetre" id="vue-financement" data-ecran-seul></div>
+        <div id="bandeau-controle" data-restitution data-ecran-seul class="bandeau"></div>
+      </div>
 
       <div class="colonnes colonnes--balance">
         <section class="bloc">
@@ -16245,11 +16263,32 @@ function rendreApercuExport() {
       </div>
       <div class="doc__meta">
         <span>${att([i.commune, i.zone_ABC && `zone ${i.zone_ABC}`, i.type_operation].filter(Boolean).join(' · '))}</span>
+        ${
+          // Un document cadre sur une tranche DOIT le dire des la premiere
+          // ligne : les memes tableaux, aux memes places, avec des montants
+          // trois fois moindres, se confondent sinon avec ceux de
+          // l'operation entiere.
+          perimetreDuDocument()
+            ? `<span><strong>Périmètre ${att(libelleProduit(perimetreDuDocument()))}</strong></span>`
+            : ''
+        }
         <span>${att(def.titre)} · édité le ${att(dateDuJour())}</span>
       </div>
     </header>`;
 
   cible.innerHTML = enTete;
+
+  // PERIMETRE DU DOCUMENT. Choisir une seule tranche ne masque pas des
+  // colonnes : cela change ce que le dossier RACONTE. Emplois, ressources,
+  // prets, subventions et fonds propres se recalculent alors pour cette
+  // tranche seule - le moteur sait deja le faire, c'est la vue qu'offre le
+  // selecteur de l'ecran Financement. On la pose le temps du clonage, puis on
+  // rend a l'ecran celle que l'utilisateur y avait laissee.
+  const vueAvant = vueFinancement;
+  if (perimetreDuDocument() && dernierResultat) {
+    vueFinancement = perimetreDuDocument();
+    rendreFinancement(dernierResultat);
+  }
 
   for (const id of def.ecrans) {
     const source = document.getElementById(`ecran-${id}`);
@@ -16312,6 +16351,11 @@ function rendreApercuExport() {
     cible.appendChild(section);
   }
 
+  if (perimetreDuDocument() && dernierResultat) {
+    vueFinancement = vueAvant;
+    rendreFinancement(dernierResultat);
+  }
+
   const info = document.getElementById('exports-info');
   if (info) {
     const n = compterPages();
@@ -16334,6 +16378,19 @@ function rendreApercuExport() {
  * Chaque section ouvre une page (`break-before: page`), d'ou le compte
  * section par section plutot que sur la hauteur totale.
  */
+/**
+ * Tranche sur laquelle le document est cadre, ou `null` s il les presente
+ * toutes.
+ *
+ * Une operation qui n'a qu'une tranche n'est pas « cadree » sur elle : le
+ * consolide EST cette tranche, et annoncer un perimetre la ou il n y a pas de
+ * choix ne ferait que semer le doute.
+ */
+function perimetreDuDocument() {
+  const retenues = tranchesRetenues();
+  return retenues.length === 1 && tranchesActives().length > 1 ? retenues[0] : null;
+}
+
 function compterPages() {
   const doc = document.getElementById('apercu-export');
   if (!doc) return 0;

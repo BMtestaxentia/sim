@@ -1316,6 +1316,19 @@ body.sans-simulation .entete__dossier { display: none; }
   border: 1px solid transparent; border-left-width: 3px;
   background: var(--neutral-bg); margin-bottom: 12px;
 }
+/* Perimetre et verdict cote a cote. `stretch` egalise les hauteurs : le
+   selecteur est plus court que le bandeau, il se laisse etirer plutot que de
+   flotter au-dessus de lui. Le bandeau prend ce qui reste. */
+.barre-perimetre {
+  display: flex; align-items: stretch; gap: 10px; margin-bottom: 12px;
+}
+/* La marge basse de la bascule doit tomber : dans une barre etiree, une marge
+   se retranche de la hauteur de l element. Elle mesurait 46,75 px contre 58,75
+   au bandeau - exactement les douze pixels de marge. */
+.barre-perimetre .bascule { align-items: center; margin-bottom: 0; }
+.barre-perimetre .bandeau { flex: 1; margin-bottom: 0; justify-content: center; }
+.barre-perimetre .bascule[hidden] { display: none; }
+
 .bandeau__principal { font-size: 13px; font-weight: 700; }
 .bandeau__detail { font-size: 11.5px; color: var(--text-secondary); }
 .bandeau--ok { background: var(--success-bg); border-left-color: var(--success-accent); }

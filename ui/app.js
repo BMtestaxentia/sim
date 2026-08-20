@@ -7471,11 +7471,32 @@ function rendreApercuExport() {
       </div>
       <div class="doc__meta">
         <span>${att([i.commune, i.zone_ABC && `zone ${i.zone_ABC}`, i.type_operation].filter(Boolean).join(' · '))}</span>
+        ${
+          // Un document cadre sur une tranche DOIT le dire des la premiere
+          // ligne : les memes tableaux, aux memes places, avec des montants
+          // trois fois moindres, se confondent sinon avec ceux de
+          // l'operation entiere.
+          perimetreDuDocument()
+            ? `<span><strong>Périmètre ${att(libelleProduit(perimetreDuDocument()))}</strong></span>`
+            : ''
+        }
         <span>${att(def.titre)} · édité le ${att(dateDuJour())}</span>
       </div>
     </header>`;
 
   cible.innerHTML = enTete;
+
+  // PERIMETRE DU DOCUMENT. Choisir une seule tranche ne masque pas des
+  // colonnes : cela change ce que le dossier RACONTE. Emplois, ressources,
+  // prets, subventions et fonds propres se recalculent alors pour cette
+  // tranche seule - le moteur sait deja le faire, c'est la vue qu'offre le
+  // selecteur de l'ecran Financement. On la pose le temps du clonage, puis on
+  // rend a l'ecran celle que l'utilisateur y avait laissee.
+  const vueAvant = vueFinancement;
+  if (perimetreDuDocument() && dernierResultat) {
+    vueFinancement = perimetreDuDocument();
+    rendreFinancement(dernierResultat);
+  }
 
   for (const id of def.ecrans) {
     const source = document.getElementById(`ecran-${id}`);
@@ -7538,6 +7559,11 @@ function rendreApercuExport() {
     cible.appendChild(section);
   }
 
+  if (perimetreDuDocument() && dernierResultat) {
+    vueFinancement = vueAvant;
+    rendreFinancement(dernierResultat);
+  }
+
   const info = document.getElementById('exports-info');
   if (info) {
     const n = compterPages();
@@ -7560,6 +7586,19 @@ function rendreApercuExport() {
  * Chaque section ouvre une page (`break-before: page`), d'ou le compte
  * section par section plutot que sur la hauteur totale.
  */
+/**
+ * Tranche sur laquelle le document est cadre, ou `null` s il les presente
+ * toutes.
+ *
+ * Une operation qui n'a qu'une tranche n'est pas « cadree » sur elle : le
+ * consolide EST cette tranche, et annoncer un perimetre la ou il n y a pas de
+ * choix ne ferait que semer le doute.
+ */
+function perimetreDuDocument() {
+  const retenues = tranchesRetenues();
+  return retenues.length === 1 && tranchesActives().length > 1 ? retenues[0] : null;
+}
+
 function compterPages() {
   const doc = document.getElementById('apercu-export');
   if (!doc) return 0;

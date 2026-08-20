@@ -272,3 +272,33 @@ describe('recherche d equilibre', () => {
     ).toThrow(/Objectif inconnu/);
   });
 });
+
+describe('cumul lu a une annee', () => {
+  const i = INDICATEURS.find((x) => x.code === 'autofinancement_cumule');
+
+  it('vaut la fin de l horizon sans annee demandee', () => {
+    expect(i.lire(reference)).toBe(reference.exploitation.indicateurs.resultat_cumule_final_eur);
+    expect(i.lire(reference, {})).toBe(i.lire(reference));
+  });
+
+  it('lit le cumul de l annee demandee, et non un autre', () => {
+    const ligne = reference.exploitation.lignes[19];
+    expect(i.lire(reference, { annee_cumul: ligne.annee })).toBe(ligne.cumul_autofinancement_eur);
+  });
+
+  it('rend null hors horizon plutot qu une valeur prise ailleurs', () => {
+    const derniere = reference.exploitation.lignes.at(-1).annee;
+    expect(i.lire(reference, { annee_cumul: derniere + 5 })).toBeNull();
+  });
+
+  it('porte la tornade sur l annee demandee', () => {
+    const annee = reference.exploitation.lignes[19].annee;
+    const t = tornade(ENTREES, REFERENTIELS, {
+      indicateur: 'autofinancement_cumule',
+      leviers: ['prix_revient'],
+      contexte: { annee_cumul: annee },
+    });
+    expect(t.reference).toBe(reference.exploitation.lignes[19].cumul_autofinancement_eur);
+    expect(t.reference).not.toBe(reference.exploitation.indicateurs.resultat_cumule_final_eur);
+  });
+});

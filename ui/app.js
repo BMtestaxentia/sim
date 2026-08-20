@@ -7533,6 +7533,10 @@ function dateDuJour() {
 
 /** Indicateur observe par la tornade, et levier deplie sous elle. */
 let indicateurSensibilite = INDICATEURS[0].code;
+/** Annee ou lire un cumul. Vide = fin de l'horizon. */
+let anneeCumul = null;
+/** Reglages de LECTURE, passes a chaque indicateur et a chaque objectif. */
+const contexteLecture = () => ({ annee_cumul: anneeCumul });
 let levierDeplie = null;
 /** Derniere tornade calculee, pour ne pas la refaire au moindre clic. */
 let derniereTornade = null;
@@ -7613,8 +7617,10 @@ function resoudreEquilibre() {
     levier: equilibreLevier,
     objectif: equilibreObjectif,
     cible,
+    contexte: contexteLecture(),
   });
   const ecrire = (v) => valeurIndicateur(v, r.objectif.unite);
+  const quand = anneeCumul ? ` en ${anneeCumul}` : '';
   const variation = (v) =>
     r.levier.unite === 'annees'
       ? `${v > 0 ? '+' : ''}${Math.round(v)} ans`
@@ -7644,7 +7650,7 @@ function resoudreEquilibre() {
         `<strong>${att(ecrire(r.valeur))}</strong>, rien à changer.`
       : `✓ Il faut <strong>${att(variation(r.variation))}</strong> sur ` +
         `${att(r.levier.libelle.toLowerCase())} pour amener ` +
-        `${att(r.objectif.libelle.toLowerCase())} à ` +
+        `${att(r.objectif.libelle.toLowerCase())}${quand} à ` +
         `<strong>${att(ecrire(r.valeur))}</strong>. ` +
         `<span class="aide">Trouvé en ${r.iterations} itérations.</span>`;
 }
@@ -7667,8 +7673,18 @@ function rendreSensibilite() {
   }
   if (choix) choix.value = indicateurSensibilite;
 
+  const champAnnee = document.getElementById('sens-annee');
+  if (champAnnee) {
+    const lignes = dernierResultat.exploitation?.lignes ?? [];
+    // Le filigrane porte la DERNIERE annee : c'est ce que le champ vide
+    // signifie, et l'ecrire evite d'avoir a le deviner.
+    champAnnee.placeholder = lignes.length ? String(lignes.at(-1).annee) : '';
+    if (nul(anneeCumul)) champAnnee.value = '';
+  }
+
   const t = tornade(etatPourAnalyse(), referentielsPourAnalyse(), {
     indicateur: indicateurSensibilite,
+    contexte: contexteLecture(),
   });
   derniereTornade = t;
 
@@ -7740,7 +7756,7 @@ function rendreBalayage() {
     '<th class="num">Écart à la référence</th></tr>';
   tab.querySelector('tbody').innerHTML = points
     .map((p) => {
-      const v = indicateur.lire(p.resultat);
+      const v = indicateur.lire(p.resultat, contexteLecture());
       const ecart = nul(v) || nul(derniereTornade?.reference) ? null : v - derniereTornade.reference;
       const variation =
         levier.unite === 'annees'
@@ -8167,6 +8183,13 @@ document.addEventListener('input', (ev) => {
 
   if (el.id === 'sens-indicateur') {
     indicateurSensibilite = el.value;
+    rendreSensibilite();
+    return;
+  }
+
+  if (el.id === 'sens-annee') {
+    const n = lireMontant(el.value);
+    anneeCumul = nul(n) ? null : Math.round(n);
     rendreSensibilite();
     return;
   }

@@ -207,6 +207,26 @@ export const LEVIERS = [
  * @type {Array<{code: string, libelle: string, unite: 'eur'|'taux'|'annee'|'nombre',
  *   sens: 1|-1, lire: (r: any) => number|null}>}
  */
+/**
+ * Autofinancement cumule, a la FIN de l'horizon ou a une annee donnee.
+ *
+ * L'horizon complet - cinquante ans, parfois soixante - dit ce que
+ * l'operation rapporte en tout. Il ne dit pas si elle passe le cap des vingt
+ * ans, qui est la question qu'on se pose devant un directoire. Le cumul se lit
+ * donc a une annee au choix.
+ *
+ * L'annee est ABSOLUE - 2048, pas « la vingtieme » : c'est ce que le tableau
+ * du compte affiche, et demander a l'utilisateur de convertir serait lui faire
+ * faire le travail du logiciel. Une annee hors horizon rend `null` et non la
+ * derniere ligne : mieux vaut une case vide qu'un chiffre pris ailleurs.
+ */
+const cumulAutofinancement = (r, o) => {
+  const n = o?.annee_cumul;
+  if (!n) return r?.exploitation?.indicateurs?.resultat_cumule_final_eur ?? null;
+  const ligne = (r?.exploitation?.lignes ?? []).find((l) => l.annee === Number(n));
+  return ligne ? (ligne.cumul_autofinancement_eur ?? null) : null;
+};
+
 export const INDICATEURS = [
   {
     code: 'autofinancement_cumule',
@@ -216,7 +236,7 @@ export const INDICATEURS = [
     // +1 elle va mieux, -1 elle va moins bien. L'affichage s'en sert pour
     // colorer, et rien d'autre - le calcul ne le lit jamais.
     sens: 1,
-    lire: (r) => r?.exploitation?.indicateurs?.resultat_cumule_final_eur ?? null,
+    lire: cumulAutofinancement,
   },
   {
     code: 'tri',
@@ -312,7 +332,12 @@ export function plage(amplitude, points = 5) {
  *
  * @param {any} entrees
  * @param {any} referentiels
- * @param {{indicateur?: string, leviers?: string[], amplitudes?: Record<string, number>}} [options]
+ * `contexte` est passe a CHAQUE lecture d indicateur : il porte les reglages
+ * de lecture - l annee ou lire un cumul, par exemple - qui ne sont ni des
+ * entrees du moteur ni des variations de levier.
+ *
+ * @param {{indicateur?: string, leviers?: string[], amplitudes?: Record<string, number>,
+ *   contexte?: any}} [options]
  */
 export function tornade(entrees, referentiels, options = {}) {
   const indicateur = indicateurDe(options.indicateur ?? INDICATEURS[0].code);
@@ -320,15 +345,15 @@ export function tornade(entrees, referentiels, options = {}) {
   const codes = options.leviers ?? LEVIERS.map((l) => l.code);
 
   const reference = calculer(copier(entrees), copier(referentiels));
-  const valeurReference = indicateur.lire(reference);
+  const valeurReference = indicateur.lire(reference, options.contexte);
 
   const barres = codes.map((code) => {
     const levier = levierDe(code);
     if (!levier) throw new Error(`Levier inconnu : ${code}`);
     const amplitude = options.amplitudes?.[code] ?? levier.amplitude;
     const { points } = balayerLevier(entrees, referentiels, code, [-amplitude, amplitude]);
-    const bas = indicateur.lire(points[0].resultat);
-    const haut = indicateur.lire(points[1].resultat);
+    const bas = indicateur.lire(points[0].resultat, options.contexte);
+    const haut = indicateur.lire(points[1].resultat, options.contexte);
     return {
       code,
       libelle: levier.libelle,
@@ -383,7 +408,7 @@ export const OBJECTIFS = [
     libelle: 'Autofinancement cumulé',
     unite: 'eur',
     cible_defaut: 0,
-    lire: (r) => r?.exploitation?.indicateurs?.resultat_cumule_final_eur ?? null,
+    lire: cumulAutofinancement,
   },
   {
     code: 'creux_cumul',
@@ -448,7 +473,7 @@ export function chercherEquilibre(entrees, referentiels, options) {
     if (v !== 0 && levier.appliquer(contexte, v) === false) applique = false;
     try {
       const resultat = calculer(contexte.entrees, contexte.referentiels);
-      const valeur = objectif.lire(resultat);
+      const valeur = objectif.lire(resultat, options.contexte);
       return { valeur, ecart: valeur === null ? null : valeur - cible, resultat };
     } catch (e) {
       return { valeur: null, ecart: null, resultat: null, erreur: /** @type {Error} */ (e).message };

@@ -42,6 +42,7 @@ import { tableauAmortissement, anneePremiereEcheance, prefinancement } from './a
 import { exonerationTFPB, taxeAmenagement } from './fiscalite.js';
 import {
   compteExploitation,
+  sommerComptes,
   dotationParComposants,
   resoudreChargesExploitation,
   anneeReconstitutionFondsPropres,
@@ -1148,7 +1149,10 @@ export function calculer(entrees, referentiels) {
       duree_annuite_fonds_propres_ans: exp.duree_annuite_fonds_propres_ans ?? 0,
       annuites_fonds_propres: parProduit(annuitesFP),
       tfpb_par_annee: parProduit(tfpbParAnnee),
-      nb_lits: code === null ? (exp.nb_lits ?? nbLogements) : nbLog,
+      // Le nombre de places se saisit pour l operation ; une tranche en prend
+      // sa part. Lire son seul nombre de lots ferait perdre la saisie des
+      // foyers, ou une place n est pas un logement.
+      nb_lits: code === null ? (exp.nb_lits ?? nbLogements) : (exp.nb_lits ?? nbLogements) * part,
       qp_subventions_annuelle_eur: (exp.qp_subventions_annuelle_eur ?? 0) * part,
       duree_qp_subventions_ans: exp.duree_qp_subventions_ans ?? 0,
       prix_revient_ttc_eur: prTranche,
@@ -1202,7 +1206,27 @@ export function calculer(entrees, referentiels) {
     };
   };
 
-  const exploitation = compteExploitation({
+  // R-EXP-8 - LE CONSOLIDE EST LA SOMME DES TRANCHES.
+  //
+  // Un compte tenu d un seul tenant sur une operation mixte melange des
+  // regimes qui ne se melangent pas. L impot sur les societes en est la
+  // preuve : le PLAI, le PLUS et le PLS relevent du service d interet general
+  // et en sont exoneres, le LLI non. Calcule sur le resultat global, il
+  // frappait le surplus des tranches exonerees des qu une seule tranche
+  // imposable figurait au programme - sur une operation PLAI+PLUS+PLS+LLI,
+  // 2 158 885 € contre 538 123 € en sommant les tranches, soit quatre fois
+  // trop. Tout le reste est additif a l euro pres (E-14).
+  //
+  // Sans tranche - les fixtures qui alimentent le bilan et les prets sans
+  // passer par un programme de lots - le compte reste calcule d un seul
+  // tenant : il n y a rien a sommer, et la voie scalaire decrit tres bien une
+  // operation qui ne se decoupe pas.
+  const comptesTranches = Object.fromEntries(
+    codesPresents.map((c) => [c, compteExploitation(contexteExploitation(c))]),
+  );
+  const exploitation = codesPresents.length
+    ? sommerComptes(codesPresents.map((c) => comptesTranches[c]))
+    : compteExploitation({
     annee_mise_en_location: anneeMEL,
     duree_ans: dates.duree_simulation_ans ?? 50,
     mode: exp.mode ?? 'loyers',
@@ -1270,8 +1294,12 @@ export function calculer(entrees, referentiels) {
       exp.is_part_fixe_ge_differe_ans ?? partFixeGE.duree_differe_ans ?? 0,
     // Trajectoires par poste, issues du referentiel normalise. Une surcharge
     // explicite dans les entrees reste possible pour tester un scenario.
-    trajectoires: exp.trajectoires ?? trajectoires.par_poste,
-  });
+        trajectoires: exp.trajectoires ?? trajectoires.par_poste,
+      });
+
+  // Le mode vient de la saisie et non de la premiere tranche : une operation
+  // mixte porte les deux, et c est la saisie qui dit lequel gouverne la vue.
+  exploitation.mode = exp.mode ?? 'loyers';
 
   // --- R-TRESO : tresorerie de la phase chantier ---
   // Elle se calcule APRES le plan de financement : il lui faut le prix de
@@ -1341,7 +1369,7 @@ export function calculer(entrees, referentiels) {
   // n'a pas ete confrontee a lui sur des operations reelles.
   exploitation.par_tranche = Object.fromEntries(
     codesPresents.map((c) => {
-      const compte = compteExploitation(contexteExploitation(c));
+      const compte = comptesTranches[c];
       // Les memes indicateurs que le consolide, sur le meme horizon : une vue
       // par tranche qui ne saurait pas dire son TRI ou son creux de cumul ne
       // serait qu une table de chiffres.

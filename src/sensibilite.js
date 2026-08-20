@@ -239,27 +239,6 @@ export const INDICATEURS = [
     sens: -1,
     lire: (r) => r?.exploitation?.indicateurs?.exercices_deficitaires ?? null,
   },
-  {
-    code: 'prix_revient_ttc',
-    libelle: 'Prix de revient TTC',
-    unite: 'eur',
-    sens: -1,
-    lire: (r) => r?.indicateurs?.prix_revient_ttc_eur ?? null,
-  },
-  {
-    code: 'fonds_propres',
-    libelle: 'Fonds propres',
-    unite: 'eur',
-    sens: -1,
-    lire: (r) => r?.indicateurs?.fonds_propres_eur ?? null,
-  },
-  {
-    code: 'reconstitution',
-    libelle: 'Reconstitution des fonds propres',
-    unite: 'annee',
-    sens: -1,
-    lire: (r) => r?.exploitation?.indicateurs?.annee_reconstitution_fonds_propres ?? null,
-  },
 ];
 
 /** Levier connu, par son code. */

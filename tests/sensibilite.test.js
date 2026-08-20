@@ -152,11 +152,12 @@ describe('tornade', () => {
 
   it('accepte de ne balayer qu une partie des leviers', () => {
     const partielle = tornade(ENTREES, REFERENTIELS, {
-      indicateur: 'prix_revient_ttc',
+      indicateur: 'autofinancement_cumule',
       leviers: ['cout_batiment', 'prix_revient'],
     });
     expect(partielle.barres.map((b) => b.code).sort()).toEqual(['cout_batiment', 'prix_revient']);
-    // Le prix de revient entier pese plus que le seul batiment.
+    // A amplitude egale, le prix de revient ENTIER pese plus que le seul
+    // batiment : il le contient.
     expect(partielle.barres[0].code).toBe('prix_revient');
   });
 

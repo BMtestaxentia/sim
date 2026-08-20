@@ -7233,12 +7233,28 @@ function adapterPrixRevientAuDocument(copie) {
   const RANG_COMMANDE = 3;
   table.querySelector('colgroup')?.remove();
   for (const rangee of table.querySelectorAll('thead tr:first-child, tbody tr, tfoot tr')) {
-    const cible = rangee.children[RANG_COMMANDE];
-    if (!cible) continue;
-    // Une cellule a cheval sur plusieurs colonnes - l'intitule d'un chapitre -
-    // couvre deja la place : on lui retire une unite au lieu de la supprimer.
-    if (cible.colSpan > 1) cible.colSpan -= 1;
-    else cible.remove();
+    // La cellule a retirer se cherche EN COMPTANT LES COLONNES, jamais par le
+    // rang de l enfant : plusieurs rangees commencent par une cellule fusionnee
+    // - le titre d'un chapitre en couvre quatre, la ligne « Base finançable »
+    // en couvre deux - et leur quatrieme enfant se trouve alors bien plus loin
+    // que la quatrieme colonne. On y detruisait une cellule de TRANCHE en
+    // croyant retirer la colonne de commande. Le compte des colonnes retombait
+    // juste par compensation, la cellule fusionnee gardant sa portee, et rien
+    // ne se voyait - jusqu au jour ou la tranche visee etait ecartee de
+    // l export : la rangee comptait alors une colonne de trop et son dernier
+    // montant sortait du cadre, a droite du tableau.
+    let colonne = 0;
+    for (const cel of [...rangee.children]) {
+      const portee = cel.colSpan || 1;
+      if (RANG_COMMANDE < colonne + portee) {
+        // Une cellule qui couvre deja plusieurs colonnes en cede une ; une
+        // cellule simple disparait.
+        if (portee > 1) cel.colSpan = portee - 1;
+        else cel.remove();
+        break;
+      }
+      colonne += portee;
+    }
   }
 
   for (const tr of table.querySelectorAll('tr.chapitre-entete')) tr.classList.add('doc-chapitre');

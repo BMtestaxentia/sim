@@ -23,6 +23,7 @@ import { produitsOrdonnes, ORDRE_PRODUITS } from '../src/produits.js';
 import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
 import { ecartsParametrage } from '../src/parametrage.js';
 import { tauxLASM } from '../src/bilan.js';
+import { sommerComptes, indicateursExploitation } from '../src/exploitation.js';
 // Le depot est importe par NOMS et non en bloc : le generateur de la version
 // autonome concatene les modules dans une portee unique, ou un espace de noms
 // (`depot.lister`) n'existerait plus. Les noms y sont donc prefixes.
@@ -3172,8 +3173,9 @@ function viderRestitution(message) {
 
 // ---------------------------------------------------------------- ecran exploitation
 
-/** Vue courante du compte : annee par annee (defaut) ou jalons condenses. */
-let vueExploitation = 'annuel';
+// La vue JALONS a ete retiree : elle condensait les periodes intermediaires en
+// moyennes annuelles, ce qui donnait deux lectures du meme compte sans que rien
+// ne dise laquelle faisait foi. La table se lit annee par annee, un point.
 
 /**
  * Graphe du resultat annuel et du cumul, en SVG ecrit a la main.
@@ -3492,45 +3494,86 @@ function rendreTresorerie(r) {
   </tr>`;
 }
 
-/** Perimetre du compte d'exploitation : le total, ou une tranche. */
-let perimetreCompte = 'total';
-
 /**
- * Compte a montrer : celui de la tranche choisie, ou celui de l'operation.
+ * Tranches ECARTEES du compte d'exploitation.
  *
- * Les champs propres a l'operation - postes absents, charges actives, fonds
- * propres par tranche - sont conserves par-dessus le compte de la tranche :
- * ils decrivent le montage et ne changent pas avec le perimetre. Seuls les
- * lignes, les totaux, les indicateurs et les jalons sont ceux de la tranche.
+ * Meme choix qu'a l'export : on memorise les ecartees et non les retenues.
+ * Un programme gagne et perd des tranches au fil de la saisie, et une liste
+ * de retenues aurait fige la vue sur celles qui existaient au moment ou on
+ * l a ouverte. Une tranche nouvelle entre donc au compte, il faut un geste
+ * pour la retirer.
  */
-function perimetreExploitation(r) {
-  const compte = r.exploitation?.par_tranche?.[perimetreCompte];
-  return compte ? { ...r.exploitation, ...compte } : r.exploitation;
+const tranchesHorsCompte = new Set();
+
+/** Tranches presentes au compte, dans l ordre canonique. */
+function tranchesAuCompte(r) {
+  const toutes = Object.keys(r?.exploitation?.par_tranche ?? {});
+  const gardees = toutes.filter((c) => !tranchesHorsCompte.has(c));
+  // Tout ecarter ne montrerait plus rien : le dernier retrait n est pas honore.
+  return gardees.length ? gardees : toutes;
 }
 
 /**
- * Selecteur de perimetre du compte. Il ne parait qu'a partir de DEUX
- * tranches : le total EST la tranche quand il n y en a qu une.
+ * Compte a montrer, pour le perimetre choisi.
+ *
+ * Toutes les tranches retenues, c est le CONSOLIDE tel que le moteur le
+ * calcule - et non leur somme : les deux different sur l impot, et tant que
+ * la bascule n'est pas decidee, la vue d'ensemble doit rester celle qui fait
+ * foi. Une partie des tranches, c est leur somme, indicateurs recalcules sur
+ * le prix de revient de ces tranches-la.
+ *
+ * Les champs propres a l'operation - postes absents, charges actives, fonds
+ * propres par tranche - sont conserves par-dessus : ils decrivent le montage
+ * et ne changent pas avec le perimetre.
+ */
+function perimetreExploitation(r) {
+  const toutes = Object.keys(r.exploitation?.par_tranche ?? {});
+  const retenues = tranchesAuCompte(r);
+  if (!toutes.length || retenues.length === toutes.length) return r.exploitation;
+  const compte = sommerComptes(retenues.map((c) => r.exploitation.par_tranche[c]));
+  if (!compte) return r.exploitation;
+  const prixRevient = retenues.reduce(
+    (s, c) => s + (r.bilan?.par_tranche?.[c]?.total_ttc_module_eur ?? 0),
+    0,
+  );
+  compte.indicateurs = indicateursExploitation(compte.lignes, {
+    prix_revient_ttc_eur: prixRevient,
+  });
+  compte.jalons = r.exploitation.jalons;
+  return { ...r.exploitation, ...compte };
+}
+
+/**
+ * Pastilles de perimetre du compte, sur le modele de celles de l'export : on
+ * en coche autant qu on veut, et « Tout » les rallume toutes.
+ *
+ * Elles ne paraissent qu'a partir de DEUX tranches : le total EST la tranche
+ * quand il n y en a qu une.
  */
 function rendrePerimetreExploitation(r) {
   const barre = document.getElementById('perimetre-exploitation');
   if (!barre) return;
   const tranches = Object.keys(r.exploitation?.par_tranche ?? {});
-  barre.hidden = tranches.length < 2;
-  barre.closest('.barre-perimetre')?.toggleAttribute('hidden', barre.hidden);
-  if (barre.hidden) {
+  const cache = tranches.length < 2;
+  barre.closest('.barre-perimetre')?.toggleAttribute('hidden', cache);
+  if (cache) {
     barre.innerHTML = '';
     return;
   }
-  const actif = tranches.includes(perimetreCompte) ? perimetreCompte : 'total';
+  const retenues = new Set(tranchesAuCompte(r));
+  const tout = retenues.size === tranches.length;
   barre.innerHTML =
-    `<button type="button" class="bascule__option ${actif === 'total' ? 'bascule__option--actif' : ''}"
-       data-perimetre-compte="total">Total</button>` +
+    `<button type="button" class="pastille-tranche${
+      tout ? ' pastille-tranche--active' : ''
+    }" data-perimetre-compte="tout" aria-pressed="${tout}"
+      title="Présenter toutes les tranches">Tout</button>` +
     tranches
       .map(
-        (c) => `<button type="button" class="bascule__option ${actif === c ? 'bascule__option--actif' : ''}"
-          data-perimetre-compte="${att(c)}" style="--cat:${catProduit(c)}">
-          <span class="bascule__puce"></span>${att(libelleProduit(c))}</button>`,
+        (c) => `<button type="button" class="pastille-tranche${
+          retenues.has(c) ? ' pastille-tranche--active' : ''
+        }" data-perimetre-compte="${att(c)}" aria-pressed="${retenues.has(c)}"
+          style="--cat:${catProduit(c)};--cat-fond:${catFondProduit(c)}"
+          title="Ajouter ou retirer cette tranche du compte">${att(libelleProduit(c))}</button>`,
       )
       .join('');
 }
@@ -3622,13 +3665,7 @@ function rendreExploitation(r) {
     : '';
 
   // --- Tableau ---
-  for (const b of document.querySelectorAll('[data-vue-exploitation]')) {
-    b.setAttribute('aria-pressed', String(b.getAttribute('data-vue-exploitation') === vueExploitation));
-  }
-  const rangs =
-    vueExploitation === 'jalons'
-      ? e.jalons
-      : e.lignes.map((l) => ({
+  const rangs = e.lignes.map((l) => ({
           type: 'annee',
           libelle: String(l.annee),
           ...l,
@@ -3682,11 +3719,8 @@ function rendreExploitation(r) {
     </tr>`;
 
   $('#aide-exploitation').textContent =
-    vueExploitation === 'jalons'
-      ? `⚙ Les années de rupture et les premières années sont détaillées, les périodes intermédiaires ` +
-        `sont présentées en moyenne annuelle. Basculer sur « Année par année » pour le détail complet.`
-      : `⚙ ${e.lignes.length} exercices, de ${e.lignes[0]?.annee} à ${e.lignes.at(-1)?.annee}. ` +
-        `La dernière année porte une marge exceptionnelle : les prêts y sont soldés.`;
+    `⚙ ${e.lignes.length} exercices, de ${e.lignes[0]?.annee} à ${e.lignes.at(-1)?.annee}. ` +
+    `La dernière année porte une marge exceptionnelle : les prêts y sont soldés.`;
 
   $('#postes-absents').innerHTML = e.postes_absents.map((p) => `<li>${att(p)}</li>`).join('');
 }
@@ -7521,12 +7555,18 @@ function rendreApercuExport() {
   // selecteur de l'ecran Financement. On la pose le temps du clonage, puis on
   // rend a l'ecran celle que l'utilisateur y avait laissee.
   const vueAvant = vueFinancement;
-  const perimetreAvant = perimetreCompte;
+  const horsCompteAvant = new Set(tranchesHorsCompte);
+  // Le compte suit le meme tri que le reste du document : les tranches
+  // ecartees de l export le sont du compte le temps du clonage.
+  const ecarteesExport = tranchesActives().filter((c) => !tranchesRetenues().includes(c));
+  if (ecarteesExport.length && dernierResultat) {
+    tranchesHorsCompte.clear();
+    for (const c of ecarteesExport) tranchesHorsCompte.add(c);
+    rendreExploitation(dernierResultat);
+  }
   if (perimetreDuDocument() && dernierResultat) {
     vueFinancement = perimetreDuDocument();
-    perimetreCompte = perimetreDuDocument();
     rendreFinancement(dernierResultat);
-    rendreExploitation(dernierResultat);
   }
 
   for (const id of def.ecrans) {
@@ -7592,8 +7632,11 @@ function rendreApercuExport() {
 
   if (perimetreDuDocument() && dernierResultat) {
     vueFinancement = vueAvant;
-    perimetreCompte = perimetreAvant;
     rendreFinancement(dernierResultat);
+  }
+  if (ecarteesExport.length && dernierResultat) {
+    tranchesHorsCompte.clear();
+    for (const c of horsCompteAvant) tranchesHorsCompte.add(c);
     rendreExploitation(dernierResultat);
   }
 
@@ -8558,7 +8601,10 @@ document.addEventListener('click', async (ev) => {
 
   const perimExp = el.closest('[data-perimetre-compte]');
   if (perimExp) {
-    perimetreCompte = /** @type {HTMLElement} */ (perimExp).dataset.perimetreCompte;
+    const c = /** @type {HTMLElement} */ (perimExp).dataset.perimetreCompte;
+    if (c === 'tout') tranchesHorsCompte.clear();
+    else if (tranchesHorsCompte.has(c)) tranchesHorsCompte.delete(c);
+    else tranchesHorsCompte.add(c);
     if (dernierResultat) rendreExploitation(dernierResultat);
     return;
   }

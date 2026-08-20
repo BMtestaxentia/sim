@@ -6914,6 +6914,7 @@ function poidsLisible(octets) {
  *     seconde. On n'en construit qu'une page.
  */
 function rendreBibliotheque() {
+  rendreChoixComparaison();
   const zone = document.getElementById('biblio-liste');
   if (!zone) return;
   const toutes = listerSimulations();
@@ -7653,6 +7654,118 @@ function resoudreEquilibre() {
         `${att(r.objectif.libelle.toLowerCase())}${quand} à ` +
         `<strong>${att(ecrire(r.valeur))}</strong>. ` +
         `<span class="aide">Trouvé en ${r.iterations} itérations.</span>`;
+}
+
+// ------------------------------------------------- comparaison de variantes
+
+/**
+ * Lignes de la comparaison. Chacune sait LIRE un resultat, rien de plus :
+ * c'est le moteur qui calcule, la table qui presente.
+ */
+const LIGNES_COMPARAISON = [
+  { libelle: 'Logements', lire: (r) => nb(r.indicateurs.nb_logements) },
+  { libelle: 'Surface utile (m²)', lire: (r) => nb(r.indicateurs.su_m2) },
+  { libelle: 'Prix de revient TTC', lire: (r) => eur(r.indicateurs.prix_revient_ttc_eur) },
+  {
+    libelle: 'Prix de revient / logement',
+    lire: (r) => eur(r.indicateurs.prix_revient_par_logement_eur),
+  },
+  { libelle: 'Subventions', lire: (r) => eur(r.indicateurs.subventions_eur) },
+  { libelle: 'Fonds propres', lire: (r) => eur(r.indicateurs.fonds_propres_eur) },
+  {
+    libelle: 'Taux de fonds propres',
+    lire: (r) => pct(r.indicateurs.taux_fonds_propres, 1),
+  },
+  { libelle: 'Loyers annuels', lire: (r) => eur(r.indicateurs.loyers_annuels_eur) },
+  {
+    libelle: 'Autofinancement cumulé',
+    lire: (r) => eur(r.exploitation?.indicateurs?.resultat_cumule_final_eur),
+  },
+  {
+    libelle: 'TRI',
+    lire: (r) => (nul(r.exploitation?.indicateurs?.tri) ? 'non défini' : pct(r.exploitation.indicateurs.tri, 2)),
+  },
+  {
+    libelle: 'Exercices déficitaires',
+    lire: (r) => nb(r.exploitation?.indicateurs?.exercices_deficitaires),
+  },
+];
+
+/** Simulations retenues pour la comparaison. */
+let comparees = [];
+
+/** Remplit la liste de choix, sans rien calculer. */
+function rendreChoixComparaison() {
+  const sel = document.getElementById('cmp-choix');
+  if (!sel) return;
+  const fiches = listerSimulations();
+  // Le GROUPE precede le nom : deux variantes du meme projet se retrouvent
+  // ainsi cote a cote dans la liste, ce qui est tout ce qu on lui demande.
+  sel.innerHTML = fiches
+    .slice()
+    .sort((a, b) => (a.groupe || '').localeCompare(b.groupe || '') || (a.nom || '').localeCompare(b.nom || ''))
+    .map(
+      (f) =>
+        `<option value="${att(f.id)}"${comparees.includes(f.id) ? ' selected' : ''}>` +
+          `${att(f.groupe ? f.groupe + ' · ' : '')}${att(f.nom)}</option>`,
+    )
+    .join('');
+  document.getElementById('bloc-comparer').hidden = fiches.length < 2;
+}
+
+/**
+ * Rejoue le moteur sur chaque variante et les met en colonnes.
+ *
+ * Une variante qui ne se calcule pas n'interrompt pas la comparaison : sa
+ * colonne porte la raison. C'est souvent elle qu'on cherchait a voir - une
+ * variante incomplete est une information, pas une panne.
+ */
+function rendreComparaison() {
+  const table = document.getElementById('table-comparaison');
+  if (!table) return;
+  const fiches = listerSimulations().filter((f) => comparees.includes(f.id));
+  if (fiches.length < 2) {
+    table.querySelector('thead').innerHTML = '';
+    table.querySelector('tbody').innerHTML =
+      '<tr><td class="vide">Choisissez au moins deux simulations.</td></tr>';
+    return;
+  }
+
+  const colonnes = fiches.map((f) => {
+    const sim = lireSimulation(f.id);
+    try {
+      const entrees = structuredClone(sim);
+      if (sim?.mode_prets === 'theoriques') entrees.prets = [];
+      entrees.postes_bilan = (entrees.postes_bilan ?? []).filter((p) => !nul(p.montant_ht_eur));
+      return { fiche: f, resultat: calculer(entrees, referentiels), erreur: null };
+    } catch (e) {
+      return { fiche: f, resultat: null, erreur: /** @type {Error} */ (e).message };
+    }
+  });
+
+  table.querySelector('thead').innerHTML =
+    `<tr><th></th>${colonnes
+      .map((c) => `<th class="num">${att(c.fiche.nom)}</th>`)
+      .join('')}</tr>`;
+  table.querySelector('tbody').innerHTML = LIGNES_COMPARAISON.map(
+    (l) =>
+      `<tr><td class="libelle">${att(l.libelle)}</td>${colonnes
+        .map(
+          (c) =>
+            `<td class="num">${
+              c.resultat ? att(String(l.lire(c.resultat))) : '<span class="vide">-</span>'
+            }</td>`,
+        )
+        .join('')}</tr>`,
+  ).join('');
+
+  const aide = document.getElementById('cmp-aide');
+  const fautives = colonnes.filter((c) => c.erreur);
+  if (aide) {
+    aide.textContent = fautives.length
+      ? `⚠ ${fautives.map((c) => `${c.fiche.nom} : ${c.erreur}`).join(' · ')}`
+      : 'Ctrl ou Maj pour en choisir plusieurs.';
+  }
 }
 
 function rendreSensibilite() {
@@ -8899,6 +9012,12 @@ document.addEventListener('click', async (ev) => {
     return;
   }
 
+  if (el.closest('#btn-comparer')) {
+    const sel = /** @type {HTMLSelectElement} */ (document.getElementById('cmp-choix'));
+    comparees = [...sel.selectedOptions].map((o) => o.value);
+    rendreComparaison();
+    return;
+  }
   if (el.closest('#btn-equilibre')) {
     resoudreEquilibre();
     return;

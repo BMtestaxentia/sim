@@ -161,6 +161,27 @@
           </span>
         </div>
       </div>
+
+      <!-- Comparaison de variantes. Deux simulations du meme projet ne se
+           lisent pas l une apres l autre : elles se lisent COTE A COTE, sur
+           les memes lignes. Le moteur etant pur, il suffit de le rejouer sur
+           chacune. -->
+      <section class="bloc" id="bloc-comparer">
+        <h2 class="bloc__titre">Comparer des variantes</h2>
+        <div class="equilibre__question">
+          <label class="champ champ--enligne">
+            <span>Simulations</span>
+            <select id="cmp-choix" multiple size="4"></select>
+          </label>
+          <button type="button" class="bouton bouton--principal" id="btn-comparer">
+            Comparer</button>
+          <p class="aide aide--enligne" id="cmp-aide">
+            Ctrl ou Maj pour en choisir plusieurs.</p>
+        </div>
+        <div class="table-defilante">
+          <table class="tableau" id="table-comparaison"><thead></thead><tbody></tbody></table>
+        </div>
+      </section>
     </main>
 
     <!-- ================= ÉCRAN 1 - OPÉRATION ================= -->

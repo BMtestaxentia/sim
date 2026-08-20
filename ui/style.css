@@ -1337,6 +1337,12 @@ body.sans-simulation .entete__dossier { display: none; }
 /* La question se lit comme une PHRASE : « amener X a Y en jouant sur Z ».
    Trois champs sur une ligne, separes par les mots qui les relient, plutot
    qu un formulaire en colonnes ou il faudrait deviner ce qui se combine. */
+/* La liste des variantes garde une largeur confortable : les noms de
+   simulation sont longs, et un select etroit les tronque au moment ou il
+   faut justement les distinguer. */
+#cmp-choix { min-width: 280px; }
+#table-comparaison td.libelle { text-align: left; font-weight: 600; }
+
 .equilibre__question { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
 .equilibre__question .champ > span { color: var(--text-tertiary); font-size: 12px; }
 .equilibre__reponse { margin: 0; font-size: 13px; line-height: 1.6; }

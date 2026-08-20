@@ -1103,6 +1103,29 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 
 /* Nom du dossier ouvert, dans la marque : il dit sur QUOI l'on travaille, là
    où le rail dit à quelle étape. Cliquable, il ouvre la bibliothèque. */
+/* La marque est un bouton : elle ramene a la bibliotheque. */
+.entete__accueil {
+  display: inline-flex; align-items: center; gap: 10px; flex: none;
+  appearance: none; background: none; border: none; padding: 0;
+  cursor: pointer; font-family: inherit; border-radius: var(--radius-sm);
+}
+.entete__accueil:hover .entete__nom { color: var(--info-text); }
+.entete__accueil:focus-visible { outline: 2px solid var(--info-accent); outline-offset: 3px; }
+
+/* Menu du dossier : le resume porte le nom, la liste porte les actions. */
+.menu-dossier__liste {
+  position: absolute; top: calc(100% + 5px); left: 0; z-index: 60;
+  display: flex; flex-direction: column; min-width: 210px; padding: 4px;
+  background: var(--bg-primary); border: 1px solid var(--border-color-strong);
+  border-radius: var(--radius-md); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+.menu-dossier__liste button {
+  appearance: none; border: none; background: none; text-align: left;
+  font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  color: var(--text-secondary); padding: 7px 10px; border-radius: var(--radius-sm);
+}
+.menu-dossier__liste button:hover { background: var(--bg-secondary); color: var(--text-primary); }
+
 .entete__dossier {
   display: inline-flex; align-items: center; gap: 6px; flex: none;
   margin-left: 10px; padding: 4px 8px 4px 9px;
@@ -1114,6 +1137,8 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
   max-width: 260px;
   transition: color 0.15s ease, border-color 0.15s ease;
 }
+.entete__dossier > summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; }
+.entete__dossier > summary::-webkit-details-marker { display: none; }
 .entete__dossier:hover { color: var(--text-primary); border-color: var(--border-color-strong); }
 .entete__dossier__icone { font-size: 11px; opacity: 0.75; flex: none; }
 .entete__dossier__nom {

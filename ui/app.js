@@ -6668,21 +6668,43 @@ function ouvrirSimulationDansEcran(id, versEcran = true) {
 }
 
 /**
- * Au demarrage, AUCUNE simulation n'est ouverte : on arrive sur la
- * bibliotheque. C'est le comportement d'un outil qui gere un parc et non un
- * document - on choisit le dossier avant de travailler dessus, on ne se
- * retrouve pas a modifier celui d'hier sans l'avoir demande.
+ * Reprend le travail LA OU IL EN ETAIT : meme dossier, meme ecran, meme
+ * saisie.
  *
- * L'etat de travail garde ses valeurs de demonstration tant que rien n'est
- * ouvert, mais rien ne s'ecrit : `memoriserSaisie` ne fait rien sans
- * simulation ouverte.
+ * Un rechargement n'est pas une decision de l'utilisateur - c'est un F5, une
+ * mise a jour, un plantage du navigateur. Le renvoyer a la bibliotheque lui
+ * ferait rouvrir son dossier et retrouver son onglet a chaque fois. La saisie
+ * etant enregistree en continu, il n'y a rien a perdre a la reprendre.
+ *
+ * Aucun dossier ouvert reste un etat valide : on arrive alors sur la
+ * bibliotheque, et rien ne s'ecrit tant qu'on n'a rien ouvert.
+ *
+ * @returns {boolean} vrai si un dossier a ete rouvert
  */
 function restaurerSaisie() {
   // Reprise de l'ancienne cle unique, une seule fois : sans elle, la mise a
   // jour de l'outil ferait disparaitre le travail en cours de chacun.
   reprendreHeritage();
-  fermerSimulation();
-  return false;
+
+  const vise = simulationCourante();
+  const existe = vise && listerSimulations().some((f) => f.id === vise);
+  if (!existe) {
+    fermerSimulation();
+    return false;
+  }
+  const sim = lireSimulation(vise);
+  if (!poserSimulation(sim)) {
+    fermerSimulation();
+    return false;
+  }
+  idSimulationOuverte = vise;
+  // Le point de retour repart de l'etat RESTAURE : ce qui etait enregistre
+  // avant le rechargement est acquis, pas « en attente ». Sans cela, le seul
+  // fait de recharger armerait la confirmation de fermeture.
+  etatAuChargement = JSON.stringify(simulationCourantePayload());
+  majNomSimulationOuverte(sim.identite?.nom);
+  majAccesMontage();
+  return true;
 }
 
 /**
@@ -7084,11 +7106,27 @@ function rendreApercuExport() {
     // l'application sur la COPIE : tout rendu ulterieur ecrirait dans
     // l'apercu au lieu de l'ecran.
     for (const el of copie.querySelectorAll('[id]')) el.removeAttribute('id');
-    // Ce qui sert a agir n'a rien a faire dans un document.
+    // Ce qui sert a agir n'a rien a faire dans un document. Les CELLULES de
+    // commande, elles, se vident sans disparaitre : les retirer decalerait les
+    // lignes d'une colonne par rapport a leur en-tete, qui n'a pas de classe a
+    // laquelle s'accrocher. Une colonne vide de trente pixels vaut mieux qu'un
+    // tableau ou les chiffres ne sont plus sous leur intitule.
     for (const el of copie.querySelectorAll(
-      '.bouton, .bouton--supprimer, .biblio-action, .poignee, .col-poignee, .col-select, .col-action, .bloc__outils, .aide, .legende-saisie, .grille__aide, .tri__fleche',
+      '.bouton, .bouton--supprimer, .biblio-action, .poignee, .bloc__outils, .aide, .legende-saisie, .grille__aide, .tri__fleche',
     )) {
       el.remove();
+    }
+    for (const cel of copie.querySelectorAll('td.col-action, td.col-poignee, td.col-select, th.col-action, th.col-poignee, th.col-select')) {
+      cel.innerHTML = '';
+    }
+    // Un document ne liste pas quarante-six postes dont trente-deux sont vides :
+    // il montre ce qui a ete chiffre. Les lignes de chapitre et de total
+    // restent, elles portent la structure.
+    for (const ligne of copie.querySelectorAll('tr[data-poste]')) {
+      const chiffree = [...ligne.querySelectorAll('input')].some(
+        (c) => /** @type {HTMLInputElement} */ (c).value.trim() !== '',
+      );
+      if (!chiffree) ligne.remove();
     }
     figerSaisies(copie);
     section.appendChild(copie);
@@ -7694,8 +7732,24 @@ document.addEventListener('click', async (ev) => {
   }
 
   // --- Bibliotheque de simulations ---
-  if (el.closest('#btn-bibliotheque')) {
+  // La marque ramene a la liste, depuis n'importe quel ecran. Le dossier
+  // ouvert le RESTE : on revient consulter la bibliotheque, on ne referme
+  // rien. La saisie en attente est ecrite avant, pour que les fiches
+  // affichees soient a jour.
+  if (el.closest('#btn-marque')) {
     viderFileDeSauvegarde();
+    rendreBibliotheque();
+    afficherEcran('simulations');
+    return;
+  }
+
+  // Menu du dossier ouvert : les deux facons de le refermer.
+  const actionDossier = el.closest('[data-dossier]');
+  if (actionDossier) {
+    const quoi = /** @type {HTMLElement} */ (actionDossier).dataset.dossier;
+    const menu = /** @type {HTMLDetailsElement} */ (document.getElementById('menu-dossier'));
+    if (menu) menu.open = false;
+    fermerSimulation(quoi === 'abandonner' ? 'abandonner' : 'enregistrer');
     rendreBibliotheque();
     afficherEcran('simulations');
     return;
@@ -8488,14 +8542,24 @@ const ETAT_INITIAL = (() => {
   vierge.regimes_par_produit = {};
   return vierge;
 })();
-restaurerSaisie();
+const dossierRouvert = restaurerSaisie();
+// L'ecran quitte se lit AVANT le premier rendu : celui-ci reaffiche l'onglet
+// marque dans le HTML, et `afficherEcran` reecrit alors la memoire - on
+// perdrait la position en la relisant apres.
+const ecranMemorise = (() => {
+  try {
+    return localStorage.getItem(CLE_ECRAN);
+  } catch {
+    return null;
+  }
+})();
 rendreChampsStatiques();
 rafraichirTout();
 rendreBibliotheque();
 majAccesMontage();
-// Aucune simulation n'est ouverte au demarrage : on arrive sur la
-// bibliotheque, et l'ecran memorise ne sert qu'apres ouverture d'un dossier.
-afficherEcran('simulations');
+// On repart exactement d'ou l'on etait : meme dossier, meme onglet. Sans
+// dossier ouvert il n'y a qu'un ecran possible, la bibliotheque.
+afficherEcran(dossierRouvert ? (ecranMemorise ?? 'operation') : 'simulations');
 // Le curseur vient d'etre pose sur l'onglet memorise SANS transition (classe
 // `onglets--muet` du HTML) : il apparait en place au lieu de traverser le rail
 // au chargement. Elle se retire une fois ce premier placement peint - deux

@@ -2220,6 +2220,15 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
   background: #fff; color: #111;
   font-size: 8.5pt; line-height: 1.3;
   box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
+  /* LES APLATS SONT DE L INFORMATION, pas de la decoration : la barre de
+     chapitre ouvre une section, le sous-total la ferme, la couleur nomme la
+     tranche. Sans cette declaration le navigateur se croit autorise a les
+     economiser a l impression - il le fait, et de facon capricieuse : sur le
+     PDF du 20/08 les teintes de produit etaient bien la et TOUS les gris
+     avaient disparu, en-tete, chapitres, sous-totaux et total. Le tableau
+     perdait sa charpente sans que rien ne le signale.
+     La propriete s herite : la poser sur le document suffit. */
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
 }
 /* L en-tete tient sur UNE ligne : identite a gauche, provenance a droite.
    Sur trois lignes il prenait un centimetre de haut pour dire ce qui tient
@@ -2264,7 +2273,10 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
    de marge de page, `@page` n en donnant plus. Il est dans l apercu pour la
    meme raison que tout le reste : ce qu on voit est ce qu on imprime. */
 .doc .tableau thead th.doc-bandeau {
-  padding: 4mm 0 1.5mm !important;
+  /* Le retrait horizontal est celui des CELLULES : le titre se cale ainsi
+     sur « N° » et sur les titres de chapitre, au lieu de se coller au filet
+     du cadre. */
+  padding: 4mm 1.1mm 1.5mm !important;
   background: #fff !important; border: none !important;
   border-bottom: 0.35mm solid #222 !important;
   text-align: left; font-size: 9pt; font-weight: 800; color: #000;
@@ -2294,7 +2306,11 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
   background: #e4e4e4 !important; color: #000; font-weight: 800;
   text-transform: uppercase; letter-spacing: 0.03em; font-size: 8pt;
   border-top: 0.4mm solid #999; border-bottom: 0.2mm solid #bbb;
-  padding: 1.4mm 1.5mm !important;
+  /* Retrait horizontal des CELLULES, pour que « I - CHARGE FONCIERE » se cale
+     sur « N° », sur le titre du tableau et sur les libelles de poste. A 1,5 mm
+     la barre de chapitre partait d un millimetre plus a droite que tout le
+     reste - assez pour se voir sur une colonne de chiffres. */
+  padding: 1.4mm 1.1mm !important;
 }
 /* Sous-total : un aplat plus clair, il FERME une section. */
 .doc tr.doc-soustotal td {
@@ -15884,6 +15900,57 @@ function figerSaisies(racine) {
  * promesse d'un apercu.
  */
 /**
+ * Fixe la largeur des colonnes du prix de revient.
+ *
+ * Sans cela le tableau se met en page sur son CONTENU : a quatre tranches la
+ * colonne des libelles est etranglee, a une seule elle devient un desert, et
+ * le meme document change de visage selon ce qu on a coche. Le lecteur, lui,
+ * doit retrouver la meme piece a chaque fois.
+ *
+ * Deux colonnes ont une part FIXE - le numero et le libelle, dont le contenu
+ * ne depend pas du nombre de tranches. Le reste se partage au poids : un
+ * montant vaut plus large qu un taux, et les colonnes de bout un peu plus
+ * que les autres, leurs intitules etant les plus longs. Les parts sont des
+ * POURCENTAGES : le tableau occupe donc toute la largeur, une tranche ou
+ * quatre.
+ *
+ * Les colonnes se lisent sur une ligne de poste et non sur l en-tete, dont
+ * les cellules sont fusionnees sur deux rangees et par blocs de tranche.
+ */
+function normaliserColonnes(table) {
+  const rangee = table.querySelector('tbody tr[data-poste]');
+  if (!rangee) return;
+  const cellules = [...rangee.children];
+  if (cellules.length < 4) return;
+
+  const PART_NUMERO = 4;
+  const PART_LIBELLE = 24;
+  const poids = cellules.map((c, i) => {
+    if (i <= 1) return 0;
+    // Un taux de TVA se saisit par une liste : trois caracteres a afficher,
+    // contre onze pour un montant.
+    if (c.querySelector('select')) return 0.75;
+    return i === cellules.length - 1 ? 1.35 : 1.2;
+  });
+  const somme = poids.reduce((s, p) => s + p, 0);
+  if (!somme) return;
+  const reste = 100 - PART_NUMERO - PART_LIBELLE;
+
+  table.querySelector('colgroup')?.remove();
+  const parts = cellules.map((c, i) =>
+    i === 0 ? PART_NUMERO : i === 1 ? PART_LIBELLE : (reste * poids[i]) / somme,
+  );
+  table.insertAdjacentHTML(
+    'afterbegin',
+    `<colgroup>${parts.map((p) => `<col style="width:${p.toFixed(3)}%" />`).join('')}</colgroup>`,
+  );
+  // `fixed` fait autorite sur le `colgroup` : sans lui le navigateur elargit
+  // encore une colonne dont le contenu deborde, et la mise en page repart a
+  // la merci du contenu.
+  table.style.tableLayout = 'fixed';
+}
+
+/**
  * Retire du document les colonnes et les lignes des tranches ecartees.
  *
  * Le filet colore qui ferme un bloc de tranche est porte par la DERNIERE
@@ -15991,6 +16058,8 @@ function adapterPrixRevientAuDocument(copie) {
   // Son espace haut tient aussi lieu de marge de page, puisque `@page` n en
   // donne plus - c'est le prix a payer pour faire taire l'en-tete que le
   // navigateur ajoute de lui-meme.
+  normaliserColonnes(table);
+
   const tete = table.querySelector('thead');
   if (tete) {
     const largeur = [...(tete.querySelector('tr')?.children ?? [])].reduce((n, c) => n + (c.colSpan || 1), 0);

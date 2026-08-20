@@ -7136,6 +7136,57 @@ function figerSaisies(racine) {
  * promesse d'un apercu.
  */
 /**
+ * Fixe la largeur des colonnes du prix de revient.
+ *
+ * Sans cela le tableau se met en page sur son CONTENU : a quatre tranches la
+ * colonne des libelles est etranglee, a une seule elle devient un desert, et
+ * le meme document change de visage selon ce qu on a coche. Le lecteur, lui,
+ * doit retrouver la meme piece a chaque fois.
+ *
+ * Deux colonnes ont une part FIXE - le numero et le libelle, dont le contenu
+ * ne depend pas du nombre de tranches. Le reste se partage au poids : un
+ * montant vaut plus large qu un taux, et les colonnes de bout un peu plus
+ * que les autres, leurs intitules etant les plus longs. Les parts sont des
+ * POURCENTAGES : le tableau occupe donc toute la largeur, une tranche ou
+ * quatre.
+ *
+ * Les colonnes se lisent sur une ligne de poste et non sur l en-tete, dont
+ * les cellules sont fusionnees sur deux rangees et par blocs de tranche.
+ */
+function normaliserColonnes(table) {
+  const rangee = table.querySelector('tbody tr[data-poste]');
+  if (!rangee) return;
+  const cellules = [...rangee.children];
+  if (cellules.length < 4) return;
+
+  const PART_NUMERO = 4;
+  const PART_LIBELLE = 24;
+  const poids = cellules.map((c, i) => {
+    if (i <= 1) return 0;
+    // Un taux de TVA se saisit par une liste : trois caracteres a afficher,
+    // contre onze pour un montant.
+    if (c.querySelector('select')) return 0.75;
+    return i === cellules.length - 1 ? 1.35 : 1.2;
+  });
+  const somme = poids.reduce((s, p) => s + p, 0);
+  if (!somme) return;
+  const reste = 100 - PART_NUMERO - PART_LIBELLE;
+
+  table.querySelector('colgroup')?.remove();
+  const parts = cellules.map((c, i) =>
+    i === 0 ? PART_NUMERO : i === 1 ? PART_LIBELLE : (reste * poids[i]) / somme,
+  );
+  table.insertAdjacentHTML(
+    'afterbegin',
+    `<colgroup>${parts.map((p) => `<col style="width:${p.toFixed(3)}%" />`).join('')}</colgroup>`,
+  );
+  // `fixed` fait autorite sur le `colgroup` : sans lui le navigateur elargit
+  // encore une colonne dont le contenu deborde, et la mise en page repart a
+  // la merci du contenu.
+  table.style.tableLayout = 'fixed';
+}
+
+/**
  * Retire du document les colonnes et les lignes des tranches ecartees.
  *
  * Le filet colore qui ferme un bloc de tranche est porte par la DERNIERE
@@ -7243,6 +7294,8 @@ function adapterPrixRevientAuDocument(copie) {
   // Son espace haut tient aussi lieu de marge de page, puisque `@page` n en
   // donne plus - c'est le prix a payer pour faire taire l'en-tete que le
   // navigateur ajoute de lui-meme.
+  normaliserColonnes(table);
+
   const tete = table.querySelector('thead');
   if (tete) {
     const largeur = [...(tete.querySelector('tr')?.children ?? [])].reduce((n, c) => n + (c.colSpan || 1), 0);

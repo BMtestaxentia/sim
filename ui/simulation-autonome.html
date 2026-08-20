@@ -91,7 +91,17 @@
   --police-nombre: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
-[data-theme='clair'] {
+/* Le DOCUMENT porte la palette du PAPIER, quel que soit le theme de
+   l'application. Il partage donc la declaration du theme clair plutot que d'en
+   recopier une : les jetons se redefinissent sur `.doc` et son sous-arbre en
+   herite, la ou `:root` porte encore ceux du theme sombre.
+
+   Sans cela un document lu en theme sombre gardait les couleurs de ce theme
+   sur son fond blanc : la ligne de subvention arrivait en aplat noir, le
+   verdict des controles en vert pastel illisible, les libelles gris clair
+   invisibles. Et le PDF, lui, sortait en clair - on ne voyait donc jamais a
+   l'ecran ce qu'on allait obtenir. */
+[data-theme='clair'], .doc {
   --bg-primary: #ffffff;
   --bg-secondary: #f8f9fa;
   --bg-tertiary: #f1f3f5;
@@ -2947,9 +2957,9 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
            financement. Une operation mixte n'a pas un plan de financement mais
            autant de plans qu'elle porte de produits. Rempli par le rendu, les
            tranches n'etant connues qu'apres calcul. -->
-      <div class="bascule bascule--perimetre" id="vue-financement"></div>
+      <div class="bascule bascule--perimetre" id="vue-financement" data-ecran-seul></div>
 
-      <div id="bandeau-controle" data-restitution class="bandeau"></div>
+      <div id="bandeau-controle" data-restitution data-ecran-seul class="bandeau"></div>
 
       <div class="colonnes colonnes--balance">
         <section class="bloc">
@@ -15965,7 +15975,14 @@ function normaliserColonnes(table) {
  * disparait.
  */
 function retirerColonne(table, index) {
-  for (const rangee of table.querySelectorAll('tr')) {
+  // PREMIERE rangee d en-tete seulement. Les suivantes ne commencent pas a
+  // la colonne zero : les colonnes fixes du prix de revient les enjambent par
+  // un `rowspan`, si bien que la rangee des sous-colonnes debute a la
+  // quatrieme colonne du tableau alors que son premier enfant est, pour elle,
+  // le rang zero. Compter ses enfants revenait a viser trois colonnes trop a
+  // gauche : on y a retire le « TVA » du PLUS, et tous les intitules de
+  // sous-colonne se sont decales d un cran jusqu au bout de la rangee.
+  for (const rangee of table.querySelectorAll('thead tr:first-child, tbody tr, tfoot tr')) {
     let colonne = 0;
     for (const cel of [...rangee.children]) {
       const portee = cel.colSpan || 1;
@@ -16278,6 +16295,14 @@ function rendreApercuExport() {
     // la liste des controles de coherence, le rappel des postes non modelises.
     // Ils parlent de l'outil et de son etat, pas de l'operation.
     for (const bloc of copie.querySelectorAll('[data-ecran-seul]')) bloc.remove();
+    // Le selecteur de vue - consolide, puis une tranche apres l autre - est un
+    // COMMANDE : dans un document il montre un choix qu on ne peut pas faire.
+    // Le verdict des controles part avec lui : « 7 controles sur 7 passes »
+    // rend compte d'une saisie, pas d'une operation. On ne presente pas a un
+    // directoire le journal de bord de son tableur.
+    // Ils se designent par leur MARQUE et non par leur identifiant : celui-ci a
+    // deja ete retire de la copie quelques lignes plus haut, pour que les
+    // rendus de l application ne viennent pas ecrire dans le document.
     adapterTablesAuDocument(copie);
     // Le tri des tranches vaut pour TOUT l ecran : le prix de revient a ses
     // colonnes, la synthese et la repartition ont leurs lignes.
@@ -16364,8 +16389,10 @@ function telechargerPDF() {
   const nomOp = (etat.identite?.nom || '').trim();
   document.title = [def.titre, nomOp].filter(Boolean).join(' - ').replace(/[\\/:*?"<>|]/g, ' ');
 
-  themeAvantImpression = document.documentElement.dataset.theme;
-  document.documentElement.dataset.theme = 'clair';
+  // Le theme ne bascule plus : le document porte sa propre palette, celle du
+  // papier, quel que soit celui de l application. L apercu et le PDF sont donc
+  // rigoureusement de la meme couleur - ils ne l etaient pas, et c est ce qui
+  // faisait passer inapercues les teintes de theme sombre sur fond blanc.
   document.body.classList.add('en-impression');
   // Laisser le navigateur appliquer le theme clair et la mise en page du
   // document avant d'ouvrir la boite, sinon il photographie l'etat precedent.

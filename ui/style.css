@@ -77,7 +77,17 @@
   --police-nombre: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
-[data-theme='clair'] {
+/* Le DOCUMENT porte la palette du PAPIER, quel que soit le theme de
+   l'application. Il partage donc la declaration du theme clair plutot que d'en
+   recopier une : les jetons se redefinissent sur `.doc` et son sous-arbre en
+   herite, la ou `:root` porte encore ceux du theme sombre.
+
+   Sans cela un document lu en theme sombre gardait les couleurs de ce theme
+   sur son fond blanc : la ligne de subvention arrivait en aplat noir, le
+   verdict des controles en vert pastel illisible, les libelles gris clair
+   invisibles. Et le PDF, lui, sortait en clair - on ne voyait donc jamais a
+   l'ecran ce qu'on allait obtenir. */
+[data-theme='clair'], .doc {
   --bg-primary: #ffffff;
   --bg-secondary: #f8f9fa;
   --bg-tertiary: #f1f3f5;

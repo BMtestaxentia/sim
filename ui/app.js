@@ -7201,7 +7201,14 @@ function normaliserColonnes(table) {
  * disparait.
  */
 function retirerColonne(table, index) {
-  for (const rangee of table.querySelectorAll('tr')) {
+  // PREMIERE rangee d en-tete seulement. Les suivantes ne commencent pas a
+  // la colonne zero : les colonnes fixes du prix de revient les enjambent par
+  // un `rowspan`, si bien que la rangee des sous-colonnes debute a la
+  // quatrieme colonne du tableau alors que son premier enfant est, pour elle,
+  // le rang zero. Compter ses enfants revenait a viser trois colonnes trop a
+  // gauche : on y a retire le « TVA » du PLUS, et tous les intitules de
+  // sous-colonne se sont decales d un cran jusqu au bout de la rangee.
+  for (const rangee of table.querySelectorAll('thead tr:first-child, tbody tr, tfoot tr')) {
     let colonne = 0;
     for (const cel of [...rangee.children]) {
       const portee = cel.colSpan || 1;
@@ -7514,6 +7521,14 @@ function rendreApercuExport() {
     // la liste des controles de coherence, le rappel des postes non modelises.
     // Ils parlent de l'outil et de son etat, pas de l'operation.
     for (const bloc of copie.querySelectorAll('[data-ecran-seul]')) bloc.remove();
+    // Le selecteur de vue - consolide, puis une tranche apres l autre - est un
+    // COMMANDE : dans un document il montre un choix qu on ne peut pas faire.
+    // Le verdict des controles part avec lui : « 7 controles sur 7 passes »
+    // rend compte d'une saisie, pas d'une operation. On ne presente pas a un
+    // directoire le journal de bord de son tableur.
+    // Ils se designent par leur MARQUE et non par leur identifiant : celui-ci a
+    // deja ete retire de la copie quelques lignes plus haut, pour que les
+    // rendus de l application ne viennent pas ecrire dans le document.
     adapterTablesAuDocument(copie);
     // Le tri des tranches vaut pour TOUT l ecran : le prix de revient a ses
     // colonnes, la synthese et la repartition ont leurs lignes.
@@ -7600,8 +7615,10 @@ function telechargerPDF() {
   const nomOp = (etat.identite?.nom || '').trim();
   document.title = [def.titre, nomOp].filter(Boolean).join(' - ').replace(/[\\/:*?"<>|]/g, ' ');
 
-  themeAvantImpression = document.documentElement.dataset.theme;
-  document.documentElement.dataset.theme = 'clair';
+  // Le theme ne bascule plus : le document porte sa propre palette, celle du
+  // papier, quel que soit celui de l application. L apercu et le PDF sont donc
+  // rigoureusement de la meme couleur - ils ne l etaient pas, et c est ce qui
+  // faisait passer inapercues les teintes de theme sombre sur fond blanc.
   document.body.classList.add('en-impression');
   // Laisser le navigateur appliquer le theme clair et la mise en page du
   // document avant d'ouvrir la boite, sinon il photographie l'etat precedent.

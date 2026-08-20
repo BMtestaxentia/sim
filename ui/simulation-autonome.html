@@ -2237,6 +2237,47 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
 .doc .tableau th { color: #444; font-weight: 700; border-bottom-color: #999; }
 .doc .tableau tfoot td { font-weight: 700; border-top: 0.3mm solid #999; }
 .doc .table-defilante { overflow: visible !important; max-height: none !important; border: none !important; }
+
+/* --- Structure du tableau de prix de revient -------------------------
+   Un bilan se lit par sa charpente : chapitres, sous-totaux, total. A
+   l ecran, la couleur et le survol la donnent ; sur papier il ne reste que
+   le filet et l aplat, et il faut donc les poser franchement. */
+.doc .tableau { border: 0.4mm solid #999; }
+.doc .tableau thead th {
+  background: #f0f0f0 !important; border-bottom: 0.4mm solid #777;
+  color: #222; text-transform: uppercase; letter-spacing: 0.02em; font-size: 7pt;
+}
+/* Titre de chapitre : une barre sombre, elle OUVRE une section. */
+.doc tr.doc-chapitre td {
+  background: #e4e4e4 !important; color: #000; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.03em; font-size: 8pt;
+  border-top: 0.4mm solid #999; border-bottom: 0.2mm solid #bbb;
+  padding: 1.4mm 1.5mm !important;
+}
+/* Sous-total : un aplat plus clair, il FERME une section. */
+.doc tr.doc-soustotal td {
+  background: #f4f4f4 !important; font-weight: 700; color: #000;
+  border-top: 0.3mm solid #aaa; border-bottom: 0.3mm solid #aaa;
+}
+/* Total general : le seul chiffre qu on retient. */
+.doc tr.doc-total td {
+  background: #dcdcdc !important; font-weight: 800; font-size: 8.5pt; color: #000;
+  border-top: 0.5mm solid #666;
+}
+/* Un intitule de sous-total ne se coupe JAMAIS : il nomme la section qu on
+   vient de lire, et trois lignes pour  Sous-total charge fonciere  volaient
+   la place aux chiffres. Les libelles de poste, eux, se replient. */
+.doc tr.doc-soustotal .libelle, .doc tr.doc-total .libelle { white-space: nowrap; }
+.doc .libelle-poste { white-space: normal; }
+/* Pas de zebrures : les lignes de chapitre s intercalent entre les postes, si
+   bien qu une alternance une-sur-deux tomberait n importe ou. Le tableau est
+   court une fois les postes vides retires, les filets suffisent. */
+.doc .tableau td { border-bottom: 0.15mm solid #e6e6e6; }
+/* Les filets de tranche restent : ils disent ou commence chaque produit. */
+.doc .col-tranche--debut, .doc .col-groupe {
+  border-left: 0.4mm solid #888 !important;
+}
+.doc .col-tranche--fin { border-right: 0.4mm solid #888 !important; }
 .doc .tableau--entete-figee thead th { position: static !important; }
 /* Les bandeaux et tuiles s'aplatissent : sur papier, un aplat de couleur mange
    de l'encre sans rien dire de plus qu'un filet. */
@@ -15684,6 +15725,51 @@ function figerSaisies(racine) {
  * entre ce qu'on voit et ce qu'on obtient. C'est la seule facon de tenir la
  * promesse d'un apercu.
  */
+/**
+ * Retravaille la table du prix de revient POUR LE DOCUMENT.
+ *
+ * Un PDF n'a pas a etre la photographie de l'ecran. L'ecran est une grille de
+ * SAISIE : il porte une colonne de commande, des largeurs figees pour que rien
+ * ne saute quand on bascule une ventilation, et quarante-six lignes dont on ne
+ * remplit qu'une poignee. Le document, lui, est une piece qu'on lit et qu'on
+ * joint a un dossier. Trois corrections en decoulent :
+ *
+ *   - la colonne de commande DISPARAIT, en-tete comprise. Vide dans un
+ *     document, elle ne faisait qu'ecarter les chiffres de leur intitule ;
+ *   - les largeurs figees tombent. Elles stabilisent la saisie ; ici elles
+ *     ecrasaient la colonne des libelles, au point que « Sous-total charge
+ *     fonciere » tenait sur trois lignes ;
+ *   - les lignes de chapitre et de sous-total sont marquees, pour que la
+ *     structure du bilan se voie sans avoir a etre lue.
+ */
+function adapterPrixRevientAuDocument(copie) {
+  const table = copie.querySelector('#table-postes');
+  if (!table) return;
+
+  // La colonne de commande est la QUATRIEME, apres le numero, le libelle et le
+  // total. On la retire par sa POSITION et non par une classe : son en-tete
+  // n'en porte aucune, et c'est precisement ce qui avait decale les lignes.
+  const RANG_COMMANDE = 3;
+  table.querySelector('colgroup')?.remove();
+  for (const rangee of table.querySelectorAll('thead tr:first-child, tbody tr, tfoot tr')) {
+    const cible = rangee.children[RANG_COMMANDE];
+    if (!cible) continue;
+    // Une cellule a cheval sur plusieurs colonnes - l'intitule d'un chapitre -
+    // couvre deja la place : on lui retire une unite au lieu de la supprimer.
+    if (cible.colSpan > 1) cible.colSpan -= 1;
+    else cible.remove();
+  }
+
+  for (const tr of table.querySelectorAll('tr.chapitre-entete')) tr.classList.add('doc-chapitre');
+  for (const tr of table.querySelectorAll('tr.chapitre-total')) tr.classList.add('doc-soustotal');
+  table.querySelector('tfoot tr')?.classList.add('doc-total');
+  // La marque « poste vide » grise le libelle a l'ecran, pour distinguer ce
+  // qui reste a saisir. Elle n'a plus de sens ici : les lignes vides ont
+  // disparu du document, et une ligne chiffree affichee en gris se lirait
+  // comme une valeur douteuse.
+  for (const tr of table.querySelectorAll('tr.poste--vide')) tr.classList.remove('poste--vide');
+}
+
 function rendreApercuExport() {
   const cible = document.getElementById('apercu-export');
   if (!cible) return;
@@ -15710,6 +15796,9 @@ function rendreApercuExport() {
     const section = document.createElement('section');
     section.className = 'doc__section';
     const copie = /** @type {HTMLElement} */ (source.cloneNode(true));
+    // Les adaptations propres a un ecran se font AVANT le retrait des
+    // identifiants, tant qu'on peut encore designer les tables par le leur.
+    if (id === 'prix-revient') adapterPrixRevientAuDocument(copie);
     copie.removeAttribute('id');
     copie.removeAttribute('hidden');
     copie.removeAttribute('role');

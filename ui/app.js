@@ -7073,6 +7073,51 @@ function figerSaisies(racine) {
  * entre ce qu'on voit et ce qu'on obtient. C'est la seule facon de tenir la
  * promesse d'un apercu.
  */
+/**
+ * Retravaille la table du prix de revient POUR LE DOCUMENT.
+ *
+ * Un PDF n'a pas a etre la photographie de l'ecran. L'ecran est une grille de
+ * SAISIE : il porte une colonne de commande, des largeurs figees pour que rien
+ * ne saute quand on bascule une ventilation, et quarante-six lignes dont on ne
+ * remplit qu'une poignee. Le document, lui, est une piece qu'on lit et qu'on
+ * joint a un dossier. Trois corrections en decoulent :
+ *
+ *   - la colonne de commande DISPARAIT, en-tete comprise. Vide dans un
+ *     document, elle ne faisait qu'ecarter les chiffres de leur intitule ;
+ *   - les largeurs figees tombent. Elles stabilisent la saisie ; ici elles
+ *     ecrasaient la colonne des libelles, au point que « Sous-total charge
+ *     fonciere » tenait sur trois lignes ;
+ *   - les lignes de chapitre et de sous-total sont marquees, pour que la
+ *     structure du bilan se voie sans avoir a etre lue.
+ */
+function adapterPrixRevientAuDocument(copie) {
+  const table = copie.querySelector('#table-postes');
+  if (!table) return;
+
+  // La colonne de commande est la QUATRIEME, apres le numero, le libelle et le
+  // total. On la retire par sa POSITION et non par une classe : son en-tete
+  // n'en porte aucune, et c'est precisement ce qui avait decale les lignes.
+  const RANG_COMMANDE = 3;
+  table.querySelector('colgroup')?.remove();
+  for (const rangee of table.querySelectorAll('thead tr:first-child, tbody tr, tfoot tr')) {
+    const cible = rangee.children[RANG_COMMANDE];
+    if (!cible) continue;
+    // Une cellule a cheval sur plusieurs colonnes - l'intitule d'un chapitre -
+    // couvre deja la place : on lui retire une unite au lieu de la supprimer.
+    if (cible.colSpan > 1) cible.colSpan -= 1;
+    else cible.remove();
+  }
+
+  for (const tr of table.querySelectorAll('tr.chapitre-entete')) tr.classList.add('doc-chapitre');
+  for (const tr of table.querySelectorAll('tr.chapitre-total')) tr.classList.add('doc-soustotal');
+  table.querySelector('tfoot tr')?.classList.add('doc-total');
+  // La marque « poste vide » grise le libelle a l'ecran, pour distinguer ce
+  // qui reste a saisir. Elle n'a plus de sens ici : les lignes vides ont
+  // disparu du document, et une ligne chiffree affichee en gris se lirait
+  // comme une valeur douteuse.
+  for (const tr of table.querySelectorAll('tr.poste--vide')) tr.classList.remove('poste--vide');
+}
+
 function rendreApercuExport() {
   const cible = document.getElementById('apercu-export');
   if (!cible) return;
@@ -7099,6 +7144,9 @@ function rendreApercuExport() {
     const section = document.createElement('section');
     section.className = 'doc__section';
     const copie = /** @type {HTMLElement} */ (source.cloneNode(true));
+    // Les adaptations propres a un ecran se font AVANT le retrait des
+    // identifiants, tant qu'on peut encore designer les tables par le leur.
+    if (id === 'prix-revient') adapterPrixRevientAuDocument(copie);
     copie.removeAttribute('id');
     copie.removeAttribute('hidden');
     copie.removeAttribute('role');

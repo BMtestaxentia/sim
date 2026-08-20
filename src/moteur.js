@@ -369,7 +369,10 @@ export function calculer(entrees, referentiels) {
     if (annuite > 0) {
       const derniere = duree > 0 ? Math.min(duree, horizon) : horizon;
       for (let k = 0; k < derniere; k++) {
-        annuitesFP.push({ annee: anneeMEL + k, montant_eur: annuite });
+        // La tranche est PORTEE par la ligne : le compte consolide somme tout
+        // sans la lire, mais le compte d une tranche a besoin de savoir laquelle
+        // de ces annuites est la sienne.
+        annuitesFP.push({ annee: anneeMEL + k, montant_eur: annuite, produit: c });
       }
     }
     fondsPropresParTranche[c] = {
@@ -927,7 +930,7 @@ export function calculer(entrees, referentiels) {
     const montant = tranches[c].nb_logements * tfpbMontantParLogement;
     for (let k = 0; k < horizonTFPB; k++) {
       const annee = anneeMEL + k;
-      if (annee >= debut) tfpbParAnnee.push({ annee, montant_eur: montant });
+      if (annee >= debut) tfpbParAnnee.push({ annee, montant_eur: montant, produit: c });
     }
   }
 
@@ -1092,6 +1095,113 @@ export function calculer(entrees, referentiels) {
       })),
   );
 
+  /**
+   * R-EXP-8 - Contexte du compte d'exploitation, cadre sur UNE tranche.
+   *
+   * Le compte est deja une fonction pure de son contexte : le cadrer sur une
+   * tranche, c'est lui passer la part qui lui revient de chaque entree, pas
+   * ecrire un second moteur. La plupart des charges suivent d'elles-memes,
+   * leur assiette etant le logement ou les produits locatifs : leur passer le
+   * nombre de logements et les loyers de la tranche suffit a les mettre a
+   * l'echelle.
+   *
+   * Ce qui se FILTRE : les annuites de prets, leurs interets, la taxe fonciere
+   * et les annuites de fonds propres, chacune portant sa tranche.
+   *
+   * Ce qui se PRORATISE, faute de porter une tranche : les loyers d annexes,
+   * la quote-part de subventions et la base de provision pour gros entretien.
+   * La cle est la quote-part de surface utile, celle qui sert partout
+   * ailleurs (R-SUB, R-TVA).
+   *
+   * Ce qui se DECIDE par tranche : l'impot sur les societes. Le PLAI et le
+   * PLUS en sont exoneres, le LLI non - le calculer sur un resultat global
+   * melangeait des assiettes de regimes differents. Les credits d'impot TFPB
+   * suivent le produit qui les ouvre.
+   */
+  const contexteExploitation = (code) => {
+    const part = code === null ? 1 : (quotesParts[code] ?? 0);
+    const lotsDe = code === null ? lots : lots.filter((l) => l.code_produit === code);
+    const nbLog = code === null ? nbLogements : lotsDe.reduce((s, l) => s + (l.nb_logements ?? 0), 0);
+    const shab = code === null ? shabTotal : lotsDe.reduce((s, l) => s + (l.shab_m2 ?? 0), 0);
+    const loyerDe =
+      code === null
+        ? loyersLogementsAnnuels
+        : (loyers.find((l) => l.code_produit === code)?.loyer_annuel_eur ?? 0);
+    const prTranche =
+      code === null
+        ? bilan.total_ttc_module_eur
+        : (bilan.par_tranche?.[code]?.total_ttc_module_eur ?? 0);
+    const amortsDe = code === null ? amortissements : amortissements.filter((a) => a.produit === code);
+    const parProduit = (serie) => (code === null ? serie : serie.filter((x) => x.produit === code));
+    const soumisDe = code === null ? soumisIS : produitsSoumisIS.has(code);
+    return {
+      annee_mise_en_location: anneeMEL,
+      duree_ans: dates.duree_simulation_ans ?? 50,
+      mode: exp.mode ?? 'loyers',
+      mode_redevance: exp.mode_redevance ?? 'forfaitaire',
+      tranches_produits:
+        code === null ? produitsParTranche : produitsParTranche.filter((p) => p.code === code),
+      redevance_annuelle_eur: exp.redevance_annuelle_eur ?? 0,
+      redevance_annee_valeur: exp.redevance_annee_valeur,
+      index_redevance: exp.index_redevance ?? 'loyers_irl',
+      annuite_fonds_propres_eur: exp.annuite_fonds_propres_eur ?? 0,
+      duree_annuite_fonds_propres_ans: exp.duree_annuite_fonds_propres_ans ?? 0,
+      annuites_fonds_propres: parProduit(annuitesFP),
+      tfpb_par_annee: parProduit(tfpbParAnnee),
+      nb_lits: code === null ? (exp.nb_lits ?? nbLogements) : nbLog,
+      qp_subventions_annuelle_eur: (exp.qp_subventions_annuelle_eur ?? 0) * part,
+      duree_qp_subventions_ans: exp.duree_qp_subventions_ans ?? 0,
+      prix_revient_ttc_eur: prTranche,
+      charges_diverses: chargesDiverses,
+      loyers_logements_annuels_eur: loyerDe,
+      loyers_annexes_annuels_eur: loyersAnnexesAnnuels * part,
+      loyers_divers_annuels_eur: (exp.loyers_divers_annuels_eur ?? 0) * part,
+      frais_gestion_annuels_eur: (exp.frais_gestion_annuels_eur ?? 0) * part,
+      frais_gestion_pct_loyers: exp.frais_gestion_pct_loyers ?? 0,
+      frais_gestion_pct_prix_revient:
+        exp.frais_gestion_pct_prix_revient ??
+        baremes.charges_exploitation?.frais_gestion_pct_prix_revient ??
+        0,
+      rel_annuel_eur: (exp.rel_annuel_eur ?? 0) * part,
+      gros_entretien_eur_m2: exp.gros_entretien_eur_m2 ?? 0,
+      pge_taux: tauxPGERetenu,
+      pge_taux_par_annee: exp.pge_taux_par_annee ?? [],
+      pge_base_eur: (exp.pge_base_eur ?? assiettePGE) * part,
+      shab_m2: shab,
+      taux_vacance_impayes: exp.taux_vacance_impayes ?? 0,
+      taux_produits_financiers: exp.taux_produits_financiers ?? 0,
+      nb_logements: nbLog,
+      tfpb_par_logement_eur:
+        exp.tfpb_par_logement_eur ?? baremes.constantes_reglementaires.tfpb.montant_par_logement_eur,
+      annee_debut_tfpb: exp.annee_debut_tfpb ?? tfpb.annee_debut_tfpb,
+      // `annuite_eur` et non `montant_eur` : le compte lit ce nom-la pour les
+      // annuites, et l autre pour les interets. Se tromper de cle ne leve
+      // rien - elle vaut `undefined`, la somme donne NaN, et le compte entier
+      // s efface sans un mot.
+      annuites: amortsDe.flatMap((a) =>
+        a.tableau.map((l) => ({ annee: l.annee, annuite_eur: l.annuite_eur })),
+      ),
+      interets_par_annee: amortsDe.flatMap((a) =>
+        a.tableau.map((l) => ({ annee: l.annee, montant_eur: l.interets_eur })),
+      ),
+      dotation_amortissements_eur: dotationAnnuelle * part,
+      dotation_amortissements_par_annee: dotationSerie.map((d) => ({
+        ...d,
+        montant_eur: d.montant_eur * part,
+      })),
+      is_taux: soumisDe ? (exp.is_taux ?? cfgIS.taux ?? 0) : 0,
+      is_duree_differe_ans: exp.is_duree_differe_ans ?? cfgIS.duree_differe_ans ?? 0,
+      is_charges_deductibles: exp.is_charges_deductibles ?? cfgIS.charges_deductibles ?? [],
+      is_credits_impot_par_annee: soumisDe ? creditsIS : [],
+      is_part_fixe_ge_eur:
+        (exp.is_part_fixe_ge_eur ?? partFixeGE.montant_eur ?? 0) *
+        ((exp.is_part_fixe_ge_assiette ?? partFixeGE.assiette) === 'lot' ? nbLog : part),
+      is_part_fixe_ge_differe_ans:
+        exp.is_part_fixe_ge_differe_ans ?? partFixeGE.duree_differe_ans ?? 0,
+      trajectoires: exp.trajectoires ?? trajectoires.par_poste,
+    };
+  };
+
   const exploitation = compteExploitation({
     annee_mise_en_location: anneeMEL,
     duree_ans: dates.duree_simulation_ans ?? 50,
@@ -1225,6 +1335,13 @@ export function calculer(entrees, referentiels) {
   exploitation.fonds_propres_eur = fondsPropres;
   exploitation.charges_diverses_actives = chargesDiverses;
   // R-FIN-7 : detail des fonds propres par tranche, remuneres ou non.
+  // R-EXP-8 - Un compte d'exploitation par tranche, a cote du consolide. Il
+  // sert la vue par tranche des ecrans et le cadrage des exports. Le
+  // consolide reste calcule d un seul tenant tant que la somme des tranches
+  // n'a pas ete confrontee a lui sur des operations reelles.
+  exploitation.par_tranche = Object.fromEntries(
+    codesPresents.map((c) => [c, compteExploitation(contexteExploitation(c))]),
+  );
   exploitation.fonds_propres_par_tranche = fondsPropresParTranche;
   exploitation.annuite_fonds_propres_eur = annuiteFPTotale;
 

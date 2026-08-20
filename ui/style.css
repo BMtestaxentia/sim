@@ -2316,9 +2316,18 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
   @page { size: A4 landscape; margin: 10mm 10mm 12mm; }
 
   html, body { background: #fff !important; }
+  /* Ne reste que l ecran des exports. Les deux regles descendent d un SEUL
+     cran (`>`), et ce n est pas une elegance : le document contient des
+     copies des ecrans repris, qui gardent la classe `ecran` et perdent leur
+     identifiant. Sans le combinateur d enfant, la seconde regle les masquait
+     avec les vrais - elle est plus specifique que le `.doc .ecran` qui les
+     rouvre - et le PDF sortait avec sa seule en-tete, celle-ci survivant
+     parce qu elle est en `position: fixed`. Une page blanche a en-tete, donc,
+     alors que l apercu a l ecran restait juste : les regles d impression ne
+     s appliquent pas la. */
   body.en-impression > *:not(.ecran) { display: none !important; }
-  body.en-impression .ecran:not(#ecran-exports) { display: none !important; }
-  body.en-impression #ecran-exports { display: block !important; padding: 0 !important; }
+  body.en-impression > .ecran:not(#ecran-exports) { display: none !important; }
+  body.en-impression > #ecran-exports { display: block !important; padding: 0 !important; }
   body.en-impression .exports__barre { display: none !important; }
   body.en-impression .apercu-cadre {
     padding: 0 !important; border: none !important; background: none !important; overflow: visible !important;

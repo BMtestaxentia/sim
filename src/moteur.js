@@ -1353,6 +1353,12 @@ export function calculer(entrees, referentiels) {
         fondsPropresParTranche[c]?.montant_eur ?? 0,
       );
       compte.fonds_propres_eur = fondsPropresParTranche[c]?.montant_eur ?? 0;
+      // Les ruptures de la courbe sont celles de l operation - entree en taxe
+      // fonciere, fin d un pret - mais leurs JALONS se lisent sur les lignes de
+      // la tranche : c est sa courbe qu on annote.
+      compte.jalons = jalonsExploitation(compte.lignes, evenements);
+      compte.evenements = evenements;
+      compte.postes_absents = exploitation.postes_absents ?? [];
       return [c, compte];
     }),
   );

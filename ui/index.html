@@ -590,6 +590,13 @@
 
     <main class="ecran" id="ecran-exploitation" role="tabpanel" hidden>
 
+      <!-- Perimetre du compte : le total, puis une tranche apres l autre. Le
+           moteur calcule un compte par tranche (R-EXP-8), l ecran ne fait que
+           choisir lequel il montre. -->
+      <div class="barre-perimetre">
+        <div class="bascule bascule--perimetre" id="perimetre-exploitation" data-ecran-seul></div>
+      </div>
+
       <section class="bloc">
         <h2 class="bloc__titre">Lecture d'ensemble</h2>
         <div class="indicateurs" id="tuiles-exploitation" data-restitution></div>

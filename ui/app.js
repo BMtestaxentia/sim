@@ -3492,8 +3492,52 @@ function rendreTresorerie(r) {
   </tr>`;
 }
 
+/** Perimetre du compte d'exploitation : le total, ou une tranche. */
+let perimetreCompte = 'total';
+
+/**
+ * Compte a montrer : celui de la tranche choisie, ou celui de l'operation.
+ *
+ * Les champs propres a l'operation - postes absents, charges actives, fonds
+ * propres par tranche - sont conserves par-dessus le compte de la tranche :
+ * ils decrivent le montage et ne changent pas avec le perimetre. Seuls les
+ * lignes, les totaux, les indicateurs et les jalons sont ceux de la tranche.
+ */
+function perimetreExploitation(r) {
+  const compte = r.exploitation?.par_tranche?.[perimetreCompte];
+  return compte ? { ...r.exploitation, ...compte } : r.exploitation;
+}
+
+/**
+ * Selecteur de perimetre du compte. Il ne parait qu'a partir de DEUX
+ * tranches : le total EST la tranche quand il n y en a qu une.
+ */
+function rendrePerimetreExploitation(r) {
+  const barre = document.getElementById('perimetre-exploitation');
+  if (!barre) return;
+  const tranches = Object.keys(r.exploitation?.par_tranche ?? {});
+  barre.hidden = tranches.length < 2;
+  barre.closest('.barre-perimetre')?.toggleAttribute('hidden', barre.hidden);
+  if (barre.hidden) {
+    barre.innerHTML = '';
+    return;
+  }
+  const actif = tranches.includes(perimetreCompte) ? perimetreCompte : 'total';
+  barre.innerHTML =
+    `<button type="button" class="bascule__option ${actif === 'total' ? 'bascule__option--actif' : ''}"
+       data-perimetre-compte="total">Total</button>` +
+    tranches
+      .map(
+        (c) => `<button type="button" class="bascule__option ${actif === c ? 'bascule__option--actif' : ''}"
+          data-perimetre-compte="${att(c)}" style="--cat:${catProduit(c)}">
+          <span class="bascule__puce"></span>${att(libelleProduit(c))}</button>`,
+      )
+      .join('');
+}
+
 function rendreExploitation(r) {
-  const e = r.exploitation;
+  rendrePerimetreExploitation(r);
+  const e = perimetreExploitation(r);
   const ind = e.indicateurs;
 
   // Le bandeau de tete de l'ecran a ete retire. Il melait trois choses de
@@ -7477,9 +7521,12 @@ function rendreApercuExport() {
   // selecteur de l'ecran Financement. On la pose le temps du clonage, puis on
   // rend a l'ecran celle que l'utilisateur y avait laissee.
   const vueAvant = vueFinancement;
+  const perimetreAvant = perimetreCompte;
   if (perimetreDuDocument() && dernierResultat) {
     vueFinancement = perimetreDuDocument();
+    perimetreCompte = perimetreDuDocument();
     rendreFinancement(dernierResultat);
+    rendreExploitation(dernierResultat);
   }
 
   for (const id of def.ecrans) {
@@ -7545,7 +7592,9 @@ function rendreApercuExport() {
 
   if (perimetreDuDocument() && dernierResultat) {
     vueFinancement = vueAvant;
+    perimetreCompte = perimetreAvant;
     rendreFinancement(dernierResultat);
+    rendreExploitation(dernierResultat);
   }
 
   const info = document.getElementById('exports-info');
@@ -8507,6 +8556,12 @@ document.addEventListener('click', async (ev) => {
     return;
   }
 
+  const perimExp = el.closest('[data-perimetre-compte]');
+  if (perimExp) {
+    perimetreCompte = /** @type {HTMLElement} */ (perimExp).dataset.perimetreCompte;
+    if (dernierResultat) rendreExploitation(dernierResultat);
+    return;
+  }
   const perim = el.closest('[data-vue-financement]');
   if (perim) {
     vueFinancement = /** @type {HTMLElement} */ (perim).dataset.vueFinancement;

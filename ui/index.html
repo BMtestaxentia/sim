@@ -77,6 +77,9 @@
           <!-- « Fermer » vit ici, au bout du rail d'onglets : il termine le
                travail sur le dossier ouvert. Il ne paraît que dans une
                simulation - sans dossier ouvert, il n'a rien à fermer. -->
+          <button type="button" id="btn-pdf" class="bouton bouton--discret"
+                  title="Éditer le dossier complet en PDF">PDF</button>
+          <span class="entete__filet" aria-hidden="true"></span>
           <button type="button" id="btn-fermer-sim" class="bouton bouton--discret"
                   title="Fermer la simulation ouverte">Fermer</button>
           <span class="entete__filet" aria-hidden="true"></span>
@@ -86,6 +89,21 @@
     </header>
 
     <div id="erreur" class="erreur" hidden></div>
+
+    <!-- En-tête du DOCUMENT imprimé. Invisible à l'écran, il porte l'identité
+         de l'opération sur chaque page du PDF : un tableau de chiffres qui ne
+         dit pas de quelle opération il parle n'a aucune valeur dans un dossier
+         de financement. Rempli par `preparerImpression`. -->
+    <div id="entete-impression" aria-hidden="true">
+      <div class="impr__marque">
+        <strong id="impr-nom"></strong>
+        <span id="impr-groupe"></span>
+      </div>
+      <div class="impr__meta">
+        <span id="impr-lieu"></span>
+        <span id="impr-date"></span>
+      </div>
+    </div>
 
     <!-- ================= ÉCRAN 0 - BIBLIOTHÈQUE =================
          Le catalogue des simulations. Il n'est PAS un onglet du rail : le rail

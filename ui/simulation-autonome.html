@@ -2135,10 +2135,144 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-color-strong); border-radius: var(--radius-pill); }
 
+/* ============================================================ IMPRESSION
+
+   Le PDF est produit par l'impression du navigateur : pas de bibliotheque,
+   donc rien a charger, et un document vectoriel dont le texte reste
+   selectionnable. Tout se joue donc ici.
+
+   PAYSAGE : les tables de ce dossier - prix de revient par tranche, compte
+   d'exploitation sur soixante ans - ont plus de colonnes que de place en
+   portrait. C'est aussi l'orientation de la Presentation CA de LEON, celle que
+   les lecteurs connaissent. */
+
+#entete-impression { display: none; }
+
 @media print {
-  .entete, .bloc__outils, .bouton { display: none !important; }
+  @page {
+    size: A4 landscape;
+    /* La marge haute loge l'en-tete repete ; les autres sont celles d'un
+       document qu'on agrafe. */
+    margin: 16mm 10mm 12mm;
+  }
+
+  /* Le fond disparait, l'encre reste. Le theme a deja bascule en clair cote
+     JS ; ceci rattrape le cas ou l'utilisateur imprime par Ctrl+P sans passer
+     par le bouton. */
+  html, body {
+    background: #fff !important;
+    color: #000;
+    font-size: 9pt;
+  }
+
+  /* --- Ce qui ne s'imprime pas -----------------------------------------
+     Tout ce qui sert a AGIR : on ne clique pas sur du papier. Et tout ce qui
+     n'appartient pas au dossier : la bibliotheque, les parametres. */
+  .entete,
+  .bloc__outils,
+  .bouton,
+  .biblio-action,
+  .bouton--supprimer,
+  .poignee,
+  .col-poignee,
+  .col-select,
+  .col-action,
+  .boite,
+  .erreur,
+  #ecran-simulations,
+  #ecran-parametres,
+  .tri__fleche,
+  .legende-saisie,
+  .aide,
+  .grille__aide {
+    display: none !important;
+  }
+  /* Les cases a cocher de selection non plus : elles n'ont pas de sens fige. */
+  input[type='checkbox'] { display: none !important; }
+
+  /* --- En-tete repete sur chaque page ---------------------------------
+     `position: fixed` en impression : le navigateur le repete en haut de
+     chaque page. Sans lui, la page 4 d'un dossier ne dit plus de quelle
+     operation elle parle - et c'est celle qu'on photocopie. */
+  #entete-impression {
+    display: flex; align-items: baseline; justify-content: space-between;
+    position: fixed; top: 0; left: 0; right: 0;
+    padding-bottom: 2mm; margin-bottom: 3mm;
+    border-bottom: 0.4mm solid #333;
+    font-size: 8pt; color: #000;
+  }
+  .impr__marque strong { font-size: 11pt; }
+  .impr__marque span { margin-left: 3mm; color: #555; }
+  .impr__meta { text-align: right; color: #555; }
+  .impr__meta span { display: block; }
+
+  /* --- Les ecrans deviennent des sections ------------------------------
+     A l'ecran on regarde un onglet a la fois ; un dossier se lit en entier.
+     Chaque ecran repart en haut d'une page : un plan de financement coupe au
+     milieu ne se defend pas devant un financeur. */
   .ecran[hidden] { display: block !important; }
-  .bloc { break-inside: avoid; }
+  .ecran {
+    padding: 0 !important; max-width: none !important;
+    break-before: page; page-break-before: always;
+  }
+  .ecran:first-of-type { break-before: auto; page-break-before: auto; }
+  /* Les degrades lateraux des ecrans de tranche sont decoratifs et couteux en
+     encre. */
+  .ecran--tranche::before, .ecran--tranche::after { display: none !important; }
+
+  /* --- Blocs et tables --------------------------------------------------- */
+  .colonnes { display: block !important; }
+  .bloc {
+    break-inside: avoid; page-break-inside: avoid;
+    background: #fff !important; border: 0.3mm solid #bbb !important;
+    box-shadow: none !important; margin-bottom: 4mm; padding: 3mm 4mm;
+  }
+  .bloc__titre { font-size: 10pt; color: #000; }
+
+  /* L'en-tete de table se REPETE sur chaque page : une colonne de nombres sans
+     intitule, page suivante, ne se lit plus. */
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  .tableau { font-size: 8pt; }
+  .tableau th, .tableau td { padding: 1mm 1.5mm !important; }
+  .tableau--entete-figee thead th,
+  .biblio-table thead th { position: static !important; }
+  /* Les zones defilantes se deplient : sur papier il n'y a pas de barre de
+     defilement, ce qui depasse est simplement perdu. */
+  .table-defilante, .biblio-table {
+    overflow: visible !important; max-height: none !important;
+    border: none !important;
+  }
+
+  /* --- Saisies : du texte, pas des champs ------------------------------
+     Un cadre de saisie imprime fait croire a un formulaire a remplir. On garde
+     la valeur, on retire la boite. */
+  input, select, textarea {
+    border: none !important; background: transparent !important;
+    color: #000 !important; padding: 0 !important;
+    -webkit-appearance: none; appearance: none;
+    font-size: 8.5pt !important;
+  }
+  .champ > span, .champ__paire-titres > span {
+    color: #555 !important; font-size: 7pt !important;
+  }
+
+  /* --- Couleurs ---------------------------------------------------------
+     Les teintes de produit et les jauges portent du SENS : elles disent quelle
+     tranche paie quoi. On demande donc au navigateur de les imprimer, mais on
+     les allege pour rester lisible en noir et blanc. */
+  .segment, .jauge__segment, .biblio-produit, .onglet--tranche::before,
+  .calc-regle, .pastille, .pilule {
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .bandeau { background: #f4f4f4 !important; color: #000 !important; border-color: #bbb !important; }
+  .indicateur, .indicateurs { background: #fff !important; border-color: #ddd !important; }
+  .indicateur__valeur { color: #000 !important; }
+  .indicateur__libelle, .indicateur__detail { color: #555 !important; }
+
+  /* Les graphiques restent : une courbe de tresorerie vaut trois tableaux. */
+  svg { max-width: 100% !important; height: auto !important; }
 }
 
 /* ---------- Trésorerie de chantier ----------
@@ -2267,6 +2401,9 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
           <!-- « Fermer » vit ici, au bout du rail d'onglets : il termine le
                travail sur le dossier ouvert. Il ne paraît que dans une
                simulation - sans dossier ouvert, il n'a rien à fermer. -->
+          <button type="button" id="btn-pdf" class="bouton bouton--discret"
+                  title="Éditer le dossier complet en PDF">PDF</button>
+          <span class="entete__filet" aria-hidden="true"></span>
           <button type="button" id="btn-fermer-sim" class="bouton bouton--discret"
                   title="Fermer la simulation ouverte">Fermer</button>
           <span class="entete__filet" aria-hidden="true"></span>
@@ -2276,6 +2413,21 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
     </header>
 
     <div id="erreur" class="erreur" hidden></div>
+
+    <!-- En-tête du DOCUMENT imprimé. Invisible à l'écran, il porte l'identité
+         de l'opération sur chaque page du PDF : un tableau de chiffres qui ne
+         dit pas de quelle opération il parle n'a aucune valeur dans un dossier
+         de financement. Rempli par `preparerImpression`. -->
+    <div id="entete-impression" aria-hidden="true">
+      <div class="impr__marque">
+        <strong id="impr-nom"></strong>
+        <span id="impr-groupe"></span>
+      </div>
+      <div class="impr__meta">
+        <span id="impr-lieu"></span>
+        <span id="impr-date"></span>
+      </div>
+    </div>
 
     <!-- ================= ÉCRAN 0 - BIBLIOTHÈQUE =================
          Le catalogue des simulations. Il n'est PAS un onglet du rail : le rail
@@ -15377,6 +15529,66 @@ function exporterSimulation(id) {
   URL.revokeObjectURL(url);
 }
 
+// ---------------------------------------------------------------- edition PDF
+
+/**
+ * Edite le dossier complet en PDF.
+ *
+ * Par l'IMPRESSION du navigateur, et non par une bibliotheque. Trois raisons :
+ * le projet s'interdit toute dependance de production (CLAUDE.md §3) ; la
+ * version autonome doit fonctionner hors ligne, ce qu'un script distant
+ * interdirait ; et l'impression native produit un PDF vectoriel dont le texte
+ * reste selectionnable et cherchable, la ou une capture d'ecran donnerait une
+ * image. L'utilisateur choisit « Enregistrer au format PDF » dans la boite du
+ * navigateur.
+ *
+ * Trois preparations avant d'imprimer :
+ *   - le theme passe au CLAIR. Les navigateurs n'impriment pas les fonds par
+ *     defaut : en theme sombre, on obtiendrait du texte pale sur du blanc,
+ *     c'est-a-dire une page vide.
+ *   - tous les ecrans deviennent visibles, chacun sur sa page. A l'ecran on
+ *     regarde un onglet a la fois ; un dossier, lui, se lit en entier.
+ *   - l'en-tete du document est rempli avec l'identite de l'operation.
+ */
+function editerPDF() {
+  if (!idSimulationOuverte) return;
+  preparerImpression();
+  // Le rendu doit etre peint AVANT l'ouverture de la boite d'impression,
+  // sinon le navigateur photographie l'etat precedent.
+  requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+}
+
+/** Remplit l'en-tete du document et bascule en theme clair. */
+function preparerImpression() {
+  const i = etat.identite ?? {};
+  const pose = (id, texte) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = texte ?? '';
+  };
+  pose('impr-nom', i.nom || 'Simulation sans nom');
+  pose('impr-groupe', i.groupe ? `Projet ${i.groupe}` : '');
+  pose(
+    'impr-lieu',
+    [i.commune, i.zone_ABC && `zone ${i.zone_ABC}`, i.type_operation].filter(Boolean).join(' · '),
+  );
+  // La date d'edition n'est pas une donnee de calcul : elle date le document,
+  // pas l'operation. Le moteur, lui, ne lit jamais l'heure.
+  pose('impr-date', `Édité le ${dateHeureLisible(new Date().toISOString())}`);
+
+  themeAvantImpression = document.documentElement.dataset.theme;
+  document.documentElement.dataset.theme = 'clair';
+}
+
+/** Theme a rendre apres l'impression. */
+let themeAvantImpression = null;
+
+// Le theme revient a ce qu'il etait, que l'utilisateur ait imprime ou annule :
+// `afterprint` se declenche dans les deux cas.
+window.addEventListener('afterprint', () => {
+  if (themeAvantImpression) document.documentElement.dataset.theme = themeAvantImpression;
+  themeAvantImpression = null;
+});
+
 // ---------------------------------------------------------------- dialogues
 
 /**
@@ -16065,6 +16277,10 @@ document.addEventListener('click', async (ev) => {
       afficherEcran('simulations');
     }
     rendreBibliotheque();
+    return;
+  }
+  if (el.closest('#btn-pdf')) {
+    editerPDF();
     return;
   }
   if (el.closest('#btn-fermer-sim')) {

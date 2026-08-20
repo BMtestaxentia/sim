@@ -6963,6 +6963,66 @@ function exporterSimulation(id) {
   URL.revokeObjectURL(url);
 }
 
+// ---------------------------------------------------------------- edition PDF
+
+/**
+ * Edite le dossier complet en PDF.
+ *
+ * Par l'IMPRESSION du navigateur, et non par une bibliotheque. Trois raisons :
+ * le projet s'interdit toute dependance de production (CLAUDE.md §3) ; la
+ * version autonome doit fonctionner hors ligne, ce qu'un script distant
+ * interdirait ; et l'impression native produit un PDF vectoriel dont le texte
+ * reste selectionnable et cherchable, la ou une capture d'ecran donnerait une
+ * image. L'utilisateur choisit « Enregistrer au format PDF » dans la boite du
+ * navigateur.
+ *
+ * Trois preparations avant d'imprimer :
+ *   - le theme passe au CLAIR. Les navigateurs n'impriment pas les fonds par
+ *     defaut : en theme sombre, on obtiendrait du texte pale sur du blanc,
+ *     c'est-a-dire une page vide.
+ *   - tous les ecrans deviennent visibles, chacun sur sa page. A l'ecran on
+ *     regarde un onglet a la fois ; un dossier, lui, se lit en entier.
+ *   - l'en-tete du document est rempli avec l'identite de l'operation.
+ */
+function editerPDF() {
+  if (!idSimulationOuverte) return;
+  preparerImpression();
+  // Le rendu doit etre peint AVANT l'ouverture de la boite d'impression,
+  // sinon le navigateur photographie l'etat precedent.
+  requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+}
+
+/** Remplit l'en-tete du document et bascule en theme clair. */
+function preparerImpression() {
+  const i = etat.identite ?? {};
+  const pose = (id, texte) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = texte ?? '';
+  };
+  pose('impr-nom', i.nom || 'Simulation sans nom');
+  pose('impr-groupe', i.groupe ? `Projet ${i.groupe}` : '');
+  pose(
+    'impr-lieu',
+    [i.commune, i.zone_ABC && `zone ${i.zone_ABC}`, i.type_operation].filter(Boolean).join(' · '),
+  );
+  // La date d'edition n'est pas une donnee de calcul : elle date le document,
+  // pas l'operation. Le moteur, lui, ne lit jamais l'heure.
+  pose('impr-date', `Édité le ${dateHeureLisible(new Date().toISOString())}`);
+
+  themeAvantImpression = document.documentElement.dataset.theme;
+  document.documentElement.dataset.theme = 'clair';
+}
+
+/** Theme a rendre apres l'impression. */
+let themeAvantImpression = null;
+
+// Le theme revient a ce qu'il etait, que l'utilisateur ait imprime ou annule :
+// `afterprint` se declenche dans les deux cas.
+window.addEventListener('afterprint', () => {
+  if (themeAvantImpression) document.documentElement.dataset.theme = themeAvantImpression;
+  themeAvantImpression = null;
+});
+
 // ---------------------------------------------------------------- dialogues
 
 /**
@@ -7651,6 +7711,10 @@ document.addEventListener('click', async (ev) => {
       afficherEcran('simulations');
     }
     rendreBibliotheque();
+    return;
+  }
+  if (el.closest('#btn-pdf')) {
+    editerPDF();
     return;
   }
   if (el.closest('#btn-fermer-sim')) {

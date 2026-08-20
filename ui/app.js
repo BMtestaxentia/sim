@@ -24,7 +24,15 @@ import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
 import { ecartsParametrage } from '../src/parametrage.js';
 import { tauxLASM } from '../src/bilan.js';
 import { sommerComptes, indicateursExploitation } from '../src/exploitation.js';
-import { LEVIERS, INDICATEURS, balayerLevier, plage, tornade } from '../src/sensibilite.js';
+import {
+  LEVIERS,
+  INDICATEURS,
+  OBJECTIFS,
+  balayerLevier,
+  chercherEquilibre,
+  plage,
+  tornade,
+} from '../src/sensibilite.js';
 // Le depot est importe par NOMS et non en bloc : le generateur de la version
 // autonome concatene les modules dans une portee unique, ou un espace de noms
 // (`depot.lister`) n'existerait plus. Les noms y sont donc prefixes.
@@ -7555,7 +7563,94 @@ function amplitudeLisible(levier, amplitude) {
  * dix-sept passages du moteur. Le resultat est garde tant que le calcul ne
  * change pas.
  */
+/** Question posee a la recherche d equilibre, et sa derniere reponse. */
+let equilibreObjectif = OBJECTIFS[0].code;
+let equilibreLevier = LEVIERS[0].code;
+
+/**
+ * Prepare la question, sans la resoudre.
+ *
+ * La recherche coute jusqu'a soixante passages du moteur : elle ne part que
+ * sur un geste explicite. Arriver sur l'ecran ne doit pas lancer un calcul
+ * dont on n'a pas encore choisi les termes.
+ */
+function rendreQuestionEquilibre() {
+  const o = document.getElementById('eq-objectif');
+  const l = document.getElementById('eq-levier');
+  if (!o || !l) return;
+  if (!o.options.length) {
+    o.innerHTML = OBJECTIFS.map(
+      (x) => `<option value="${att(x.code)}">${att(x.libelle)}</option>`,
+    ).join('');
+  }
+  if (!l.options.length) {
+    l.innerHTML = LEVIERS.map(
+      (x) => `<option value="${att(x.code)}">${att(x.libelle)}</option>`,
+    ).join('');
+  }
+  o.value = equilibreObjectif;
+  l.value = equilibreLevier;
+  // Le bloc ne s ouvre pas sur une ligne vide : il dit ce qu il attend.
+  const zone = document.getElementById('eq-reponse');
+  if (zone && !zone.textContent.trim()) {
+    zone.className = 'equilibre__reponse equilibre__reponse--vide';
+    zone.textContent = "Choisissez ce qu’il faut atteindre, puis cliquez sur « Chercher ».";
+  }
+}
+
+/** Resout la question et ecrit la reponse en toutes lettres. */
+function resoudreEquilibre() {
+  const zone = document.getElementById('eq-reponse');
+  if (!zone || !dernierResultat) return;
+  const cible = lireMontant(document.getElementById('eq-cible')?.value);
+  if (nul(cible)) {
+    zone.className = 'equilibre__reponse equilibre__reponse--vide';
+    zone.textContent = 'Indiquez la valeur à atteindre.';
+    return;
+  }
+
+  const r = chercherEquilibre(etatPourAnalyse(), referentielsPourAnalyse(), {
+    levier: equilibreLevier,
+    objectif: equilibreObjectif,
+    cible,
+  });
+  const ecrire = (v) => valeurIndicateur(v, r.objectif.unite);
+  const variation = (v) =>
+    r.levier.unite === 'annees'
+      ? `${v > 0 ? '+' : ''}${Math.round(v)} ans`
+      : r.levier.unite === 'points'
+        ? `${v > 0 ? '+' : ''}${pct(v, 2).replace(' %', ' pt')}`
+        : `${v > 0 ? '+' : ''}${pct(v, 1)}`;
+
+  if (!r.applique) {
+    zone.className = 'equilibre__reponse equilibre__reponse--sans';
+    zone.textContent = `${r.levier.libelle} : ${r.raison}.`;
+    return;
+  }
+  if (!r.trouve) {
+    zone.className = 'equilibre__reponse equilibre__reponse--hors';
+    zone.innerHTML = r.atteignable
+      ? `⚠ Hors de portée. En jouant sur ${att(r.levier.libelle)} seul, ` +
+        `${att(r.objectif.libelle.toLowerCase())} ne descend pas sous ` +
+        `<strong>${att(ecrire(r.atteignable[0]))}</strong> ni ne monte au-dessus de ` +
+        `<strong>${att(ecrire(r.atteignable[1]))}</strong>.`
+      : `⚠ ${att(r.raison)}.`;
+    return;
+  }
+  zone.className = 'equilibre__reponse';
+  zone.innerHTML =
+    r.iterations === 0
+      ? `✓ Déjà atteint : ${att(r.objectif.libelle.toLowerCase())} vaut ` +
+        `<strong>${att(ecrire(r.valeur))}</strong>, rien à changer.`
+      : `✓ Il faut <strong>${att(variation(r.variation))}</strong> sur ` +
+        `${att(r.levier.libelle.toLowerCase())} pour amener ` +
+        `${att(r.objectif.libelle.toLowerCase())} à ` +
+        `<strong>${att(ecrire(r.valeur))}</strong>. ` +
+        `<span class="aide">Trouvé en ${r.iterations} itérations.</span>`;
+}
+
 function rendreSensibilite() {
+  rendreQuestionEquilibre();
   const zone = document.getElementById('tornade');
   if (!zone) return;
   if (!dernierResultat) {
@@ -8073,6 +8168,19 @@ document.addEventListener('input', (ev) => {
   if (el.id === 'sens-indicateur') {
     indicateurSensibilite = el.value;
     rendreSensibilite();
+    return;
+  }
+
+  if (el.id === 'eq-objectif' || el.id === 'eq-levier' || el.id === 'eq-cible') {
+    if (el.id === 'eq-objectif') equilibreObjectif = el.value;
+    if (el.id === 'eq-levier') equilibreLevier = el.value;
+    // La reponse affichee ne vaut plus pour la nouvelle question : elle
+    // s efface plutot que de rester la, juste et hors sujet.
+    const zone = document.getElementById('eq-reponse');
+    if (zone) {
+      zone.className = 'equilibre__reponse equilibre__reponse--vide';
+      zone.textContent = 'Cliquez sur « Chercher ».';
+    }
     return;
   }
 
@@ -8768,6 +8876,10 @@ document.addEventListener('click', async (ev) => {
     return;
   }
 
+  if (el.closest('#btn-equilibre')) {
+    resoudreEquilibre();
+    return;
+  }
   const barreTornade = el.closest('[data-levier]');
   if (barreTornade) {
     const code = /** @type {HTMLElement} */ (barreTornade).dataset.levier;

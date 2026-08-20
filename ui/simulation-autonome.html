@@ -1348,6 +1348,17 @@ body.sans-simulation .entete__dossier { display: none; }
    comparer d un coup d oeil, et c est tout l interet de la figure. Le trait
    vertical marque la reference ; une barre qui la chevauche dit que le levier
    fait basculer le resultat de part et d autre. */
+/* La question se lit comme une PHRASE : « amener X a Y en jouant sur Z ».
+   Trois champs sur une ligne, separes par les mots qui les relient, plutot
+   qu un formulaire en colonnes ou il faudrait deviner ce qui se combine. */
+.equilibre__question { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.equilibre__question .champ > span { color: var(--text-tertiary); font-size: 12px; }
+.equilibre__reponse { margin: 0; font-size: 13px; line-height: 1.6; }
+.equilibre__reponse strong { font-size: 15px; }
+.equilibre__reponse--vide { color: var(--text-tertiary); }
+.equilibre__reponse--hors { color: var(--warning-text); }
+.equilibre__reponse--sans { color: var(--text-tertiary); font-style: italic; }
+
 .tornade__ligne {
   display: grid; grid-template-columns: 190px 1fr 120px; align-items: center;
   gap: 12px; width: 100%; padding: 6px 8px; border: none; border-radius: var(--radius-sm);
@@ -3229,6 +3240,30 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
           ⚙ Chaque barre montre l’écart de l’indicateur entre les deux bornes du levier.
           Le trait vertical marque la valeur de référence. Cliquer une barre en déplie le détail.
         </p>
+      </section>
+
+      <!-- La question posee a l envers : non plus « que se passe-t-il si »,
+           mais « de combien faut-il bouger pour atteindre cela ». Meme
+           catalogue de leviers, meme moteur, resolu par dichotomie. -->
+      <section class="bloc">
+        <h2 class="bloc__titre">Recherche d’équilibre</h2>
+        <div class="equilibre__question">
+          <label class="champ champ--enligne">
+            <span>Amener</span>
+            <select id="eq-objectif"></select>
+          </label>
+          <label class="champ champ--enligne">
+            <span>à</span>
+            <input type="text" inputmode="decimal" id="eq-cible" value="0" size="12" />
+          </label>
+          <label class="champ champ--enligne">
+            <span>en jouant sur</span>
+            <select id="eq-levier"></select>
+          </label>
+          <button type="button" class="bouton bouton--principal" id="btn-equilibre">
+            Chercher</button>
+        </div>
+        <p class="equilibre__reponse" id="eq-reponse" data-restitution></p>
       </section>
 
       <section class="bloc" id="bloc-balayage" hidden>
@@ -17215,7 +17250,94 @@ function amplitudeLisible(levier, amplitude) {
  * dix-sept passages du moteur. Le resultat est garde tant que le calcul ne
  * change pas.
  */
+/** Question posee a la recherche d equilibre, et sa derniere reponse. */
+let equilibreObjectif = OBJECTIFS[0].code;
+let equilibreLevier = LEVIERS[0].code;
+
+/**
+ * Prepare la question, sans la resoudre.
+ *
+ * La recherche coute jusqu'a soixante passages du moteur : elle ne part que
+ * sur un geste explicite. Arriver sur l'ecran ne doit pas lancer un calcul
+ * dont on n'a pas encore choisi les termes.
+ */
+function rendreQuestionEquilibre() {
+  const o = document.getElementById('eq-objectif');
+  const l = document.getElementById('eq-levier');
+  if (!o || !l) return;
+  if (!o.options.length) {
+    o.innerHTML = OBJECTIFS.map(
+      (x) => `<option value="${att(x.code)}">${att(x.libelle)}</option>`,
+    ).join('');
+  }
+  if (!l.options.length) {
+    l.innerHTML = LEVIERS.map(
+      (x) => `<option value="${att(x.code)}">${att(x.libelle)}</option>`,
+    ).join('');
+  }
+  o.value = equilibreObjectif;
+  l.value = equilibreLevier;
+  // Le bloc ne s ouvre pas sur une ligne vide : il dit ce qu il attend.
+  const zone = document.getElementById('eq-reponse');
+  if (zone && !zone.textContent.trim()) {
+    zone.className = 'equilibre__reponse equilibre__reponse--vide';
+    zone.textContent = "Choisissez ce qu’il faut atteindre, puis cliquez sur « Chercher ».";
+  }
+}
+
+/** Resout la question et ecrit la reponse en toutes lettres. */
+function resoudreEquilibre() {
+  const zone = document.getElementById('eq-reponse');
+  if (!zone || !dernierResultat) return;
+  const cible = lireMontant(document.getElementById('eq-cible')?.value);
+  if (nul(cible)) {
+    zone.className = 'equilibre__reponse equilibre__reponse--vide';
+    zone.textContent = 'Indiquez la valeur à atteindre.';
+    return;
+  }
+
+  const r = chercherEquilibre(etatPourAnalyse(), referentielsPourAnalyse(), {
+    levier: equilibreLevier,
+    objectif: equilibreObjectif,
+    cible,
+  });
+  const ecrire = (v) => valeurIndicateur(v, r.objectif.unite);
+  const variation = (v) =>
+    r.levier.unite === 'annees'
+      ? `${v > 0 ? '+' : ''}${Math.round(v)} ans`
+      : r.levier.unite === 'points'
+        ? `${v > 0 ? '+' : ''}${pct(v, 2).replace(' %', ' pt')}`
+        : `${v > 0 ? '+' : ''}${pct(v, 1)}`;
+
+  if (!r.applique) {
+    zone.className = 'equilibre__reponse equilibre__reponse--sans';
+    zone.textContent = `${r.levier.libelle} : ${r.raison}.`;
+    return;
+  }
+  if (!r.trouve) {
+    zone.className = 'equilibre__reponse equilibre__reponse--hors';
+    zone.innerHTML = r.atteignable
+      ? `⚠ Hors de portée. En jouant sur ${att(r.levier.libelle)} seul, ` +
+        `${att(r.objectif.libelle.toLowerCase())} ne descend pas sous ` +
+        `<strong>${att(ecrire(r.atteignable[0]))}</strong> ni ne monte au-dessus de ` +
+        `<strong>${att(ecrire(r.atteignable[1]))}</strong>.`
+      : `⚠ ${att(r.raison)}.`;
+    return;
+  }
+  zone.className = 'equilibre__reponse';
+  zone.innerHTML =
+    r.iterations === 0
+      ? `✓ Déjà atteint : ${att(r.objectif.libelle.toLowerCase())} vaut ` +
+        `<strong>${att(ecrire(r.valeur))}</strong>, rien à changer.`
+      : `✓ Il faut <strong>${att(variation(r.variation))}</strong> sur ` +
+        `${att(r.levier.libelle.toLowerCase())} pour amener ` +
+        `${att(r.objectif.libelle.toLowerCase())} à ` +
+        `<strong>${att(ecrire(r.valeur))}</strong>. ` +
+        `<span class="aide">Trouvé en ${r.iterations} itérations.</span>`;
+}
+
 function rendreSensibilite() {
+  rendreQuestionEquilibre();
   const zone = document.getElementById('tornade');
   if (!zone) return;
   if (!dernierResultat) {
@@ -17733,6 +17855,19 @@ document.addEventListener('input', (ev) => {
   if (el.id === 'sens-indicateur') {
     indicateurSensibilite = el.value;
     rendreSensibilite();
+    return;
+  }
+
+  if (el.id === 'eq-objectif' || el.id === 'eq-levier' || el.id === 'eq-cible') {
+    if (el.id === 'eq-objectif') equilibreObjectif = el.value;
+    if (el.id === 'eq-levier') equilibreLevier = el.value;
+    // La reponse affichee ne vaut plus pour la nouvelle question : elle
+    // s efface plutot que de rester la, juste et hors sujet.
+    const zone = document.getElementById('eq-reponse');
+    if (zone) {
+      zone.className = 'equilibre__reponse equilibre__reponse--vide';
+      zone.textContent = 'Cliquez sur « Chercher ».';
+    }
     return;
   }
 
@@ -18428,6 +18563,10 @@ document.addEventListener('click', async (ev) => {
     return;
   }
 
+  if (el.closest('#btn-equilibre')) {
+    resoudreEquilibre();
+    return;
+  }
   const barreTornade = el.closest('[data-levier]');
   if (barreTornade) {
     const code = /** @type {HTMLElement} */ (barreTornade).dataset.levier;

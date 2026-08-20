@@ -1334,6 +1334,17 @@ body.sans-simulation .entete__dossier { display: none; }
    comparer d un coup d oeil, et c est tout l interet de la figure. Le trait
    vertical marque la reference ; une barre qui la chevauche dit que le levier
    fait basculer le resultat de part et d autre. */
+/* La question se lit comme une PHRASE : « amener X a Y en jouant sur Z ».
+   Trois champs sur une ligne, separes par les mots qui les relient, plutot
+   qu un formulaire en colonnes ou il faudrait deviner ce qui se combine. */
+.equilibre__question { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.equilibre__question .champ > span { color: var(--text-tertiary); font-size: 12px; }
+.equilibre__reponse { margin: 0; font-size: 13px; line-height: 1.6; }
+.equilibre__reponse strong { font-size: 15px; }
+.equilibre__reponse--vide { color: var(--text-tertiary); }
+.equilibre__reponse--hors { color: var(--warning-text); }
+.equilibre__reponse--sans { color: var(--text-tertiary); font-style: italic; }
+
 .tornade__ligne {
   display: grid; grid-template-columns: 190px 1fr 120px; align-items: center;
   gap: 12px; width: 100%; padding: 6px 8px; border: none; border-radius: var(--radius-sm);

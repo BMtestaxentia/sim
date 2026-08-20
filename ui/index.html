@@ -684,6 +684,30 @@
         </p>
       </section>
 
+      <!-- La question posee a l envers : non plus « que se passe-t-il si »,
+           mais « de combien faut-il bouger pour atteindre cela ». Meme
+           catalogue de leviers, meme moteur, resolu par dichotomie. -->
+      <section class="bloc">
+        <h2 class="bloc__titre">Recherche d’équilibre</h2>
+        <div class="equilibre__question">
+          <label class="champ champ--enligne">
+            <span>Amener</span>
+            <select id="eq-objectif"></select>
+          </label>
+          <label class="champ champ--enligne">
+            <span>à</span>
+            <input type="text" inputmode="decimal" id="eq-cible" value="0" size="12" />
+          </label>
+          <label class="champ champ--enligne">
+            <span>en jouant sur</span>
+            <select id="eq-levier"></select>
+          </label>
+          <button type="button" class="bouton bouton--principal" id="btn-equilibre">
+            Chercher</button>
+        </div>
+        <p class="equilibre__reponse" id="eq-reponse" data-restitution></p>
+      </section>
+
       <section class="bloc" id="bloc-balayage" hidden>
         <h2 class="bloc__titre" id="titre-balayage">Balayage</h2>
         <div class="table-defilante">

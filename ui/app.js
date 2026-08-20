@@ -1845,7 +1845,7 @@ function rendreTablePrixRevient() {
   ];
   const fin = [
     ['num calc', 'TVA (€)'],
-    ['num calc', 'TTC saisie (€)'],
+    ['num calc', 'Total TTC (€)'],
   ];
   const cellulesFixes = (l) =>
     l.map(([cl, t]) => `<th class="${cl}" ${parTranche ? 'rowspan="2"' : ''}>${t}</th>`).join('');
@@ -1944,7 +1944,7 @@ function rendreTablePrixRevient() {
             .map(
               (v) =>
                 `<option value="${v}" ${v === valeur ? 'selected' : ''}${admis.includes(v) ? '' : ' data-hors-bareme="1"'}>` +
-                `${(v * 100).toFixed(1)} %${admis.includes(v) ? '' : ' (hors barème)'}</option>`,
+                `${pct(v, 1)}${admis.includes(v) ? '' : ' (hors barème)'}</option>`,
             )
             .join('')}
         </select>`;
@@ -2578,7 +2578,7 @@ function rendreValeurs(r) {
       <td></td>
       <td class="num">${eur(b.total_ttc_module_eur)}</td>
     </tr>
-    <tr>
+    <tr class="resume-saisie">
       <td></td><td colspan="${3 + (tvaGlobaleTr ? 1 : 0)}" style="font-weight:400;color:var(--text-tertiary);border-top:none">
         ${renseignes} poste${renseignes > 1 ? 's' : ''} renseigné${renseignes > 1 ? 's' : ''}
         sur ${etat.postes_bilan.length} de la nomenclature${
@@ -3135,14 +3135,23 @@ function viderRestitution(message) {
     el.innerHTML = '';
   }
 
-  // La table des LOTS porte la saisie : son corps reste, seul son pied - qui
-  // est un total calcule - se vide. Elle ne peut donc pas etre marquee.
-  const piedLots = document.querySelector('#table-lots tfoot');
-  if (piedLots) piedLots.innerHTML = '';
+  // Les tables de SAISIE ne peuvent pas etre marquees en bloc : leur corps est
+  // de la saisie, qui reste, alors que leur pied est un total, qui doit partir.
+  // Sans cela le prix de revient gardait le total de l operation precedente
+  // sous une grille vide - un chiffre juste pour un dossier qui n existe plus.
+  for (const sel of ['#table-lots tfoot', '#table-postes tfoot']) {
+    const pied = document.querySelector(sel);
+    if (pied) pied.innerHTML = '';
+  }
 
   // Cellules posees une a une dans les tables de saisie : apercus de
   // ventilation, montants calcules, parts de subvention et de fonds propres.
-  for (const el of document.querySelectorAll('[data-apercu], [data-calc], [data-part-sub], [data-part-fp], [data-taux-marge]')) {
+  // `data-total` et `data-sous-total` sont les sous-totaux de chapitre du prix
+  // de revient : poses cellule par cellule dans une table de saisie, ils ne
+  // partent pas avec un conteneur.
+  for (const el of document.querySelectorAll(
+    '[data-apercu], [data-calc], [data-part-sub], [data-part-fp], [data-taux-marge], [data-total], [data-sous-total]',
+  )) {
     el.textContent = '';
   }
 
@@ -7121,6 +7130,25 @@ function adapterPrixRevientAuDocument(copie) {
   // disparu du document, et une ligne chiffree affichee en gris se lirait
   // comme une valeur douteuse.
   for (const tr of table.querySelectorAll('tr.poste--vide')) tr.classList.remove('poste--vide');
+
+  // Le document ne compte pas les cases qui restent a remplir. « 14 postes
+  // renseignes sur 46 de la nomenclature » parle de la SAISIE et non de
+  // l'operation : c'est un reperage utile a l'ecran, une confidence de
+  // chantier dans une piece qu on joint a un dossier.
+  table.querySelector('tr.resume-saisie')?.remove();
+
+  // Les montants saisis prennent le FORMAT DU DOCUMENT. Une case de saisie
+  // n affiche pas l euro - il se repeterait sur quarante-six lignes et gene
+  // la frappe - et son texte est cale a gauche, comme dans tout champ. Ici ce
+  // sont des montants au meme titre que les sous-totaux : ce qui se lit est
+  // une colonne de chiffres, qui se compare a l oeil, pas une colonne de
+  // champs. Ils prennent donc la meme ecriture et le meme bord.
+  for (const champ of table.querySelectorAll('input[data-type="montant"]')) {
+    const saisi = /** @type {HTMLInputElement} */ (champ);
+    const v = lireMontant(saisi.value);
+    saisi.value = nul(v) ? '' : eur(v);
+    saisi.closest('td')?.classList.add('num');
+  }
 }
 
 function rendreApercuExport() {

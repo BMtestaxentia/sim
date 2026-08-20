@@ -42,6 +42,7 @@ const MODULES = [
   'fiscalite.js',
   'exploitation.js',
   'moteur.js',
+  'sensibilite.js', // depend de moteur.js (calculer)
 ];
 
 /** Retire les `import` et les mots-cles `export` pour permettre la concatenation. */

@@ -75,6 +75,9 @@
         <button type="button" class="onglet" role="tab" data-ecran="exploitation" aria-selected="false">
           Exploitation
         </button>
+        <button type="button" class="onglet" role="tab" data-ecran="sensibilite" aria-selected="false">
+          Sensibilité
+        </button>
         <button type="button" class="onglet" role="tab" data-ecran="exports" aria-selected="false">
           Exports
         </button>
@@ -652,16 +655,6 @@
         <p class="aide" id="aide-exploitation" data-restitution></p>
       </section>
 
-      <section class="bloc" data-ecran-seul>
-        <h2 class="bloc__titre">Postes non encore modélisés</h2>
-        <ul class="alertes" id="postes-absents" data-restitution></ul>
-        <p class="aide">
-          ⚙ Ces postes existent dans la matrice LEON et dans la maquette, mais le moteur ne les
-          produit pas encore. Le résultat affiché est donc un compte partiel : il surestime
-          l'autofinancement. Les arbitrages correspondants sont consignés dans
-          <code>docs/QUESTIONS_SPEC.md</code>.
-        </p>
-      </section>
     </main>
 
     <!-- ================= ÉCRAN 4 - PARAMÈTRES ================= -->
@@ -669,6 +662,39 @@
          Chaque bouton édite une VUE du dossier en PDF. Le PDF passe par
          l'impression du navigateur : rien à installer, et le texte du document
          reste sélectionnable. L'écran lui-même ne s'imprime jamais. -->
+    <main class="ecran" id="ecran-sensibilite" role="tabpanel" hidden>
+      <!-- L analyse ne se lance QU EN ARRIVANT sur cet ecran : une tornade
+           coute dix-sept passages du moteur, et la relancer a chaque frappe
+           rendrait la saisie poussive pour un chiffre que personne ne regarde
+           a cet instant. -->
+      <div class="barre-perimetre">
+        <label class="champ champ--enligne">
+          <span>Indicateur observé</span>
+          <select id="sens-indicateur"></select>
+        </label>
+        <p class="aide aide--enligne" id="sens-reference"></p>
+      </div>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">Ce qui pèse sur le résultat</h2>
+        <div id="tornade" data-restitution></div>
+        <p class="aide">
+          ⚙ Chaque barre montre l’écart de l’indicateur entre les deux bornes du levier.
+          Le trait vertical marque la valeur de référence. Cliquer une barre en déplie le détail.
+        </p>
+      </section>
+
+      <section class="bloc" id="bloc-balayage" hidden>
+        <h2 class="bloc__titre" id="titre-balayage">Balayage</h2>
+        <div class="table-defilante">
+          <table class="tableau" id="table-balayage">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
     <main class="ecran" id="ecran-exports" role="tabpanel" hidden>
       <!-- Barre de choix : le type d'export, puis le téléchargement. Ce qui
            s'affiche en dessous EST le document, aux marges de page près. -->

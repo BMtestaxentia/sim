@@ -24,6 +24,7 @@ import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
 import { ecartsParametrage } from '../src/parametrage.js';
 import { tauxLASM } from '../src/bilan.js';
 import { sommerComptes, indicateursExploitation } from '../src/exploitation.js';
+import { LEVIERS, INDICATEURS, balayerLevier, plage, tornade } from '../src/sensibilite.js';
 // Le depot est importe par NOMS et non en bloc : le generateur de la version
 // autonome concatene les modules dans une portee unique, ou un espace de noms
 // (`depot.lister`) n'existerait plus. Les noms y sont donc prefixes.
@@ -3722,7 +3723,6 @@ function rendreExploitation(r) {
     `⚙ ${e.lignes.length} exercices, de ${e.lignes[0]?.annee} à ${e.lignes.at(-1)?.annee}. ` +
     `La dernière année porte une marge exceptionnelle : les prêts y sont soldés.`;
 
-  $('#postes-absents').innerHTML = e.postes_absents.map((p) => `<li>${att(p)}</li>`).join('');
 }
 
 // ---------------------------------------------------------------- ecran parametres
@@ -6531,6 +6531,8 @@ function afficherEcran(cible) {
   for (const e of document.querySelectorAll('.ecran')) {
     /** @type {HTMLElement} */ (e).hidden = e.id !== `ecran-${vise}`;
   }
+  if (vise === 'sensibilite') rendreSensibilite();
+
   // L'ecran affiche se retient : recharger la page pour reprendre au programme
   // alors qu'on travaillait sur l'exploitation coute une navigation a chaque
   // fois. Il est memorise a part de la saisie - c'est une position de lecture,
@@ -7519,6 +7521,167 @@ function dateDuJour() {
   return `${jj}/${mm}/${d.getFullYear()}`;
 }
 
+// ------------------------------------------------------- sensibilite
+
+/** Indicateur observe par la tornade, et levier deplie sous elle. */
+let indicateurSensibilite = INDICATEURS[0].code;
+let levierDeplie = null;
+/** Derniere tornade calculee, pour ne pas la refaire au moindre clic. */
+let derniereTornade = null;
+
+/** Mise en forme d une valeur selon l unite de son indicateur. */
+function valeurIndicateur(v, unite) {
+  if (nul(v)) return '-';
+  if (unite === 'eur') return eur(v);
+  if (unite === 'taux') return pct(v, 2);
+  if (unite === 'annee') return String(v);
+  return nb(v);
+}
+
+/** Amplitude d un levier, ecrite dans son unite. */
+function amplitudeLisible(levier, amplitude) {
+  if (levier.unite === 'annees') return `± ${amplitude} ans`;
+  // Un decalage de taux se dit en POINTS, pas en pourcent : « ± 0,5 % » sur un
+  // taux se lirait comme un demi-pourcent de sa valeur, soit deux cents fois
+  // moins que ce que le levier fait vraiment.
+  if (levier.unite === 'points') return `± ${pct(amplitude, 1).replace(' %', ' pt')}`;
+  return `± ${pct(amplitude, 0)}`;
+}
+
+/**
+ * Analyse de sensibilite de l'operation ouverte.
+ *
+ * Appelee a l'arrivee sur l'ecran et non a chaque frappe : une tornade coute
+ * dix-sept passages du moteur. Le resultat est garde tant que le calcul ne
+ * change pas.
+ */
+function rendreSensibilite() {
+  const zone = document.getElementById('tornade');
+  if (!zone) return;
+  if (!dernierResultat) {
+    zone.innerHTML = '<p class="vide">Aucun résultat : la saisie est incomplète.</p>';
+    document.getElementById('bloc-balayage').hidden = true;
+    return;
+  }
+
+  const choix = document.getElementById('sens-indicateur');
+  if (choix && !choix.options.length) {
+    choix.innerHTML = INDICATEURS.map(
+      (i) => `<option value="${att(i.code)}">${att(i.libelle)}</option>`,
+    ).join('');
+  }
+  if (choix) choix.value = indicateurSensibilite;
+
+  const t = tornade(etatPourAnalyse(), referentielsPourAnalyse(), {
+    indicateur: indicateurSensibilite,
+  });
+  derniereTornade = t;
+
+  const ref = document.getElementById('sens-reference');
+  if (ref) {
+    ref.textContent = `⚙ Référence : ${valeurIndicateur(t.reference, t.indicateur.unite)}. ` +
+      `${t.barres.filter((b) => b.applique).length} leviers essayés sur ${t.barres.length}.`;
+  }
+
+  // L echelle est commune a toutes les barres : c est ce qui permet de les
+  // comparer d un coup d oeil, et c est tout l interet de la figure.
+  const maxi = Math.max(...t.barres.map((b) => b.ecart ?? 0), 1);
+  const bornes = t.barres.flatMap((b) => [b.bas, b.haut, t.reference]).filter((x) => !nul(x));
+  const min = Math.min(...bornes);
+  const etendue = Math.max(...bornes) - min || 1;
+  const part = (v) => ((v - min) / etendue) * 100;
+
+  zone.innerHTML = t.barres
+    .map((b) => {
+      if (!b.applique) {
+        return `<div class="tornade__ligne tornade__ligne--muette">
+          <span class="tornade__nom">${att(b.libelle)}</span>
+          <span class="tornade__piste"><span class="tornade__absent">levier sans prise sur cette opération</span></span>
+          <span class="tornade__poids">-</span></div>`;
+      }
+      const g = Math.min(part(b.bas), part(b.haut));
+      const d = Math.max(part(b.bas), part(b.haut));
+      const levier = LEVIERS.find((l) => l.code === b.code);
+      return `<button type="button" class="tornade__ligne${
+        levierDeplie === b.code ? ' tornade__ligne--ouverte' : ''
+      }" data-levier="${att(b.code)}">
+        <span class="tornade__nom">${att(b.libelle)}
+          <small>${att(amplitudeLisible(levier, b.amplitude))}</small></span>
+        <span class="tornade__piste">
+          <span class="tornade__barre" style="left:${g.toFixed(2)}%;width:${(d - g).toFixed(2)}%"></span>
+          <span class="tornade__reference" style="left:${part(t.reference).toFixed(2)}%"></span>
+        </span>
+        <span class="tornade__poids">${valeurIndicateur(b.ecart, t.indicateur.unite)}</span>
+      </button>`;
+    })
+    .join('');
+
+  rendreBalayage();
+}
+
+/** Detail d un levier : une ligne par point de mesure. */
+function rendreBalayage() {
+  const bloc = document.getElementById('bloc-balayage');
+  if (!bloc) return;
+  const levier = LEVIERS.find((l) => l.code === levierDeplie);
+  bloc.hidden = !levier || !dernierResultat;
+  if (bloc.hidden) return;
+
+  const barre = derniereTornade?.barres.find((b) => b.code === levier.code);
+  const amplitude = barre?.amplitude ?? levier.amplitude;
+  const { points } = balayerLevier(
+    etatPourAnalyse(),
+    referentielsPourAnalyse(),
+    levier.code,
+    plage(amplitude, 7),
+  );
+  const indicateur = INDICATEURS.find((i) => i.code === indicateurSensibilite);
+
+  document.getElementById('titre-balayage').textContent =
+    `${levier.libelle} · ${indicateur.libelle}`;
+  const tab = document.getElementById('table-balayage');
+  tab.querySelector('thead').innerHTML =
+    `<tr><th>Variation</th><th class="num">${att(indicateur.libelle)}</th>` +
+    '<th class="num">Écart à la référence</th></tr>';
+  tab.querySelector('tbody').innerHTML = points
+    .map((p) => {
+      const v = indicateur.lire(p.resultat);
+      const ecart = nul(v) || nul(derniereTornade?.reference) ? null : v - derniereTornade.reference;
+      const variation =
+        levier.unite === 'annees'
+          ? `${p.variation > 0 ? '+' : ''}${p.variation} ans`
+          : `${p.variation > 0 ? '+' : ''}${
+              levier.unite === 'points'
+                ? pct(p.variation, 2).replace(' %', ' pt')
+                : pct(p.variation, 1)
+            }`;
+      return `<tr class="${p.variation === 0 ? 'poste--reference' : ''}">
+        <td>${att(variation)}</td>
+        <td class="num">${p.erreur ? att(p.erreur) : valeurIndicateur(v, indicateur.unite)}</td>
+        <td class="num ${ecart < 0 ? 'montant--negatif' : ''}">${
+          nul(ecart) ? '-' : (ecart > 0 ? '+' : '') + valeurIndicateur(ecart, indicateur.unite)
+        }</td></tr>`;
+    })
+    .join('');
+}
+
+/**
+ * Entrees et referentiels tels que le moteur les recoit.
+ *
+ * L'analyse doit partir de CE QUI EST CALCULE et non de l'etat brut : le
+ * parametrage actif, les postes vides ecartes, les prets theoriques. Sans
+ * cela sa reference ne serait pas celle affichee a l'ecran, et tout l'exercice
+ * porterait a faux.
+ */
+function etatPourAnalyse() {
+  const entrees = structuredClone(etat);
+  entrees.parametrage = structuredClone(parametrageActif());
+  if (etat.mode_prets === 'theoriques') entrees.prets = [];
+  entrees.postes_bilan = entrees.postes_bilan.filter((p) => !nul(p.montant_ht_eur));
+  return entrees;
+}
+const referentielsPourAnalyse = () => referentiels;
+
 function rendreApercuExport() {
   const cible = document.getElementById('apercu-export');
   if (!cible) return;
@@ -7904,6 +8067,12 @@ document.addEventListener('input', (ev) => {
     // d'une liste qui n'en compte plus que deux afficherait un vide.
     pageBiblio = 0;
     rendreBibliotheque();
+    return;
+  }
+
+  if (el.id === 'sens-indicateur') {
+    indicateurSensibilite = el.value;
+    rendreSensibilite();
     return;
   }
 
@@ -8599,6 +8768,13 @@ document.addEventListener('click', async (ev) => {
     return;
   }
 
+  const barreTornade = el.closest('[data-levier]');
+  if (barreTornade) {
+    const code = /** @type {HTMLElement} */ (barreTornade).dataset.levier;
+    levierDeplie = levierDeplie === code ? null : code;
+    rendreSensibilite();
+    return;
+  }
   const perimExp = el.closest('[data-perimetre-compte]');
   if (perimExp) {
     const c = /** @type {HTMLElement} */ (perimExp).dataset.perimetreCompte;

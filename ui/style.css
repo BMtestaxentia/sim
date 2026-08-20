@@ -1329,6 +1329,42 @@ body.sans-simulation .entete__dossier { display: none; }
 .barre-perimetre .bandeau { flex: 1; margin-bottom: 0; justify-content: center; }
 .barre-perimetre .bascule[hidden] { display: none; }
 
+/* --- TORNADE ---------------------------------------------------------
+   Une barre par levier, toutes a la MEME echelle : c est ce qui permet de les
+   comparer d un coup d oeil, et c est tout l interet de la figure. Le trait
+   vertical marque la reference ; une barre qui la chevauche dit que le levier
+   fait basculer le resultat de part et d autre. */
+.tornade__ligne {
+  display: grid; grid-template-columns: 190px 1fr 120px; align-items: center;
+  gap: 12px; width: 100%; padding: 6px 8px; border: none; border-radius: var(--radius-sm);
+  background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.tornade__ligne:hover { background: var(--bg-tertiary); }
+.tornade__ligne--ouverte { background: var(--bg-tertiary); box-shadow: inset 2px 0 0 var(--cat-1); }
+.tornade__ligne--muette { cursor: default; opacity: 0.55; }
+.tornade__nom { font-size: 12px; font-weight: 600; }
+.tornade__nom small { display: block; font-weight: 500; color: var(--text-tertiary); font-size: 10.5px; }
+.tornade__piste { position: relative; height: 18px; border-radius: 3px; background: var(--bg-tertiary); }
+.tornade__ligne:hover .tornade__piste { background: var(--bg-secondary); }
+.tornade__barre {
+  position: absolute; top: 3px; bottom: 3px; min-width: 2px;
+  border-radius: 2px; background: var(--cat-1);
+}
+/* Le trait de reference passe PAR-DESSUS la barre : c est un repere de lecture,
+   pas une donnee, et il doit rester visible meme au milieu d un aplat. */
+.tornade__reference {
+  position: absolute; top: -2px; bottom: -2px; width: 2px;
+  background: var(--text-primary); transform: translateX(-1px);
+}
+.tornade__poids { text-align: right; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tornade__absent { font-size: 11px; color: var(--text-tertiary); padding-left: 4px; }
+/* La ligne de reference du balayage : celle dont la variation est nulle. */
+.poste--reference td { background: var(--bg-tertiary); font-weight: 700; }
+/* Un champ dans une barre : le libelle a gauche, le champ a sa suite. */
+.champ--enligne { flex-direction: row; align-items: center; gap: 8px; margin: 0; }
+.champ--enligne > span { white-space: nowrap; }
+.aide--enligne { margin: 0; }
+
 .bandeau__principal { font-size: 13px; font-weight: 700; }
 .bandeau__detail { font-size: 11.5px; color: var(--text-secondary); }
 .bandeau--ok { background: var(--success-bg); border-left-color: var(--success-accent); }

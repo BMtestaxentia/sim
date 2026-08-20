@@ -1343,6 +1343,42 @@ body.sans-simulation .entete__dossier { display: none; }
 .barre-perimetre .bandeau { flex: 1; margin-bottom: 0; justify-content: center; }
 .barre-perimetre .bascule[hidden] { display: none; }
 
+/* --- TORNADE ---------------------------------------------------------
+   Une barre par levier, toutes a la MEME echelle : c est ce qui permet de les
+   comparer d un coup d oeil, et c est tout l interet de la figure. Le trait
+   vertical marque la reference ; une barre qui la chevauche dit que le levier
+   fait basculer le resultat de part et d autre. */
+.tornade__ligne {
+  display: grid; grid-template-columns: 190px 1fr 120px; align-items: center;
+  gap: 12px; width: 100%; padding: 6px 8px; border: none; border-radius: var(--radius-sm);
+  background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.tornade__ligne:hover { background: var(--bg-tertiary); }
+.tornade__ligne--ouverte { background: var(--bg-tertiary); box-shadow: inset 2px 0 0 var(--cat-1); }
+.tornade__ligne--muette { cursor: default; opacity: 0.55; }
+.tornade__nom { font-size: 12px; font-weight: 600; }
+.tornade__nom small { display: block; font-weight: 500; color: var(--text-tertiary); font-size: 10.5px; }
+.tornade__piste { position: relative; height: 18px; border-radius: 3px; background: var(--bg-tertiary); }
+.tornade__ligne:hover .tornade__piste { background: var(--bg-secondary); }
+.tornade__barre {
+  position: absolute; top: 3px; bottom: 3px; min-width: 2px;
+  border-radius: 2px; background: var(--cat-1);
+}
+/* Le trait de reference passe PAR-DESSUS la barre : c est un repere de lecture,
+   pas une donnee, et il doit rester visible meme au milieu d un aplat. */
+.tornade__reference {
+  position: absolute; top: -2px; bottom: -2px; width: 2px;
+  background: var(--text-primary); transform: translateX(-1px);
+}
+.tornade__poids { text-align: right; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tornade__absent { font-size: 11px; color: var(--text-tertiary); padding-left: 4px; }
+/* La ligne de reference du balayage : celle dont la variation est nulle. */
+.poste--reference td { background: var(--bg-tertiary); font-weight: 700; }
+/* Un champ dans une barre : le libelle a gauche, le champ a sa suite. */
+.champ--enligne { flex-direction: row; align-items: center; gap: 8px; margin: 0; }
+.champ--enligne > span { white-space: nowrap; }
+.aide--enligne { margin: 0; }
+
 .bandeau__principal { font-size: 13px; font-weight: 700; }
 .bandeau__detail { font-size: 11.5px; color: var(--text-secondary); }
 .bandeau--ok { background: var(--success-bg); border-left-color: var(--success-accent); }
@@ -2586,6 +2622,9 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
         <button type="button" class="onglet" role="tab" data-ecran="exploitation" aria-selected="false">
           Exploitation
         </button>
+        <button type="button" class="onglet" role="tab" data-ecran="sensibilite" aria-selected="false">
+          Sensibilité
+        </button>
         <button type="button" class="onglet" role="tab" data-ecran="exports" aria-selected="false">
           Exports
         </button>
@@ -3163,16 +3202,6 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
         <p class="aide" id="aide-exploitation" data-restitution></p>
       </section>
 
-      <section class="bloc" data-ecran-seul>
-        <h2 class="bloc__titre">Postes non encore modélisés</h2>
-        <ul class="alertes" id="postes-absents" data-restitution></ul>
-        <p class="aide">
-          ⚙ Ces postes existent dans la matrice LEON et dans la maquette, mais le moteur ne les
-          produit pas encore. Le résultat affiché est donc un compte partiel : il surestime
-          l'autofinancement. Les arbitrages correspondants sont consignés dans
-          <code>docs/QUESTIONS_SPEC.md</code>.
-        </p>
-      </section>
     </main>
 
     <!-- ================= ÉCRAN 4 - PARAMÈTRES ================= -->
@@ -3180,6 +3209,39 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
          Chaque bouton édite une VUE du dossier en PDF. Le PDF passe par
          l'impression du navigateur : rien à installer, et le texte du document
          reste sélectionnable. L'écran lui-même ne s'imprime jamais. -->
+    <main class="ecran" id="ecran-sensibilite" role="tabpanel" hidden>
+      <!-- L analyse ne se lance QU EN ARRIVANT sur cet ecran : une tornade
+           coute dix-sept passages du moteur, et la relancer a chaque frappe
+           rendrait la saisie poussive pour un chiffre que personne ne regarde
+           a cet instant. -->
+      <div class="barre-perimetre">
+        <label class="champ champ--enligne">
+          <span>Indicateur observé</span>
+          <select id="sens-indicateur"></select>
+        </label>
+        <p class="aide aide--enligne" id="sens-reference"></p>
+      </div>
+
+      <section class="bloc">
+        <h2 class="bloc__titre">Ce qui pèse sur le résultat</h2>
+        <div id="tornade" data-restitution></div>
+        <p class="aide">
+          ⚙ Chaque barre montre l’écart de l’indicateur entre les deux bornes du levier.
+          Le trait vertical marque la valeur de référence. Cliquer une barre en déplie le détail.
+        </p>
+      </section>
+
+      <section class="bloc" id="bloc-balayage" hidden>
+        <h2 class="bloc__titre" id="titre-balayage">Balayage</h2>
+        <div class="table-defilante">
+          <table class="tableau" id="table-balayage">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
     <main class="ecran" id="ecran-exports" role="tabpanel" hidden>
       <!-- Barre de choix : le type d'export, puis le téléchargement. Ce qui
            s'affiche en dessous EST le document, aux marges de page près. -->
@@ -8811,6 +8873,385 @@ function calculer(entrees, referentiels) {
   };
 }
 
+/* ===== src/sensibilite.js ===== */
+// @ts-check
+/**
+ * R-SENS - Analyse de sensibilite.
+ *
+ * Le moteur est PUR : memes entrees, memes sorties, aucune date systeme, aucun
+ * etat global (CLAUDE.md §4). Une analyse de sensibilite n'est donc pas un
+ * calcul de plus, c'est le meme calcul relance sur des entrees decalees. Ce
+ * module ne modelise rien : il decrit QUOI faire varier, QUOI lire en retour,
+ * et rejoue `calculer`.
+ *
+ * Deux lectures se completent :
+ *
+ *   - le BALAYAGE d'un levier, qui donne la courbe d'un indicateur sur une
+ *     plage de variations. C'est la reponse a « et si les travaux derapent de
+ *     5 % ? » ;
+ *   - la TORNADE, qui compare les leviers entre eux : pour chacun, l'ecart de
+ *     l'indicateur entre sa borne basse et sa borne haute. C'est la reponse a
+ *     « qu'est-ce qui compte vraiment dans cette operation ? », et c'est
+ *     souvent la plus utile, parce qu'elle contredit les intuitions.
+ *
+ * Aucun litteral metier ici : les amplitudes par defaut sont des hypotheses de
+ * lecture, pas des regles, et chaque appel peut les remplacer.
+ */
+
+
+/**
+ * Copie profonde, sans passer par `structuredClone` : les referentiels et les
+ * entrees sont du JSON pur, et le moteur doit rester importable dans un
+ * navigateur ancien comme dans Node.
+ * @template T
+ * @param {T} v
+ * @returns {T}
+ */
+const copier = (v) => JSON.parse(JSON.stringify(v));
+
+/**
+ * LEVIERS - ce qu'on fait varier.
+ *
+ * Chaque levier porte son UNITE, qui dit comment lire sa variation :
+ *
+ *   - `relatif` : une part, appliquee en multiplication. +0,05 = +5 % ;
+ *   - `points`  : un decalage additif, en points de pourcentage. +0,005 = +0,5
+ *     point. C'est l'unite des taux, ou un « +5 % » serait ambigu ;
+ *   - `annees`  : un decalage additif, en annees.
+ *
+ * `appliquer` recoit un contexte DEJA copie et le modifie sur place : le
+ * balayage en cree un par point de mesure, il n'y a rien a preserver. Il rend
+ * VRAI s'il a trouve quelque chose a decaler, FAUX sinon - une operation sans
+ * subvention ne se teste pas sur ses subventions, et une barre nulle dirait
+ * alors « ce levier ne pese rien » la ou il faut lire « ce levier n'a pas ete
+ * essaye ». La difference est tout sauf cosmetique : elle separe un resultat
+ * d'une absence de resultat.
+ *
+ * @type {Array<{code: string, libelle: string, unite: 'relatif'|'points'|'annees',
+ *   amplitude: number, appliquer: (c: {entrees: any, referentiels: any}, v: number) => void}>}
+ */
+const LEVIERS = [
+  {
+    code: 'cout_batiment',
+    libelle: 'Coût des travaux',
+    unite: 'relatif',
+    amplitude: 0.05,
+    appliquer: (c, v) => {
+      let mordu = false;
+      for (const p of c.entrees.postes_bilan ?? []) {
+        if (p.chapitre === 'batiment' && p.montant_ht_eur) {
+          p.montant_ht_eur *= 1 + v;
+          mordu = true;
+        }
+      }
+      return mordu;
+    },
+  },
+  {
+    code: 'prix_revient',
+    libelle: 'Prix de revient',
+    unite: 'relatif',
+    amplitude: 0.05,
+    appliquer: (c, v) => {
+      let mordu = false;
+      for (const p of c.entrees.postes_bilan ?? []) {
+        if (p.montant_ht_eur) {
+          p.montant_ht_eur *= 1 + v;
+          mordu = true;
+        }
+      }
+      return mordu;
+    },
+  },
+  {
+    code: 'subventions',
+    libelle: 'Subventions',
+    unite: 'relatif',
+    amplitude: 0.2,
+    appliquer: (c, v) => {
+      let mordu = false;
+      for (const s of c.entrees.subventions ?? []) {
+        if (s.montant_eur) {
+          s.montant_eur *= 1 + v;
+          mordu = true;
+        }
+      }
+      return mordu;
+    },
+  },
+  {
+    code: 'livret_a',
+    libelle: 'Livret A',
+    unite: 'points',
+    amplitude: 0.005,
+    appliquer: (c, v) => {
+      // Le TAUX DE REFERENCE ne bouge pas : la revision d'un pret CDC vaut
+      // `LA_N - LA_0` (R-AMT-4), et c'est bien l'ecart a l'origine du contrat
+      // qui fait l'annuite. Decaler les deux ne changerait rien.
+      const tr = c.referentiels?.trajectoires?.trajectoires;
+      if (!tr) return false;
+      let mordu = false;
+      for (const cle of Object.keys(tr)) {
+        const a = tr[cle];
+        if (a && typeof a.livret_a === 'number') {
+          a.livret_a += v;
+          mordu = true;
+        }
+      }
+      return mordu;
+    },
+  },
+  {
+    code: 'vacance_impayes',
+    libelle: 'Vacance et impayés',
+    unite: 'points',
+    amplitude: 0.01,
+    appliquer: (c, v) => {
+      const e = (c.entrees.exploitation ??= {});
+      e.taux_vacance_impayes = Math.max(0, (e.taux_vacance_impayes ?? 0) + v);
+      return true;
+    },
+  },
+  {
+    code: 'frais_gestion',
+    libelle: 'Frais de gestion',
+    unite: 'points',
+    amplitude: 0.01,
+    appliquer: (c, v) => {
+      const e = (c.entrees.exploitation ??= {});
+      e.frais_gestion_pct_loyers = Math.max(0, (e.frais_gestion_pct_loyers ?? 0) + v);
+      return true;
+    },
+  },
+  {
+    code: 'gros_entretien',
+    libelle: 'Gros entretien',
+    unite: 'relatif',
+    amplitude: 0.2,
+    appliquer: (c, v) => {
+      // Le gros entretien se dit de DEUX facons - un montant au metre carre,
+      // ou une provision en part du prix de revient - et une seule gouverne a
+      // la fois. Le levier decale celle qui est en place, sans avoir a savoir
+      // laquelle : ne toucher que la premiere le rendait muet sur toute
+      // operation reglee en provision, ce qui est le cas courant.
+      const e = (c.entrees.exploitation ??= {});
+      let mordu = false;
+      if (e.gros_entretien_eur_m2) {
+        e.gros_entretien_eur_m2 *= 1 + v;
+        mordu = true;
+      }
+      const pge =
+        e.pge_taux ?? c.referentiels?.baremes?.provision_gros_entretien?.taux_defaut ?? 0;
+      if (pge) {
+        e.pge_taux = Math.max(0, pge * (1 + v));
+        mordu = true;
+      }
+      return mordu;
+    },
+  },
+  {
+    code: 'duree_prets',
+    libelle: 'Durée des prêts',
+    unite: 'annees',
+    amplitude: 5,
+    appliquer: (c, v) => {
+      let mordu = false;
+      for (const p of c.entrees.prets ?? []) {
+        if (p.duree_ans) {
+          p.duree_ans = Math.max(1, Math.round(p.duree_ans + v));
+          mordu = true;
+        }
+      }
+      // Seuls les prets SAISIS sont touches. Sans pret saisi, le moteur en
+      // calcule de theoriques dont la duree ne se lit pas dans les entrees :
+      // le levier rend alors faux, et la tornade le range parmi les
+      // non-applicables plutot que de lui donner une barre nulle. Une barre
+      // nulle dirait « la duree ne compte pas », ce qui serait faux.
+      return mordu;
+    },
+  },
+];
+
+/**
+ * INDICATEURS - ce qu'on lit en retour.
+ *
+ * `lire` rend `null` quand la grandeur n'a pas de sens sur ce resultat - un TRI
+ * dont les flux ne changent jamais de signe, par exemple. Zero dirait autre
+ * chose.
+ *
+ * @type {Array<{code: string, libelle: string, unite: 'eur'|'taux'|'annee'|'nombre',
+ *   sens: 1|-1, lire: (r: any) => number|null}>}
+ */
+const INDICATEURS = [
+  {
+    code: 'autofinancement_cumule',
+    libelle: 'Autofinancement cumulé',
+    unite: 'eur',
+    // `sens` dit ce qu'une HAUSSE de l'indicateur signifie pour l'operation :
+    // +1 elle va mieux, -1 elle va moins bien. L'affichage s'en sert pour
+    // colorer, et rien d'autre - le calcul ne le lit jamais.
+    sens: 1,
+    lire: (r) => r?.exploitation?.indicateurs?.resultat_cumule_final_eur ?? null,
+  },
+  {
+    code: 'tri',
+    libelle: 'TRI de l’opération',
+    unite: 'taux',
+    sens: 1,
+    lire: (r) => r?.exploitation?.indicateurs?.tri ?? null,
+  },
+  {
+    code: 'creux_cumul',
+    libelle: 'Creux du cumul',
+    unite: 'eur',
+    sens: 1,
+    lire: (r) => r?.exploitation?.indicateurs?.creux_cumul_eur ?? null,
+  },
+  {
+    code: 'exercices_deficitaires',
+    libelle: 'Exercices déficitaires',
+    unite: 'nombre',
+    sens: -1,
+    lire: (r) => r?.exploitation?.indicateurs?.exercices_deficitaires ?? null,
+  },
+  {
+    code: 'prix_revient_ttc',
+    libelle: 'Prix de revient TTC',
+    unite: 'eur',
+    sens: -1,
+    lire: (r) => r?.indicateurs?.prix_revient_ttc_eur ?? null,
+  },
+  {
+    code: 'fonds_propres',
+    libelle: 'Fonds propres',
+    unite: 'eur',
+    sens: -1,
+    lire: (r) => r?.indicateurs?.fonds_propres_eur ?? null,
+  },
+  {
+    code: 'reconstitution',
+    libelle: 'Reconstitution des fonds propres',
+    unite: 'annee',
+    sens: -1,
+    lire: (r) => r?.exploitation?.indicateurs?.annee_reconstitution_fonds_propres ?? null,
+  },
+];
+
+/** Levier connu, par son code. */
+const levierDe = (code) => LEVIERS.find((l) => l.code === code) ?? null;
+/** Indicateur connu, par son code. */
+const indicateurDe = (code) => INDICATEURS.find((i) => i.code === code) ?? null;
+
+/**
+ * Relance le moteur sur des entrees decalees d'UN levier.
+ *
+ * Le contexte est copie avant chaque variation : un levier qui multiplie des
+ * montants les multiplierait sinon en cascade d'un point de mesure au suivant,
+ * et la courbe serait exponentielle sans que rien ne le dise.
+ *
+ * Une variation qui fait echouer le moteur - un programme devenu incalculable -
+ * rend un point sans valeur plutot que d'interrompre le balayage : c'est une
+ * information, pas une panne.
+ *
+ * @param {any} entrees
+ * @param {any} referentiels
+ * @param {string} codeLevier
+ * @param {number[]} variations
+ * @returns {{levier: any, points: Array<{variation: number, resultat: any|null, erreur: string|null}>}}
+ */
+function balayerLevier(entrees, referentiels, codeLevier, variations) {
+  const levier = levierDe(codeLevier);
+  if (!levier) throw new Error(`Levier inconnu : ${codeLevier}`);
+  const points = variations.map((variation) => {
+    const contexte = { entrees: copier(entrees), referentiels: copier(referentiels) };
+    const applique = variation === 0 ? true : levier.appliquer(contexte, variation) !== false;
+    try {
+      return {
+        variation,
+        applique,
+        resultat: calculer(contexte.entrees, contexte.referentiels),
+        erreur: null,
+      };
+    } catch (e) {
+      return { variation, applique, resultat: null, erreur: /** @type {Error} */ (e).message };
+    }
+  });
+  return { levier, points };
+}
+
+/**
+ * Plage de variations centree sur zero.
+ *
+ * Le point CENTRAL est toujours present, et vaut exactement zero : c'est le cas
+ * de reference, celui auquel tout le reste se compare. Un nombre pair de pas le
+ * ferait manquer, on impose donc un nombre impair de points.
+ *
+ * @param {number} amplitude
+ * @param {number} points nombre de points, ramene au premier impair superieur
+ * @returns {number[]}
+ */
+function plage(amplitude, points = 5) {
+  const n = points % 2 === 0 ? points + 1 : points;
+  const moitie = (n - 1) / 2;
+  return Array.from({ length: n }, (_, k) => ((k - moitie) / moitie) * amplitude);
+}
+
+/**
+ * TORNADE - l'effet de chaque levier sur un indicateur, tous compares.
+ *
+ * Pour chaque levier, deux relances : borne basse et borne haute. L'ecart entre
+ * les deux mesure ce que le levier PESE, et le classement par amplitude
+ * decroissante donne la figure qui a donne son nom a l'exercice.
+ *
+ * La reference est calculee UNE fois, pas une par levier : c'est le meme
+ * resultat, et le moteur etant pur, le recalculer n'apprendrait rien.
+ *
+ * @param {any} entrees
+ * @param {any} referentiels
+ * @param {{indicateur?: string, leviers?: string[], amplitudes?: Record<string, number>}} [options]
+ */
+function tornade(entrees, referentiels, options = {}) {
+  const indicateur = indicateurDe(options.indicateur ?? INDICATEURS[0].code);
+  if (!indicateur) throw new Error(`Indicateur inconnu : ${options.indicateur}`);
+  const codes = options.leviers ?? LEVIERS.map((l) => l.code);
+
+  const reference = calculer(copier(entrees), copier(referentiels));
+  const valeurReference = indicateur.lire(reference);
+
+  const barres = codes.map((code) => {
+    const levier = levierDe(code);
+    if (!levier) throw new Error(`Levier inconnu : ${code}`);
+    const amplitude = options.amplitudes?.[code] ?? levier.amplitude;
+    const { points } = balayerLevier(entrees, referentiels, code, [-amplitude, amplitude]);
+    const bas = indicateur.lire(points[0].resultat);
+    const haut = indicateur.lire(points[1].resultat);
+    return {
+      code,
+      libelle: levier.libelle,
+      unite: levier.unite,
+      amplitude,
+      bas,
+      haut,
+      reference: valeurReference,
+      // L'ecart est pris en VALEUR ABSOLUE : un levier qui fait perdre autant
+      // qu'un autre fait gagner pese autant, et c'est le poids qui classe.
+      ecart: bas === null || haut === null ? null : Math.abs(haut - bas),
+      // Un levier qui n'a rien trouve a decaler n'a pas ete essaye. Sa barre
+      // nulle ne dit pas « sans effet », elle ne dit rien du tout.
+      applique: points.every((p) => p.applique),
+      erreurs: points.filter((p) => p.erreur).map((p) => p.erreur),
+    };
+  });
+
+  // Les leviers non applicables ferment la marche : ils ne se comparent pas
+  // aux autres, ils attendent une operation qui les porte.
+  barres.sort((a, b) => {
+    if (a.applique !== b.applique) return a.applique ? -1 : 1;
+    return (b.ecart ?? -1) - (a.ecart ?? -1);
+  });
+  return { indicateur, reference: valeurReference, barres };
+}
+
 
 /* ===== ui/app.js ===== */
 // @ts-check
@@ -9083,6 +9524,7 @@ function poidsBibliotheque() {
  * Un seul fichier a dessein : le generateur de la version autonome concatene tout
  * dans une portee unique et refuse les collisions de noms racine.
  */
+
 
 
 
@@ -12772,7 +13214,6 @@ function rendreExploitation(r) {
     `⚙ ${e.lignes.length} exercices, de ${e.lignes[0]?.annee} à ${e.lignes.at(-1)?.annee}. ` +
     `La dernière année porte une marge exceptionnelle : les prêts y sont soldés.`;
 
-  $('#postes-absents').innerHTML = e.postes_absents.map((p) => `<li>${att(p)}</li>`).join('');
 }
 
 // ---------------------------------------------------------------- ecran parametres
@@ -15581,6 +16022,8 @@ function afficherEcran(cible) {
   for (const e of document.querySelectorAll('.ecran')) {
     /** @type {HTMLElement} */ (e).hidden = e.id !== `ecran-${vise}`;
   }
+  if (vise === 'sensibilite') rendreSensibilite();
+
   // L'ecran affiche se retient : recharger la page pour reprendre au programme
   // alors qu'on travaillait sur l'exploitation coute une navigation a chaque
   // fois. Il est memorise a part de la saisie - c'est une position de lecture,
@@ -16569,6 +17012,167 @@ function dateDuJour() {
   return `${jj}/${mm}/${d.getFullYear()}`;
 }
 
+// ------------------------------------------------------- sensibilite
+
+/** Indicateur observe par la tornade, et levier deplie sous elle. */
+let indicateurSensibilite = INDICATEURS[0].code;
+let levierDeplie = null;
+/** Derniere tornade calculee, pour ne pas la refaire au moindre clic. */
+let derniereTornade = null;
+
+/** Mise en forme d une valeur selon l unite de son indicateur. */
+function valeurIndicateur(v, unite) {
+  if (nul(v)) return '-';
+  if (unite === 'eur') return eur(v);
+  if (unite === 'taux') return pct(v, 2);
+  if (unite === 'annee') return String(v);
+  return nb(v);
+}
+
+/** Amplitude d un levier, ecrite dans son unite. */
+function amplitudeLisible(levier, amplitude) {
+  if (levier.unite === 'annees') return `± ${amplitude} ans`;
+  // Un decalage de taux se dit en POINTS, pas en pourcent : « ± 0,5 % » sur un
+  // taux se lirait comme un demi-pourcent de sa valeur, soit deux cents fois
+  // moins que ce que le levier fait vraiment.
+  if (levier.unite === 'points') return `± ${pct(amplitude, 1).replace(' %', ' pt')}`;
+  return `± ${pct(amplitude, 0)}`;
+}
+
+/**
+ * Analyse de sensibilite de l'operation ouverte.
+ *
+ * Appelee a l'arrivee sur l'ecran et non a chaque frappe : une tornade coute
+ * dix-sept passages du moteur. Le resultat est garde tant que le calcul ne
+ * change pas.
+ */
+function rendreSensibilite() {
+  const zone = document.getElementById('tornade');
+  if (!zone) return;
+  if (!dernierResultat) {
+    zone.innerHTML = '<p class="vide">Aucun résultat : la saisie est incomplète.</p>';
+    document.getElementById('bloc-balayage').hidden = true;
+    return;
+  }
+
+  const choix = document.getElementById('sens-indicateur');
+  if (choix && !choix.options.length) {
+    choix.innerHTML = INDICATEURS.map(
+      (i) => `<option value="${att(i.code)}">${att(i.libelle)}</option>`,
+    ).join('');
+  }
+  if (choix) choix.value = indicateurSensibilite;
+
+  const t = tornade(etatPourAnalyse(), referentielsPourAnalyse(), {
+    indicateur: indicateurSensibilite,
+  });
+  derniereTornade = t;
+
+  const ref = document.getElementById('sens-reference');
+  if (ref) {
+    ref.textContent = `⚙ Référence : ${valeurIndicateur(t.reference, t.indicateur.unite)}. ` +
+      `${t.barres.filter((b) => b.applique).length} leviers essayés sur ${t.barres.length}.`;
+  }
+
+  // L echelle est commune a toutes les barres : c est ce qui permet de les
+  // comparer d un coup d oeil, et c est tout l interet de la figure.
+  const maxi = Math.max(...t.barres.map((b) => b.ecart ?? 0), 1);
+  const bornes = t.barres.flatMap((b) => [b.bas, b.haut, t.reference]).filter((x) => !nul(x));
+  const min = Math.min(...bornes);
+  const etendue = Math.max(...bornes) - min || 1;
+  const part = (v) => ((v - min) / etendue) * 100;
+
+  zone.innerHTML = t.barres
+    .map((b) => {
+      if (!b.applique) {
+        return `<div class="tornade__ligne tornade__ligne--muette">
+          <span class="tornade__nom">${att(b.libelle)}</span>
+          <span class="tornade__piste"><span class="tornade__absent">levier sans prise sur cette opération</span></span>
+          <span class="tornade__poids">-</span></div>`;
+      }
+      const g = Math.min(part(b.bas), part(b.haut));
+      const d = Math.max(part(b.bas), part(b.haut));
+      const levier = LEVIERS.find((l) => l.code === b.code);
+      return `<button type="button" class="tornade__ligne${
+        levierDeplie === b.code ? ' tornade__ligne--ouverte' : ''
+      }" data-levier="${att(b.code)}">
+        <span class="tornade__nom">${att(b.libelle)}
+          <small>${att(amplitudeLisible(levier, b.amplitude))}</small></span>
+        <span class="tornade__piste">
+          <span class="tornade__barre" style="left:${g.toFixed(2)}%;width:${(d - g).toFixed(2)}%"></span>
+          <span class="tornade__reference" style="left:${part(t.reference).toFixed(2)}%"></span>
+        </span>
+        <span class="tornade__poids">${valeurIndicateur(b.ecart, t.indicateur.unite)}</span>
+      </button>`;
+    })
+    .join('');
+
+  rendreBalayage();
+}
+
+/** Detail d un levier : une ligne par point de mesure. */
+function rendreBalayage() {
+  const bloc = document.getElementById('bloc-balayage');
+  if (!bloc) return;
+  const levier = LEVIERS.find((l) => l.code === levierDeplie);
+  bloc.hidden = !levier || !dernierResultat;
+  if (bloc.hidden) return;
+
+  const barre = derniereTornade?.barres.find((b) => b.code === levier.code);
+  const amplitude = barre?.amplitude ?? levier.amplitude;
+  const { points } = balayerLevier(
+    etatPourAnalyse(),
+    referentielsPourAnalyse(),
+    levier.code,
+    plage(amplitude, 7),
+  );
+  const indicateur = INDICATEURS.find((i) => i.code === indicateurSensibilite);
+
+  document.getElementById('titre-balayage').textContent =
+    `${levier.libelle} · ${indicateur.libelle}`;
+  const tab = document.getElementById('table-balayage');
+  tab.querySelector('thead').innerHTML =
+    `<tr><th>Variation</th><th class="num">${att(indicateur.libelle)}</th>` +
+    '<th class="num">Écart à la référence</th></tr>';
+  tab.querySelector('tbody').innerHTML = points
+    .map((p) => {
+      const v = indicateur.lire(p.resultat);
+      const ecart = nul(v) || nul(derniereTornade?.reference) ? null : v - derniereTornade.reference;
+      const variation =
+        levier.unite === 'annees'
+          ? `${p.variation > 0 ? '+' : ''}${p.variation} ans`
+          : `${p.variation > 0 ? '+' : ''}${
+              levier.unite === 'points'
+                ? pct(p.variation, 2).replace(' %', ' pt')
+                : pct(p.variation, 1)
+            }`;
+      return `<tr class="${p.variation === 0 ? 'poste--reference' : ''}">
+        <td>${att(variation)}</td>
+        <td class="num">${p.erreur ? att(p.erreur) : valeurIndicateur(v, indicateur.unite)}</td>
+        <td class="num ${ecart < 0 ? 'montant--negatif' : ''}">${
+          nul(ecart) ? '-' : (ecart > 0 ? '+' : '') + valeurIndicateur(ecart, indicateur.unite)
+        }</td></tr>`;
+    })
+    .join('');
+}
+
+/**
+ * Entrees et referentiels tels que le moteur les recoit.
+ *
+ * L'analyse doit partir de CE QUI EST CALCULE et non de l'etat brut : le
+ * parametrage actif, les postes vides ecartes, les prets theoriques. Sans
+ * cela sa reference ne serait pas celle affichee a l'ecran, et tout l'exercice
+ * porterait a faux.
+ */
+function etatPourAnalyse() {
+  const entrees = structuredClone(etat);
+  entrees.parametrage = structuredClone(parametrageActif());
+  if (etat.mode_prets === 'theoriques') entrees.prets = [];
+  entrees.postes_bilan = entrees.postes_bilan.filter((p) => !nul(p.montant_ht_eur));
+  return entrees;
+}
+const referentielsPourAnalyse = () => referentiels;
+
 function rendreApercuExport() {
   const cible = document.getElementById('apercu-export');
   if (!cible) return;
@@ -16954,6 +17558,12 @@ document.addEventListener('input', (ev) => {
     // d'une liste qui n'en compte plus que deux afficherait un vide.
     pageBiblio = 0;
     rendreBibliotheque();
+    return;
+  }
+
+  if (el.id === 'sens-indicateur') {
+    indicateurSensibilite = el.value;
+    rendreSensibilite();
     return;
   }
 
@@ -17649,6 +18259,13 @@ document.addEventListener('click', async (ev) => {
     return;
   }
 
+  const barreTornade = el.closest('[data-levier]');
+  if (barreTornade) {
+    const code = /** @type {HTMLElement} */ (barreTornade).dataset.levier;
+    levierDeplie = levierDeplie === code ? null : code;
+    rendreSensibilite();
+    return;
+  }
   const perimExp = el.closest('[data-perimetre-compte]');
   if (perimExp) {
     const c = /** @type {HTMLElement} */ (perimExp).dataset.perimetreCompte;

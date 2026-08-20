@@ -1746,7 +1746,7 @@ function rendreStructure() {
           data-l="${l}" data-c="6" value="${valNum(lot.surfaces_annexes_m2)}" /></td>
         <td class="calc" data-calc="su"></td>
         <td class="calc" data-calc="loyer"></td>
-        <td><button type="button" class="bouton--supprimer" data-supprimer="lots" data-index="${i}" title="Supprimer">×</button></td>
+        <td class="col-action"><button type="button" class="bouton--supprimer" data-supprimer="lots" data-index="${i}" title="Supprimer">×</button></td>
       </tr>`,
         )
         .join('')
@@ -2082,7 +2082,7 @@ function rendreValeurs(r) {
     ? r.loyers
         .map((l) => {
           const t = recap[l.code_produit] ?? {};
-          return `<tr>
+          return `<tr data-tranche="${l.code_produit}">
             <td>${att(libelleProduit(l.code_produit))}</td>
             <td class="num">${nb(t.nb_lots)}</td>
             <td class="num">${nb(l.shab_m2)}</td>
@@ -7187,6 +7187,130 @@ function normaliserColonnes(table) {
 }
 
 /**
+ * Retire une COLONNE entiere d une table, en-tete et pied compris.
+ *
+ * La cellule a retirer se cherche en comptant les colonnes, jamais par le
+ * rang de l enfant : une rangee peut commencer par une cellule fusionnee - le
+ * titre d'un chapitre, un intitule de total - et son n-ieme enfant se trouve
+ * alors bien plus loin que la n-ieme colonne. On y detruisait une cellule de
+ * donnees en croyant retirer une colonne de commande, et le compte retombait
+ * juste par compensation : rien ne se voyait, jusqu au jour ou la cellule
+ * visee disparaissait par ailleurs.
+ *
+ * Une cellule qui couvre plusieurs colonnes en cede une ; une cellule simple
+ * disparait.
+ */
+function retirerColonne(table, index) {
+  for (const rangee of table.querySelectorAll('tr')) {
+    let colonne = 0;
+    for (const cel of [...rangee.children]) {
+      const portee = cel.colSpan || 1;
+      if (index < colonne + portee) {
+        if (portee > 1) cel.colSpan = portee - 1;
+        else cel.remove();
+        break;
+      }
+      colonne += portee;
+    }
+  }
+}
+
+/** Nombre de colonnes d une table, lu sur sa rangee la plus large. */
+function compterColonnes(table) {
+  let n = 0;
+  for (const rangee of table.querySelectorAll('tr')) {
+    const somme = [...rangee.children].reduce((s, c) => s + (c.colSpan || 1), 0);
+    n = Math.max(n, somme);
+  }
+  return n;
+}
+
+/**
+ * Retire les colonnes qui n existent que pour la MANIPULATION : poignee de
+ * deplacement, case de selection, croix de suppression.
+ *
+ * Elles etaient jusqu ici seulement VIDEES, faute de pouvoir les retirer sans
+ * decaler les lignes par rapport a leur en-tete. Ce n est plus un obstacle, et
+ * une colonne vide de trente pixels dans un document est de la place prise aux
+ * chiffres.
+ *
+ * Les rangs se relevent sur une rangee de CORPS, ou chaque cellule occupe une
+ * colonne, puis se retirent du plus grand au plus petit pour que les suivants
+ * restent valables.
+ */
+function retirerColonnesDEcran(table) {
+  const rangee = table.querySelector('tbody tr');
+  if (!rangee) return;
+  const rangs = [];
+  let colonne = 0;
+  for (const cel of rangee.children) {
+    const portee = cel.colSpan || 1;
+    if (portee === 1 && /col-(poignee|select|action)/.test(cel.className)) rangs.push(colonne);
+    colonne += portee;
+  }
+  for (const r of rangs.reverse()) retirerColonne(table, r);
+}
+
+/**
+ * Pose le titre du bloc DANS le `thead` de sa table, et le retire du bloc.
+ *
+ * Un groupe d en-tete se repete en haut de chaque page imprimee et y reserve
+ * sa place. Un titre pose au-dessus de la table, lui, ne parait qu une fois :
+ * la deuxieme page du compte d exploitation etait un mur de chiffres sans nom.
+ * Son espace haut tient aussi lieu de marge de page, `@page` n en donnant plus
+ * - c est le prix a payer pour faire taire l en-tete du navigateur.
+ */
+function poserBandeauDeTable(table) {
+  const tete = table.querySelector('thead');
+  const titre = table.closest('.bloc')?.querySelector('.bloc__titre');
+  if (!tete || !titre || tete.querySelector('.doc-bandeau')) return;
+  // Le premier noeud de texte seulement : un titre porte parfois une legende
+  // ou des outils, qui ne sont pas son nom.
+  const nom = (titre.childNodes[0]?.textContent ?? '').trim();
+  if (!nom) return;
+  const bande = document.createElement('tr');
+  bande.innerHTML = `<th class="doc-bandeau" colspan="${compterColonnes(table)}">${att(nom)}</th>`;
+  tete.insertBefore(bande, tete.firstChild);
+  titre.remove();
+}
+
+/**
+ * Applique a TOUTE table du document ce que le prix de revient a inaugure :
+ * pas de colonne de manipulation, un titre qui se repete de page en page, un
+ * pied marque comme le total qu il est.
+ */
+/**
+ * Etire la derniere cellule des rangees qui n atteignent pas le bord droit.
+ *
+ * Le pied de la table des lots couvrait onze colonnes sur treize : sa bande de
+ * total s arretait avant le bord, deux colonnes plus tot, sans que personne ne
+ * l'ait voulu. Le retrait des colonnes de manipulation pouvait creuser le meme
+ * ecart ailleurs. Plutot que de corriger chaque rendu, le document se ferme
+ * lui-meme.
+ *
+ * Seuls le corps et le pied sont touches : l'en-tete se sert de `rowspan`, et
+ * une rangee courte y est normale - les sous-colonnes de tranche ne couvrent
+ * que leur bloc.
+ */
+function completerRangees(table, colonnes) {
+  for (const rangee of table.querySelectorAll('tbody tr, tfoot tr')) {
+    const cellules = [...rangee.children];
+    if (!cellules.length) continue;
+    const portee = cellules.reduce((s, c) => s + (c.colSpan || 1), 0);
+    if (portee < colonnes) cellules[cellules.length - 1].colSpan = (cellules[cellules.length - 1].colSpan || 1) + (colonnes - portee);
+  }
+}
+
+function adapterTablesAuDocument(racine) {
+  for (const table of racine.querySelectorAll('table')) {
+    retirerColonnesDEcran(table);
+    table.querySelector('tfoot tr')?.classList.add('doc-total');
+    completerRangees(table, compterColonnes(table));
+    poserBandeauDeTable(table);
+  }
+}
+
+/**
  * Retire du document les colonnes et les lignes des tranches ecartees.
  *
  * Le filet colore qui ferme un bloc de tranche est porte par la DERNIERE
@@ -7232,30 +7356,7 @@ function adapterPrixRevientAuDocument(copie) {
   // n'en porte aucune, et c'est precisement ce qui avait decale les lignes.
   const RANG_COMMANDE = 3;
   table.querySelector('colgroup')?.remove();
-  for (const rangee of table.querySelectorAll('thead tr:first-child, tbody tr, tfoot tr')) {
-    // La cellule a retirer se cherche EN COMPTANT LES COLONNES, jamais par le
-    // rang de l enfant : plusieurs rangees commencent par une cellule fusionnee
-    // - le titre d'un chapitre en couvre quatre, la ligne « Base finançable »
-    // en couvre deux - et leur quatrieme enfant se trouve alors bien plus loin
-    // que la quatrieme colonne. On y detruisait une cellule de TRANCHE en
-    // croyant retirer la colonne de commande. Le compte des colonnes retombait
-    // juste par compensation, la cellule fusionnee gardant sa portee, et rien
-    // ne se voyait - jusqu au jour ou la tranche visee etait ecartee de
-    // l export : la rangee comptait alors une colonne de trop et son dernier
-    // montant sortait du cadre, a droite du tableau.
-    let colonne = 0;
-    for (const cel of [...rangee.children]) {
-      const portee = cel.colSpan || 1;
-      if (RANG_COMMANDE < colonne + portee) {
-        // Une cellule qui couvre deja plusieurs colonnes en cede une ; une
-        // cellule simple disparait.
-        if (portee > 1) cel.colSpan = portee - 1;
-        else cel.remove();
-        break;
-      }
-      colonne += portee;
-    }
-  }
+  retirerColonne(table, RANG_COMMANDE);
 
   for (const tr of table.querySelectorAll('tr.chapitre-entete')) tr.classList.add('doc-chapitre');
   for (const tr of table.querySelectorAll('tr.chapitre-total')) tr.classList.add('doc-soustotal');
@@ -7310,18 +7411,9 @@ function adapterPrixRevientAuDocument(copie) {
   // Son espace haut tient aussi lieu de marge de page, puisque `@page` n en
   // donne plus - c'est le prix a payer pour faire taire l'en-tete que le
   // navigateur ajoute de lui-meme.
+  // Le bandeau de tete est pose par le traitement commun a toutes les tables,
+  // qui reprend le titre du bloc - ici « Prix de revient ».
   normaliserColonnes(table);
-
-  const tete = table.querySelector('thead');
-  if (tete) {
-    const largeur = [...(tete.querySelector('tr')?.children ?? [])].reduce((n, c) => n + (c.colSpan || 1), 0);
-    const bande = document.createElement('tr');
-    bande.innerHTML = `<th class="doc-bandeau" colspan="${largeur}">Prix de revient</th>`;
-    tete.insertBefore(bande, tete.firstChild);
-    // Le bandeau EST le titre du tableau : garder en plus le titre du bloc
-    // ecrivait « Prix de revient » deux fois a dix millimetres d intervalle.
-    table.closest('.bloc')?.querySelector('.bloc__titre')?.remove();
-  }
 
   // Le document ne compte pas les cases qui restent a remplir. « 14 postes
   // renseignes sur 46 de la nomenclature » parle de la SAISIE et non de
@@ -7390,15 +7482,15 @@ function rendreApercuExport() {
     // La repartition par financement est une autre table, sur le meme ecran :
     // elle liste une ligne par tranche et subit donc le meme tri. Son TOTAL
     // reste celui de l'operation entiere - il est marque comme tel plus bas.
-    const repartition = copie.querySelector('#table-ventilation-pdr');
-    if (repartition) {
-      ecarterTranches(repartition);
-      // Son total reste celui de l OPERATION : le prix de revient ne change
-      // pas parce qu on presente une tranche de moins. Il faut donc le dire,
-      // sinon un lecteur additionne les lignes et trouve autre chose.
-      if (tranchesRetenues().length < tranchesActives().length) {
-        const pied = repartition.querySelector('tfoot .libelle');
-        if (pied) pied.textContent = 'Total de l’opération';
+    // Le total d une table triee reste celui de l OPERATION : le prix de
+    // revient ne change pas parce qu on presente une tranche de moins. Il faut
+    // donc le dire, sinon un lecteur additionne les lignes et trouve autre
+    // chose.
+    if (tranchesRetenues().length < tranchesActives().length) {
+      for (const table of copie.querySelectorAll('table')) {
+        if (!table.querySelector('tbody [data-tranche]')) continue;
+        const pied = table.querySelector('tfoot .libelle');
+        if (pied && pied.textContent.trim() === 'Total') pied.textContent = 'Total de l’opération';
       }
     }
     copie.removeAttribute('id');
@@ -7418,9 +7510,14 @@ function rendreApercuExport() {
     )) {
       el.remove();
     }
-    for (const cel of copie.querySelectorAll('td.col-action, td.col-poignee, td.col-select, th.col-action, th.col-poignee, th.col-select')) {
-      cel.innerHTML = '';
-    }
+    // Ce qui ne sert qu a SAISIR quitte le document : le generateur de lots,
+    // la liste des controles de coherence, le rappel des postes non modelises.
+    // Ils parlent de l'outil et de son etat, pas de l'operation.
+    for (const bloc of copie.querySelectorAll('[data-ecran-seul]')) bloc.remove();
+    adapterTablesAuDocument(copie);
+    // Le tri des tranches vaut pour TOUT l ecran : le prix de revient a ses
+    // colonnes, la synthese et la repartition ont leurs lignes.
+    ecarterTranches(copie);
     figerSaisies(copie);
     section.appendChild(copie);
     cible.appendChild(section);

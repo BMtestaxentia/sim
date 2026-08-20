@@ -287,7 +287,7 @@
 
     <!-- ================= ÉCRAN - PROGRAMME (lot par lot) ================= -->
     <main class="ecran" id="ecran-programme" role="tabpanel" hidden>
-      <section class="bloc">
+      <section class="bloc" data-ecran-seul>
         <h2 class="bloc__titre">Génération de lots</h2>
         <div class="champs generateur">
           <label class="champ">
@@ -533,7 +533,7 @@
         </section>
       </div>
 
-      <section class="bloc">
+      <section class="bloc" data-ecran-seul>
         <h2 class="bloc__titre">Contrôles</h2>
         <ul class="controles" id="controles" data-restitution></ul>
         <div id="messages-moteur" data-restitution></div>
@@ -645,7 +645,7 @@
         <p class="aide" id="aide-exploitation" data-restitution></p>
       </section>
 
-      <section class="bloc">
+      <section class="bloc" data-ecran-seul>
         <h2 class="bloc__titre">Postes non encore modélisés</h2>
         <ul class="alertes" id="postes-absents" data-restitution></ul>
         <p class="aide">

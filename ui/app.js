@@ -7285,6 +7285,16 @@ function rendreApercuExport() {
 function telechargerPDF() {
   if (!idSimulationOuverte) return;
   rendreApercuExport();
+
+  // Le navigateur nomme le fichier d apres le TITRE de la page. Sans cela
+  // tous les exports arrivent dans le dossier de telechargement sous le nom
+  // de l application, et le deuxieme s appelle « (1) ». On lui donne donc le
+  // nom du document et de l operation, le temps de l impression.
+  titreAvantImpression = document.title;
+  const def = EXPORTS[exportChoisi] ?? EXPORTS['prix-revient'];
+  const nomOp = (etat.identite?.nom || '').trim();
+  document.title = [def.titre, nomOp].filter(Boolean).join(' - ').replace(/[\\/:*?"<>|]/g, ' ');
+
   themeAvantImpression = document.documentElement.dataset.theme;
   document.documentElement.dataset.theme = 'clair';
   document.body.classList.add('en-impression');
@@ -7299,6 +7309,8 @@ function telechargerPDF() {
 
 /** Theme a rendre apres l'impression. */
 let themeAvantImpression = null;
+/** Titre de page a rendre apres l'impression. */
+let titreAvantImpression = null;
 
 // `afterprint` se declenche que l'on ait imprime ou annule : l'ecran revient
 // dans les deux cas.
@@ -7306,6 +7318,8 @@ window.addEventListener('afterprint', () => {
   document.body.classList.remove('en-impression');
   if (themeAvantImpression) document.documentElement.dataset.theme = themeAvantImpression;
   themeAvantImpression = null;
+  if (titreAvantImpression !== null) document.title = titreAvantImpression;
+  titreAvantImpression = null;
 });
 
 // ---------------------------------------------------------------- dialogues

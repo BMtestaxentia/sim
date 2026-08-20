@@ -12,7 +12,14 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { calculer } from '../src/moteur.js';
-import { LEVIERS, INDICATEURS, balayerLevier, plage, tornade } from '../src/sensibilite.js';
+import {
+  LEVIERS,
+  INDICATEURS,
+  balayerLevier,
+  plage,
+  tornade,
+  chercherEquilibre,
+} from '../src/sensibilite.js';
 
 const racine = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (f) => JSON.parse(readFileSync(join(racine, 'referentiels', f), 'utf8'));
@@ -183,5 +190,85 @@ describe('catalogues', () => {
       const v = i.lire(reference);
       expect(v === null || Number.isFinite(v)).toBe(true);
     }
+  });
+});
+
+describe('recherche d equilibre', () => {
+  it('trouve la subvention qui ramene les fonds propres a une cible', () => {
+    const r = chercherEquilibre(ENTREES, REFERENTIELS, {
+      levier: 'subventions',
+      objectif: 'fonds_propres',
+    });
+    expect(r.applique).toBe(true);
+    if (r.trouve) {
+      // La solution DOIT verifier l objectif : on relit le resultat qu elle
+      // porte plutot que de croire la fonction sur parole.
+      expect(Math.abs(r.objectif.lire(r.resultat) - r.cible)).toBeLessThanOrEqual(1);
+      // Zero iteration est une reponse valide : la cible etait deja atteinte.
+      if (r.iterations === 0) expect(r.variation).toBe(0);
+    } else {
+      expect(r.raison).toBeTruthy();
+    }
+  });
+
+  it('rend une variation nulle quand la cible est deja atteinte', () => {
+    const fp = reference.indicateurs.fonds_propres_eur;
+    const r = chercherEquilibre(ENTREES, REFERENTIELS, {
+      levier: 'prix_revient',
+      objectif: 'fonds_propres',
+      cible: fp,
+    });
+    expect(r.trouve).toBe(true);
+    expect(r.variation).toBe(0);
+    expect(r.iterations).toBe(0);
+  });
+
+  it('atteint un autofinancement cumule vise', () => {
+    const cible = reference.exploitation.indicateurs.resultat_cumule_final_eur + 50000;
+    const r = chercherEquilibre(ENTREES, REFERENTIELS, {
+      levier: 'prix_revient',
+      objectif: 'autofinancement_cumule',
+      cible,
+      tolerance: 500,
+    });
+    expect(r.trouve).toBe(true);
+    expect(Math.abs(r.objectif.lire(r.resultat) - cible)).toBeLessThanOrEqual(500);
+    // Moins cher, donc moins d annuites : la variation doit etre NEGATIVE.
+    expect(r.variation).toBeLessThan(0);
+  });
+
+  it('dit quand la cible est hors de portee, et ce qu il est possible d atteindre', () => {
+    const r = chercherEquilibre(ENTREES, REFERENTIELS, {
+      levier: 'subventions',
+      objectif: 'autofinancement_cumule',
+      cible: 1e12,
+    });
+    expect(r.trouve).toBe(false);
+    expect(r.applique).toBe(true);
+    expect(r.atteignable).toHaveLength(2);
+    expect(r.atteignable[0]).toBeLessThanOrEqual(r.atteignable[1]);
+  });
+
+  it('distingue un levier sans prise d une cible hors de portee', () => {
+    const sansSubvention = { ...ENTREES, subventions: [] };
+    const r = chercherEquilibre(sansSubvention, REFERENTIELS, {
+      levier: 'subventions',
+      objectif: 'fonds_propres',
+    });
+    expect(r.trouve).toBe(false);
+    expect(r.applique).toBe(false);
+    expect(r.raison).toMatch(/prise/);
+  });
+
+  it('laisse les entrees d origine intactes', () => {
+    const empreinte = JSON.stringify(ENTREES);
+    chercherEquilibre(ENTREES, REFERENTIELS, { levier: 'prix_revient', objectif: 'fonds_propres' });
+    expect(JSON.stringify(ENTREES)).toBe(empreinte);
+  });
+
+  it('refuse un objectif inconnu', () => {
+    expect(() =>
+      chercherEquilibre(ENTREES, REFERENTIELS, { levier: 'prix_revient', objectif: 'inconnu' }),
+    ).toThrow(/Objectif inconnu/);
   });
 });

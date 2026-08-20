@@ -9231,6 +9231,196 @@ function tornade(entrees, referentiels, options = {}) {
   return { indicateur, reference: valeurReference, barres };
 }
 
+/**
+ * OBJECTIFS - ce qu on cherche a atteindre.
+ *
+ * Un objectif est une grandeur du resultat et une valeur a lui donner. Il se
+ * distingue d'un indicateur : celui-ci s'observe, celui-la se vise.
+ *
+ * @type {Array<{code: string, libelle: string, unite: string, cible_defaut: number,
+ *   lire: (r: any) => number|null}>}
+ */
+const OBJECTIFS = [
+  {
+    // L ECART du plan de financement ne fait pas un objectif : il est nul par
+    // construction, les fonds propres absorbant le residu. Chercher a l annuler
+    // repondrait toujours « deja atteint ». Ce qui se cherche, c est le montant
+    // d APPORT que l operation reclame - et de combien bouger un levier pour le
+    // ramener a ce que l organisme peut mettre.
+    code: 'fonds_propres',
+    libelle: 'Fonds propres appelés',
+    unite: 'eur',
+    cible_defaut: 0,
+    lire: (r) => r?.indicateurs?.fonds_propres_eur ?? null,
+  },
+  {
+    code: 'autofinancement_cumule',
+    libelle: 'Autofinancement cumulé',
+    unite: 'eur',
+    cible_defaut: 0,
+    lire: (r) => r?.exploitation?.indicateurs?.resultat_cumule_final_eur ?? null,
+  },
+  {
+    code: 'creux_cumul',
+    libelle: 'Creux du cumul',
+    unite: 'eur',
+    cible_defaut: 0,
+    lire: (r) => r?.exploitation?.indicateurs?.creux_cumul_eur ?? null,
+  },
+];
+
+/** Objectif connu, par son code. */
+const objectifDe = (code) => OBJECTIFS.find((o) => o.code === code) ?? null;
+
+/**
+ * R-SENS-2 - RECHERCHE D EQUILIBRE.
+ *
+ * L'analyse de sensibilite demande « que se passe-t-il si ? ». Celle-ci pose la
+ * question a l'envers : « de combien faut-il bouger ce levier pour atteindre
+ * cela ? ». Meme moteur, meme purete, mais parcouru en sens inverse.
+ *
+ * La methode est la DICHOTOMIE, comme pour le TRI (`tauxRentabiliteInterne`) :
+ * on encadre la solution entre deux bornes ou l'ecart a la cible change de
+ * signe, puis on resserre. Elle ne demande aucune derivee, elle tolere les
+ * discontinuites que le moteur porte - un arrondi au millier superieur, un
+ * plafond de droit a pret - et elle converge toujours quand elle part d un
+ * encadrement valide.
+ *
+ * Elle ne trouve rien dans deux cas, et les DISTINGUE :
+ *
+ *   - la cible n'est pas encadree par les bornes. Le levier ne peut pas y
+ *     mener, du moins pas dans la plage exploree : c'est une reponse, et elle
+ *     dit de chercher ailleurs ou plus loin ;
+ *   - le levier ne mord pas sur cette operation - pas de subvention a faire
+ *     varier, pas de pret saisi. Rien n a ete essaye.
+ *
+ * Une operation deja a l'equilibre rend une variation nulle, sans iterer.
+ *
+ * @param {any} entrees
+ * @param {any} referentiels
+ * @param {{levier: string, objectif?: string, cible?: number, bornes?: [number, number],
+ *   tolerance?: number, iterations_max?: number}} options
+ */
+function chercherEquilibre(entrees, referentiels, options) {
+  const levier = levierDe(options.levier);
+  if (!levier) throw new Error(`Levier inconnu : ${options.levier}`);
+  const objectif = objectifDe(options.objectif ?? OBJECTIFS[0].code);
+  if (!objectif) throw new Error(`Objectif inconnu : ${options.objectif}`);
+
+  const cible = options.cible ?? objectif.cible_defaut;
+  // Les bornes par defaut suivent l UNITE du levier : doubler un montant a du
+  // sens, doubler un taux de Livret A n en a pas.
+  const larges =
+    levier.unite === 'relatif' ? [-0.9, 3] : levier.unite === 'annees' ? [-30, 30] : [-0.1, 0.1];
+  const [a0, b0] = options.bornes ?? larges;
+  const tolerance = options.tolerance ?? 1;
+  const maxi = options.iterations_max ?? 60;
+
+  /** Ecart a la cible pour une variation donnee, et le resultat qui va avec. */
+  let applique = true;
+  const essayer = (v) => {
+    const contexte = { entrees: copier(entrees), referentiels: copier(referentiels) };
+    if (v !== 0 && levier.appliquer(contexte, v) === false) applique = false;
+    try {
+      const resultat = calculer(contexte.entrees, contexte.referentiels);
+      const valeur = objectif.lire(resultat);
+      return { valeur, ecart: valeur === null ? null : valeur - cible, resultat };
+    } catch (e) {
+      return { valeur: null, ecart: null, resultat: null, erreur: /** @type {Error} */ (e).message };
+    }
+  };
+
+  // La PRISE du levier se teste avant tout le reste : un levier sans prise ne
+  // doit pas ressortir « deja atteint », qui laisserait croire qu il a servi.
+  const essai = { entrees: copier(entrees), referentiels: copier(referentiels) };
+  const mord = levier.appliquer(essai, b0) !== false;
+  if (!mord) {
+    return {
+      trouve: false,
+      applique: false,
+      levier,
+      objectif,
+      cible,
+      bornes: [a0, b0],
+      raison: "ce levier n’a pas de prise sur cette opération",
+    };
+  }
+
+  const depart = essayer(0);
+  if (depart.ecart !== null && Math.abs(depart.ecart) <= tolerance) {
+    return {
+      trouve: true,
+      applique: true,
+      variation: 0,
+      valeur: depart.valeur,
+      cible,
+      iterations: 0,
+      levier,
+      objectif,
+      resultat: depart.resultat,
+      raison: 'déjà atteint',
+    };
+  }
+
+  let bas = { v: a0, ...essayer(a0) };
+  let haut = { v: b0, ...essayer(b0) };
+  applique = applique && bas.ecart !== null && haut.ecart !== null;
+  if (!applique || bas.ecart === null || haut.ecart === null) {
+    return {
+      trouve: false,
+      applique: false,
+      levier,
+      objectif,
+      cible,
+      bornes: [a0, b0],
+      raison: 'ce levier n’a pas de prise sur cette opération',
+    };
+  }
+  if (bas.ecart * haut.ecart > 0) {
+    return {
+      trouve: false,
+      applique: true,
+      levier,
+      objectif,
+      cible,
+      bornes: [a0, b0],
+      atteignable: [Math.min(bas.valeur, haut.valeur), Math.max(bas.valeur, haut.valeur)],
+      raison: 'la cible n’est pas atteignable dans la plage explorée',
+    };
+  }
+
+  let milieu = depart;
+  let v = 0;
+  let iterations = 0;
+  while (iterations < maxi) {
+    iterations += 1;
+    v = (bas.v + haut.v) / 2;
+    milieu = essayer(v);
+    if (milieu.ecart === null) break;
+    if (Math.abs(milieu.ecart) <= tolerance) break;
+    // On garde le cote qui CHANGE DE SIGNE avec le milieu : c est lui qui
+    // contient la racine.
+    if (bas.ecart * milieu.ecart < 0) haut = { v, ...milieu };
+    else bas = { v, ...milieu };
+  }
+
+  return {
+    trouve: milieu.ecart !== null && Math.abs(milieu.ecart) <= tolerance,
+    applique: true,
+    variation: v,
+    valeur: milieu.valeur,
+    cible,
+    iterations,
+    levier,
+    objectif,
+    resultat: milieu.resultat,
+    raison:
+      milieu.ecart !== null && Math.abs(milieu.ecart) <= tolerance
+        ? null
+        : 'la dichotomie n’a pas convergé dans la tolérance demandée',
+  };
+}
+
 
 /* ===== ui/app.js ===== */
 // @ts-check

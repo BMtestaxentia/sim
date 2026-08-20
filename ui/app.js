@@ -7131,6 +7131,61 @@ function adapterPrixRevientAuDocument(copie) {
   // comme une valeur douteuse.
   for (const tr of table.querySelectorAll('tr.poste--vide')) tr.classList.remove('poste--vide');
 
+  // Un document ne liste pas quarante-six postes dont trente-deux sont vides :
+  // il montre ce qui a ete chiffre.
+  for (const ligne of table.querySelectorAll('tr[data-poste]')) {
+    const chiffree = [...ligne.querySelectorAll('input')].some(
+      (c) => /** @type {HTMLInputElement} */ (c).value.trim() !== '',
+    );
+    if (!chiffree) ligne.remove();
+  }
+
+  // ... et un chapitre dont il ne reste aucun poste s en va avec eux. Son
+  // titre et son « Sous-total frais divers : 0 € » ne portaient plus de
+  // structure, seulement une case du plan comptable restee vide.
+  let enTeteCourant = null;
+  let postesDuChapitre = 0;
+  for (const tr of [...table.querySelectorAll('tbody tr')]) {
+    if (tr.classList.contains('chapitre-entete')) {
+      enTeteCourant = tr;
+      postesDuChapitre = 0;
+      continue;
+    }
+    if (tr.classList.contains('chapitre-total')) {
+      if (!postesDuChapitre) {
+        enTeteCourant?.remove();
+        tr.remove();
+      }
+      enTeteCourant = null;
+      continue;
+    }
+    postesDuChapitre += 1;
+  }
+
+  // BANDEAU DE TETE, dans le `thead` et non au-dessus de la table : un
+  // groupe d en-tete se repete en haut de chaque page imprimee ET y reserve
+  // sa place. L en-tete du document, lui, etait en `position: fixed` : il se
+  // repetait sans rien reserver et recouvrait le tableau des la page deux.
+  // Son espace haut tient aussi lieu de marge de page, puisque `@page` n en
+  // donne plus - c'est le prix a payer pour faire taire l'en-tete que le
+  // navigateur ajoute de lui-meme.
+  const tete = table.querySelector('thead');
+  const i = etat.identite ?? {};
+  const legende = [i.nom, i.commune, i.zone_ABC && `zone ${i.zone_ABC}`]
+    .filter(Boolean)
+    .join(' · ');
+  if (tete) {
+    const largeur = [...(tete.querySelector('tr')?.children ?? [])].reduce((n, c) => n + (c.colSpan || 1), 0);
+    const bande = document.createElement('tr');
+    bande.innerHTML = `<th class="doc-bandeau" colspan="${largeur}">Prix de revient${
+      legende ? ` <span>· ${att(legende)}</span>` : ''
+    }</th>`;
+    tete.insertBefore(bande, tete.firstChild);
+    // Le bandeau EST le titre du tableau : garder en plus le titre du bloc
+    // ecrivait « Prix de revient » deux fois a dix millimetres d intervalle.
+    table.closest('.bloc')?.querySelector('.bloc__titre')?.remove();
+  }
+
   // Le document ne compte pas les cases qui restent a remplir. « 14 postes
   // renseignes sur 46 de la nomenclature » parle de la SAISIE et non de
   // l'operation : c'est un reperage utile a l'ecran, une confidence de
@@ -7199,15 +7254,6 @@ function rendreApercuExport() {
     }
     for (const cel of copie.querySelectorAll('td.col-action, td.col-poignee, td.col-select, th.col-action, th.col-poignee, th.col-select')) {
       cel.innerHTML = '';
-    }
-    // Un document ne liste pas quarante-six postes dont trente-deux sont vides :
-    // il montre ce qui a ete chiffre. Les lignes de chapitre et de total
-    // restent, elles portent la structure.
-    for (const ligne of copie.querySelectorAll('tr[data-poste]')) {
-      const chiffree = [...ligne.querySelectorAll('input')].some(
-        (c) => /** @type {HTMLInputElement} */ (c).value.trim() !== '',
-      );
-      if (!chiffree) ligne.remove();
     }
     figerSaisies(copie);
     section.appendChild(copie);

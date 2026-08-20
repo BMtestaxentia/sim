@@ -2190,22 +2190,28 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
 /* --- LE DOCUMENT ------------------------------------------------------
    Largeur d'une A4 paysage moins ses marges, en millimetres : ce qui deborde
    ici debordera sur le papier, et se voit donc avant d'imprimer. */
+/* Le rythme vertical est SERRE, et c est une decision : un bilan tient sur
+   une page ou il oblige a tourner pour comparer un sous-total a son total.
+   La densite d un tableau de chiffres n est pas celle d un texte suivi. */
 .doc {
-  width: 277mm; margin: 0 auto; padding: 10mm 12mm;
+  width: 277mm; margin: 0 auto; padding: 8mm 10mm;
   background: #fff; color: #111;
-  font-size: 9pt; line-height: 1.45;
+  font-size: 8.5pt; line-height: 1.3;
   box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
 }
+/* L en-tete tient sur UNE ligne : identite a gauche, provenance a droite.
+   Sur trois lignes il prenait un centimetre de haut pour dire ce qui tient
+   en une - et ce centimetre manquait au tableau. */
 .doc__entete {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 12mm;
-  padding-bottom: 2.5mm; margin-bottom: 5mm;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8mm;
+  padding-bottom: 1.5mm; margin-bottom: 3mm;
   border-bottom: 0.5mm solid #222;
 }
-.doc__entete strong { font-size: 13pt; color: #000; }
+.doc__entete strong { font-size: 11.5pt; color: #000; }
 .doc__entete span { color: #555; }
 .doc__entete > div:first-child span { margin-left: 3mm; }
-.doc__meta { text-align: right; font-size: 8pt; }
-.doc__meta span { display: block; }
+.doc__meta { text-align: right; font-size: 7.5pt; white-space: nowrap; }
+.doc__meta span + span::before { content: ' · '; }
 
 /* Une section par ecran repris. Elles se suivent a l'ecran et commencent
    chacune en haut d'une page a l'impression. */
@@ -2214,12 +2220,12 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
 .doc .colonnes { display: block !important; }
 .doc .bloc {
   background: #fff !important; border: 0.3mm solid #ccc !important;
-  box-shadow: none !important; margin-bottom: 4mm; padding: 3mm 4mm;
+  box-shadow: none !important; margin-bottom: 3mm; padding: 2mm 2.5mm;
   break-inside: avoid; page-break-inside: avoid;
 }
 .doc .bloc__titre {
-  font-size: 10pt; font-weight: 700; color: #000; margin-bottom: 2mm;
-  border-bottom: 0.2mm solid #ddd; padding-bottom: 1mm;
+  font-size: 9pt; font-weight: 700; color: #000; margin-bottom: 1.5mm;
+  border-bottom: 0.2mm solid #ddd; padding-bottom: 0.8mm;
 }
 .doc h2, .doc h3, .doc h4 { color: #000; }
 
@@ -2229,9 +2235,23 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
 .doc .champ { gap: 1mm; }
 .doc .champ > span, .doc .champ__paire-titres > span { color: #666; font-size: 7pt; }
 
-.doc .tableau { width: 100%; font-size: 8pt; border-collapse: collapse; }
+/* Bandeau de tete du tableau. Il vit DANS le `thead` : un groupe d en-tete
+   se repete en haut de chaque page imprimee et y reserve sa place, ce qu un
+   en-tete en `position: fixed` ne fait pas. Il dit de quelle operation
+   parlent les chiffres - page deux comprise - et son espace haut tient lieu
+   de marge de page, `@page` n en donnant plus. Il est dans l apercu pour la
+   meme raison que tout le reste : ce qu on voit est ce qu on imprime. */
+.doc .tableau thead th.doc-bandeau {
+  padding: 4mm 0 1.5mm !important;
+  background: #fff !important; border: none !important;
+  border-bottom: 0.35mm solid #222 !important;
+  text-align: left; font-size: 9pt; font-weight: 800; color: #000;
+}
+.doc .tableau thead th.doc-bandeau span { font-weight: 500; color: #555; }
+
+.doc .tableau { width: 100%; font-size: 7.4pt; border-collapse: collapse; }
 .doc .tableau th, .doc .tableau td {
-  padding: 1mm 1.5mm !important; border-bottom: 0.2mm solid #e0e0e0;
+  padding: 0.45mm 1.1mm !important; border-bottom: 0.2mm solid #e0e0e0;
   color: #111; background: transparent !important;
 }
 .doc .tableau th { color: #444; font-weight: 700; border-bottom-color: #999; }
@@ -2327,7 +2347,14 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
    barre de choix, cadre - disparait, et le document perd son ombre et ses
    marges d'ecran pour epouser la page. */
 @media print {
-  @page { size: A4 landscape; margin: 10mm 10mm 12mm; }
+  /* MARGE DE PAGE NULLE, et ce n est pas un oubli : c est la seule facon de
+     faire taire ce que le navigateur ajoute de lui-meme - la date, l adresse
+     du fichier, « 2/2 ». Il les dessine DANS la marge de la page ; sans
+     marge, il n a plus ou les mettre. Les marges du document ne disparaissent
+     pas pour autant : elles sont dans le document, ou l apercu les montre
+     deja. Une piece jointe a un dossier de financement ne doit pas avoir l air
+     d une page web imprimee. */
+  @page { size: A4 landscape; margin: 0; }
 
   html, body { background: #fff !important; }
   /* Ne reste que l ecran des exports. Les deux regles descendent d un SEUL
@@ -2346,23 +2373,31 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
   body.en-impression .apercu-cadre {
     padding: 0 !important; border: none !important; background: none !important; overflow: visible !important;
   }
-  body.en-impression .doc {
-    width: auto !important; padding: 0 !important; box-shadow: none !important; margin: 0 !important;
-  }
-  /* L'en-tete du document se repete en haut de chaque page : un tableau de
-     chiffres qui ne dit pas de quelle operation il parle n'a aucune valeur
-     dans un dossier de financement. */
-  body.en-impression .doc__entete {
-    position: fixed; top: 0; left: 0; right: 0; background: #fff;
-  }
-  body.en-impression .doc__section:first-of-type { margin-top: 16mm; }
+  /* Le document garde EXACTEMENT la boite de l apercu : 277 mm de large,
+     centres sur la page, et ses marges interieures. Il etait mis a plat ici
+     - `width: auto`, `padding: 0` - et s etalait alors sur toute la feuille :
+     la colonne des libelles absorbait les 24 mm gagnes, les intitules se
+     coupaient ailleurs, et le PDF ne ressemblait plus a ce qu on avait sous
+     les yeux. Seule l ombre portee tombe : elle pose la feuille sur un bureau,
+     elle n a rien a faire SUR la feuille. */
+  body.en-impression .doc { box-shadow: none !important; }
+
+  /* L en-tete du document reste DANS LE FLUX. En `position: fixed` il se
+     repetait en haut de chaque page, mais rien ne lui reservait sa place :
+     des la deuxieme page il recouvrait le tableau. Ce qui se repete
+     proprement, c est l en-tete de la TABLE, qui reserve la sienne. */
+
   body.en-impression .doc__section + .doc__section {
     break-before: page; page-break-before: always;
     margin-top: 16mm; padding-top: 0; border-top: none;
   }
   /* Les en-tetes de table se repetent, les lignes ne se coupent plus. */
   thead { display: table-header-group; }
-  tfoot { display: table-footer-group; }
+  /* Le PIED, lui, ne se repete PAS. `table-footer-group` le faisait imprimer
+     au bas de CHAQUE page : le « Prix de revient total » figurait deux fois,
+     dont une au milieu du tableau, sous des lignes qu il ne totalisait pas.
+     Un total qui apparait avant la fin est un faux. */
+  tfoot { display: table-row-group; }
   tr { break-inside: avoid; page-break-inside: avoid; }
 }
 
@@ -15819,6 +15854,61 @@ function adapterPrixRevientAuDocument(copie) {
   // comme une valeur douteuse.
   for (const tr of table.querySelectorAll('tr.poste--vide')) tr.classList.remove('poste--vide');
 
+  // Un document ne liste pas quarante-six postes dont trente-deux sont vides :
+  // il montre ce qui a ete chiffre.
+  for (const ligne of table.querySelectorAll('tr[data-poste]')) {
+    const chiffree = [...ligne.querySelectorAll('input')].some(
+      (c) => /** @type {HTMLInputElement} */ (c).value.trim() !== '',
+    );
+    if (!chiffree) ligne.remove();
+  }
+
+  // ... et un chapitre dont il ne reste aucun poste s en va avec eux. Son
+  // titre et son « Sous-total frais divers : 0 € » ne portaient plus de
+  // structure, seulement une case du plan comptable restee vide.
+  let enTeteCourant = null;
+  let postesDuChapitre = 0;
+  for (const tr of [...table.querySelectorAll('tbody tr')]) {
+    if (tr.classList.contains('chapitre-entete')) {
+      enTeteCourant = tr;
+      postesDuChapitre = 0;
+      continue;
+    }
+    if (tr.classList.contains('chapitre-total')) {
+      if (!postesDuChapitre) {
+        enTeteCourant?.remove();
+        tr.remove();
+      }
+      enTeteCourant = null;
+      continue;
+    }
+    postesDuChapitre += 1;
+  }
+
+  // BANDEAU DE TETE, dans le `thead` et non au-dessus de la table : un
+  // groupe d en-tete se repete en haut de chaque page imprimee ET y reserve
+  // sa place. L en-tete du document, lui, etait en `position: fixed` : il se
+  // repetait sans rien reserver et recouvrait le tableau des la page deux.
+  // Son espace haut tient aussi lieu de marge de page, puisque `@page` n en
+  // donne plus - c'est le prix a payer pour faire taire l'en-tete que le
+  // navigateur ajoute de lui-meme.
+  const tete = table.querySelector('thead');
+  const i = etat.identite ?? {};
+  const legende = [i.nom, i.commune, i.zone_ABC && `zone ${i.zone_ABC}`]
+    .filter(Boolean)
+    .join(' · ');
+  if (tete) {
+    const largeur = [...(tete.querySelector('tr')?.children ?? [])].reduce((n, c) => n + (c.colSpan || 1), 0);
+    const bande = document.createElement('tr');
+    bande.innerHTML = `<th class="doc-bandeau" colspan="${largeur}">Prix de revient${
+      legende ? ` <span>· ${att(legende)}</span>` : ''
+    }</th>`;
+    tete.insertBefore(bande, tete.firstChild);
+    // Le bandeau EST le titre du tableau : garder en plus le titre du bloc
+    // ecrivait « Prix de revient » deux fois a dix millimetres d intervalle.
+    table.closest('.bloc')?.querySelector('.bloc__titre')?.remove();
+  }
+
   // Le document ne compte pas les cases qui restent a remplir. « 14 postes
   // renseignes sur 46 de la nomenclature » parle de la SAISIE et non de
   // l'operation : c'est un reperage utile a l'ecran, une confidence de
@@ -15887,15 +15977,6 @@ function rendreApercuExport() {
     }
     for (const cel of copie.querySelectorAll('td.col-action, td.col-poignee, td.col-select, th.col-action, th.col-poignee, th.col-select')) {
       cel.innerHTML = '';
-    }
-    // Un document ne liste pas quarante-six postes dont trente-deux sont vides :
-    // il montre ce qui a ete chiffre. Les lignes de chapitre et de total
-    // restent, elles portent la structure.
-    for (const ligne of copie.querySelectorAll('tr[data-poste]')) {
-      const chiffree = [...ligne.querySelectorAll('input')].some(
-        (c) => /** @type {HTMLInputElement} */ (c).value.trim() !== '',
-      );
-      if (!chiffree) ligne.remove();
     }
     figerSaisies(copie);
     section.appendChild(copie);

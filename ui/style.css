@@ -2264,6 +2264,33 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
   border-left: 0.4mm solid #888 !important;
 }
 .doc .col-tranche--fin { border-right: 0.4mm solid #888 !important; }
+/* ...sauf sur la barre de chapitre, qui traverse le tableau d un bord a
+   l autre. Des filets verticaux la decoupaient en cases vides, comme si les
+   colonnes attendaient une valeur qui ne viendra jamais. */
+.doc tr.doc-chapitre td { border-left: none !important; border-right: none !important; }
+
+/* En-tete de tranche : la CELLULE porte la couleur du produit. Une pastille
+   de trois millimetres se perd a l impression, un aplat non - et c est ce qui
+   permet de suivre une colonne du haut du tableau jusqu a son sous-total.
+   Le fond vient de --cat-fond, identique dans les deux themes : le document
+   ne doit pas changer selon que l ecran est clair ou sombre. */
+.doc .tableau thead th.col-groupe {
+  background: color-mix(in srgb, var(--cat-fond, #dcdcdc) 60%, #fff) !important;
+  color: #000 !important; font-weight: 800; font-size: 8pt;
+  border-bottom: 0.3mm solid #999;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.doc .tableau thead th.col-groupe .col-groupe__puce { display: none; }
+/* Les sous-colonnes reprennent la teinte, en plus pale : le bloc se lit
+   d un seul tenant. */
+.doc .tableau thead th.col-tranche {
+  background: color-mix(in srgb, var(--cat-fond, #eee) 25%, #fff) !important;
+  text-align: center;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+/* Un taux se centre, un montant s aligne a droite : le taux est une etiquette
+   a trois caracteres, pas une grandeur qu on additionne colonne par colonne. */
+.doc td.col-tranche:not(.num) { text-align: center; }
 .doc .tableau--entete-figee thead th { position: static !important; }
 /* Les bandeaux et tuiles s'aplatissent : sur papier, un aplat de couleur mange
    de l'encre sans rien dire de plus qu'un filet. */

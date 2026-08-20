@@ -1815,15 +1815,20 @@ function rendreTablePrixRevient() {
   const groupes = codes
     .map(
       (c) =>
-        `<th class="col-groupe${finBloc(c)}" colspan="${tva ? 2 : 1}" style="--cat:${catProduit(c)}">` +
+        `<th class="col-groupe${finBloc(c)}" colspan="${tva ? 2 : 1}" ` +
+        `style="--cat:${catProduit(c)};--cat-fond:${catFondProduit(c)}">` +
         `<span class="col-groupe__puce"></span>${att(libelleProduit(c))}</th>`,
     )
     .join('');
   const sousColonnes = codes
     .map(
       (c) =>
-        `<th class="num col-tranche col-tranche--debut${tva ? '' : finBloc(c)}" style="--cat:${catProduit(c)}">HT (€)</th>` +
-        (tva ? `<th class="num col-tranche${finBloc(c)}" style="--cat:${catProduit(c)}">TVA</th>` : ''),
+        `<th class="num col-tranche col-tranche--debut${tva ? '' : finBloc(c)}" ` +
+          `style="--cat:${catProduit(c)};--cat-fond:${catFondProduit(c)}">HT (€)</th>` +
+        (tva
+          ? `<th class="num col-tranche${finBloc(c)}" ` +
+            `style="--cat:${catProduit(c)};--cat-fond:${catFondProduit(c)}">TVA</th>`
+          : ''),
     )
     .join('');
 

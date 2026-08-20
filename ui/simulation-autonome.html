@@ -15829,9 +15829,8 @@ document.addEventListener('click', async (ev) => {
     });
     if (nom === null) return;
     viderFileDeSauvegarde();
-    // Une simulation neuve part de la DEMONSTRATION et non d'un objet vide :
-    // une page de saisie entierement vierge ne calcule rien et n'apprend rien.
-    // Les profils de parametres suivent, ils sont le reglage de l'organisme.
+    // Une simulation neuve est VIERGE : voir ETAT_INITIAL pour ce qu'elle
+    // garde et ce qu'elle laisse vide.
     const neuve = structuredClone(ETAT_INITIAL);
     neuve.identite = { ...(neuve.identite ?? {}), nom: nom.trim() || 'Nouvelle opération' };
     const id = ajouterSimulation(neuve);
@@ -16551,13 +16550,45 @@ document.addEventListener('click', async (ev) => {
 
 appliquerTheme(themeInitial());
 /**
- * Etat de depart FIGE, capture avant toute restauration.
+ * Modele d'une simulation NEUVE : les reglages par defaut, et rien d'autre.
  *
- * C'est le modele d'une simulation neuve. Le prendre ici plutot que de cloner
- * l'etat courant evite qu'une « nouvelle simulation » herite du dossier
- * consulte juste avant : on en creerait une copie sans l'avoir demande.
+ * Ce qui est vide : le programme, les postes de prix de revient, les
+ * subventions, les prets, les parametres de loyer par tranche. Une operation
+ * qu'on cree est une operation qu'on va saisir ; y trouver les six logements
+ * et les quatorze postes de la demonstration obligerait a les effacer un par
+ * un, et laisserait surtout croire a un chiffrage qui n'a jamais ete fait.
+ *
+ * Ce qui est garde : les dates par defaut, les hypotheses d'exploitation, le
+ * catalogue des charges (tout inactif) et les profils de parametres, qui sont
+ * le reglage de l'organisme et non des donnees d'operation. La NOMENCLATURE
+ * des postes est gardee elle aussi, sans montants : ses quarante-six lignes
+ * sont le cadre de saisie, pas du contenu.
+ *
+ * Fige a l'ouverture de l'application, avant toute restauration : le prendre
+ * ici plutot que de cloner l'etat courant evite qu'une simulation neuve herite
+ * du dossier consulte juste avant.
  */
-const ETAT_INITIAL = structuredClone(simulationCourantePayload());
+const ETAT_INITIAL = (() => {
+  const vierge = structuredClone(simulationCourantePayload());
+  vierge.identite = {
+    ...vierge.identite,
+    nom: '',
+    // Le groupe se saisit : rattacher d'office une operation neuve au projet
+    // de la demonstration creerait un faux lien entre deux dossiers.
+    groupe: '',
+    commune: '',
+    departement: '',
+  };
+  vierge.lots = [];
+  vierge.postes_bilan = nomenclatureEnPostes();
+  vierge.subventions = [];
+  vierge.prets = [];
+  vierge.loyers_par_produit = {};
+  vierge.fonds_propres_par_produit = {};
+  vierge.remuneration_fonds_propres = {};
+  vierge.regimes_par_produit = {};
+  return vierge;
+})();
 restaurerSaisie();
 rendreChampsStatiques();
 rafraichirTout();

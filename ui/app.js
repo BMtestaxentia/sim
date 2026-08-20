@@ -6466,6 +6466,9 @@ function afficherEcran(cible) {
     /* voir memoriserSaisie */
   }
   if (vise === 'parametres') rendreParametres();
+  // L'apercu est un CLONE des ecrans : il se refait a chaque arrivee sur
+  // l'onglet, sinon il montrerait le dossier tel qu'il etait la fois d'avant.
+  if (vise === 'exports') rendreApercuExport();
 }
 
 /**
@@ -6552,6 +6555,27 @@ function modificationsEnAttente() {
   if (!idSimulationOuverte || !etatAuChargement) return false;
   return JSON.stringify(simulationCourantePayload()) !== etatAuChargement;
 }
+
+/**
+ * Recharger ou fermer l'onglet avec des modifications en attente demande
+ * confirmation.
+ *
+ * La saisie s'enregistre toute seule, donc rien n'est perdu au sens strict -
+ * mais « enregistre » n'est pas « valide ». On essaie une variante, on ferme
+ * la fenetre par reflexe, et l'essai devient la version de reference sans
+ * qu'on l'ait voulu. Ce garde-fou laisse le temps de choisir.
+ *
+ * Le navigateur impose son propre libelle : on ne peut ni le personnaliser ni
+ * le remplacer par la boite de l'application, une page ne pouvant pas retenir
+ * une fermeture derriere un dialogue qu'elle dessine elle-meme.
+ */
+window.addEventListener('beforeunload', (ev) => {
+  if (!modificationsEnAttente()) return;
+  ev.preventDefault();
+  // `returnValue` reste exige par plusieurs navigateurs pour declencher la
+  // demande, meme si sa valeur n'est plus affichee nulle part.
+  ev.returnValue = '';
+});
 
 /** Ce qui part au depot : la saisie, et rien d'autre. */
 function simulationCourantePayload() {
@@ -6963,62 +6987,158 @@ function exporterSimulation(id) {
   URL.revokeObjectURL(url);
 }
 
-// ---------------------------------------------------------------- edition PDF
+// ---------------------------------------------------------------- exports
 
 /**
- * Edite le dossier complet en PDF.
- *
- * Par l'IMPRESSION du navigateur, et non par une bibliotheque. Trois raisons :
- * le projet s'interdit toute dependance de production (CLAUDE.md §3) ; la
- * version autonome doit fonctionner hors ligne, ce qu'un script distant
- * interdirait ; et l'impression native produit un PDF vectoriel dont le texte
- * reste selectionnable et cherchable, la ou une capture d'ecran donnerait une
- * image. L'utilisateur choisit « Enregistrer au format PDF » dans la boite du
- * navigateur.
- *
- * Trois preparations avant d'imprimer :
- *   - le theme passe au CLAIR. Les navigateurs n'impriment pas les fonds par
- *     defaut : en theme sombre, on obtiendrait du texte pale sur du blanc,
- *     c'est-a-dire une page vide.
- *   - tous les ecrans deviennent visibles, chacun sur sa page. A l'ecran on
- *     regarde un onglet a la fois ; un dossier, lui, se lit en entier.
- *   - l'en-tete du document est rempli avec l'identite de l'operation.
+ * Composition de chaque export : les ecrans repris, dans l'ordre du document.
+ * Un export est une VUE du dossier, pas un format : c'est le choix des
+ * sections qui le definit.
  */
-function editerPDF() {
-  if (!idSimulationOuverte) return;
-  preparerImpression();
-  // Le rendu doit etre peint AVANT l'ouverture de la boite d'impression,
-  // sinon le navigateur photographie l'etat precedent.
-  requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+const EXPORTS = {
+  'prix-revient': {
+    titre: 'Prix de revient',
+    ecrans: ['prix-revient'],
+  },
+  financier: {
+    titre: 'Dossier financier',
+    ecrans: ['prix-revient', 'financement', 'exploitation'],
+  },
+  complet: {
+    titre: 'Dossier complet',
+    ecrans: ['operation', 'programme', 'prix-revient', 'financement', 'tresorerie', 'exploitation'],
+  },
+};
+
+/** Export choisi. Le premier de la liste par defaut. */
+let exportChoisi = 'prix-revient';
+
+/**
+ * Remplace les champs de saisie par leur VALEUR, en texte.
+ *
+ * Deux raisons, et la premiere est un piege : `cloneNode` copie l'attribut
+ * `value` et non la propriete. Une valeur posee par le code - ce qui est le cas
+ * de presque tout ici - ne survit donc pas au clonage, et l'apercu afficherait
+ * des cases vides. La seconde est de forme : un cadre de saisie dans un
+ * document fait croire a un formulaire a remplir.
+ */
+function figerSaisies(racine) {
+  for (const champ of racine.querySelectorAll('input, select, textarea')) {
+    const el = /** @type {HTMLInputElement|HTMLSelectElement} */ (champ);
+    if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) {
+      const marque = document.createElement('span');
+      marque.textContent = el.checked ? 'oui' : 'non';
+      marque.className = 'doc__valeur';
+      el.replaceWith(marque);
+      continue;
+    }
+    const texte =
+      el instanceof HTMLSelectElement ? (el.selectedOptions[0]?.textContent ?? '') : el.value;
+    const span = document.createElement('span');
+    // Le placeholder porte souvent la valeur par defaut - un montant calcule,
+    // un taux du referentiel. Une case vide dans un document ne dit rien ;
+    // la valeur qui s'appliquera, si.
+    span.textContent = texte || el.getAttribute('placeholder') || '';
+    span.className = 'doc__valeur';
+    el.replaceWith(span);
+  }
 }
 
-/** Remplit l'en-tete du document et bascule en theme clair. */
-function preparerImpression() {
+/**
+ * Construit l'apercu du document.
+ *
+ * L'apercu N'EST PAS une representation de l'export : c'est l'export. Le PDF
+ * imprime ce conteneur et rien d'autre, si bien qu'aucun ecart n'est possible
+ * entre ce qu'on voit et ce qu'on obtient. C'est la seule facon de tenir la
+ * promesse d'un apercu.
+ */
+function rendreApercuExport() {
+  const cible = document.getElementById('apercu-export');
+  if (!cible) return;
+  const def = EXPORTS[exportChoisi] ?? EXPORTS['prix-revient'];
   const i = etat.identite ?? {};
-  const pose = (id, texte) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = texte ?? '';
-  };
-  pose('impr-nom', i.nom || 'Simulation sans nom');
-  pose('impr-groupe', i.groupe ? `Projet ${i.groupe}` : '');
-  pose(
-    'impr-lieu',
-    [i.commune, i.zone_ABC && `zone ${i.zone_ABC}`, i.type_operation].filter(Boolean).join(' · '),
-  );
-  // La date d'edition n'est pas une donnee de calcul : elle date le document,
-  // pas l'operation. Le moteur, lui, ne lit jamais l'heure.
-  pose('impr-date', `Édité le ${dateHeureLisible(new Date().toISOString())}`);
 
+  const enTete = `
+    <header class="doc__entete">
+      <div>
+        <strong>${att(i.nom || 'Simulation sans nom')}</strong>
+        ${i.groupe ? `<span>Projet ${att(i.groupe)}</span>` : ''}
+      </div>
+      <div class="doc__meta">
+        <span>${att([i.commune, i.zone_ABC && `zone ${i.zone_ABC}`, i.type_operation].filter(Boolean).join(' · '))}</span>
+        <span>${att(def.titre)} · édité le ${att(dateHeureLisible(new Date().toISOString()))}</span>
+      </div>
+    </header>`;
+
+  cible.innerHTML = enTete;
+
+  for (const id of def.ecrans) {
+    const source = document.getElementById(`ecran-${id}`);
+    if (!source) continue;
+    const section = document.createElement('section');
+    section.className = 'doc__section';
+    const copie = /** @type {HTMLElement} */ (source.cloneNode(true));
+    copie.removeAttribute('id');
+    copie.removeAttribute('hidden');
+    copie.removeAttribute('role');
+    // Les identifiants dupliques feraient pointer les `getElementById` de
+    // l'application sur la COPIE : tout rendu ulterieur ecrirait dans
+    // l'apercu au lieu de l'ecran.
+    for (const el of copie.querySelectorAll('[id]')) el.removeAttribute('id');
+    // Ce qui sert a agir n'a rien a faire dans un document.
+    for (const el of copie.querySelectorAll(
+      '.bouton, .bouton--supprimer, .biblio-action, .poignee, .col-poignee, .col-select, .col-action, .bloc__outils, .aide, .legende-saisie, .grille__aide, .tri__fleche',
+    )) {
+      el.remove();
+    }
+    figerSaisies(copie);
+    section.appendChild(copie);
+    cible.appendChild(section);
+  }
+
+  const info = document.getElementById('exports-info');
+  if (info) {
+    const n = def.ecrans.length;
+    info.textContent = `${n} section${n > 1 ? 's' : ''} · A4 paysage`;
+  }
+  for (const b of document.querySelectorAll('#choix-export [data-export]')) {
+    b.classList.toggle('choix__option--actif', /** @type {HTMLElement} */ (b).dataset.export === exportChoisi);
+  }
+}
+
+/**
+ * Edite l'apercu en PDF, par l'impression du navigateur.
+ *
+ * Sans bibliotheque : le projet s'interdit toute dependance de production
+ * (CLAUDE.md §3), la version autonome doit fonctionner hors ligne, et
+ * l'impression native produit un document vectoriel dont le texte reste
+ * selectionnable - une bibliotheque de rendu aurait donne une image.
+ *
+ * Le theme passe au CLAIR le temps de l'impression : les navigateurs
+ * n'impriment pas les fonds, et en theme sombre on obtiendrait du texte pale
+ * sur du blanc, c'est-a-dire une page vide.
+ */
+function telechargerPDF() {
+  if (!idSimulationOuverte) return;
+  rendreApercuExport();
   themeAvantImpression = document.documentElement.dataset.theme;
   document.documentElement.dataset.theme = 'clair';
+  document.body.classList.add('en-impression');
+  // Laisser le navigateur appliquer le theme clair et la mise en page du
+  // document avant d'ouvrir la boite, sinon il photographie l'etat precedent.
+  //
+  // Par un delai et non par `requestAnimationFrame` : celui-ci ne se declenche
+  // pas dans un onglet qui n'est pas au premier plan, et l'application
+  // resterait alors bloquee en theme clair, sans jamais imprimer.
+  setTimeout(() => window.print(), 60);
 }
 
 /** Theme a rendre apres l'impression. */
 let themeAvantImpression = null;
 
-// Le theme revient a ce qu'il etait, que l'utilisateur ait imprime ou annule :
-// `afterprint` se declenche dans les deux cas.
+// `afterprint` se declenche que l'on ait imprime ou annule : l'ecran revient
+// dans les deux cas.
 window.addEventListener('afterprint', () => {
+  document.body.classList.remove('en-impression');
   if (themeAvantImpression) document.documentElement.dataset.theme = themeAvantImpression;
   themeAvantImpression = null;
 });
@@ -7713,8 +7833,20 @@ document.addEventListener('click', async (ev) => {
     rendreBibliotheque();
     return;
   }
-  if (el.closest('#btn-pdf')) {
-    editerPDF();
+  // --- Ecran Exports ---
+  const choixExport = el.closest('#choix-export [data-export]');
+  if (choixExport) {
+    exportChoisi = /** @type {HTMLElement} */ (choixExport).dataset.export;
+    rendreApercuExport();
+    return;
+  }
+  if (el.closest('#btn-telecharger-pdf')) {
+    telechargerPDF();
+    return;
+  }
+  if (el.closest('#btn-export-json')) {
+    viderFileDeSauvegarde();
+    exporterSimulation(idSimulationOuverte);
     return;
   }
   if (el.closest('#btn-fermer-sim')) {

@@ -63,6 +63,9 @@
         <button type="button" class="onglet" role="tab" data-ecran="exploitation" aria-selected="false">
           Exploitation
         </button>
+        <button type="button" class="onglet" role="tab" data-ecran="exports" aria-selected="false">
+          Exports
+        </button>
         <button type="button" class="onglet" role="tab" data-ecran="parametres" aria-selected="false">
           Paramètres
         </button>
@@ -77,9 +80,6 @@
           <!-- « Fermer » vit ici, au bout du rail d'onglets : il termine le
                travail sur le dossier ouvert. Il ne paraît que dans une
                simulation - sans dossier ouvert, il n'a rien à fermer. -->
-          <button type="button" id="btn-pdf" class="bouton bouton--discret"
-                  title="Éditer le dossier complet en PDF">PDF</button>
-          <span class="entete__filet" aria-hidden="true"></span>
           <button type="button" id="btn-fermer-sim" class="bouton bouton--discret"
                   title="Fermer la simulation ouverte">Fermer</button>
           <span class="entete__filet" aria-hidden="true"></span>
@@ -90,19 +90,7 @@
 
     <div id="erreur" class="erreur" hidden></div>
 
-    <!-- En-tête du DOCUMENT imprimé. Invisible à l'écran, il porte l'identité
-         de l'opération sur chaque page du PDF : un tableau de chiffres qui ne
-         dit pas de quelle opération il parle n'a aucune valeur dans un dossier
-         de financement. Rempli par `preparerImpression`. -->
-    <div id="entete-impression" aria-hidden="true">
-      <div class="impr__marque">
-        <strong id="impr-nom"></strong>
-        <span id="impr-groupe"></span>
-      </div>
-      <div class="impr__meta">
-        <span id="impr-lieu"></span>
-        <span id="impr-date"></span>
-      </div>
+
     </div>
 
     <!-- ================= ÉCRAN 0 - BIBLIOTHÈQUE =================
@@ -658,6 +646,37 @@
     </main>
 
     <!-- ================= ÉCRAN 4 - PARAMÈTRES ================= -->
+    <!-- ================= ÉCRAN - EXPORTS =================
+         Chaque bouton édite une VUE du dossier en PDF. Le PDF passe par
+         l'impression du navigateur : rien à installer, et le texte du document
+         reste sélectionnable. L'écran lui-même ne s'imprime jamais. -->
+    <main class="ecran" id="ecran-exports" role="tabpanel" hidden>
+      <!-- Barre de choix : le type d'export, puis le téléchargement. Ce qui
+           s'affiche en dessous EST le document, aux marges de page près. -->
+      <div class="exports__barre">
+        <div class="choix" id="choix-export" role="group" aria-label="Type d'export">
+          <button type="button" class="choix__option choix__option--actif" data-export="prix-revient">
+            Prix de revient</button>
+          <button type="button" class="choix__option" data-export="financier">
+            Dossier financier</button>
+          <button type="button" class="choix__option" data-export="complet">
+            Dossier complet</button>
+        </div>
+        <span class="exports__info" id="exports-info"></span>
+        <button type="button" class="bouton bouton--discret" id="btn-export-json">
+          Fichier JSON</button>
+        <button type="button" class="bouton bouton--principal" id="btn-telecharger-pdf">
+          Télécharger en PDF</button>
+      </div>
+
+      <!-- L'aperçu est le document LUI-MÊME : c'est ce conteneur, et lui seul,
+           que l'impression envoie au PDF. Il n'y a donc aucun écart possible
+           entre ce qu'on voit et ce qu'on obtient. -->
+      <div class="apercu-cadre">
+        <div id="apercu-export" class="doc"></div>
+      </div>
+    </main>
+
     <main class="ecran" id="ecran-parametres" role="tabpanel" hidden>
       <!-- La barre de tete est STATIQUE : le champ de recherche s'y trouve, et
            le reconstruire a chaque frappe lui couterait le focus. Seul le

@@ -177,7 +177,11 @@
             </label>
             <label class="champ">
               <span>Type d'opération</span>
+              <!-- Option vide en tête : une opération neuve ne présume pas de
+                   son montage, et proposer VEFA d'office ferait passer un
+                   défaut d'affichage pour un choix. -->
               <select data-champ="identite.type_operation">
+                <option value="">-</option>
                 <option>VEFA</option>
                 <option>Neuf</option>
                 <option>Acq-Amélio</option>
@@ -197,12 +201,18 @@
                  (fiscale A/B/C, loyers 1/2/3). Separes, l'un finissait orphelin
                  sur sa propre rangee. -->
             <label class="champ">
-              <span>Zonage A/B/C · 1/2/3</span>
+              <!-- Chaque zonage porte son intitulé au-dessus de SON menu, mais
+                   la rangée d'intitulés reste UNE ligne, de la même hauteur que
+                   celle des autres champs. Deux étiquettes empilées au-dessus
+                   des menus rendaient cette case plus haute que ses voisines et
+                   désalignaient toute la rangée. -->
+              <span class="champ__paire-titres"><span>Zonage A/B/C</span><span>1/2/3</span></span>
               <div class="champ__paire">
-                <!-- La VALEUR suit l'ecriture de l'arrete (« Abis ») pour que la
-                     deduction depuis la commune trouve son option ; le libelle
+                <!-- La VALEUR suit l'écriture de l'arrêté (« Abis ») pour que la
+                     déduction depuis la commune trouve son option ; le libellé
                      reste lisible. Le moteur accepte les deux graphies. -->
                 <select data-champ="identite.zone_ABC" aria-label="Zone A/B/C">
+                  <option value="">-</option>
                   <option value="A">A</option>
                   <option value="Abis">A bis</option>
                   <option value="B1">B1</option>
@@ -210,6 +220,7 @@
                   <option value="C">C</option>
                 </select>
                 <select data-champ="identite.zone_123" data-type="nombre" aria-label="Zone 1/2/3">
+                  <option value="">-</option>
                   <option value="1">1</option>
                   <option value="2">2</option>
                   <option value="3">3</option>
@@ -252,7 +263,7 @@
 
       <section class="bloc">
         <h2 class="bloc__titre">Récapitulatif de l'opération</h2>
-        <div class="indicateurs" id="recap-operation"></div>
+        <div class="indicateurs" id="recap-operation" data-restitution></div>
       </section>
     </main>
 
@@ -345,7 +356,7 @@
       <section class="bloc">
         <h2 class="bloc__titre">Synthèse par tranche</h2>
         <div class="table-defilante">
-          <table class="tableau" id="table-synthese-tranches">
+          <table class="tableau" id="table-synthese-tranches" data-restitution>
             <thead>
               <tr>
                 <th>Financement</th>
@@ -402,7 +413,7 @@
       <section class="bloc" id="bloc-ventilation-pdr">
         <h2 class="bloc__titre">Répartition par financement</h2>
         <div class="table-defilante">
-          <table class="tableau" id="table-ventilation-pdr">
+          <table class="tableau" id="table-ventilation-pdr" data-restitution>
             <thead>
               <tr>
                 <th>Tranche</th>
@@ -417,7 +428,7 @@
             <tfoot></tfoot>
           </table>
         </div>
-        <p class="aide" id="aide-ventilation-pdr"></p>
+        <p class="aide" id="aide-ventilation-pdr" data-restitution></p>
       </section>
     </main>
 
@@ -432,7 +443,7 @@
            tranches n'etant connues qu'apres calcul. -->
       <div class="bascule bascule--perimetre" id="vue-financement"></div>
 
-      <div id="bandeau-controle" class="bandeau"></div>
+      <div id="bandeau-controle" data-restitution class="bandeau"></div>
 
       <div class="colonnes colonnes--balance">
         <section class="bloc">
@@ -442,24 +453,24 @@
                  a deviner de quel cote tombait chaque poste. -->
             <div class="balance__colonne">
               <div class="balance__libelle">Emplois</div>
-              <div class="barre" id="barre-emplois"></div>
-              <div class="balance__total" id="total-emplois">-</div>
-              <div class="balance__precision" id="precision-emplois"></div>
-              <div class="legende legende--detail" id="legende-emplois"></div>
+              <div class="barre" id="barre-emplois" data-restitution></div>
+              <div class="balance__total" id="total-emplois" data-restitution>-</div>
+              <div class="balance__precision" id="precision-emplois" data-restitution></div>
+              <div class="legende legende--detail" id="legende-emplois" data-restitution></div>
             </div>
             <div class="balance__colonne">
               <div class="balance__libelle">Ressources</div>
-              <div class="barre" id="barre-ressources"></div>
-              <div class="balance__total" id="total-ressources">-</div>
-              <div class="balance__precision" id="precision-ressources"></div>
-              <div class="legende" id="legende-ressources"></div>
+              <div class="barre" id="barre-ressources" data-restitution></div>
+              <div class="balance__total" id="total-ressources" data-restitution>-</div>
+              <div class="balance__precision" id="precision-ressources" data-restitution></div>
+              <div class="legende" id="legende-ressources" data-restitution></div>
             </div>
           </div>
         </section>
 
         <section class="bloc">
           <h2 class="bloc__titre">Indicateurs</h2>
-          <div class="indicateurs" id="indicateurs"></div>
+          <div class="indicateurs" id="indicateurs" data-restitution></div>
         </section>
       </div>
 
@@ -477,7 +488,7 @@
       <section class="bloc">
         <h2 class="bloc__titre">Prêts</h2>
         <div class="table-defilante">
-          <table class="tableau" id="table-prets">
+          <table class="tableau" id="table-prets" data-restitution>
             <thead>
               <tr>
                 <th>Prêt</th>
@@ -495,19 +506,19 @@
             <tfoot></tfoot>
           </table>
         </div>
-        <p class="aide" id="aide-taux"></p>
+        <p class="aide" id="aide-taux" data-restitution></p>
       </section>
 
         <section class="bloc">
           <h2 class="bloc__titre">Subventions</h2>
-          <div id="liste-subventions"></div>
+          <div id="liste-subventions" data-restitution></div>
         </section>
       </div>
 
       <section class="bloc">
         <h2 class="bloc__titre">Contrôles</h2>
-        <ul class="controles" id="controles"></ul>
-        <div id="messages-moteur"></div>
+        <ul class="controles" id="controles" data-restitution></ul>
+        <div id="messages-moteur" data-restitution></div>
       </section>
     </main>
 
@@ -519,20 +530,20 @@
     <main class="ecran" id="ecran-tresorerie" role="tabpanel" hidden>
       <section class="bloc">
         <h2 class="bloc__titre">Trésorerie de chantier</h2>
-        <div class="indicateurs" id="recap-tresorerie"></div>
-        <p class="aide" id="aide-tresorerie"></p>
+        <div class="indicateurs" id="recap-tresorerie" data-restitution></div>
+        <p class="aide" id="aide-tresorerie" data-restitution></p>
       </section>
 
       <section class="bloc">
         <h2 class="bloc__titre">Besoin de financement au fil du chantier</h2>
-        <div id="graphe-tresorerie"></div>
-        <p class="aide" id="legende-tresorerie"></p>
+        <div id="graphe-tresorerie" data-restitution></div>
+        <p class="aide" id="legende-tresorerie" data-restitution></p>
       </section>
 
       <section class="bloc">
         <h2 class="bloc__titre">Échéancier mensuel</h2>
         <div>
-          <table class="tableau tableau--entete-figee" id="table-tresorerie">
+          <table class="tableau tableau--entete-figee" id="table-tresorerie" data-restitution>
             <thead>
               <tr>
                 <th>Mois</th>
@@ -555,11 +566,11 @@
     </main>
 
     <main class="ecran" id="ecran-exploitation" role="tabpanel" hidden>
-      <div id="bandeau-exploitation" class="bandeau"></div>
+      <div id="bandeau-exploitation" data-restitution class="bandeau"></div>
 
       <section class="bloc">
         <h2 class="bloc__titre">Lecture d'ensemble</h2>
-        <div class="indicateurs" id="tuiles-exploitation"></div>
+        <div class="indicateurs" id="tuiles-exploitation" data-restitution></div>
       </section>
 
       <section class="bloc">
@@ -571,8 +582,8 @@
             <span class="legende__item"><span class="legende__puce puce--cumul"></span>cumul</span>
           </span>
         </h2>
-        <div id="graphe-exploitation"></div>
-        <p class="aide" id="aide-graphe"></p>
+        <div id="graphe-exploitation" data-restitution></div>
+        <p class="aide" id="aide-graphe" data-restitution></p>
       </section>
 
       <section class="bloc">
@@ -589,7 +600,7 @@
              compte se lit sur soixante lignes - les garder sous les yeux
              compte plus que le repli d'une colonne sur un ecran etroit. -->
         <div>
-          <table class="tableau tableau--entete-figee" id="table-exploitation">
+          <table class="tableau tableau--entete-figee" id="table-exploitation" data-restitution>
             <thead>
               <!-- DEUX vues, cote a cote et non entremelees. La vue TRESORERIE
                    occupe les colonnes de gauche, dans leur ordre d'origine :
@@ -613,12 +624,12 @@
             <tfoot></tfoot>
           </table>
         </div>
-        <p class="aide" id="aide-exploitation"></p>
+        <p class="aide" id="aide-exploitation" data-restitution></p>
       </section>
 
       <section class="bloc">
         <h2 class="bloc__titre">Postes non encore modélisés</h2>
-        <ul class="alertes" id="postes-absents"></ul>
+        <ul class="alertes" id="postes-absents" data-restitution></ul>
         <p class="aide">
           ⚙ Ces postes existent dans la matrice LEON et dans la maquette, mais le moteur ne les
           produit pas encore. Le résultat affiché est donc un compte partiel : il surestime

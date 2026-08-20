@@ -454,9 +454,14 @@ html, body {
 .champs--serres { grid-template-columns: repeat(auto-fit, minmax(160px, 220px)); margin-top: 10px; }
 .champ { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .champ--large { grid-column: 1 / -1; }
-/* Deux saisies jumelles dans une case : les deux ecritures d'un meme zonage. */
-.champ__paire { display: flex; gap: 6px; }
-.champ__paire > select { flex: 1; min-width: 0; }
+/* Deux saisies jumelles dans une case : les deux ecritures d'un meme zonage.
+   Chacune porte son intitule, en plus petit que celui de la case. */
+/* Deux saisies jumelles dans une case : les deux ecritures d’un meme zonage.
+   La rangee d’intitules est UNE ligne, decoupee en deux colonnes calees sur
+   les menus du dessous - la case garde ainsi exactement la hauteur de ses
+   voisines, et la rangee reste alignee. */
+.champ__paire, .champ__paire-titres { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.champ__paire > select { min-width: 0; }
 .champ > span {
   font-size: 10.5px; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.04em; color: var(--text-tertiary);

@@ -702,13 +702,69 @@ function libelleProduit(code) {
  * propres.
  */
 /**
+ * Elague TOUT ce qui se rattache a un produit absent du programme.
+ *
+ * Le programme est la source de verite : une tranche existe parce que des lots
+ * la portent. Or beaucoup de donnees sont indexees par produit - marges de
+ * loyer, fonds propres, regime de redevance, ventilation du prix de revient,
+ * prets, affectation des subventions - et elles survivaient a la disparition
+ * du produit. Transformer tout son PLAI en PLS laissait des montants de prix
+ * de revient PLAI, des prets PLAI et un plan de financement PLAI, invisibles a
+ * l'ecran mais bien presents dans les totaux. C'est la source des valeurs
+ * fantomes.
+ *
+ * La regle est desormais sans exception : ce qui n'a plus de tranche n'existe
+ * plus. Elle s'applique a chaque rafraichissement de structure, donc a chaque
+ * geste qui touche au programme.
+ *
+ * CE QUE CELA COUTE : retirer le dernier lot d'une tranche efface ses prets et
+ * ses marges, et les remettre ne les rendra pas - la tranche renaitra avec ses
+ * valeurs par defaut. C'est le prix a payer pour qu'aucun chiffre ne survive a
+ * ce qui le justifiait, et c'est le bon arbitrage : un montant fantome dans un
+ * plan de financement est une faute, une ressaisie n'est qu'une corvee.
+ *
+ * Les SUBVENTIONS font exception a la suppression : leur affectation est une
+ * metadonnee facultative, pas leur nature. On efface donc l'affectation devenue
+ * caduque et on garde la ligne, qui redevient non affectee - supprimer une
+ * somme saisie par l'utilisateur serait autrement plus grave.
+ */
+function elaguerProduitsAbsents() {
+  const actifs = new Set(tranchesActives());
+  const purger = (dico) => {
+    if (!dico || typeof dico !== 'object') return;
+    for (const code of Object.keys(dico)) if (!actifs.has(code)) delete dico[code];
+  };
+
+  purger(etat.loyers_par_produit);
+  purger(etat.fonds_propres_par_produit);
+  purger(etat.remuneration_fonds_propres);
+  purger(etat.regimes_par_produit);
+
+  for (const p of etat.postes_bilan ?? []) {
+    purger(p.montants_ht_par_produit);
+    purger(p.taux_tva_par_produit);
+    // Un poste ventile dont plus aucune tranche ne subsiste redevient global :
+    // laisser un dictionnaire vide le ferait passer pour ventile a zero.
+    if (p.montants_ht_par_produit && !Object.keys(p.montants_ht_par_produit).length) {
+      delete p.montants_ht_par_produit;
+      delete p.taux_tva_par_produit;
+    }
+  }
+
+  // Un pret sans produit est un pret d'operation (collecteur, ALS...) : il
+  // n'appartient a aucune tranche et survit.
+  etat.prets = (etat.prets ?? []).filter((p) => !p.produit || actifs.has(p.produit));
+
+  for (const s of etat.subventions ?? []) {
+    if (s.affectation && !actifs.has(s.affectation)) delete s.affectation;
+  }
+}
+
+/**
  * R-FIN-3 - Chaque tranche presente au programme porte un pret CDC foncier et un
  * pret CDC construction, crees des son apparition et en montant AUTOMATIQUE.
  *
- * On ne les supprime PAS quand la tranche disparait : l'utilisateur peut avoir
- * retire un lot par erreur, et retrouver ses caracteristiques de pret en
- * revenant en arriere vaut mieux que les ressaisir. Le moteur ignore un pret
- * dont la tranche n'existe plus.
+ * Ils disparaissent avec elle : voir `elaguerProduitsAbsents`.
  */
 function pretsCDCParDefaut(codes) {
   for (const code of codes) {
@@ -1635,6 +1691,11 @@ function rendreEntetesTriLots() {
 }
 
 function rendreStructure() {
+  // AVANT toute chose : ce qui n'a plus de tranche disparait. Place ici parce
+  // que c'est le point de passage de tout changement de structure - ajout ou
+  // suppression de lot, changement de financement, ouverture d'une simulation.
+  elaguerProduitsAbsents();
+
   // --- Programme : une ligne par LOT ---
   const optionsProduit = (selection) =>
     produitsOrdonnes()
@@ -3040,31 +3101,65 @@ function rendreCalendrier(r) {
 }
 
 /** Vide l'ecran de restitution : mieux vaut rien qu'un resultat perime presente comme valide. */
+/**
+ * Efface TOUT ce que le resultat du moteur a produit.
+ *
+ * La liste des zones a vider n'est plus tenue ici : chaque conteneur porte
+ * l'attribut `data-restitution` dans le HTML, et cette fonction les balaie
+ * tous. Une liste dans le code derivait a chaque ecran ajoute, et l'oubli ne
+ * se voyait pas - c'est ainsi qu'une simulation vierge affichait encore la
+ * tresorerie, les totaux de lots et le plan de financement du dossier
+ * precedent. Un chiffre qui survit a ce qui l'a produit est pire qu'une case
+ * vide : on le croit vrai.
+ *
+ * La regle pour la suite : toute zone remplie par le resultat porte
+ * `data-restitution`. Rien d'autre a faire.
+ */
 function viderRestitution(message) {
-  const bandeau = $('#bandeau-controle');
-  bandeau.className = 'bandeau bandeau--erreur';
-  bandeau.innerHTML = `<span class="bandeau__principal">Aucun résultat</span>
-    <span class="bandeau__detail">${att(message)}</span>`;
-  for (const sel of [
-    '#barre-emplois', '#barre-ressources', '#legende-emplois', '#legende-ressources',
-    '#precision-emplois', '#precision-ressources', '#liste-subventions',
-    '#indicateurs', '#controles',
-    '#messages-moteur', '#tuiles-exploitation', '#graphe-exploitation', '#postes-absents',
-  ]) {
-    $(sel).innerHTML = '';
+  for (const zone of document.querySelectorAll('[data-restitution]')) {
+    const el = /** @type {HTMLElement} */ (zone);
+    if (el.tagName === 'TABLE') {
+      // Une table de restitution se vide corps ET pied ; son en-tete est du
+      // balisage, il reste.
+      for (const partie of ['tbody', 'tfoot']) {
+        const p = el.querySelector(partie);
+        if (p) p.innerHTML = '';
+      }
+      continue;
+    }
+    el.innerHTML = '';
   }
-  $('#table-exploitation').querySelector('tbody').innerHTML = '';
-  $('#table-exploitation').querySelector('tfoot').innerHTML = '';
-  $('#bandeau-exploitation').className = 'bandeau bandeau--erreur';
-  $('#bandeau-exploitation').innerHTML = `<span class="bandeau__principal">Aucun résultat</span>`;
-  $('#aide-graphe').textContent = '';
-  $('#aide-exploitation').textContent = '';
-  $('#total-emplois').textContent = '-';
-  $('#total-ressources').textContent = '-';
-  $('#table-prets').querySelector('tbody').innerHTML = '';
-  $('#table-prets').querySelector('tfoot').innerHTML = '';
-  $('#aide-taux').textContent = '';
+
+  // La table des LOTS porte la saisie : son corps reste, seul son pied - qui
+  // est un total calcule - se vide. Elle ne peut donc pas etre marquee.
+  const piedLots = document.querySelector('#table-lots tfoot');
+  if (piedLots) piedLots.innerHTML = '';
+
+  // Cellules posees une a une dans les tables de saisie : apercus de
+  // ventilation, montants calcules, parts de subvention et de fonds propres.
+  for (const el of document.querySelectorAll('[data-apercu], [data-calc], [data-part-sub], [data-part-fp], [data-taux-marge]')) {
+    el.textContent = '';
+  }
+
+  // Le bandeau de controle dit POURQUOI il n'y a pas de resultat : il est le
+  // seul a ne pas rester vide.
+  const bandeau = $('#bandeau-controle');
+  if (bandeau) {
+    bandeau.className = 'bandeau bandeau--erreur';
+    bandeau.innerHTML = `<span class="bandeau__principal">Aucun résultat</span>
+      <span class="bandeau__detail">${att(message)}</span>`;
+  }
+  const bandeauExp = $('#bandeau-exploitation');
+  if (bandeauExp) {
+    bandeauExp.className = 'bandeau bandeau--erreur';
+    bandeauExp.innerHTML = '<span class="bandeau__principal">Aucun résultat</span>';
+  }
+  const totalE = $('#total-emplois');
+  if (totalE) totalE.textContent = '-';
+  const totalR = $('#total-ressources');
+  if (totalR) totalR.textContent = '-';
 }
+
 
 // ---------------------------------------------------------------- ecran exploitation
 
@@ -8180,6 +8275,12 @@ const ETAT_INITIAL = (() => {
     groupe: '',
     commune: '',
     departement: '',
+    // Le type et le zonage ne se DEVINENT pas : proposer VEFA en zone B1 par
+    // defaut, c'est proposer un chiffrage. Le zonage se deduira de la commune
+    // des qu'elle sera saisie.
+    type_operation: '',
+    zone_123: null,
+    zone_ABC: '',
   };
   vierge.lots = [];
   vierge.postes_bilan = nomenclatureEnPostes();

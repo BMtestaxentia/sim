@@ -3100,7 +3100,6 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
     </main>
 
     <main class="ecran" id="ecran-exploitation" role="tabpanel" hidden>
-      <div id="bandeau-exploitation" data-restitution class="bandeau"></div>
 
       <section class="bloc">
         <h2 class="bloc__titre">Lecture d'ensemble</h2>
@@ -11955,11 +11954,6 @@ function viderRestitution(message) {
     bandeau.innerHTML = `<span class="bandeau__principal">Aucun résultat</span>
       <span class="bandeau__detail">${att(message)}</span>`;
   }
-  const bandeauExp = $('#bandeau-exploitation');
-  if (bandeauExp) {
-    bandeauExp.className = 'bandeau bandeau--erreur';
-    bandeauExp.innerHTML = '<span class="bandeau__principal">Aucun résultat</span>';
-  }
   const totalE = $('#total-emplois');
   if (totalE) totalE.textContent = '-';
   const totalR = $('#total-ressources');
@@ -12293,24 +12287,13 @@ function rendreExploitation(r) {
   const e = r.exploitation;
   const ind = e.indicateurs;
 
-  // --- Bandeau ---
-  const bandeau = $('#bandeau-exploitation');
+  // Le bandeau de tete de l'ecran a ete retire. Il melait trois choses de
+  // natures differentes - un verdict sur l'operation, les bornes de la
+  // simulation, l'etat d'avancement du moteur - et la derniere n'a rien a
+  // faire sous les yeux de qui monte une operation. Le nombre d exercices
+  // deficitaires reste lisible : la table le montre ligne par ligne, et les
+  // tuiles portent les indicateurs.
   const deficit = ind.exercices_deficitaires > 0;
-  bandeau.className = `bandeau ${deficit ? 'bandeau--alerte' : 'bandeau--ok'}`;
-  bandeau.innerHTML =
-    `<span class="bandeau__principal">${
-      deficit
-        ? `${ind.exercices_deficitaires} exercice${ind.exercices_deficitaires > 1 ? 's' : ''} déficitaire${ind.exercices_deficitaires > 1 ? 's' : ''}`
-        : 'Aucun exercice déficitaire'
-    }</span>` +
-    `<span class="bandeau__detail">${e.lignes.length} années simulées, de ${e.lignes[0]?.annee} à ` +
-    `${e.lignes.at(-1)?.annee}${deficit ? `, de ${ind.premiere_annee_deficitaire} à ${ind.derniere_annee_deficitaire}` : ''}. ` +
-    `${
-      e.mode === 'redevance'
-        ? `Produits en redevance ${etat.exploitation.mode_redevance === 'transparence' ? 'en transparence' : 'forfaitaire'} (mode foyer). `
-        : ''
-    }` +
-    `Compte partiel : ${e.postes_absents.length} familles de postes ne sont pas encore modélisées.</span>`;
 
   // Colonne « Année 1 » de la table des charges diverses : remplie depuis le
   // resultat du moteur, jamais recalculee ici (les taux portent sur des loyers

@@ -674,9 +674,12 @@
           <button type="button" class="choix__option" data-export="complet">
             Dossier complet</button>
         </div>
+        <!-- Tranches retenues. Un dossier se presente parfois produit par
+             produit - le PLAI a son financeur, le LLI a son investisseur -
+             et l export doit pouvoir ne montrer que la part qui les regarde. -->
+        <div class="choix-tranches" id="choix-tranches" role="group"
+             aria-label="Tranches présentées dans l export"></div>
         <span class="exports__info" id="exports-info"></span>
-        <button type="button" class="bouton bouton--discret" id="btn-export-json">
-          Fichier JSON</button>
         <button type="button" class="bouton bouton--principal" id="btn-telecharger-pdf">
           Télécharger en PDF</button>
       </div>

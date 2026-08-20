@@ -2175,6 +2175,28 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
   background: var(--bg-secondary);
   border: 1px solid var(--border-color); border-radius: var(--radius-md);
 }
+/* Tranches retenues dans le document. Une pastille ETEINTE se lit d un coup
+   d oeil comme une absence : elle perd sa couleur et son texte palit, la ou
+   une case a cocher demande de lire une coche de trois pixels. La couleur du
+   produit est celle du tableau, pour qu on suive la meme teinte du selecteur
+   jusqu a la colonne. */
+/* Deux marges automatiques - ici et sur le compte de pages - se partagent
+   l espace libre : les pastilles se posent au milieu de la barre, et quand
+   elles disparaissent (operation mono-produit) le compte reste a droite. */
+.choix-tranches { display: flex; align-items: center; gap: 5px; margin-left: auto; }
+.choix-tranches[hidden] { display: none; }
+.pastille-tranche {
+  padding: 4px 9px; border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+  background: transparent; color: var(--text-tertiary);
+  border: 1px solid var(--border-color);
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.pastille-tranche:hover { border-color: var(--cat); color: var(--text-secondary); }
+.pastille-tranche--active {
+  background: var(--cat); border-color: var(--cat); color: var(--encre-sur-cat, #12161f);
+}
+
 .exports__info {
   margin-left: auto; font-size: 11.5px; color: var(--text-tertiary); white-space: nowrap;
 }
@@ -3124,9 +3146,12 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
           <button type="button" class="choix__option" data-export="complet">
             Dossier complet</button>
         </div>
+        <!-- Tranches retenues. Un dossier se presente parfois produit par
+             produit - le PLAI a son financeur, le LLI a son investisseur -
+             et l export doit pouvoir ne montrer que la part qui les regarde. -->
+        <div class="choix-tranches" id="choix-tranches" role="group"
+             aria-label="Tranches présentées dans l export"></div>
         <span class="exports__info" id="exports-info"></span>
-        <button type="button" class="bouton bouton--discret" id="btn-export-json">
-          Fichier JSON</button>
         <button type="button" class="bouton bouton--principal" id="btn-telecharger-pdf">
           Télécharger en PDF</button>
       </div>
@@ -10539,7 +10564,7 @@ function rendreTablePrixRevient() {
     .map(
       (c) =>
         `<th class="col-groupe${finBloc(c)}" colspan="${tva ? 2 : 1}" ` +
-        `style="--cat:${catProduit(c)};--cat-fond:${catFondProduit(c)}">` +
+        `data-tranche="${c}" style="--cat:${catProduit(c)};--cat-fond:${catFondProduit(c)}">` +
         `<span class="col-groupe__puce"></span>${att(libelleProduit(c))}</th>`,
     )
     .join('');
@@ -10547,10 +10572,10 @@ function rendreTablePrixRevient() {
     .map(
       (c) =>
         `<th class="num col-tranche col-tranche--debut${tva ? '' : finBloc(c)}" ` +
-          `style="--cat:${catProduit(c)};--cat-fond:${catFondProduit(c)}">HT (€)</th>` +
+          `data-tranche="${c}" style="--cat:${catProduit(c)};--cat-fond:${catFondProduit(c)}">HT (€)</th>` +
         (tva
           ? `<th class="num col-tranche${finBloc(c)}" ` +
-            `style="--cat:${catProduit(c)};--cat-fond:${catFondProduit(c)}">TVA</th>`
+            `data-tranche="${c}" style="--cat:${catProduit(c)};--cat-fond:${catFondProduit(c)}">TVA</th>`
           : ''),
     )
     .join('');
@@ -10636,8 +10661,8 @@ function rendreTablePrixRevient() {
           ? codes
               .map(
                 (c) =>
-                  `<td class="col-tranche col-tranche--debut${tva ? '' : finBloc(c)}" style="--cat:${catProduit(c)}"></td>` +
-                  (tva ? `<td class="col-tranche${finBloc(c)}" style="--cat:${catProduit(c)}"></td>` : ''),
+                  `<td class="col-tranche col-tranche--debut${tva ? '' : finBloc(c)}" data-tranche="${c}" style="--cat:${catProduit(c)}"></td>` +
+                  (tva ? `<td class="col-tranche${finBloc(c)}" data-tranche="${c}" style="--cat:${catProduit(c)}"></td>` : ''),
               )
               .join('')
           : '') +
@@ -10676,7 +10701,7 @@ function rendreTablePrixRevient() {
       const cellulesTranches = parTranche
         ? codes
             .map((c, ic) => {
-              const style = `style="--cat:${catProduit(c)}"`;
+              const style = `data-tranche="${c}" style="--cat:${catProduit(c)}"`;
               // Colonne 0 = le total ; les tranches suivent, HT puis TVA.
               const col = 1 + ic * (tva ? 2 : 1);
               // `--debut` porte le filet colore : il ouvre le bloc de la
@@ -10741,9 +10766,9 @@ function rendreTablePrixRevient() {
       ? codes
           .map(
             (c) =>
-              `<td class="num col-tranche col-tranche--debut${tva ? '' : finBloc(c)}" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="ht_eur"></td>` +
+              `<td class="num col-tranche col-tranche--debut${tva ? '' : finBloc(c)}" data-tranche="${c}" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="ht_eur"></td>` +
               (tva
-                ? `<td class="num col-tranche${finBloc(c)}" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="tva_eur"></td>`
+                ? `<td class="num col-tranche${finBloc(c)}" data-tranche="${c}" style="--cat:${catProduit(c)}" data-sous-total="${c}" data-cle="tva_eur"></td>`
                 : ''),
           )
           .join('')
@@ -11270,8 +11295,8 @@ function rendreValeurs(r) {
     ? codesTr
         .map(
           (c) =>
-            `<td class="num col-tranche col-tranche--debut${tvaVisible ? '' : finTr(c)}" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_ht_eur)}</td>` +
-            (tvaVisible ? `<td class="num col-tranche${finTr(c)}" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_tva_eur)}</td>` : ''),
+            `<td class="num col-tranche col-tranche--debut${tvaVisible ? '' : finTr(c)}" data-tranche="${c}" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_ht_eur)}</td>` +
+            (tvaVisible ? `<td class="num col-tranche${finTr(c)}" data-tranche="${c}" style="--cat:${catProduit(c)}">${eur(b.par_tranche?.[c]?.total_tva_eur)}</td>` : ''),
         )
         .join('')
     : '';
@@ -11292,8 +11317,8 @@ function rendreValeurs(r) {
           ? codesTr
               .map(
                 (c) =>
-                  `<td class="col-tranche col-tranche--debut${tvaVisible ? '' : finTr(c)}" style="--cat:${catProduit(c)}"></td>` +
-                  (tvaVisible ? `<td class="col-tranche${finTr(c)}" style="--cat:${catProduit(c)}"></td>` : ''),
+                  `<td class="col-tranche col-tranche--debut${tvaVisible ? '' : finTr(c)}" data-tranche="${c}" style="--cat:${catProduit(c)}"></td>` +
+                  (tvaVisible ? `<td class="col-tranche${finTr(c)}" data-tranche="${c}" style="--cat:${catProduit(c)}"></td>` : ''),
               )
               .join('')
           : ''
@@ -11316,8 +11341,8 @@ function rendreValeurs(r) {
           ? codesTr
               .map(
                 (c) =>
-                  `<td class="col-tranche col-tranche--debut${tvaVisible ? '' : finTr(c)}" style="--cat:${catProduit(c)};border-top:none"></td>` +
-                  (tvaVisible ? `<td class="col-tranche${finTr(c)}" style="--cat:${catProduit(c)};border-top:none"></td>` : ''),
+                  `<td class="col-tranche col-tranche--debut${tvaVisible ? '' : finTr(c)}" data-tranche="${c}" style="--cat:${catProduit(c)};border-top:none"></td>` +
+                  (tvaVisible ? `<td class="col-tranche${finTr(c)}" data-tranche="${c}" style="--cat:${catProduit(c)};border-top:none"></td>` : ''),
               )
               .join('')
           : ''
@@ -11330,7 +11355,7 @@ function rendreValeurs(r) {
   if (vent && tvp) {
     tvp.querySelector('tbody').innerHTML = Object.entries(vent.par_tranche)
       .map(
-        ([code, t]) => `<tr><td>${att(libelleProduit(code))}</td><td class="num">${nb(t.su_m2)}</td>
+        ([code, t]) => `<tr data-tranche="${code}"><td>${att(libelleProduit(code))}</td><td class="num">${nb(t.su_m2)}</td>
           <td class="num">${pct(t.part_su, 1)}</td><td class="num">${eur(t.total_ht_eur)}</td>
           <td class="num">${pct(t.taux_lasm, 1)}</td><td class="num">${eur(t.total_ttc_lasm_eur)}</td></tr>`,
       )
@@ -15772,6 +15797,54 @@ const EXPORTS = {
 let exportChoisi = 'prix-revient';
 
 /**
+ * Tranches ecartees du document, par leur code produit.
+ *
+ * C'est bien l'ENSEMBLE DES EXCLUES qui est memorise, et non celui des
+ * retenues : un programme gagne et perd des tranches au fil de la saisie, et
+ * une liste de retenues aurait fige l'export sur celles qui existaient au
+ * moment ou on l'a ouvert. Une tranche nouvelle est presentee par defaut,
+ * ce qui est le comportement attendu ; il faut un geste pour la retirer.
+ */
+const tranchesEcartees = new Set();
+
+/** Tranches presentees dans le document, dans l ordre canonique. */
+function tranchesRetenues() {
+  const actives = tranchesActives();
+  const gardees = actives.filter((c) => !tranchesEcartees.has(c));
+  // Tout ecarter ne montrerait plus rien : le dernier retrait n'est pas
+  // honore, et le selecteur le signale en gardant sa pastille allumee.
+  return gardees.length ? gardees : actives;
+}
+
+/**
+ * Pastilles de tranche de la barre d'export.
+ *
+ * Elles ne s'affichent qu'a partir de DEUX tranches : sur une operation
+ * mono-produit, un selecteur qui n'a qu'un choix est un faux choix.
+ */
+function rendreChoixTranches() {
+  const zone = document.getElementById('choix-tranches');
+  if (!zone) return;
+  const actives = tranchesActives();
+  zone.hidden = actives.length < 2;
+  if (zone.hidden) {
+    zone.innerHTML = '';
+    return;
+  }
+  const retenues = new Set(tranchesRetenues());
+  zone.innerHTML = actives
+    .map(
+      (c) =>
+        `<button type="button" class="pastille-tranche${
+          retenues.has(c) ? ' pastille-tranche--active' : ''
+        }" data-tranche-export="${att(c)}" aria-pressed="${retenues.has(c)}"
+          style="--cat:${catProduit(c)};--cat-fond:${catFondProduit(c)}"
+          title="Présenter ou retirer cette tranche du document">${att(libelleProduit(c))}</button>`,
+    )
+    .join('');
+}
+
+/**
  * Remplace les champs de saisie par leur VALEUR, en texte.
  *
  * Deux raisons, et la premiere est un piege : `cloneNode` copie l'attribut
@@ -15810,6 +15883,26 @@ function figerSaisies(racine) {
  * entre ce qu'on voit et ce qu'on obtient. C'est la seule facon de tenir la
  * promesse d'un apercu.
  */
+/**
+ * Retire du document les colonnes et les lignes des tranches ecartees.
+ *
+ * Le filet colore qui ferme un bloc de tranche est porte par la DERNIERE
+ * colonne du bloc : retirer la derniere tranche laissait le tableau ouvert
+ * sur sa droite. Il est donc repose sur ce qui reste.
+ */
+function ecarterTranches(racine) {
+  const retenues = new Set(tranchesRetenues());
+  for (const cel of [...racine.querySelectorAll('[data-tranche]')]) {
+    if (!retenues.has(/** @type {HTMLElement} */ (cel).dataset.tranche)) cel.remove();
+  }
+  for (const rangee of racine.querySelectorAll('tr')) {
+    const cellules = [...rangee.querySelectorAll('[data-tranche]')];
+    if (!cellules.length) continue;
+    for (const c of cellules) c.classList.remove('col-tranche--fin');
+    cellules[cellules.length - 1].classList.add('col-tranche--fin');
+  }
+}
+
 /**
  * Retravaille la table du prix de revient POUR LE DOCUMENT.
  *
@@ -15854,6 +15947,12 @@ function adapterPrixRevientAuDocument(copie) {
   // comme une valeur douteuse.
   for (const tr of table.querySelectorAll('tr.poste--vide')) tr.classList.remove('poste--vide');
 
+  // Les tranches ecartees quittent le tableau, colonne entiere : en-tete de
+  // groupe, sous-colonnes, cellules et sous-totaux. Elles se designent par
+  // leur CODE et non par leur rang - un rang se decale des qu'une colonne
+  // part - ni par leur couleur, que deux produits peuvent partager.
+  ecarterTranches(table);
+
   // Un document ne liste pas quarante-six postes dont trente-deux sont vides :
   // il montre ce qui a ete chiffre.
   for (const ligne of table.querySelectorAll('tr[data-poste]')) {
@@ -15893,16 +15992,10 @@ function adapterPrixRevientAuDocument(copie) {
   // donne plus - c'est le prix a payer pour faire taire l'en-tete que le
   // navigateur ajoute de lui-meme.
   const tete = table.querySelector('thead');
-  const i = etat.identite ?? {};
-  const legende = [i.nom, i.commune, i.zone_ABC && `zone ${i.zone_ABC}`]
-    .filter(Boolean)
-    .join(' · ');
   if (tete) {
     const largeur = [...(tete.querySelector('tr')?.children ?? [])].reduce((n, c) => n + (c.colSpan || 1), 0);
     const bande = document.createElement('tr');
-    bande.innerHTML = `<th class="doc-bandeau" colspan="${largeur}">Prix de revient${
-      legende ? ` <span>· ${att(legende)}</span>` : ''
-    }</th>`;
+    bande.innerHTML = `<th class="doc-bandeau" colspan="${largeur}">Prix de revient</th>`;
     tete.insertBefore(bande, tete.firstChild);
     // Le bandeau EST le titre du tableau : garder en plus le titre du bloc
     // ecrivait « Prix de revient » deux fois a dix millimetres d intervalle.
@@ -15929,6 +16022,21 @@ function adapterPrixRevientAuDocument(copie) {
   }
 }
 
+/**
+ * Date du jour, en ecriture francaise et en heure LOCALE.
+ *
+ * L'heure a disparu de l'en-tete : un document se date au jour, la minute
+ * d edition ne dit rien a qui le lit. La date se prend sur le calendrier
+ * local et non sur `toISOString`, qui donne l'UTC - a vingt-trois heures un
+ * soir de juillet, le document serait date du lendemain.
+ */
+function dateDuJour() {
+  const d = new Date();
+  const jj = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${jj}/${mm}/${d.getFullYear()}`;
+}
+
 function rendreApercuExport() {
   const cible = document.getElementById('apercu-export');
   if (!cible) return;
@@ -15943,7 +16051,7 @@ function rendreApercuExport() {
       </div>
       <div class="doc__meta">
         <span>${att([i.commune, i.zone_ABC && `zone ${i.zone_ABC}`, i.type_operation].filter(Boolean).join(' · '))}</span>
-        <span>${att(def.titre)} · édité le ${att(dateHeureLisible(new Date().toISOString()))}</span>
+        <span>${att(def.titre)} · édité le ${att(dateDuJour())}</span>
       </div>
     </header>`;
 
@@ -15958,6 +16066,20 @@ function rendreApercuExport() {
     // Les adaptations propres a un ecran se font AVANT le retrait des
     // identifiants, tant qu'on peut encore designer les tables par le leur.
     if (id === 'prix-revient') adapterPrixRevientAuDocument(copie);
+    // La repartition par financement est une autre table, sur le meme ecran :
+    // elle liste une ligne par tranche et subit donc le meme tri. Son TOTAL
+    // reste celui de l'operation entiere - il est marque comme tel plus bas.
+    const repartition = copie.querySelector('#table-ventilation-pdr');
+    if (repartition) {
+      ecarterTranches(repartition);
+      // Son total reste celui de l OPERATION : le prix de revient ne change
+      // pas parce qu on presente une tranche de moins. Il faut donc le dire,
+      // sinon un lecteur additionne les lignes et trouve autre chose.
+      if (tranchesRetenues().length < tranchesActives().length) {
+        const pied = repartition.querySelector('tfoot .libelle');
+        if (pied) pied.textContent = 'Total de l’opération';
+      }
+    }
     copie.removeAttribute('id');
     copie.removeAttribute('hidden');
     copie.removeAttribute('role');
@@ -15985,12 +16107,54 @@ function rendreApercuExport() {
 
   const info = document.getElementById('exports-info');
   if (info) {
-    const n = def.ecrans.length;
-    info.textContent = `${n} section${n > 1 ? 's' : ''} · A4 paysage`;
+    const n = compterPages();
+    info.textContent = `${n} page${n > 1 ? 's' : ''} · A4 paysage`;
   }
+  rendreChoixTranches();
   for (const b of document.querySelectorAll('#choix-export [data-export]')) {
     b.classList.toggle('choix__option--actif', /** @type {HTMLElement} */ (b).dataset.export === exportChoisi);
   }
+}
+
+/**
+ * Compte les pages que le PDF fera.
+ *
+ * Il se MESURE sur l'apercu au lieu d'etre estime : l'apercu a la geometrie
+ * exacte du document imprime - meme largeur, memes marges - et une hauteur
+ * de page vaut 210 mm, la feuille etant en paysage. Ce que le lecteur voit
+ * defiler, le PDF le coupera aux memes endroits.
+ *
+ * Chaque section ouvre une page (`break-before: page`), d'ou le compte
+ * section par section plutot que sur la hauteur totale.
+ */
+function compterPages() {
+  const doc = document.getElementById('apercu-export');
+  if (!doc) return 0;
+  const PAGE = 210 * 3.779528;
+  const sections = [...doc.querySelectorAll('.doc__section')];
+  if (!sections.length) return 0;
+  const st = getComputedStyle(doc);
+  const marges = parseFloat(st.paddingTop) + parseFloat(st.paddingBottom);
+  const entete = doc.querySelector('.doc__entete');
+  let pages = 0;
+  sections.forEach((s, i) => {
+    const cs = getComputedStyle(s);
+    // La hauteur propre de la section : son remplissage haut n existe qu a
+    // l ecran, ou il separe deux sections que l impression separe par une
+    // coupure de page.
+    let h = s.getBoundingClientRect().height - parseFloat(cs.paddingTop);
+    if (i === 0) {
+      h += marges;
+      if (entete) {
+        h += entete.getBoundingClientRect().height;
+        h += parseFloat(getComputedStyle(entete).marginBottom);
+      }
+    } else {
+      h += 16 * 3.779528; // la marge haute d une section qui ouvre une page
+    }
+    pages += Math.max(1, Math.ceil(h / PAGE));
+  });
+  return pages;
 }
 
 /**
@@ -16752,6 +16916,14 @@ document.addEventListener('click', async (ev) => {
     return;
   }
   // --- Ecran Exports ---
+  const pastilleTranche = el.closest('[data-tranche-export]');
+  if (pastilleTranche) {
+    const c = /** @type {HTMLElement} */ (pastilleTranche).dataset.trancheExport;
+    if (tranchesEcartees.has(c)) tranchesEcartees.delete(c);
+    else tranchesEcartees.add(c);
+    rendreApercuExport();
+    return;
+  }
   const choixExport = el.closest('#choix-export [data-export]');
   if (choixExport) {
     exportChoisi = /** @type {HTMLElement} */ (choixExport).dataset.export;
@@ -16760,11 +16932,6 @@ document.addEventListener('click', async (ev) => {
   }
   if (el.closest('#btn-telecharger-pdf')) {
     telechargerPDF();
-    return;
-  }
-  if (el.closest('#btn-export-json')) {
-    viderFileDeSauvegarde();
-    exporterSimulation(idSimulationOuverte);
     return;
   }
   if (el.closest('#btn-fermer-sim')) {

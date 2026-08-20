@@ -2161,6 +2161,28 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
   background: var(--bg-secondary);
   border: 1px solid var(--border-color); border-radius: var(--radius-md);
 }
+/* Tranches retenues dans le document. Une pastille ETEINTE se lit d un coup
+   d oeil comme une absence : elle perd sa couleur et son texte palit, la ou
+   une case a cocher demande de lire une coche de trois pixels. La couleur du
+   produit est celle du tableau, pour qu on suive la meme teinte du selecteur
+   jusqu a la colonne. */
+/* Deux marges automatiques - ici et sur le compte de pages - se partagent
+   l espace libre : les pastilles se posent au milieu de la barre, et quand
+   elles disparaissent (operation mono-produit) le compte reste a droite. */
+.choix-tranches { display: flex; align-items: center; gap: 5px; margin-left: auto; }
+.choix-tranches[hidden] { display: none; }
+.pastille-tranche {
+  padding: 4px 9px; border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+  background: transparent; color: var(--text-tertiary);
+  border: 1px solid var(--border-color);
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.pastille-tranche:hover { border-color: var(--cat); color: var(--text-secondary); }
+.pastille-tranche--active {
+  background: var(--cat); border-color: var(--cat); color: var(--encre-sur-cat, #12161f);
+}
+
 .exports__info {
   margin-left: auto; font-size: 11.5px; color: var(--text-tertiary); white-space: nowrap;
 }

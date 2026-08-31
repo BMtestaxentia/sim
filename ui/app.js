@@ -2041,7 +2041,7 @@ function rendreTablePrixRevient() {
                  title="${ventile ? 'Regrouper en un total unique' : 'Ventiler ce montant sur les tranches'}">${ventile ? '↤' : '⇥'}</button>`
             : ''
         }</td>
-        ${tvaGlobale ? `<td>${selectTVA(`postes_bilan.${i}.taux_tva`, p.taux_tva, 1, codes[0])}</td>` : ''}
+        ${tvaGlobale ? `<td class="tva-taux">${selectTVA(`postes_bilan.${i}.taux_tva`, p.taux_tva, 1, codes[0])}</td>` : ''}
         ${cellulesTranches}
         <td class="calc" data-calc="tva"></td>
         <td class="calc" data-calc="ttc"></td>

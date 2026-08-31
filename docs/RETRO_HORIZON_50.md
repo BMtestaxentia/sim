@@ -18,9 +18,9 @@ n'était donc pas lisible ; seuls ses résultats l'étaient.
 | H-4 | 2026 | 45 | 1 242 | 299,12 |
 | H-5 | 2026 | 45 | 22 842 997 | 3 786,41 |
 | H-6 | 2028 | 43 | 14 398 | 2 739,12 |
-| RE | 2026 | 45 | 22 842 997 | 3 786,41 |
+| H-7 | 2026 | 45 | 22 842 997 | 3 786,41 |
 
-Deux remarques d'emblée : **H-5 et RE sont identiques** au centime sur
+Deux remarques d'emblée : **H-5 et H-7 sont identiques** au centime sur
 toutes les lignes, et **« Données » comme H-5 portent des assiettes en
 milliards** : ce sont des consolidations de patrimoine, pas des opérations. Les
 quatre autres sont des opérations.
@@ -67,12 +67,12 @@ montée diffère d'un fichier à l'autre :
 
 | Fichier | Escalier |
 |---|---|
-| OP-3 | 0 → 0,3 → 0,4 → 0,5 → **0,6 %** |
-| Données | 0 → 0,1 → 0,2 → 0,3 → 0,4 → 0,5 → **0,6 %** |
+| H-1 | 0 → 0,3 → 0,4 → 0,5 → **0,6 %** |
+| H-2 | 0 → 0,1 → 0,2 → 0,3 → 0,4 → 0,5 → **0,6 %** |
 | H-4 | 0 → 0,6 → **1,2 %** |
-| H-3, H-5, H-6, RE | 0 → **0,6 %** |
+| H-3, H-5, H-6, H-7 | 0 → **0,6 %** |
 
-Le palier est donc **0,6 %**, sauf Lyon qui monte à **1,2 %** : le double. La
+Le palier est donc **0,6 %**, sauf H-4 qui monte à **1,2 %** : le double. La
 première année est toujours à zéro. L'escalier est une donnée de saisie, pas une
 règle : quatre formes différentes sur sept fichiers.
 
@@ -85,7 +85,7 @@ C'est le cœur, et c'est ce qui n'était nulle part écrit.
 Années de dépense, comptées depuis la première colonne :
 
 ```
-OP-3, Données, Lyon, H-5, H-6, RE
+H-1, H-2, H-4, H-5, H-6, H-7
   0, 7, 9, 12, 14, 18, 21, 24, 27, 28, 30, 35, 36, 40, 42
 
 H-3
@@ -135,7 +135,7 @@ Le modèle est ensuite rejoué sur **toutes** les années :
 | Données | +0,066 k€ |
 | H-3 | −0,210 k€ |
 | H-4 | +0,031 k€ |
-| H-5 / RE | +0,064 k€ |
+| H-5 / H-7 | +0,064 k€ |
 | H-6 | −0,115 k€ |
 
 Sur des montants qui vont jusqu'à 3 016 k€, l'écart maximal est de 0,21 k€, soit

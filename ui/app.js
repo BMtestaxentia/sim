@@ -8908,6 +8908,14 @@ document.addEventListener('click', async (ev) => {
     afficherEcran('simulations');
     return;
   }
+  // Le champ de fichier est masque - un `input type=file` brut ne se met pas a
+  // la charte - donc rien ne l'ouvrait : le code d'import existait sans qu'on
+  // puisse l'atteindre. Ce bouton est sa poignee.
+  if (el.closest('#btn-importer')) {
+    /** @type {HTMLInputElement} */ ($('#fichier-import')).click();
+    return;
+  }
+
   if (el.closest('#btn-nouvelle-sim')) {
     const nom = await saisirBoite('Nouvelle simulation', {
       libelle: 'Nom', valeur: 'Nouvelle opération', action: 'Créer',

@@ -2847,6 +2847,8 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
           <button type="button" class="bouton bouton--discret" id="btn-vider-filtres"
             title="Effacer la recherche et le filtre">Réinitialiser</button>
           <span class="biblio-barre__separateur" aria-hidden="true"></span>
+          <button type="button" class="bouton bouton--discret" id="btn-importer"
+            title="Charger une simulation depuis un fichier JSON exporté">Importer</button>
           <button type="button" class="bouton bouton--principal" id="btn-nouvelle-sim">
             Nouvelle simulation</button>
           <input type="file" id="fichier-import" accept="application/json,.json" hidden />
@@ -19192,6 +19194,14 @@ document.addEventListener('click', async (ev) => {
     afficherEcran('simulations');
     return;
   }
+  // Le champ de fichier est masque - un `input type=file` brut ne se met pas a
+  // la charte - donc rien ne l'ouvrait : le code d'import existait sans qu'on
+  // puisse l'atteindre. Ce bouton est sa poignee.
+  if (el.closest('#btn-importer')) {
+    /** @type {HTMLInputElement} */ ($('#fichier-import')).click();
+    return;
+  }
+
   if (el.closest('#btn-nouvelle-sim')) {
     const nom = await saisirBoite('Nouvelle simulation', {
       libelle: 'Nom', valeur: 'Nouvelle opération', action: 'Créer',

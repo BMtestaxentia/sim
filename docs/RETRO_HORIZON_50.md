@@ -1,4 +1,4 @@
-# Rétro-ingénierie « Horizon 50 » — projection des dépenses par composants
+# Rétro-ingénierie « Horizon 50 » : projection des dépenses par composants
 
 > Règle **R-COMP** (provision et renouvellement de composants sur 50 ans),
 > reconstituée le 31/08/2026 à partir de sept exports, **sans la matrice de
@@ -22,14 +22,14 @@ n'était donc pas lisible ; seuls ses résultats l'étaient.
 
 Deux remarques d'emblée : **Clermont et RE sont identiques** au centime sur
 toutes les lignes, et **« Données » comme Clermont portent des assiettes en
-milliards** — ce sont des consolidations de patrimoine, pas des opérations. Les
+milliards** : ce sont des consolidations de patrimoine, pas des opérations. Les
 quatre autres sont des opérations.
 
 Les dix lignes sont les mêmes partout : stock de début, taux de collecte,
 montant de collecte, autres financements, montant consommé, dépenses totales,
 stock de fin, seuil d'alerte.
 
-## 2. La récurrence du stock — R-COMP-1
+## 2. La récurrence du stock : R-COMP-1
 
 ```
 stock_fin(N) = stock_début(N) + collecte(N) + autres_financements(N) − dépenses(N)
@@ -40,8 +40,8 @@ stock_début(N+1) = stock_fin(N)
 0,01 k€, soit exactement l'arrondi à deux décimales de l'export. Ce n'est donc
 pas une approximation, c'est la règle.
 
-Le stock **peut devenir négatif** — BERGERAC descend à −318,89 k€ en 2057, à la
-suite d'une dépense de 1 687,71 k€ — et rien dans les fichiers ne l'en empêche.
+Le stock **peut devenir négatif** : BERGERAC descend à −318,89 k€ en 2057, à la
+suite d'une dépense de 1 687,71 k€, et rien dans les fichiers ne l'en empêche.
 La provision n'est pas une trésorerie : c'est un compte de provision qui se
 creuse et se rattrape.
 
@@ -49,7 +49,7 @@ Le **seuil d'alerte** vaut 100 k€ à plat sur les sept fichiers, toutes année
 confondues. C'est un repère d'affichage, pas un plancher : le stock passe
 dessous sans que rien ne se déclenche.
 
-## 3. La collecte — R-COMP-2
+## 3. La collecte : R-COMP-2
 
 ```
 collecte(N) = taux(N) × assiette(N)
@@ -58,8 +58,8 @@ assiette(N) = assiette(N₀) × (1 + 2,30 %)^(N − N₀)
 
 L'assiette se retrouve par division, `collecte / taux`. Sa croissance est de
 **2,300 %/an** sur les sept fichiers (2,299 à 2,300 : bruit d'arrondi). C'est
-une **donnée d'entrée** — prix de revient TTC pour une opération, patrimoine
-pour une consolidation — et non une grandeur dérivée : le rapport entre
+une **donnée d'entrée** (prix de revient TTC pour une opération, patrimoine
+pour une consolidation) et non une grandeur dérivée : le rapport entre
 l'assiette et la dépense de l'année 0 va de 4,15 à 6 033 selon les fichiers.
 
 Le **taux monte en escalier** sur les premières années, puis se stabilise. La
@@ -72,11 +72,11 @@ montée diffère d'un fichier à l'autre :
 | Lyon 7 | 0 → 0,6 → **1,2 %** |
 | Sablé, Clermont, La Rochelle, RE | 0 → **0,6 %** |
 
-Le palier est donc **0,6 %**, sauf Lyon qui monte à **1,2 %** — le double. La
+Le palier est donc **0,6 %**, sauf Lyon qui monte à **1,2 %** : le double. La
 première année est toujours à zéro. L'escalier est une donnée de saisie, pas une
 règle : quatre formes différentes sur sept fichiers.
 
-## 4. Les dépenses par composants — R-COMP-3
+## 4. Les dépenses par composants : R-COMP-3
 
 C'est le cœur, et c'est ce qui n'était nulle part écrit.
 
@@ -141,9 +141,9 @@ Le modèle est ensuite rejoué sur **toutes** les années :
 Sur des montants qui vont jusqu'à 3 016 k€, l'écart maximal est de 0,21 k€, soit
 **7 pour cent mille**. C'est l'arrondi de l'export, pas un défaut du modèle.
 
-L'indexation retrouvée par le rapport des années 7 et 21 — seules années où le
-composant de 7 ans joue seul — vaut **2,2969 % à 2,3022 %** selon le fichier :
-le même 2,30 % que l'assiette. **Un seul taux gouverne tout le classeur.**
+L'indexation se lit sur le rapport des années 7 et 21, seules années où le
+composant de 7 ans joue seul. Elle vaut **2,2969 % à 2,3022 %** selon le
+fichier, soit le même 2,30 % que l'assiette. **Un seul taux gouverne tout le classeur.**
 
 ### La grille de répartition est standard
 
@@ -180,7 +180,7 @@ L'année 0 dépasse systématiquement la somme des sept bases :
 
 **8,3 à 8,4 %** du total sur les quatre opérations. Il existe donc un composant
 posé à l'année 0 et **jamais renouvelé dans la fenêtre de 45 ans** : sa durée de
-vie est supérieure à 42 ans, très vraisemblablement 50 — la structure. Les
+vie est supérieure à 42 ans, très vraisemblablement 50, la structure. Les
 fichiers ne permettent pas de trancher entre 43 et 50, aucune de ces années
 n'étant observable.
 
@@ -217,7 +217,7 @@ projectionComposants({
 ```
 
 Elle rend la table des dix lignes, année par année, plus le détail par composant
-et par année — ce que les exports ne portent pas, et qui est justement l'objet de
+et par année : ce que les exports ne portent pas, et qui est justement l'objet de
 la demande.
 
 Les sept durées, leurs parts et l'indexation de 2,30 % ont leur place dans

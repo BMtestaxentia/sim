@@ -22,7 +22,7 @@ importent le même moteur, seule la manière de le charger diffère.
 
 ## Sans rien installer (recommandé sur poste sans droits)
 
-Ouvrir `ui/simulation-autonome.html` par double-clic. C'est un fichier unique,
+Ouvrir `index.html` (a la racine) par double-clic. C'est un fichier unique,
 sans serveur, sans node, sans connexion réseau - vérifié : la page ne charge
 aucune ressource distante. La police Manrope de la charte SFO est utilisée si
 elle est installée sur le poste, sinon la pile système prend le relais. Elle

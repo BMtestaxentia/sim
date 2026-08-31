@@ -172,7 +172,12 @@ const html = lire('ui', 'index.html')
       'Regenerer avec : node outils/generer_ui_autonome.js -->',
   );
 
-const sortie = join(RACINE, 'ui', 'simulation-autonome.html');
+// A LA RACINE et nomme `index.html` : c'est ce que GitHub Pages sert par
+// defaut. Sans lui, Pages affiche le README, c'est-a-dire la documentation au
+// lieu de l'outil. Le fichier ne depend d'aucun chemin relatif - aucun `fetch`
+// n'y subsiste, tout y est embarque - il peut donc vivre n'importe ou.
+const sortie = join(RACINE, 'index.html');
 writeFileSync(sortie, html);
 console.log(`Fichier autonome ecrit : ${sortie}`);
 console.log(`Taille : ${(html.length / 1024).toFixed(0)} Ko - ouvrable par double-clic.`);
+console.log('Servi par GitHub Pages a la racine du depot.');

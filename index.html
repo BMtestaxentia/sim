@@ -20014,6 +20014,138 @@ const ETAT_INITIAL = (() => {
   vierge.regimes_par_produit = {};
   return vierge;
 })();
+/**
+ * OPERATIONS DE DEMONSTRATION.
+ *
+ * Les simulations vivent dans le `localStorage`, qui est propre a chaque
+ * origine : une bibliotheque vide est donc ce que voit TOUT nouveau visiteur,
+ * et un outil qui s'ouvre sur rien ne se decouvre pas. Trois operations sont
+ * semees au premier chargement, et seulement au premier - des que la
+ * bibliotheque porte quoi que ce soit, on n'y touche plus.
+ *
+ * Elles sont ENTIEREMENT INVENTEES : noms, montants, programmes. Les communes,
+ * elles, sont reelles parce que le zonage s'y lit, et c'est lui qui commande
+ * les plafonds de loyer. Aucune ne reprend une operation existante.
+ *
+ * Les trois couvrent trois lectures differentes de l'outil : une operation
+ * locative ordinaire, une operation a deux financements, et une operation
+ * mixte a quatre tranches - celle qui donne sa matiere a la tornade et a la
+ * table des scenarios.
+ */
+const EXEMPLES = [
+  {
+    nom: 'Les Tilleuls',
+    groupe: 'Démonstration',
+    identite: {
+      commune: 'Saint-Nazaire',
+      departement: 'Loire-Atlantique (44)',
+      zone_ABC: 'B1',
+      zone_123: 2,
+      type_operation: 'Neuf',
+    },
+    lots: [
+      { code_produit: 'PLAI', nombre: 8, shab_totale: 480, annexes_totales: 64, typologie: 'T2', batiment: 'A' },
+      { code_produit: 'PLUS', nombre: 16, shab_totale: 1120, annexes_totales: 128, typologie: 'T3', batiment: 'A' },
+    ],
+    postes: {
+      cf_acquisition: { montant_ht_eur: 780000, taux_tva: 0.055 },
+      cf_vrd: { montant_ht_eur: 92000, taux_tva: 0.1 },
+      cf_branchements: { montant_ht_eur: 26000, taux_tva: 0.1 },
+      cf_notaire: { montant_ht_eur: 18000, taux_tva: 0.055 },
+      bat_travaux: { montant_ht_eur: 2640000, taux_tva: 0.1 },
+      bat_aleas: { montant_ht_eur: 66000, taux_tva: 0.1 },
+      hon_architecte: { montant_ht_eur: 211000, taux_tva: 0.2 },
+      hon_bureau_etudes: { montant_ht_eur: 79000, taux_tva: 0.2 },
+      hon_controleur: { montant_ht_eur: 24000, taux_tva: 0.2 },
+    },
+    subventions: [
+      { libelle: 'Etat', montant_eur: 96000, affectation: 'PLAI' },
+      { libelle: 'Agglomération', montant_eur: 60000, affectation: null },
+    ],
+  },
+  {
+    nom: 'Cour des Ateliers',
+    groupe: 'Démonstration',
+    identite: {
+      commune: 'Bordeaux',
+      departement: 'Gironde (33)',
+      zone_ABC: 'A',
+      zone_123: 1,
+      type_operation: 'VEFA',
+    },
+    lots: [
+      { code_produit: 'PLUS', nombre: 12, shab_totale: 780, annexes_totales: 96, typologie: 'T3', batiment: 'A' },
+      { code_produit: 'PLS', nombre: 6, shab_totale: 372, annexes_totales: 48, typologie: 'T2', batiment: 'A' },
+    ],
+    postes: {
+      cf_acquisition: { montant_ht_eur: 2450000, taux_tva: 0.1 },
+      cf_notaire: { montant_ht_eur: 34000, taux_tva: 0 },
+      cf_taxes_amenagement: { montant_ht_eur: 41000, taux_tva: 0 },
+      hon_architecte: { montant_ht_eur: 48000, taux_tva: 0.2 },
+      hon_assurances: { montant_ht_eur: 22000, taux_tva: 0.2 },
+    },
+    subventions: [{ libelle: 'Département', montant_eur: 45000, affectation: null }],
+  },
+  {
+    nom: 'Îlot Verrières',
+    groupe: 'Démonstration',
+    identite: {
+      commune: 'Villeurbanne',
+      departement: 'Rhône (69)',
+      zone_ABC: 'A',
+      zone_123: 1,
+      type_operation: 'Neuf',
+    },
+    lots: [
+      { code_produit: 'PLAI', nombre: 9, shab_totale: 540, annexes_totales: 72, typologie: 'T2', batiment: 'A' },
+      { code_produit: 'PLUS', nombre: 14, shab_totale: 966, annexes_totales: 112, typologie: 'T3', batiment: 'A' },
+      { code_produit: 'PLS', nombre: 5, shab_totale: 320, annexes_totales: 40, typologie: 'T2', batiment: 'B' },
+      { code_produit: 'LOC', nombre: 6, shab_totale: 396, annexes_totales: 48, typologie: 'T3', batiment: 'B' },
+    ],
+    postes: {
+      cf_acquisition: { montant_ht_eur: 1340000, taux_tva: 0.055 },
+      cf_sondages: { montant_ht_eur: 14000, taux_tva: 0.2 },
+      cf_vrd: { montant_ht_eur: 118000, taux_tva: 0.1 },
+      cf_branchements: { montant_ht_eur: 37000, taux_tva: 0.1 },
+      cf_notaire: { montant_ht_eur: 26000, taux_tva: 0.055 },
+      bat_travaux: { montant_ht_eur: 3980000, taux_tva: 0.1 },
+      bat_actualisation: { montant_ht_eur: 119000, taux_tva: 0.1 },
+      bat_aleas: { montant_ht_eur: 99000, taux_tva: 0.1 },
+      hon_architecte: { montant_ht_eur: 318000, taux_tva: 0.2 },
+      hon_bureau_etudes: { montant_ht_eur: 126000, taux_tva: 0.2 },
+      hon_controleur: { montant_ht_eur: 35000, taux_tva: 0.2 },
+      hon_assurances: { montant_ht_eur: 48000, taux_tva: 0.2 },
+    },
+    subventions: [
+      { libelle: 'Etat', montant_eur: 108000, affectation: 'PLAI' },
+      { libelle: 'Agglomération', montant_eur: 90000, affectation: null },
+      { libelle: 'Action logement :', montant_eur: 55000, affectation: null },
+    ],
+  },
+];
+
+/**
+ * Seme les exemples, une seule fois, sur une bibliotheque vide.
+ *
+ * Chacun part de l'etat VIERGE et non de l'operation de demonstration du
+ * module : partir d'un etat deja rempli laisserait trainer des postes et des
+ * lots qu'on croirait choisis.
+ */
+function semerExemples() {
+  if (listerSimulations().length) return 0;
+  let poses = 0;
+  for (const ex of EXEMPLES) {
+    const sim = structuredClone(ETAT_INITIAL);
+    sim.identite = { ...sim.identite, ...ex.identite, nom: ex.nom, groupe: ex.groupe };
+    sim.lots = ex.lots.flatMap((l) => repartirEnLots(l));
+    sim.postes_bilan = nomenclatureEnPostes(ex.postes);
+    sim.subventions = structuredClone(ex.subventions);
+    if (ajouterSimulation(sim)) poses += 1;
+  }
+  return poses;
+}
+
+semerExemples();
 const dossierRouvert = restaurerSaisie();
 // L'ecran quitte se lit AVANT le premier rendu : celui-ci reaffiche l'onglet
 // marque dans le HTML, et `afficherEcran` reecrit alors la memoire - on

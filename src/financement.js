@@ -100,7 +100,7 @@ export function plafondPretsLLI({ total_prets_eur, prix_revient_eur, plafond = 0
  * R-FIN-7 - Charge annuelle des fonds propres.
  *
  * REMUNERATION et RECONSTITUTION sont DEUX OPTIONS INDEPENDANTES, et les quatre
- * combinaisons existent. L'annexe MULHOUSE 3308 les porte toutes les quatre dans
+ * combinaisons existent. L'annexe OP-1 les porte toutes les quatre dans
  * une seule operation (`plan_financement.fonds_propres`) :
  *
  *   produit | taux  | duree | regime
@@ -146,7 +146,7 @@ export function annuiteFondsPropres({ montant_eur, taux = 0, duree_ans = 0 }) {
  *
  * L'assiette est celle de la CALCULETTE CDC (« production LS juin 2026 »,
  * Construction!AT37) : TOUTES les subventions du plan, et non les seules
- * subventions gratuites comme le faisait LEON. Arbitrage de Bastien du
+ * subventions gratuites comme le faisait LEON. Arbitrage metier du
  * 06/08/2026 (Q-30) : c'est le preteur qui fixe la regle de son propre pret.
  * L'ancien nom du parametre, `financements_gratuits_eur`, aurait menti sur ce
  * qu'il contient.

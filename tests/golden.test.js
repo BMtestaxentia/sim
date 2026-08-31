@@ -12,6 +12,7 @@
  * loyers, financement, exploitation) viendra avec les modules correspondants.
  */
 import { describe, it, expect } from 'vitest';
+import { fixturesReellesPresentes, lireFixtureReelle } from './fixtures-reelles.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -23,7 +24,7 @@ const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** @param {string} nom @param {string} fichier */
 function fixture(nom, fichier) {
-  return JSON.parse(readFileSync(join(RACINE, 'fixtures', nom, fichier), 'utf8'));
+  return lireFixtureReelle(nom, fichier);
 }
 
 /** Tolerance relative de 0,1 % sur les annuites, avec plancher absolu au centime. */
@@ -31,9 +32,9 @@ function tolerance(valeurAttendue) {
   return Math.max(Math.abs(valeurAttendue) * 0.001, 0.01);
 }
 
-describe('golden - BERGERAC LLS 6 PLS (matrice LEON 2025-042d)', () => {
-  const entrees = fixture('bergerac_lls6_pls', 'entrees.json');
-  const attendus = fixture('bergerac_lls6_pls', 'attendus.json');
+describe.skipIf(!fixturesReellesPresentes)('golden - OP-3 (matrice LEON 2025-042d)', () => {
+  const entrees = fixture('op-3-pls', 'entrees.json');
+  const attendus = fixture('op-3-pls', 'attendus.json');
   const { livret_a_origine, livret_a_par_annee } = entrees.referentiel_amortissement;
 
   for (const pret of entrees.prets) {
@@ -97,11 +98,11 @@ describe('golden - BERGERAC LLS 6 PLS (matrice LEON 2025-042d)', () => {
 });
 
 /**
- * MULHOUSE 3308 - partie LIBRE, VEFA zone 2 / B1, 11 logements.
+ * OP-1 - partie LIBRE, VEFA zone 2 / B1, 11 logements.
  *
  * Cette fixture vient d'une ANNEXE LEON (et non de la matrice) : elle porte les
  * valeurs de la Presentation CA et de la Grille d'analyse. Elle exerce la chaine
- * complete `calculer()` la ou Bergerac ne validait que l'amortissement, et sur
+ * complete `calculer()` la ou OP-3 ne validait que l'amortissement, et sur
  * un profil de pret oppose : TAUX FIXE sans progressivite, contre SIMPLE revise.
  *
  * Particularite du jeu : tous les postes portent une TVA nulle et un TTC egal au
@@ -110,8 +111,8 @@ describe('golden - BERGERAC LLS 6 PLS (matrice LEON 2025-042d)', () => {
  * Voir QUESTIONS_SPEC Q-24 : est-ce une regle du produit ou une saisie propre a
  * cette operation ?
  */
-describe('golden - MULHOUSE 3308 LIBRE (annexe LEON, chaine complete)', () => {
-  const attendus = fixture('mulhouse_3308_libre', 'attendus.json');
+describe.skipIf(!fixturesReellesPresentes)('golden - OP-1 LIBRE (annexe LEON, chaine complete)', () => {
+  const attendus = fixture('op-1-libre', 'attendus.json');
   const baremes = JSON.parse(
     readFileSync(join(RACINE, 'referentiels', 'baremes_her_2027.json'), 'utf8'),
   );
@@ -123,7 +124,7 @@ describe('golden - MULHOUSE 3308 LIBRE (annexe LEON, chaine complete)', () => {
   const T = attendus.totaux_plan_financement;
 
   const entreesLibre = {
-      identite: { nom: 'MULHOUSE LIBRE', zone_123: 2, zone_ABC: 'B1', type_operation: 'VEFA' },
+      identite: { nom: 'OP-1', zone_123: 2, zone_ABC: 'B1', type_operation: 'VEFA' },
       dates: { annee_mise_en_location: 2026, duree_simulation_ans: 18 },
       lots: [{ code_produit: 'LIBRE', nb_logements: 11, shab_m2: 545.8, surfaces_annexes_m2: 0 }],
       // Postes repris de l'annexe, avec leur chapitre. `hors_lasm` parce que
@@ -261,7 +262,7 @@ describe('golden - MULHOUSE 3308 LIBRE (annexe LEON, chaine complete)', () => {
 });
 
 /**
- * MULHOUSE 3307 - partie LLI, meme operation que la fixture LIBRE.
+ * OP-2 - partie LLI, meme operation que la fixture LIBRE.
  *
  * Ce jeu porte trois prets dont deux en revisabilite DOUBLE avec progressivite
  * -0,5 %, ce qui en ferait le meilleur test possible du re-amortissement annuel
@@ -273,8 +274,8 @@ describe('golden - MULHOUSE 3308 LIBRE (annexe LEON, chaine complete)', () => {
  * revient, plan de financement et montants des prets. La comparaison des
  * annuites reste en attente.
  */
-describe('golden - MULHOUSE 3307 LLI (bilan et plan de financement)', () => {
-  const attendus = fixture('mulhouse_3308_lli', 'attendus.json');
+describe.skipIf(!fixturesReellesPresentes)('golden - OP-2 LLI (bilan et plan de financement)', () => {
+  const attendus = fixture('op-2-lli', 'attendus.json');
   const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_her_2027.json'), 'utf8'));
   const trajectoires = JSON.parse(
     readFileSync(join(RACINE, 'referentiels', 'trajectoires_axentia_2026.json'), 'utf8'),
@@ -285,7 +286,7 @@ describe('golden - MULHOUSE 3307 LLI (bilan et plan de financement)', () => {
 
   const resultat = calculer(
     {
-      identite: { nom: 'MULHOUSE LLI', zone_123: 2, zone_ABC: 'B1', type_operation: 'VEFA' },
+      identite: { nom: 'OP-2', zone_123: 2, zone_ABC: 'B1', type_operation: 'VEFA' },
       dates: { annee_mise_en_location: 2026, duree_simulation_ans: 18 },
       // Le loyer LLI n'est pas testable : son bareme est absent du referentiel
       // (defaut V5 connu). On passe par le produit LIBRE, dont seul le prix de
@@ -361,7 +362,7 @@ describe('golden - MULHOUSE 3307 LLI (bilan et plan de financement)', () => {
 });
 
 /**
- * ORLEANS 3463 - foyer PLUS/PLAI, la PREMIERE fixture du perimetre V1 declare.
+ * OP-6 - foyer PLUS/PLAI, la PREMIERE fixture du perimetre V1 declare.
  *
  * C'est le test le plus exigeant du moteur d'amortissement : quatre prets CDC en
  * revisabilite DOUBLE avec progressivite -0,5 %, sur une trajectoire de Livret A
@@ -375,9 +376,9 @@ describe('golden - MULHOUSE 3307 LLI (bilan et plan de financement)', () => {
  * Hors perimetre ici : le compte d'exploitation en mode foyer (redevance,
  * Q-27) et le bilan (les postes ne sont pas repris dans cette fixture).
  */
-describe('golden - ORLEANS 3463 PLUS/PLAI (revisabilite DOUBLE, trajectoire LA reelle)', () => {
-  const entrees = fixture('orleans_3463_fplus_fplai', 'entrees.json');
-  const attendus = fixture('orleans_3463_fplus_fplai', 'attendus.json');
+describe.skipIf(!fixturesReellesPresentes)('golden - OP-6 PLUS/PLAI (revisabilite DOUBLE, trajectoire LA reelle)', () => {
+  const entrees = fixture('op-6-foyer-plus-plai', 'entrees.json');
+  const attendus = fixture('op-6-foyer-plus-plai', 'attendus.json');
 
   const la0 = entrees.taux_evolution.livret_a_origine;
   const laParAnnee = entrees.livret_a_par_annee;
@@ -580,7 +581,7 @@ describe('golden - ORLEANS 3463 PLUS/PLAI (revisabilite DOUBLE, trajectoire LA r
 /**
  * Q-11 - GOLDEN TEST DU COMPTE D'EXPLOITATION.
  *
- * Le compte de LEON pour Bergerac (SimPLS colonnes DM a EC, 81 annees) est verse
+ * Le compte de LEON pour OP-3 (SimPLS colonnes DM a EC, 81 annees) est verse
  * dans `exploitation_leon.json`. Ce bloc confronte la MECANIQUE du moteur a cette
  * sortie reelle : agregation des annuites, indexation des recettes et de la
  * gestion, table de gros entretien, entree en TFPB, enchainement des soldes.
@@ -596,9 +597,9 @@ describe('golden - ORLEANS 3463 PLUS/PLAI (revisabilite DOUBLE, trajectoire LA r
  * de la faire croitre d'environ 2,3 % par an : divergence connue, dont la reponse
  * propre est de fournir une table couvrant l'horizon.
  */
-describe('golden - BERGERAC compte d exploitation (81 annees de LEON)', () => {
-  const leon = fixture('bergerac_lls6_pls', 'exploitation_leon.json');
-  const entrees = fixture('bergerac_lls6_pls', 'entrees.json');
+describe.skipIf(!fixturesReellesPresentes)('golden - OP-3 compte d exploitation (81 annees de LEON)', () => {
+  const leon = fixture('op-3-pls', 'exploitation_leon.json');
+  const entrees = fixture('op-3-pls', 'entrees.json');
   const C = leon.compte;
   const ref = entrees.referentiel_amortissement;
   const DERNIERE_ANNEE_TABLE_GE = 2088;

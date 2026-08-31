@@ -8,7 +8,7 @@
  * recalculee a la main), jamais une recopie du code teste.
  *
  * Reference : formules SimPLUS!FF117:FN117, SimPLUS!FA15:FD27, SimLIB!FG8/FH8
- * de la matrice LEON (classeur BERGERAC 07/2026).
+ * de la matrice LEON (classeur OP-3 07/2026).
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -286,7 +286,7 @@ describe('R-AMT-3 - date de premiere echeance PAR PRET (bug historique ALS)', ()
     // Le pret est mobilise a la livraison et s'amortit dans la foulee ; les
     // interets du chantier sont deja portes par le prefinancement. Arbitrage
     // metier du 11/08/2026 (Q-4, Q-28), contre le « +1 » lu dans LEON et
-    // contredit par les annexes BERGERAC et ORLEANS.
+    // contredit par les annexes OP-3 et OP-6.
     expect(anneePremiereEcheance(2026)).toBe(2026);
     // Le demembrement ne decale plus rien : il n'y a plus de decalage a annuler.
     expect(anneePremiereEcheance(2026, { demembrement: true })).toBe(2026);

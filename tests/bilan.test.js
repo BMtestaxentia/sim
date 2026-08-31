@@ -41,7 +41,7 @@ describe('R-TVA - prix de revient et livraison a soi-meme', () => {
   });
 
   it('R-TVA-2 : le PLAI releve de 5,5 %, le PLUS et le PLS de 10 %', () => {
-    // Arbitrage de Bastien du 06/08/2026 (Q-13) : LEON appliquait 10 % au PLAI
+    // Arbitrage metier du 06/08/2026 (Q-13) : LEON appliquait 10 % au PLAI
     // comme au PLUS, la maquette LEON REWORK les distingue et fait foi.
     expect(tauxLASM('PLAI', baremes)).toBe(0.055);
     expect(tauxLASM('PLUS', baremes)).toBe(0.1);
@@ -449,7 +449,7 @@ describe('R-TVA-2 - le taux par defaut d une tranche est celui de SON produit', 
     prixDeRevientVentile({ postes: [poste], su_par_produit: { PLAI: 500, PLS: 500 } }, baremes);
 
   it('chaque tranche prend le taux de son produit, pas celui de la ligne', () => {
-    // Cas signale par Bastien : une ligne a 5,5 % faisait apparaitre 5,5 % sur
+    // Cas signale en interne : une ligne a 5,5 % faisait apparaitre 5,5 % sur
     // la part PLS, taux qui n'existe pas pour ce produit.
     const r = deuxTranches({ chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 200000, taux_tva: 0.055 });
     expect(r.postes[0].par_tranche.PLAI.taux_tva).toBe(0.055);
@@ -489,7 +489,7 @@ describe('R-TVA-2 - le taux par defaut d une tranche est celui de SON produit', 
 
   it('un poste HORS CHAMP de la LASM garde son taux de saisie', () => {
     // Il est en dehors du regime du produit : lui appliquer le taux de ce
-    // produit n aurait pas de sens (annexes MULHOUSE, Q-24).
+    // produit n aurait pas de sens (annexes OP-1, Q-24).
     const r = deuxTranches({ chapitre: 'batiment', libelle: 'T', montant_ht_eur: 100000, taux_tva: 0, hors_lasm: true });
     expect(r.postes[0].par_tranche.PLS.taux_tva).toBe(0);
   });

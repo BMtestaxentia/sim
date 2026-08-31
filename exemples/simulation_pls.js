@@ -6,7 +6,7 @@
  *   node exemples/simulation_pls.js --json   # resultat brut, pour brancher une UI
  *
  * Sert de contrat d'interface : c'est exactement ce qu'une UI aura a appeler et
- * a afficher. Les donnees sont fictives (calquees sur la structure BERGERAC),
+ * a afficher. Les donnees sont fictives (calquees sur la structure de l operation de reference OP-3),
  * aucune donnee reelle AXENTIA ici.
  */
 import { readFileSync } from 'node:fs';

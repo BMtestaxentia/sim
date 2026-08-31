@@ -1,10 +1,10 @@
 // @ts-check
 /**
- * AGDE 2402 - FOYER PLS en colocation, 16 lots, VEFA zone 3/B1.
+ * OP-4 - FOYER PLS en colocation, 16 lots, VEFA zone 3/B1.
  *
  * Premiere fixture de foyer qui porte la chaine ENTIERE : bilan, plan de
  * financement, amortissement, amortissement comptable et compte en redevance.
- * Orleans validait l'amortissement et la redevance sans le bilan ; Mulhouse le
+ * OP-6 validait l'amortissement et la redevance sans le bilan ; OP-1 le
  * bilan sans la redevance. Celle-ci ferme le tour.
  *
  * Trois choses la rendent precieuse :
@@ -14,7 +14,7 @@
  * 2. elle porte une avance de tresorerie remuneree - le montage a 2 % de fonds
  *    propres des operations en redevance - reconstituee sur 30 ans a 2,5 % ;
  * 3. sa taxe fonciere entre en 2051, soit mise en location + 25 ans PILE, ce qui
- *    CONTREDIT Bergerac (+26) et donne raison au CGI. Voir E-10.
+ *    CONTREDIT OP-3 (+26) et donne raison au CGI. Voir E-10.
  *
  * Elle expose aussi un defaut de LEON que le moteur ne reproduit pas : une 51e
  * echeance sur un pret de 50 ans (E-13).
@@ -22,6 +22,7 @@
  * Protocole et tolerances : CLAUDE.md §5, comme `golden.test.js`.
  */
 import { describe, it, expect } from 'vitest';
+import { fixturesReellesPresentes, lireFixtureReelle } from './fixtures-reelles.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -32,10 +33,10 @@ const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** @param {string} fichier */
 function fixture(fichier) {
-  return JSON.parse(readFileSync(join(RACINE, 'fixtures', 'agde_2402_foyer_pls', fichier), 'utf8'));
+  return lireFixtureReelle('op-4-foyer-pls', fichier);
 }
 
-describe('golden - AGDE 2402 FOYER PLS (chaine complete en redevance)', () => {
+describe.skipIf(!fixturesReellesPresentes)('golden - OP-4 FOYER PLS (chaine complete en redevance)', () => {
   const entrees = fixture('entrees.json');
   const attendus = fixture('attendus.json');
   const baremes = JSON.parse(
@@ -51,12 +52,12 @@ describe('golden - AGDE 2402 FOYER PLS (chaine complete en redevance)', () => {
   const SERIE = attendus.resultat_et_autofinancement_par_annee;
 
   const entreesMoteur = {
-    identite: { nom: 'AGDE COLOC PLS', zone_123: 3, zone_ABC: 'B1', type_operation: 'VEFA' },
+    identite: { nom: 'OP-4 COLOC PLS', zone_123: 3, zone_ABC: 'B1', type_operation: 'VEFA' },
     dates: { annee_mise_en_location: 2026, duree_simulation_ans: 60 },
     lots: [{ code_produit: 'FPLS', nb_logements: 16, shab_m2: 423.7, surfaces_annexes_m2: 0 }],
     // Quatre postes, un seul taxable. Le prix de VEFA porte 10 % de TVA ; les
     // trois autres sont hors champ de la livraison a soi-meme (TTC = HT dans
-    // l'annexe), comme sur les fixtures Mulhouse - voir Q-24.
+    // l'annexe), comme sur les fixtures OP-1 - voir Q-24.
     postes_bilan: [
       {
         chapitre: 'charge_fonciere',
@@ -267,14 +268,14 @@ describe('golden - AGDE 2402 FOYER PLS (chaine complete en redevance)', () => {
   // ---------------------------------------------------------------------------
   // Compte d'exploitation en redevance forfaitaire.
   //
-  // Comme sur Orleans (Q-27), les trajectoires ci-dessous sont IDENTIFIEES sur
+  // Comme sur OP-6 (Q-27), les trajectoires ci-dessous sont IDENTIFIEES sur
   // les series de sortie et non transcrites d'une saisie : elles vivent donc
   // dans le test et non dans `entrees.json`. Ce que l'annexe etablit ici, et qui
   // n'etait pas acquis :
   //
   // - la redevance et les charges suivent DEUX trajectoires DISTINCTES
   //   (+1,7 % puis +1,8 % contre +2,0 % puis +1,8 %). Une trajectoire unique,
-  //   comme sur Orleans, n'est donc pas une regle du mode redevance ;
+  //   comme sur OP-6, n'est donc pas une regle du mode redevance ;
   // - l'annee 1 ne compte qu'UN MOIS - mise en location au 01/12/2026. Le
   //   rapport annee 2 / annee 1 vaut 12,42 sur les charges, soit douze mois
   //   indexes de 2,1 % ; la comparaison porte donc sur 2027 a 2085.
@@ -434,14 +435,14 @@ describe('golden - AGDE 2402 FOYER PLS (chaine complete en redevance)', () => {
     it('la redevance et les charges suivent DEUX trajectoires distinctes', () => {
       // Garde-fou : si l'on unifiait les deux trajectoires, 2028 et 2029
       // decrocheraient immediatement. Le mode redevance n'impose pas un index
-      // unique, contrairement a ce que suggerait Orleans seule.
+      // unique, contrairement a ce que suggerait OP-6 seule.
       const an = (a) => RED.find((x) => x.annee === a);
       expect(an(2028).redevance_eur / an(2027).redevance_eur).toBeCloseTo(1.017, 10);
       expect(an(2028).frais_gestion_keur / an(2027).frais_gestion_keur).toBeCloseTo(1.02, 10);
     });
 
     it('la taxe fonciere entre en 2051, soit mise en location + 25 ans PILE (E-10)', () => {
-      // Contre-exemple direct a Bergerac, ou LEON exonerait 26 ans. AGDE est
+      // Contre-exemple direct a OP-3, ou LEON exonerait 26 ans. OP-4 est
       // mise en location en 2026 et taxee des 2051 : la regle du moteur,
       // `annee_mise_en_location + duree_exoneration`, est celle du CGI 1384 A,
       // et c'est bien celle-la que LEON applique ici.

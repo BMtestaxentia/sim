@@ -201,7 +201,7 @@ describe('V5 - barèmes de loyer des produits', () => {
     expect(r.loyers[0].cs).toBe(1);
   });
 
-  it('R-AMT-1 : le LLI a ses prets par defaut, releves sur l annexe MULHOUSE', () => {
+  it('R-AMT-1 : le LLI a ses prets par defaut, releves sur l annexe OP-1', () => {
     // LA + 1,40 %, 35 ans en travaux et 40 en foncier.
     const p = pretsDefautResolus('LOC', { zone_ABC: 'B1', livret_a_reference: 0.017, marges: MARGES });
     expect(p).toHaveLength(2);
@@ -807,7 +807,7 @@ describe('R-FIN-2 - assiette CDC du droit a pret foncier (Q-30, arbitrage 06/08/
 });
 
 describe('R-FIN-7 - remuneration et reconstitution des fonds propres', () => {
-  // Les QUATRE combinaisons existent : l'annexe MULHOUSE 3308 les porte toutes
+  // Les QUATRE combinaisons existent : l'annexe OP-1 les porte toutes
   // dans une seule operation (PLS remunere et reconstitue, CD remunere seul,
   // LIB reconstitue seul, PLUS ni l'un ni l'autre).
   const op = (regime) => ({
@@ -1231,7 +1231,7 @@ describe('R-FIN - plan de financement PAR TRANCHE', () => {
   });
 });
 
-describe('R-EXP-PGE - assiette de la provision, relevee sur SIMTEST_BM_HAB', () => {
+describe('R-EXP-PGE - assiette de la provision, relevee sur matrice LEON de reference', () => {
   const postes = [
     { id: 'cf_acquisition', chapitre: 'charge_fonciere', libelle: 'Terrain', montant_ht_eur: 500000, taux_tva: 0.055 },
     { id: 'cf_notaire', chapitre: 'charge_fonciere', libelle: 'Notaire', montant_ht_eur: 7100, taux_tva: 0.2 },

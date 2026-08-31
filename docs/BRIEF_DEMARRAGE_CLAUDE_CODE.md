@@ -9,7 +9,7 @@ De la part de l'instance Claude qui pilote le projet (conversation « moteur de 
 3. **Repo** : nouveau repo **privé** séparé, nom suggéré `moteur-sim` (compte BMtestaxentia). Justification : les fixtures de golden tests contiennent des annexes LEON d'opérations réelles. Ne jamais rien copier de ce repo vers `exnihilo` (public).
 4. **Pas de base de données en phase 1** : moteur pur + fixtures JSON. Le Postgres de la VM viendra plus tard, ce n'est pas ton sujet pour l'instant.
 
-## Fichiers fournis par Bastien (à placer dans le repo)
+## Fichiers fournis en interne (à placer dans le repo)
 
 - `CLAUDE_MOTEUR.md` → à renommer `CLAUDE.md` à la racine du nouveau repo. Il contient l'architecture cible, les conventions et les règles non négociables. C'est ta référence permanente.
 - `docs/DICTIONNAIRE_REGLES_MOTEUR_PLUSPLAI_v0.1.md` → la spécification métier (règles R-xxx, irrégularités I-xxx). Toute fonction publique cite les règles qu'elle implémente.
@@ -26,16 +26,16 @@ De la part de l'instance Claude qui pilote le projet (conversation « moteur de 
 ### Sessions 2-3 - Moteur d'amortissement (R-AMT-1 à R-AMT-5 du dictionnaire)
 1. `src/amortissement.js` : annuité progressive (formule R-AMT-2), révision annuelle (R-AMT-4 : DOUBLE / D. LIMITÉE / SIMPLE), différés (types), date de première échéance PAR PRÊT (R-AMT-3 - c'est le bug historique, chaque prêt a sa propre année de départ), dernière échéance ajustée, préfinancement par échéancier mensuel avec capitalisation optionnelle (R-FIN-6).
 2. `tests/amortissement.test.js` : cas canoniques - taux 0 (linéaire, cf. I-8 : LEON renvoie 0, nous on fait juste), progressivité 0 (annuité constante classique, vérifiable contre PMT), progressivité -0,5 %, révision LA à la hausse/baisse, différé avec/sans capitalisation, prêt 40 ans vs 60 ans, dernière échéance.
-3. Point de comparaison : Bastien possède un optimiseur VBA validé à ±0,1 % des annuités LEON (avril 2026) - il peut fournir des jeux annuité/CRD de référence si besoin.
+3. Point de comparaison : le métier possède un optimiseur VBA validé à ±0,1 % des annuités LEON (avril 2026) - il peut fournir des jeux annuité/CRD de référence si besoin.
 
 ### Session 4+ - LIBRE bout-en-bout
-Attendre que l'instance chat fournisse les fixtures Mulhouse (`entrees.json` / `attendus.json` extraites des annexes) - en préparation côté chat. Ne pas les reconstruire toi-même.
+Attendre que l'instance chat fournisse les fixtures OP-1 (`entrees.json` / `attendus.json` extraites des annexes) - en préparation côté chat. Ne pas les reconstruire toi-même.
 
 ## Garde-fous
 
 - `npm test` vert avant chaque commit. Ne jamais adapter une fixture pour faire passer un test.
 - Aucun littéral métier dans le code (pas de 345, 0.77, 0.006 en dur) : tout vient de `referentiels/` ou des entrées.
 - Moteur pur : pas d'I/O, pas de réseau, pas de date système implicite.
-- En cas d'ambiguïté sur une règle métier : NE PAS deviner. Noter la question dans `docs/QUESTIONS_SPEC.md`, Bastien la remontera à l'instance chat qui a la matrice LEON sous la main et tranchera avec les cellules sources.
+- En cas d'ambiguïté sur une règle métier : NE PAS deviner. Noter la question dans `docs/QUESTIONS_SPEC.md`, le métier la remontera à l'instance chat qui a la matrice LEON sous la main et tranchera avec les cellules sources.
 
 Bon démarrage.

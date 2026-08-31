@@ -4,3 +4,7 @@ node_modules/
 # Exports bruts d'annexes LEON avant transformation en fixtures JSON
 *.xls
 *.xlsx
+
+# Fixtures REELLES : exports d operations, hors du depot public.
+# Les golden tests les lisent quand elles sont la, et se sautent sinon.
+fixtures-reelles/

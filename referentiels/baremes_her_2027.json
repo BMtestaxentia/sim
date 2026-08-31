@@ -1,6 +1,6 @@
 {
   "date_valeur": "2026-01-01",
-  "source": "LEON 2026-043h (SIMTEST_BM_HAB), onglet ParaGEN, profil AXENTIA HER 2027 (PMT2026), extrait le 2026-08-10",
+  "source": "LEON 2026-043h (matrice LEON de reference), onglet ParaGEN, profil AXENTIA HER 2027 (PMT2026), extrait le 2026-08-10",
   "note": "Baremes reglementaires versionnes. Toutes les valeurs sont lues dans la matrice, aucune n'est inventee. Les cellules sources sont citees pour audit.",
   "loyers_max_zone_123": {
     "unite": "EUR/m2 SU/mois",
@@ -165,7 +165,7 @@
   },
   "prets_cdc": {
     "date_valeur": "2026-06-01",
-    "source": "Calculette-production-LS-juin 2026.xlsx, feuille « Taux » (C11:C15)",
+    "source": "grille tarifaire des prets sur fonds d epargne (source interne, juin 2026)",
     "usage": "Grille tarifaire des prets sur fonds d'epargne. Le taux d'un pret CDC vaut Livret A + marge : seule la MARGE (le spread) est propre au produit, le Livret A est commun a toute l'operation.",
     "note": "Le Livret A retenu par le moteur est celui de la trajectoire (`taux_reference_livret_a`), pas le 1,50 % au 01/02/2026 de la calculette : deux simulations doivent pouvoir tourner sur des trajectoires differentes sans toucher a cette grille. Comme toute valeur de ce fichier, ces marges se surchargent par simulation via `entrees.parametrage.baremes` (R-PARAM, ecran Parametres).",
     "marges": {
@@ -214,7 +214,7 @@
       "booster": {
         "libelle": "Pret Booster",
         "montant_par_logement_eur": 15000,
-        "note_droit": "Calculette AT45 : 15 000 x (nb_logements - nb_PLI), moins nb_PLS si le Booster n est pas affecte au PLS (interrupteur AX53).",
+        "note_droit": "grille interne, cellule AT45 : 15 000 x (nb_logements - nb_PLI), moins nb_PLS si le Booster n est pas affecte au PLS (interrupteur AX53).",
         "durees_ans": [
           30,
           35,
@@ -265,7 +265,7 @@
         "taux_fixe": true,
         "note_taux": "Taux FIXE sur ressource BEI, sous reserve d eligibilite du projet. A saisir : le bareme est mensuel.",
         "profil_amortissement": "annuite",
-        "note_droit": "Calculette AZ57 : MIN(50 000 x nb_PLI ; 50 % des prets PLI ; 50 % du prix de revient PLI ; prix de revient PLI - sa charge fonciere).",
+        "note_droit": "grille interne, cellule AZ57 : MIN(50 000 x nb_PLI ; 50 % des prets PLI ; 50 % du prix de revient PLI ; prix de revient PLI - sa charge fonciere).",
         "plafond_par_logement_eur": 50000
       }
     }
@@ -399,7 +399,7 @@
   },
   "fonds_propres": {
     "note": "R-FIN-7. REMUNERATION et RECONSTITUTION sont deux options INDEPENDANTES, et les quatre combinaisons se rencontrent : remuneres sans etre reconstitues (l'operation sert l'interet mais ne rend jamais le capital), reconstitues sans etre remuneres (le capital est rendu par parts egales), les deux (annuite d'amortissement classique, qui s'arrete au terme), ou ni l'un ni l'autre (reconstitution sur le seul autofinancement). Ces valeurs sont des HYPOTHESES d'organisme, pas des baremes reglementaires : elles se surchargent tranche par tranche.",
-    "source": "Annexe LEON MULHOUSE 3308, plan_financement.fonds_propres, et regle de montage AXENTIA confirmee par Bastien le 10/08/2026 pour les taux d apport.",
+    "source": "Annexe LEON operation de reference LIBRE/LLI, plan_financement.fonds_propres, et regle de montage AXENTIA confirmee en interne le 10/08/2026 pour les taux d apport.",
     "taux_remuneration_defaut": 0.025,
     "duree_reconstitution_defaut_ans": 30,
     "apport": {
@@ -459,12 +459,12 @@
         "assiette": "logement",
         "valeur": 124,
         "index": "gestion",
-        "source": "Presentation CA J202 x D79, indexe sur la trajectoire de gestion (annexe SIMTEST_BM_HAB)",
+        "source": "Presentation CA J202 x D79, indexe sur la trajectoire de gestion (annexe matrice LEON de reference)",
         "note": "Quote-part des frais de siege imputee a l operation. Forfait par logement, indexe comme la gestion. Comme tout poste du catalogue, inactif tant que la saisie ne l active pas."
       }
     ],
     "frais_gestion_pct_prix_revient": 0.003,
-    "note_frais_gestion": "Q-17, close le 11/08/2026. Les frais de gestion s assoient sur le PRIX DE REVIENT TTC, a 0,3 % (ParaGLOB!C49, identique sur BOURGES, CHAMBERY et AGDE). LEON les AFFICHE en euros par logement (ComPLUS!B150) mais les CALCULE comme taux x PR TTC / nb logements (SimPLUS!A36) : c est un cout de structure rapporte a la taille de l operation, pas une commission sur les recettes."
+    "note_frais_gestion": "Q-17, close le 11/08/2026. Les frais de gestion s assoient sur le PRIX DE REVIENT TTC, a 0,3 % (ParaGLOB!C49, identique sur BOURGES, CHAMBERY et operation de reference foyer PLS). LEON les AFFICHE en euros par logement (ComPLUS!B150) mais les CALCULE comme taux x PR TTC / nb logements (SimPLUS!A36) : c est un cout de structure rapporte a la taille de l operation, pas une commission sur les recettes."
   },
   "provision_gros_entretien": {
     "source": "SimPLUS!BH12 (taux), SimPLUS!BK31 (assiette), SimPLUS!DX15 (charge annuelle) ; plafond : Presentation CA K82 (PLAFOND PGERC)",

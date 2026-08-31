@@ -1,6 +1,6 @@
 {
   "profil": "AXENTIA HER 2027 (PMT2026)",
-  "source": "LEON 2026-043h (SIMTEST_BM_HAB), ParaGEN!GS22:HE72, extrait le 2026-08-10",
+  "source": "LEON 2026-043h (matrice LEON de reference), ParaGEN!GS22:HE72, extrait le 2026-08-10",
   "taux_reference_livret_a": 0.015,
   "taux_livret_a_courant": 0.015,
   "marge_anticipee_livret_a": 0,

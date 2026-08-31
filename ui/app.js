@@ -145,7 +145,7 @@ const LIBELLES_ASSIETTE = {
 // ---------------------------------------------------------------- etat initial
 
 /**
- * Operation de depart, calquee sur la structure BERGERAC.
+ * Operation de depart, calquee sur la structure OP-3.
  *
  * Aucun taux de Livret A n'est fige ici : le moteur applique celui du referentiel.
  * Une valeur codee a cet endroit ecraserait le referentiel et ferait diverger deux
@@ -157,8 +157,8 @@ const etat = {
     // Groupe : le PROJET auquel la simulation appartient. Une meme operation
     // se simule souvent plusieurs fois - variantes de programme, de montage,
     // d'hypotheses - et ces essais n'ont de sens que rassembles.
-    groupe: 'Bergerac LLS 6',
-    commune: 'Bergerac',
+    groupe: 'OP-3 LLS 6',
+    commune: 'OP-3',
     departement: 'Dordogne (24)',
     produit: 'PLS',
     zone_123: 2,
@@ -535,7 +535,7 @@ function zonageDeLaCommune(commune, departement) {
   const cible = normaliserNom(commune);
   // La comparaison passe par la forme normalisee : la commune est normalement
   // choisie dans la liste, donc exacte, mais une simulation importee peut
-  // porter « ORLEANS » ou « Orleans » sans accent.
+  // porter « OP-6 » ou « OP-6 » sans accent.
   const trouvee = communesDuDepartement(departement).find((c) => normaliserNom(c[1]) === cible);
   return trouvee ? { code_insee: trouvee[0], nom: trouvee[1], zone_ABC: trouvee[2] } : null;
 }
@@ -1553,7 +1553,7 @@ function rendreBlocRedevance() {
           'rupture de charges, les cotisations assises sur elle sont refacturées à leur tour, et la ' +
           'vacance ne s’y applique pas : le risque est porté par le gestionnaire.'
         : '⚙ En forfaitaire, la redevance est un montant négocié, indexé depuis son année de valeur. ' +
-          'Elle ne suit pas les charges : vérifié sur l’annexe Orléans, où aucune rupture de charges ' +
+          'Elle ne suit pas les charges : vérifié sur l’annexe OP-6, où aucune rupture de charges ' +
           'ne laisse de trace sur 60 ans.';
   }
 }
@@ -2120,7 +2120,7 @@ function rendreValeurs(r) {
     { l: 'Tranches', v: r.surfaces.tranches.length, d: r.surfaces.tranches.map(libelleProduit).join(', ') || '-' },
     { l: 'Surface utile', v: `${nb(ind.su_m2)} m²`, d: `${nb(ind.shab_m2)} m² SHAB` },
     { l: 'Prix de revient', v: eur(ind.prix_revient_ttc_eur), d: `${eur(ind.prix_revient_par_logement_eur)} / logement` },
-    // Sans le RMO : retire du recapitulatif a la demande de Bastien, comme il
+    // Sans le RMO : retire du recapitulatif a la demande du metier, comme il
     // l'avait deja ete de l'indicateur du plan de financement.
     { l: 'Loyers annuels', v: eur(ind.loyers_annuels_eur), d: '' },
     { l: 'Mise en location', v: r.calendrier.annee_mise_en_location, d: `${etat.dates.duree_simulation_ans} ans simulés` },
@@ -2945,7 +2945,7 @@ function rendreFinancement(r) {
     : '';
 
   // Le prix de revient a quitte ces tuiles : la balance le porte deja, en gros
-  // et avec ses ratios. Le RMO aussi, retire a la demande de Bastien.
+  // et avec ses ratios. Le RMO aussi, retire a la demande du metier.
   //
   // Les deux dernieres tuiles ne s'affichent qu'en consolide : la reconstitution
   // des fonds propres et l'entree en TFPB se lisent sur le compte d'exploitation
@@ -4538,7 +4538,7 @@ const MODELE_CALCULS = [
         titre: "L’équilibre, et le sens de l’écart",
         regles: ["R-FIN-1"],
         simple: "Une opération est équilibrée quand ce qu’elle coûte est exactement couvert par ce qui la finance. Les ressources sont la somme de trois choses : les subventions, les fonds propres et les prêts. On les compare au prix de revient TTC. Le signe de l’écart se lit dans un sens précis : un écart positif signifie qu’on a mobilisé plus de ressources que nécessaire, un écart négatif qu’il manque de l’argent. Le moteur signale aussi si la part des prêts CDC descend sous le minimum réglementaire. Un écart d’un euro ou moins est de l’arrondi de présentation et n’est pas signalé.",
-        formule: "ressources = subventions + fonds propres + prêts\nécart = ressources − prix de revient TTC\n\n  écart > 0 ...... surfinancement, il faut réduire une ressource\n  écart = 0 ...... équilibre\n  écart < 0 ...... reste à financer\n\nExemple, opération AGDE :\n  prêts PLS ................ 1 978 651 €   (89,3 %)\n  subventions .............. 193 000 €     ( 8,7 %)\n  avance de trésorerie ..... 44 319 €      ( 2,0 %)\n                             ───────────\n  ressources ............... 2 215 970 €\n  prix de revient TTC ...... 2 215 970 €\n  écart .................... 0 € ✓",
+        formule: "ressources = subventions + fonds propres + prêts\nécart = ressources − prix de revient TTC\n\n  écart > 0 ...... surfinancement, il faut réduire une ressource\n  écart = 0 ...... équilibre\n  écart < 0 ...... reste à financer\n\nExemple, opération OP-4 :\n  prêts PLS ................ 1 978 651 €   (89,3 %)\n  subventions .............. 193 000 €     ( 8,7 %)\n  avance de trésorerie ..... 44 319 €      ( 2,0 %)\n                             ───────────\n  ressources ............... 2 215 970 €\n  prix de revient TTC ...... 2 215 970 €\n  écart .................... 0 € ✓",
         support: {
           fonction: "controleEquilibre",
           signature: "controleEquilibre({ prix_revient_ttc_module_eur, subventions_eur, fonds_propres_eur, prets_eur, prets_cdc_eur }, referentiels) → { ressources_eur, ecart_eur, alertes }",
@@ -4665,7 +4665,7 @@ const MODELE_CALCULS = [
         titre: "Les fonds propres ont un coût",
         regles: ["R-FIN-7"],
         simple: "Les fonds propres ne sont pas gratuits. Dans un montage en redevance, on les apporte sous forme d’avance de trésorerie rémunérée : l’organisme se paie un intérêt sur l’argent qu’il a immobilisé, et il reconstitue le capital sur une durée donnée. Le calcul est exactement celui d’un prêt : une annuité constante qui rembourse le capital et sert l’intérêt sur la durée de reconstitution. Cette annuité entre dans les charges du compte d’exploitation, au même titre qu’une annuité de prêt. Quand le taux est nul, l’annuité est simplement le capital divisé par la durée.",
-        formule: "annuité = capital × taux ÷ (1 − (1 + taux) ^ −durée)\nsi taux = 0 :\n  annuité = capital ÷ durée\n\nExemple, opération AGDE :\n  avance de trésorerie ....... 44 318,74 €\n  taux de rémunération ....... 2,50 %\n  durée de reconstitution .... 30 ans\n  annuité .................... 44 318,74 × 2,5 % ÷ (1 − 1,025^−30)\n                             = 2 117,44 € par an pendant 30 ans",
+        formule: "annuité = capital × taux ÷ (1 − (1 + taux) ^ −durée)\nsi taux = 0 :\n  annuité = capital ÷ durée\n\nExemple, opération OP-4 :\n  avance de trésorerie ....... 44 318,74 €\n  taux de rémunération ....... 2,50 %\n  durée de reconstitution .... 30 ans\n  annuité .................... 44 318,74 × 2,5 % ÷ (1 − 1,025^−30)\n                             = 2 117,44 € par an pendant 30 ans",
         support: {
           fonction: "annuiteFondsPropres",
           signature: "annuiteFondsPropres({ montant_eur, taux = 0, duree_ans = 0 }) → euros par an",
@@ -4723,7 +4723,7 @@ const MODELE_CALCULS = [
       {
         titre: "Fiscalité : exonération et taxe d’aménagement",
         regles: ["R-FISC-1", "R-FISC-2"],
-        simple: "Le logement social neuf est exonéré de taxe foncière sur les propriétés bâties pendant 25 ans à compter de la mise en location. La 26e année, la taxe entre en charge d’un coup dans le compte d’exploitation, et le saut est brutal : la ligne quadruple, parce que jusque-là elle ne portait que la taxe d’enlèvement des ordures ménagères. Le moteur compte les 25 ans à partir de l’année de mise en location, conformément au CGI. À noter que la matrice LEON est incohérente sur ce point : elle en compte 26 sur l’opération de Bergerac et 25 sur celle d’Agde. C’est la règle du CGI qui a été retenue. La taxe d’aménagement, elle, se paie une fois, au moment du permis, et entre au prix de revient.",
+        simple: "Le logement social neuf est exonéré de taxe foncière sur les propriétés bâties pendant 25 ans à compter de la mise en location. La 26e année, la taxe entre en charge d’un coup dans le compte d’exploitation, et le saut est brutal : la ligne quadruple, parce que jusque-là elle ne portait que la taxe d’enlèvement des ordures ménagères. Le moteur compte les 25 ans à partir de l’année de mise en location, conformément au CGI. À noter que la matrice LEON est incohérente sur ce point : elle en compte 26 sur l’opération de OP-3 et 25 sur celle d’OP-4. C’est la règle du CGI qui a été retenue. La taxe d’aménagement, elle, se paie une fois, au moment du permis, et entre au prix de revient.",
         formule: "année d’entrée en TFPB = année de mise en location + durée d’exonération\n\nExemple, mise en location en 2026 :\n  2026 + 25 = 2051  →  première année taxée\n  de 2026 à 2050, seule la TEOM est due\n\nDurées par produit :\n  logement social (PLAI, PLUS, PLS) ... 25 ans (CGI art. 1384 A)\n  logement intermédiaire .............. 20 ans (CGI art. 1384-0 A)\n  logement libre ...................... 0 an",
         support: {
           fonction: "exonerationTFPB, taxeAmenagement",
@@ -4763,7 +4763,7 @@ const MODELE_CALCULS = [
         titre: "L’ordre d’une année",
         regles: ["R-EXP"],
         simple: "Chaque année du compte se calcule dans un ordre qui n’est pas négociable, parce que certaines charges dépendent des produits et que les produits, en mode transparence, dépendent des charges. Le moteur commence donc par ce qui ne dépend de rien : les annuités de prêts, la taxe foncière, le gros entretien, les charges au forfait. Il calcule ensuite les produits — loyers ou redevance — desquels il retire la vacance et les impayés. Il peut alors calculer les charges assises sur ces produits : les frais de gestion quand ils sont en pourcentage des loyers, les cotisations CGLLS et ANCOLS. Vient l’impôt sur les sociétés, qui a besoin du résultat. Et enfin les deux soldes.",
-        formule: "Ordre de calcul d’une année :\n\n  1. charges fixes ...... annuités + TFPB + TEOM + gros entretien + assurance\n  2. produits bruts ..... loyers (ou redevance) + annexes + divers\n     produits nets ...... produits bruts × (1 − taux de vacance et impayés)\n  3. charges assises .... frais de gestion en % + CGLLS + ANCOLS\n     (calculées sur les produits, donc après l’étape 2)\n  4. impôt .............. taux × MAX(0 ; résultat fiscal)\n  5. soldes ............. autofinancement, puis résultat comptable\n\nExemple, année 2 d’AGDE :\n  redevance ............... 101 504 €\n  − annuités .............. 84 779 €\n  − TFPB et TEOM .......... 1 957 €\n  − assurance ............. 304 €\n  − frais de structure .... 2 075 €\n  = autofinancement ....... 12 389 €",
+        formule: "Ordre de calcul d’une année :\n\n  1. charges fixes ...... annuités + TFPB + TEOM + gros entretien + assurance\n  2. produits bruts ..... loyers (ou redevance) + annexes + divers\n     produits nets ...... produits bruts × (1 − taux de vacance et impayés)\n  3. charges assises .... frais de gestion en % + CGLLS + ANCOLS\n     (calculées sur les produits, donc après l’étape 2)\n  4. impôt .............. taux × MAX(0 ; résultat fiscal)\n  5. soldes ............. autofinancement, puis résultat comptable\n\nExemple, année 2 d’OP-4 :\n  redevance ............... 101 504 €\n  − annuités .............. 84 779 €\n  − TFPB et TEOM .......... 1 957 €\n  − assurance ............. 304 €\n  − frais de structure .... 2 075 €\n  = autofinancement ....... 12 389 €",
         support: {
           fonction: "compteExploitation",
           signature: "compteExploitation(e) → { lignes, indicateurs }. lignes : une par année, chacune portant produits, charges, annuités et soldes",
@@ -4856,8 +4856,8 @@ const MODELE_CALCULS = [
       {
         titre: "Les trois assiettes des frais de gestion",
         regles: ["R-EXP"],
-        simple: "Les frais de gestion peuvent se calculer de trois façons, et le choix change beaucoup le résultat. En pourcentage du prix de revient TTC : c’est la règle retenue, 0,3 % du prix de revient, ce que fait réellement LEON. En pourcentage des loyers : une commission sur les recettes. En forfait par logement : un montant fixe. Le point de confusion vient de ce que LEON AFFICHE les frais de gestion en euros par logement — 415,49 € par lot sur l’opération d’Agde — mais ne les CALCULE jamais ainsi : c’est 0,3 % du prix de revient divisé par le nombre de lots. C’est un coût de structure rapporté à la taille de l’opération, pas une commission sur les recettes.",
-        formule: "assiette prix de revient (retenue) :\n  frais de gestion = 0,3 % × prix de revient TTC × facteur d’indexation\n\nassiette loyers :\n  frais de gestion = taux × produits locatifs\n\nassiette forfait :\n  frais de gestion = valeur × nombre de logements\n\nExemple, AGDE, 16 lots, prix de revient 2 215 969,74 € :\n  0,003 × 2 215 969,74 = 6 647,91 € pour l’opération\n  6 647,91 ÷ 16 = 415,49 € par lot  ← la valeur affichée par LEON",
+        simple: "Les frais de gestion peuvent se calculer de trois façons, et le choix change beaucoup le résultat. En pourcentage du prix de revient TTC : c’est la règle retenue, 0,3 % du prix de revient, ce que fait réellement LEON. En pourcentage des loyers : une commission sur les recettes. En forfait par logement : un montant fixe. Le point de confusion vient de ce que LEON AFFICHE les frais de gestion en euros par logement — 415,49 € par lot sur l’opération d’OP-4 — mais ne les CALCULE jamais ainsi : c’est 0,3 % du prix de revient divisé par le nombre de lots. C’est un coût de structure rapporté à la taille de l’opération, pas une commission sur les recettes.",
+        formule: "assiette prix de revient (retenue) :\n  frais de gestion = 0,3 % × prix de revient TTC × facteur d’indexation\n\nassiette loyers :\n  frais de gestion = taux × produits locatifs\n\nassiette forfait :\n  frais de gestion = valeur × nombre de logements\n\nExemple, OP-4, 16 lots, prix de revient 2 215 969,74 € :\n  0,003 × 2 215 969,74 = 6 647,91 € pour l’opération\n  6 647,91 ÷ 16 = 415,49 € par lot  ← la valeur affichée par LEON",
         support: {
           fonction: "compteExploitation (fraisGestionForfait puis arbitrage final)",
           signature: "trois assiettes possibles : % du prix de revient TTC, % des loyers, forfait par logement",
@@ -4866,7 +4866,7 @@ const MODELE_CALCULS = [
           alimente: "les charges du compte d’exploitation",
           tests: "tests/exploitation.test.js, tests/golden_agde_foyer.test.js (question Q-17)",
           source: "src/exploitation.js:311 et 493",
-          texte: "Q-17, close le 11/08/2026 sur les matrices BOURGES, CHAMBERY et AGDE. La variante en % des loyers n’est PAS multipliée par l’indice de gestion : son indexation vient de celle des loyers. Les trois assiettes ne suivent donc pas la même inflation."
+          texte: "Q-17, close le 11/08/2026 sur les matrices BOURGES, CHAMBERY et OP-4. La variante en % des loyers n’est PAS multipliée par l’indice de gestion : son indexation vient de celle des loyers. Les trois assiettes ne suivent donc pas la même inflation."
         },
         piege: "Les tests de sélection portent sur « strictement positif » : un taux à zéro fait basculer sur l’assiette suivante. Il n’est donc pas possible de forcer des frais de gestion nuls par un taux à zéro.",
         entrees: [
@@ -4881,7 +4881,7 @@ const MODELE_CALCULS = [
       {
         titre: "Redevance forfaitaire ou en transparence",
         regles: ["R-EXP-7"],
-        simple: "Un foyer ne perçoit pas un loyer au m² mais une redevance, et il y a deux façons de la fixer. La redevance forfaitaire est un montant négocié : vous le saisissez pour la première année et il s’indexe ensuite, sans aucun lien avec les charges. C’est le cas des opérations d’Agde et de Cazères. La redevance en transparence, au contraire, se recompose depuis les charges : on refacture au gestionnaire ce que l’opération coûte. Le calcul est alors circulaire, puisque certaines charges se calculent en pourcentage des produits — donc de la redevance qu’on cherche. Le moteur résout cette circularité par une formule fermée, il n’itère pas.",
+        simple: "Un foyer ne perçoit pas un loyer au m² mais une redevance, et il y a deux façons de la fixer. La redevance forfaitaire est un montant négocié : vous le saisissez pour la première année et il s’indexe ensuite, sans aucun lien avec les charges. C’est le cas des opérations d’OP-4 et de OP-5. La redevance en transparence, au contraire, se recompose depuis les charges : on refacture au gestionnaire ce que l’opération coûte. Le calcul est alors circulaire, puisque certaines charges se calculent en pourcentage des produits — donc de la redevance qu’on cherche. Le moteur résout cette circularité par une formule fermée, il n’itère pas.",
         formule: "redevance forfaitaire :\n  redevance de l’année N = montant saisi × facteur d’indexation\n\nredevance en transparence :\n  socle .... = annuités + TFPB + gros entretien + charges fixes\n  k ........ = somme des taux assis sur les produits\n  redevance = quote-part × (socle + k × produits connus)\n              ÷ (1 − quote-part × k)\n\nLa division par (1 − quote-part × k) est la résolution de la circularité :\nsans elle, il faudrait itérer jusqu’à convergence.",
         support: {
           fonction: "compteExploitation (blocs redevanceForfait et redevanceTransparence)",
@@ -4970,7 +4970,7 @@ const MODELE_CALCULS = [
         titre: "Les deux soldes",
         regles: ["R-EXP-2"],
         simple: "Le compte produit deux soldes qui ne disent pas la même chose et qu’il ne faut pas confondre. L’autofinancement est un solde de TRÉSORERIE : ce qui reste en caisse une fois les recettes encaissées et les charges payées, annuités comprises. C’est lui qui dit si l’opération tient financièrement. Le résultat comptable est un solde de COMPTABILITÉ : il ignore le remboursement du capital, qui n’est pas une charge, mais il intègre la dotation aux amortissements, qui n’est pas un décaissement. Une opération peut très bien afficher un autofinancement positif et un résultat comptable négatif pendant des années : c’est même le cas normal du logement social neuf.",
-        formule: "autofinancement = produits − charges (annuités comprises)\ncumul = cumul de l’année précédente + autofinancement\n\nrésultat comptable = produits\n                   − charges hors remboursement de capital\n                   − dotation aux amortissements\n                   + quote-part de subventions virée au résultat\n\nExemple, année 2 d’AGDE :\n  autofinancement ....... +12 389 €   (la trésorerie tient)\n  résultat comptable .... −15 588 €   (les amortissements pèsent)",
+        formule: "autofinancement = produits − charges (annuités comprises)\ncumul = cumul de l’année précédente + autofinancement\n\nrésultat comptable = produits\n                   − charges hors remboursement de capital\n                   − dotation aux amortissements\n                   + quote-part de subventions virée au résultat\n\nExemple, année 2 d’OP-4 :\n  autofinancement ....... +12 389 €   (la trésorerie tient)\n  résultat comptable .... −15 588 €   (les amortissements pèsent)",
         support: {
           fonction: "compteExploitation (bloc des soldes)",
           signature: "chaque ligne porte total_produits_eur, total_charges_eur, autofinancement_eur et son cumul",
@@ -5020,7 +5020,7 @@ const MODELE_CALCULS = [
         titre: "Les indicateurs de synthèse",
         regles: ["R-EXP-3"],
         simple: "Trois indicateurs résument soixante ans de compte. Le taux de rentabilité interne est le taux qui annule la valeur actuelle nette de la série des flux : c’est le rendement de l’opération, tous flux confondus. Le moteur le cherche par dichotomie, en resserrant un intervalle jusqu’à trouver le taux qui équilibre, et il renvoie une absence de valeur si la série ne change jamais de signe — un TRI n’a alors pas de sens. L’année de reconstitution des fonds propres est la première année où l’autofinancement cumulé repasse au-dessus du montant apporté : c’est la date à laquelle l’organisme a récupéré sa mise. Le cumul d’autofinancement, enfin, dit ce que l’opération aura rapporté au total.",
-        formule: "TRI : le taux r tel que  Σ flux(N) ÷ (1 + r)^N = 0\n  cherché par dichotomie entre −99 % et +100 %, 200 itérations\n  renvoie « non calculable » si tous les flux ont le même signe\n\nannée de reconstitution = première année où :\n  autofinancement cumulé ≥ fonds propres apportés\n\nExemple, AGDE :\n  TRI sur 60 ans ......................... 2,40 %\n  fonds propres apportés ................. 44 319 €\n  cumul d’autofinancement à 60 ans ....... 5 843 784 €",
+        formule: "TRI : le taux r tel que  Σ flux(N) ÷ (1 + r)^N = 0\n  cherché par dichotomie entre −99 % et +100 %, 200 itérations\n  renvoie « non calculable » si tous les flux ont le même signe\n\nannée de reconstitution = première année où :\n  autofinancement cumulé ≥ fonds propres apportés\n\nExemple, OP-4 :\n  TRI sur 60 ans ......................... 2,40 %\n  fonds propres apportés ................. 44 319 €\n  cumul d’autofinancement à 60 ans ....... 5 843 784 €",
         support: {
           fonction: "tauxRentabiliteInterne, indicateursExploitation, anneeReconstitutionFondsPropres",
           signature: "tauxRentabiliteInterne(flux) → taux, ou null si la série ne change jamais de signe · indicateursExploitation(lignes, contexte) → agrégats · anneeReconstitutionFondsPropres(lignes, fonds_propres_eur) → année ou null",
@@ -9847,8 +9847,28 @@ const EXEMPLES = [
  * module : partir d'un etat deja rempli laisserait trainer des postes et des
  * lots qu'on croirait choisis.
  */
+const CLE_EXEMPLES_SEMES = 'moteur-sim.exemples-semes';
+
+/** Pose le marqueur de semis et rend le compte inchange, pour s ecrire en une ligne. */
+function marquerSemis(poses) {
+  try {
+    localStorage.setItem(CLE_EXEMPLES_SEMES, '1');
+  } catch {
+    /* stockage indisponible : rien a memoriser, rien a reparer */
+  }
+  return poses;
+}
+
 function semerExemples() {
-  if (listerSimulations().length) return 0;
+  // UNE FOIS, jamais deux. La bibliotheque vide ne suffit pas comme condition :
+  // qui supprime les trois exemples les verrait revenir au rechargement suivant,
+  // et une suppression qu'on defait est une suppression qui n'a pas eu lieu.
+  try {
+    if (localStorage.getItem(CLE_EXEMPLES_SEMES)) return 0;
+  } catch {
+    /* stockage indisponible : on tente le semis, il echouera de lui-meme */
+  }
+  if (listerSimulations().length) return marquerSemis(0);
   let poses = 0;
   for (const ex of EXEMPLES) {
     const sim = structuredClone(ETAT_INITIAL);
@@ -9858,7 +9878,7 @@ function semerExemples() {
     sim.subventions = structuredClone(ex.subventions);
     if (ajouterSimulation(sim)) poses += 1;
   }
-  return poses;
+  return marquerSemis(poses);
 }
 
 semerExemples();

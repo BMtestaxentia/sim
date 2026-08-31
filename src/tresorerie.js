@@ -14,7 +14,7 @@
  * de prefinancement, et c'est lui qui porte les interets intercalaires (R-FIN-6).
  *
  * R-TRESO-2 - INDEXATION DES DEPENSES. Transcription du classeur « Indexeur cout
- * travaux » (Bastien, 11/08/2026). Deux indexations se suivent, et les confondre
+ * travaux » (metier, 11/08/2026). Deux indexations se suivent, et les confondre
  * donnerait un surcout faux :
  *
  *  1. le cout est saisi a une DATE DE VALEUR, et revise jusqu'a l'ordre de

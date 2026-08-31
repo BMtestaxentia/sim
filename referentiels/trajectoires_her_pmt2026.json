@@ -4,7 +4,7 @@
   "extrait_le": "2026-08-06",
   "annee_reference": 2025,
   "note": "Valeurs saisies en POURCENTAGE dans la source, converties ici en fractions. Les taux 2036 et suivants reconduisent la derniere ligne du tableau (« 2036 a 2075 » dans le tableur, « 2036 a 2074 » dans la note : l'ecart d'un an est sans effet, la valeur etant constante). Les postes du tableur ne portent aucune indexation sur l'inflation (colonne « Indexation sur inflation » a Non).",
-  "avertissement_millesime": "Ce profil est le PMT 2026. Les annexes Mulhouse du depot ont ete calculees avec le profil « AXENTIA HER 2026 (PMT 2025) », millesime PRECEDENT, conserve dans trajectoires_axentia_2026.json. Ne pas confondre : une trajectoire est versionnee par millesime de PMT, et rejouer une annexe ancienne avec le profil courant donnerait des ecarts legitimes mais trompeurs.",
+  "avertissement_millesime": "Ce profil est le PMT 2026. Les annexes de reference du depot ont ete calculees avec le profil « AXENTIA HER 2026 (PMT 2025) », millesime PRECEDENT, conserve dans trajectoires_axentia_2026.json. Ne pas confondre : une trajectoire est versionnee par millesime de PMT, et rejouer une annexe ancienne avec le profil courant donnerait des ecarts legitimes mais trompeurs.",
 
   "taux_reference_livret_a": null,
   "note_taux_reference": "Le Livret A d'origine d'un pret (LA_0, plage nommee Tx_LA dans LEON) n'est PAS dans ce document : c'est une propriete du pret a sa date de montage, pas une hypothese macro. Il reste a fournir par la simulation. Question ouverte Q-8.",

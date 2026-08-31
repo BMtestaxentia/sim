@@ -15,7 +15,11 @@ La spécification de référence est `docs/DICTIONNAIRE_REGLES_MOTEUR_PLUSPLAI_v
 - Poste Windows, **pas de Docker**, pas de Python. Node/npm : à installer (voir §3) - ne rien supposer installé, vérifier.
 - **Aucun backend disponible** (VM SFO éteinte temporairement). Le moteur se développe et se teste **sans base de données** : entrées JSON → sorties JSON, fixtures sur disque.
 - La persistance (Postgres auto-hébergé de la VM, PostgREST) viendra plus tard. **Jamais Supabase cloud.**
-- Ce repo est **PRIVÉ** et doit le rester : les golden tests contiennent des exports d'opérations réelles AXENTIA (annexes LEON). Ne jamais copier ces fixtures vers le repo public `exnihilo`.
+- **Ce repo est PUBLIC** (`github.com/BMtestaxentia/sim`, servi par GitHub Pages). Il ne doit donc contenir **aucune donnée réelle**.
+  - Les **fixtures réelles** (exports d'annexes et de matrices LEON) vivent dans `fixtures-reelles/`, **ignoré par git**. Les trois fichiers `golden*.test.js` les lisent quand elles sont là et **se sautent** sinon : `npm test` passe dans les deux cas, avec ou sans elles.
+  - Les opérations sont désignées par des **codes** dans tout le dépôt : `OP-1` à `OP-6` pour les fixtures, `H-1` à `H-7` pour les exports Horizon 50. La table de correspondance est dans `fixtures-reelles/CORRESPONDANCE.md`, hors du dépôt.
+  - Ne jamais réintroduire un nom de commune, un numéro de simulation, un nom de fichier interne ni un nom de personne dans un fichier suivi par git. Les communes du **zonage** font exception : c'est de la donnée publique (data.gouv.fr).
+  - L'application sème trois **opérations de démonstration inventées** au premier chargement : c'est ce que voit un visiteur de la page publique.
 
 ## 3. Stack technique
 
@@ -41,11 +45,12 @@ moteur/
   referentiels/
     baremes_2025.json          # barèmes réglementaires versionnés (extraits de ParaGEN)
     trajectoires_axentia_2026.json  # scénario macro (LA, IRL, TFPB...)
-  fixtures/                    # DONNÉES RÉELLES - raison du repo privé
-    mulhouse_3308_libre/       # entrees.json + attendus.json (depuis l'annexe LIBRE)
-    mulhouse_3308_lli/
-    bergerac_lls6_pls/         # PLS, depuis la matrice complète (tables d'amortissement LEON)
-    (à venir : opérations PLUS/PLAI exportées par Bastien)
+  fixtures/                    # documentation du format, AUCUNE donnee
+  fixtures-reelles/            # les vraies annexes, hors git (.gitignore)
+    op-1-libre/                # entrees.json + attendus.json (depuis l'annexe LIBRE)
+    op-2-lli/
+    op-3-pls/                  # PLS, depuis la matrice complète (tables d'amortissement LEON)
+    op-4-foyer-pls/ op-5-foyer-pls/ op-6-foyer-plus-plai/
   tests/
     amortissement.test.js      # cas canoniques (taux 0, progressivité, révision LA, différés, dernière échéance)
     golden.test.js             # comparaison moteur vs annexes LEON, tolérances ±1 EUR bilan / ±0,1 % annuités
@@ -64,7 +69,7 @@ Règles d'architecture non négociables :
 
 - Une fixture = `entrees.json` (reconstruit depuis l'onglet IN de l'annexe LEON) + `attendus.json` (valeurs de la Présentation CA / Grille d'analyse / PMT).
 - Tolérances : ±1 EUR sur bilan et plan de financement ; ±0,1 % sur annuités et lignes d'exploitation. Un écart au-delà = bug du moteur OU bug documenté de LEON (à consigner dans ECARTS_LEON.md, jamais à masquer).
-- Ordre d'implémentation : amortissement (tests canoniques) → LIBRE bout-en-bout (fixture Mulhouse disponible) → LLI → PLUS/PLAI (dès fixtures fournies).
+- Ordre d'implémentation : amortissement (tests canoniques) → LIBRE bout-en-bout (fixture OP-1 disponible) → LLI → PLUS/PLAI (dès fixtures fournies).
 - `npm test` est le juge de paix. Ne jamais commiter en rouge.
 
 ## 6. Conventions de travail

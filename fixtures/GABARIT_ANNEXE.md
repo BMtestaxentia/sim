@@ -17,7 +17,7 @@ l'opération ; pas d'autre donnée nominative dans le nom de dossier.
 ## 2. Ce que `attendus.json` doit contenir
 
 Les clés ci-dessous sont celles que les golden tests existants consomment. Les
-deux fixtures Mulhouse en sont l'exemple de référence.
+deux fixtures OP-1 en sont l'exemple de référence.
 
 | Clé | Contenu | Sert à tester |
 |---|---|---|
@@ -32,7 +32,7 @@ deux fixtures Mulhouse en sont l'exemple de référence.
 
 ## 3. Points de vigilance constatés sur les annexes déjà branchées
 
-**TVA et livraison à soi-même.** Sur les deux annexes Mulhouse, tous les postes
+**TVA et livraison à soi-même.** Sur les deux annexes OP-1, tous les postes
 portent une TVA nulle et un TTC égal au HT : aucune LASM ne s'applique. Les
 tests les marquent `hors_lasm: true`. Vérifier ce point AVANT de conclure à un
 écart : sans ce marqueur, le prix de revient LIBRE était faux de 413 k€.
@@ -42,7 +42,7 @@ Question ouverte Q-24.
 Un prêt en `DOUBLE` ou `D. LIMITEE` dépend de la trajectoire de Livret A avec
 laquelle l'annexe a été calculée, et cette trajectoire n'est pas dans le dépôt.
 C'est ce qui bloque aujourd'hui les annuités LLI (Q-25). **Si l'annexe PLUS/PLAI
-comporte des prêts révisables — ce sera le cas, les prêts CDC le sont — il faut
+comporte des prêts révisables (ce sera le cas, les prêts CDC le sont), il faut
 exporter aussi la trajectoire de LA du profil**, sans quoi seules les grandeurs
 indépendantes du taux seront testables.
 
@@ -56,7 +56,7 @@ un arrondi d'affichage de LEON, à ne pas reproduire.
 
 ## 4. Écrire le test
 
-Reprendre la structure de `tests/golden.test.js`, section MULHOUSE LIBRE. Elle
+Reprendre la structure de `tests/golden.test.js`, section OP-1 LIBRE. Elle
 appelle `calculer()` une fois puis vérifie bloc par bloc, ce qui permet de ne
 tester que ce qui est comparable et de documenter le reste en question ouverte
 plutôt que de le masquer.
@@ -71,5 +71,5 @@ documenté de LEON, consigné dans `docs/ECARTS_LEON.md`.
 sans rien laisser d'indéfini : coefficient de structure par tranche, barème sur
 le zonage 1/2/3, prêts CDC par défaut résolus depuis `produits.js`, majoration
 PLUS 33 % en multiplicatif, exonération de taxe foncière. Ces tests ne comparent
-rien à LEON — ils garantissent seulement qu'aucune régression ne casse PLUS/PLAI
+rien à LEON : ils garantissent seulement qu'aucune régression ne casse PLUS/PLAI
 d'ici là. Le golden test viendra s'ajouter à côté, sans les remplacer.

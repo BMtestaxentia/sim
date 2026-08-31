@@ -12,16 +12,16 @@ n'était donc pas lisible ; seuls ses résultats l'étaient.
 
 | Fichier | 1re année | Années | Assiette an 1 (k€) | Dépense an 0 (k€) |
 |---|---|---|---|---|
-| BERGERAC RJA | 2027 | 44 | 7 160 | 1 338,77 |
+| H-1 | 2027 | 44 | 7 160 | 1 338,77 |
 | Données | 2026 | 45 | 3 432 850 | 751,39 |
-| Sablé | 2027 | 44 | 12 218 | (hors fenêtre) |
-| Lyon 7 | 2026 | 45 | 1 242 | 299,12 |
-| Clermont | 2026 | 45 | 22 842 997 | 3 786,41 |
-| La Rochelle | 2028 | 43 | 14 398 | 2 739,12 |
+| H-3 | 2027 | 44 | 12 218 | (hors fenêtre) |
+| H-4 | 2026 | 45 | 1 242 | 299,12 |
+| H-5 | 2026 | 45 | 22 842 997 | 3 786,41 |
+| H-6 | 2028 | 43 | 14 398 | 2 739,12 |
 | RE | 2026 | 45 | 22 842 997 | 3 786,41 |
 
-Deux remarques d'emblée : **Clermont et RE sont identiques** au centime sur
-toutes les lignes, et **« Données » comme Clermont portent des assiettes en
+Deux remarques d'emblée : **H-5 et RE sont identiques** au centime sur
+toutes les lignes, et **« Données » comme H-5 portent des assiettes en
 milliards** : ce sont des consolidations de patrimoine, pas des opérations. Les
 quatre autres sont des opérations.
 
@@ -40,7 +40,7 @@ stock_début(N+1) = stock_fin(N)
 0,01 k€, soit exactement l'arrondi à deux décimales de l'export. Ce n'est donc
 pas une approximation, c'est la règle.
 
-Le stock **peut devenir négatif** : BERGERAC descend à −318,89 k€ en 2057, à la
+Le stock **peut devenir négatif** : OP-3 descend à −318,89 k€ en 2057, à la
 suite d'une dépense de 1 687,71 k€, et rien dans les fichiers ne l'en empêche.
 La provision n'est pas une trésorerie : c'est un compte de provision qui se
 creuse et se rattrape.
@@ -67,10 +67,10 @@ montée diffère d'un fichier à l'autre :
 
 | Fichier | Escalier |
 |---|---|
-| BERGERAC | 0 → 0,3 → 0,4 → 0,5 → **0,6 %** |
+| OP-3 | 0 → 0,3 → 0,4 → 0,5 → **0,6 %** |
 | Données | 0 → 0,1 → 0,2 → 0,3 → 0,4 → 0,5 → **0,6 %** |
-| Lyon 7 | 0 → 0,6 → **1,2 %** |
-| Sablé, Clermont, La Rochelle, RE | 0 → **0,6 %** |
+| H-4 | 0 → 0,6 → **1,2 %** |
+| H-3, H-5, H-6, RE | 0 → **0,6 %** |
 
 Le palier est donc **0,6 %**, sauf Lyon qui monte à **1,2 %** : le double. La
 première année est toujours à zéro. L'escalier est une donnée de saisie, pas une
@@ -85,14 +85,14 @@ C'est le cœur, et c'est ce qui n'était nulle part écrit.
 Années de dépense, comptées depuis la première colonne :
 
 ```
-BERGERAC, Données, Lyon, Clermont, La Rochelle, RE
+OP-3, Données, Lyon, H-5, H-6, RE
   0, 7, 9, 12, 14, 18, 21, 24, 27, 28, 30, 35, 36, 40, 42
 
-Sablé
+H-3
   6, 8, 11, 13, 17, 20, 23, 26, 27, 29, 34, 35, 39, 41
 ```
 
-Sablé est le **même gabarit décalé d'un an** : son année de référence précède sa
+H-3 est le **même gabarit décalé d'un an** : son année de référence précède sa
 première colonne, si bien que son année 0 tombe hors fenêtre. Six fichiers sur
 sept partagent le calendrier au rang près.
 
@@ -131,12 +131,12 @@ Le modèle est ensuite rejoué sur **toutes** les années :
 
 | Fichier | Pire écart de reconstitution |
 |---|---|
-| BERGERAC | −0,086 k€ |
+| OP-3 | −0,086 k€ |
 | Données | +0,066 k€ |
-| Sablé | −0,210 k€ |
-| Lyon 7 | +0,031 k€ |
-| Clermont / RE | +0,064 k€ |
-| La Rochelle | −0,115 k€ |
+| H-3 | −0,210 k€ |
+| H-4 | +0,031 k€ |
+| H-5 / RE | +0,064 k€ |
+| H-6 | −0,115 k€ |
 
 Sur des montants qui vont jusqu'à 3 016 k€, l'écart maximal est de 0,21 k€, soit
 **7 pour cent mille**. C'est l'arrondi de l'export, pas un défaut du modèle.
@@ -149,7 +149,7 @@ fichier, soit le même 2,30 % que l'assiette. **Un seul taux gouverne tout le cl
 
 Part de chaque composant dans le total des bases :
 
-| Durée | BERGERAC | Clermont | Lyon 7 | Données |
+| Durée | OP-3 | H-5 | H-4 | Données |
 |---|---|---|---|---|
 | 7 ans | 0,53 % | 0,53 % | 0,53 % | 0,50 % |
 | 9 ans | 1,45 % | 1,45 % | 1,45 % | 1,45 % |
@@ -164,7 +164,7 @@ consolidation « Données » s'en écarte légèrement, ce qui est attendu : ell
 mélange des patrimoines de compositions différentes.
 
 Le composant de 30 ans porte **69 % du montant** à lui seul. C'est lui qui fait
-la forme de la courbe, et le creux de stock de 2057 sur BERGERAC.
+la forme de la courbe, et le creux de stock de 2057 sur OP-3.
 
 ### Un huitième composant, qui ne se renouvelle jamais
 
@@ -172,10 +172,10 @@ L'année 0 dépasse systématiquement la somme des sept bases :
 
 | Fichier | Année 0 | Σ bases | Écart | Part |
 |---|---|---|---|---|
-| BERGERAC | 1 338,77 | 1 234,90 | 103,87 | 8,4 % |
-| Clermont | 3 786,41 | 3 494,81 | 291,60 | 8,3 % |
-| Lyon 7 | 299,12 | 276,31 | 22,81 | 8,3 % |
-| La Rochelle | 2 739,12 | 2 526,92 | 212,20 | 8,4 % |
+| OP-3 | 1 338,77 | 1 234,90 | 103,87 | 8,4 % |
+| H-5 | 3 786,41 | 3 494,81 | 291,60 | 8,3 % |
+| H-4 | 299,12 | 276,31 | 22,81 | 8,3 % |
+| H-6 | 2 739,12 | 2 526,92 | 212,20 | 8,4 % |
 | Données | 751,39 | 690,20 | 61,19 | 8,9 % |
 
 **8,3 à 8,4 %** du total sur les quatre opérations. Il existe donc un composant
@@ -190,7 +190,7 @@ n'étant observable.
 - **Les libellés des composants.** Sept durées, aucun nom. La grille du
   référentiel comptable actuel (`amortissement`) ne correspond pas : il faudra
   soit obtenir les libellés, soit les nommer par convention.
-- **Pourquoi Lyon 7 collecte à 1,2 %** et les autres à 0,6 %. Doublement de
+- **Pourquoi H-4 collecte à 1,2 %** et les autres à 0,6 %. Doublement de
   taux, sans indice dans les fichiers.
 - **La forme de l'escalier de montée en charge.** Quatre formes sur sept
   fichiers : c'est une saisie, mais sa règle de construction est inconnue.

@@ -86,7 +86,7 @@ export function tauxTVAPoste(poste, code, taux_produit) {
   // deplace toutes les lignes de ce produit qui n'ont pas de saisie propre.
   // Un poste HORS CHAMP de la livraison a soi-meme garde son taux de saisie :
   // il est par definition en dehors du regime du produit, lui appliquer le taux
-  // de ce produit n'aurait pas de sens. C'est le cas des annexes MULHOUSE, dont
+  // de ce produit n'aurait pas de sens. C'est le cas des annexes OP-1, dont
   // les postes portent une TVA nulle et un TTC egal au HT (Q-24).
   if (poste.hors_lasm) return poste.taux_tva ?? 0;
   if (taux_produit !== undefined && taux_produit !== null) return taux_produit;
@@ -228,7 +228,7 @@ export function prixDeRevient({ code_produit, postes, modulation_ttc_eur = 0, qp
  * tout l'interet de la ventilation : un PLAI et un LIBRE ne portent pas la meme
  * TVA finale sur le meme poste.
  *
- * La cle est unique pour toute l'operation (arbitrage de Bastien du 05/08/2026 :
+ * La cle est unique pour toute l'operation (arbitrage metier du 05/08/2026 :
  * « ventile tout en SU »), conformement au titre de l'onglet source. Une cle par
  * chapitre ou par poste reste possible plus tard sans changer cette signature.
  *
@@ -409,7 +409,7 @@ export function prixDeRevientVentile(
  * Valeur comptable du terrain, part du prix de revient qui ne s'amortit pas.
  *
  * ATTENTION, la quotite est un PARAMETRE et non une constante : l'annexe
- * Mulhouse applique 25 % du poste Terrain, alors que `baremes_her_2027.json` porte
+ * OP-1 applique 25 % du poste Terrain, alors que `baremes_her_2027.json` porte
  * une table par zone donnant 13 % en B1. Les deux valeurs coexistent dans les
  * sources et ne sont pas arbitrees (QUESTIONS_SPEC Q-26). L'appelant fournit
  * donc la quotite qu'il retient, et la fonction ne choisit pas a sa place.
@@ -430,7 +430,7 @@ export function valeurComptableTerrain({ montant_terrain_eur, quotite }) {
  * Base d'amortissement comptable : prix de revient TTC moins la valeur
  * comptable du terrain. C'est l'assiette de la dotation aux amortissements.
  * Source : Grille d'analyse LEON (« base d'amortissement »), verifiee sur
- * l'annexe Mulhouse (2 065 829,65 - 478 360,03 = 1 587 469,62).
+ * l'annexe OP-1 (2 065 829,65 - 478 360,03 = 1 587 469,62).
  *
  * @param {Object} p
  * @param {number} p.prix_revient_ttc_eur

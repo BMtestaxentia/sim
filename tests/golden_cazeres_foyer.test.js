@@ -1,17 +1,17 @@
 // @ts-check
 /**
- * CAZERES 2868 - FOYER PLS, fixture de CONTROLE d'AGDE.
+ * OP-5 - FOYER PLS, fixture de CONTROLE d'OP-4.
  *
  * Meme profil de gestion, meme annexe, meme montage : 16 lots, VEFA, PLS en
  * double revisabilite, redevance forfaitaire. Mais des montants differents, une
  * mise en location differente (31/03/2027 contre 01/12/2026) et surtout un plan
  * de financement oppose : ici AUCUNE subvention et 98 % de prets, contre 89 %
- * de prets et 193 kEUR de subventions a AGDE.
+ * de prets et 193 kEUR de subventions a OP-4.
  *
  * Une fixture seule ne dit pas si un accord vient de la regle ou du hasard des
  * chiffres. Ce fichier ne re-teste donc pas la mecanique - `golden_agde_foyer`
  * s'en charge - mais ce que les deux operations doivent avoir EN COMMUN si les
- * regles identifiees sur AGDE en sont bien :
+ * regles identifiees sur OP-4 en sont bien :
  *
  * - la valeur comptable du terrain a 25 % de l'acquisition VEFA TTC (Q-26) ;
  * - les frais de gestion a 0,3 % du prix de revient TTC (Q-17) ;
@@ -23,6 +23,7 @@
  * - la 51e echeance fantome de LEON sur le pret de 50 ans (E-13).
  */
 import { describe, it, expect } from 'vitest';
+import { fixturesReellesPresentes, lireFixtureReelle } from './fixtures-reelles.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -32,18 +33,18 @@ const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** @param {string} dossier @param {string} fichier */
 function fixture(dossier, fichier) {
-  return JSON.parse(readFileSync(join(RACINE, 'fixtures', dossier, fichier), 'utf8'));
+  return lireFixtureReelle(dossier, fichier);
 }
 
-describe('golden - CAZERES 2868 FOYER PLS (controle d AGDE)', () => {
-  const entrees = fixture('cazeres_2868_foyer_pls', 'entrees.json');
-  const attendus = fixture('cazeres_2868_foyer_pls', 'attendus.json');
-  const agde = fixture('agde_2402_foyer_pls', 'attendus.json');
-  const agdeEntrees = fixture('agde_2402_foyer_pls', 'entrees.json');
+describe.skipIf(!fixturesReellesPresentes)('golden - OP-5 FOYER PLS (controle d OP-4)', () => {
+  const entrees = fixture('op-5-foyer-pls', 'entrees.json');
+  const attendus = fixture('op-5-foyer-pls', 'attendus.json');
+  const agde = fixture('op-4-foyer-pls', 'attendus.json');
+  const agdeEntrees = fixture('op-4-foyer-pls', 'entrees.json');
 
   const RED = attendus.redevance_forfaitaire_par_annee;
   const SERIE = attendus.resultat_et_autofinancement_par_annee;
-  const AGDE_RED = agde.redevance_forfaitaire_par_annee;
+  const OP4_RED = agde.redevance_forfaitaire_par_annee;
   const PREMIERE = entrees.dates.annee_premiere_echeance;
 
   const tables = entrees.prets.map((p) =>
@@ -73,7 +74,7 @@ describe('golden - CAZERES 2868 FOYER PLS (controle d AGDE)', () => {
       F.total_prets_eur + F.total_subventions_eur + F.avance_tresorerie_remuneree_eur;
     expect(Math.abs(ressources - attendus.bilan.total_ttc_eur)).toBeLessThanOrEqual(0.01);
     expect(F.total_subventions_eur).toBe(0);
-    // 98 % de prets : le cas oppose a AGDE, ou ils ne font que 89 %.
+    // 98 % de prets : le cas oppose a OP-4, ou ils ne font que 89 %.
     expect(F.pct_prets).toBeGreaterThan(0.97);
     expect(agde.plan_financement.pct_prets).toBeLessThan(0.9);
   });
@@ -121,7 +122,7 @@ describe('golden - CAZERES 2868 FOYER PLS (controle d AGDE)', () => {
       attendus.indicateurs.valeur_comptable_terrain_eur,
       6,
     );
-    // Et la meme quotite sur AGDE : deux operations en zone B1, 25 % toutes les
+    // Et la meme quotite sur OP-4 : deux operations en zone B1, 25 % toutes les
     // deux, la ou la table par zone donne 13 %.
     expect(agdeEntrees.hypotheses_exploitation.terrain_sur_montant_acquisition_vefa_ttc).toBe(q);
     expect(entrees.identite.zone_ABC).toBe(agdeEntrees.identite.zone_ABC);
@@ -133,7 +134,7 @@ describe('golden - CAZERES 2868 FOYER PLS (controle d AGDE)', () => {
       entrees.hypotheses_exploitation.frais_gestion_par_lot_eur,
       6,
     );
-    // 440,08 EUR par lot ici contre 415,49 a AGDE : c'est bien l'assiette qui
+    // 440,08 EUR par lot ici contre 415,49 a OP-4 : c'est bien l'assiette qui
     // est constante, pas le montant. Un forfait par lot ne pourrait pas donner
     // deux valeurs differentes sur le meme profil.
     expect(entrees.hypotheses_exploitation.frais_gestion_par_lot_eur).not.toBeCloseTo(
@@ -181,20 +182,20 @@ describe('golden - CAZERES 2868 FOYER PLS (controle d AGDE)', () => {
     };
     // Redevance : +1,7 % en 2029 sur les deux, +1,8 % en 2030 sur les deux.
     expect(taux(RED, 'redevance_eur', 2029)).toBeCloseTo(0.017, 10);
-    expect(taux(AGDE_RED, 'redevance_eur', 2029)).toBeCloseTo(0.017, 10);
+    expect(taux(OP4_RED, 'redevance_eur', 2029)).toBeCloseTo(0.017, 10);
     expect(taux(RED, 'redevance_eur', 2030)).toBeCloseTo(0.018, 10);
-    expect(taux(AGDE_RED, 'redevance_eur', 2030)).toBeCloseTo(0.018, 10);
+    expect(taux(OP4_RED, 'redevance_eur', 2030)).toBeCloseTo(0.018, 10);
     // Charges : +1,8 % en 2029 sur les deux.
     expect(taux(RED, 'frais_gestion_keur', 2029)).toBeCloseTo(0.018, 10);
-    expect(taux(AGDE_RED, 'frais_gestion_keur', 2029)).toBeCloseTo(0.018, 10);
+    expect(taux(OP4_RED, 'frais_gestion_keur', 2029)).toBeCloseTo(0.018, 10);
     // Et les deux trajectoires restent DISTINCTES l'une de l'autre en 2028,
-    // ou AGDE porte +1,7 % sur la redevance contre +2,0 % sur les charges.
-    expect(taux(AGDE_RED, 'redevance_eur', 2028)).toBeCloseTo(0.017, 10);
-    expect(taux(AGDE_RED, 'frais_gestion_keur', 2028)).toBeCloseTo(0.02, 10);
+    // ou OP-4 porte +1,7 % sur la redevance contre +2,0 % sur les charges.
+    expect(taux(OP4_RED, 'redevance_eur', 2028)).toBeCloseTo(0.017, 10);
+    expect(taux(OP4_RED, 'frais_gestion_keur', 2028)).toBeCloseTo(0.02, 10);
   });
 
   it('LEON decale la premiere echeance quand la mise en location n est pas au 1er janvier (Q-28)', () => {
-    // Mise en location au 31/03/2027, premiere echeance en 2028 ; AGDE, mise en
+    // Mise en location au 31/03/2027, premiere echeance en 2028 ; OP-4, mise en
     // location au 01/12/2026, premiere echeance en 2027. Deux operations de
     // plus qui amortissent a partir de la premiere annee civile COMPLETE, et
     // non l'annee de mise en location. Le moteur, lui, applique desormais
@@ -202,6 +203,6 @@ describe('golden - CAZERES 2868 FOYER PLS (controle d AGDE)', () => {
     expect(PREMIERE).toBe(2028);
     expect(RED.find((a) => a.annee === 2027).annuites_keur).toBe(0);
     expect(agdeEntrees.dates.annee_premiere_echeance).toBe(2027);
-    expect(AGDE_RED.find((a) => a.annee === 2026).annuites_keur).toBe(0);
+    expect(OP4_RED.find((a) => a.annee === 2026).annuites_keur).toBe(0);
   });
 });

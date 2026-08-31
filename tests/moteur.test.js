@@ -15,7 +15,7 @@ import { calculer, VERSION_MOTEUR } from '../src/moteur.js';
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_her_2027.json'), 'utf8'));
 
-/** Operation de reference : 6 logements PLS en VEFA, calquee sur BERGERAC. */
+/** Operation de reference : 6 logements PLS en VEFA, calquee sur OP-3. */
 const ENTREES = {
   identite: { nom: 'Operation de test', zone_123: 2, zone_ABC: 'B1', type_operation: 'Vefa' },
   dates: { annee_mise_en_location: 2028, duree_simulation_ans: 40 },

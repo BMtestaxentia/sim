@@ -2,7 +2,7 @@
 /**
  * R-SURF + R-LOYER - Surfaces, coefficient de structure et loyers reglementes.
  *
- * Sources LEON verifiees le 04/08/2026 (classeur BERGERAC, matrice complete) :
+ * Sources LEON verifiees le 04/08/2026 (classeur OP-3, matrice complete) :
  * - `calculs!D384` : surface utile = SHAB + 0,5 x annexes.
  * - `calculs!D92/D94/D95/D96` : coefficient de structure, variantes metropole/DOM,
  *   par produit / mixte / hors annexes.

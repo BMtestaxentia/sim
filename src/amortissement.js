@@ -3,7 +3,7 @@
  * R-AMT - Moteur d'amortissement des prets (coeur du moteur, cible +/-0,1 % vs LEON).
  *
  * Transcription etablie a partir des formules VIVANTES de la matrice LEON
- * (classeur BERGERAC 07/2026, meme version 131 onglets que la matrice de
+ * (classeur OP-3 07/2026, meme version 131 onglets que la matrice de
  * reference) : SimPLUS!FF117:FN117 pour le tableau d'amortissement,
  * SimPLUS!AM15 pour le facteur d'annuite affiche, SimPLUS!FA15:FD27 pour la
  * capitalisation du prefinancement, SimLIB!FG8/FH8 pour la variante taux fixe.
@@ -73,7 +73,7 @@ export function normaliserRevisabilite(libelle) {
  * portes par le prefinancement (R-FIN-6), capitalise au capital emprunte.
  *
  * Le dictionnaire v0.1 lisait « annee(DAT) + 1 » dans LEON. Deux annexes le
- * contredisent - BERGERAC et ORLEANS demarrent l'annee de la mise en location -
+ * contredisent - OP-3 et OP-6 demarrent l'annee de la mise en location -
  * et le metier a tranche le 11/08/2026 pour le decalage nul (Q-4, Q-28). Le
  * decalage de demembrement devient donc sans objet.
  *

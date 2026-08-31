@@ -87,14 +87,14 @@ export const PRODUITS = {
     coefficient_structure: true,
     duree_exoneration_tfpb_ans: 25,
     prets_defaut: [
-      // Taux constate sur l'operation BERGERAC : 3,51 % pour un LA de reference de
+      // Taux constate sur l'operation OP-3 : 3,51 % pour un LA de reference de
       // 2,40 % (ParaGEN!DD20), soit LA + 1,11 %. Confirme independamment par la
       // maquette LEON REWORK (ADMIN!C45 « Spread PLS » = 0,0111), qui donne aussi
       // PLAI -0,20 % et PLUS +0,60 %, conformes a R-AMT-1.
       //
-      // Revisabilite DOUBLE, sur decision du metier (Bastien, 10/08/2026) : les
+      // Revisabilite DOUBLE, sur decision du metier (10/08/2026) : les
       // trois produits CDC sont montes en double revisabilite. La matrice
-      // BERGERAC portait SIMPLE (SimPLS!AM19), ce qui reflete un montage
+      // OP-3 portait SIMPLE (SimPLS!AM19), ce qui reflete un montage
       // particulier et non la regle - l'ecart est trace dans ECARTS_LEON.
       { nature: 'construction', cle_marge: 'PLS', duree_ref: '40', revisabilite: 'DOUBLE' },
       { nature: 'foncier', cle_marge: 'PLS', duree_ref: 'zone_abc:B2|C->50,sinon->60', revisabilite: 'DOUBLE' },
@@ -125,7 +125,7 @@ export const PRODUITS = {
       { nature: 'construction', cle_marge: 'PLI', duree_ref: '35', revisabilite: 'DOUBLE' },
       { nature: 'foncier', cle_marge: 'PLI', duree_ref: '40', revisabilite: 'DOUBLE' },
     ],
-    // Active a la demande de Bastien le 06/08/2026 : bareme de loyer, prets par
+    // Active a la demande du metier le 06/08/2026 : bareme de loyer, prets par
     // defaut, duree d'exoneration et plafond de financement a 90 % sont en place.
     v1: true,
   },
@@ -275,7 +275,7 @@ export function marge(cle_marge, marges) {
  * tarifaires, revisees a chaque grille CDC, et les coder en dur reproduirait
  * l'irregularite I-2 de LEON. Trois sources concordent sur les valeurs :
  * `Taux!C11:C15` de la calculette CDC de juin 2026, `ADMIN!C43:C46` de la
- * maquette LEON REWORK, et le taux constate sur l'operation Bergerac.
+ * maquette LEON REWORK, et le taux constate sur l'operation OP-3.
  *
  * @param {string} cle_marge
  * @param {number} livret_a_reference

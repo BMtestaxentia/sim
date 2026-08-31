@@ -223,10 +223,24 @@ html, body {
 .onglets {
   position: relative;
   display: flex; align-items: center; gap: 2px;
-  /* Le rail OCCUPE toute la largeur libre du bandeau. Les onglets se centrent
-     dedans tant qu'ils tiennent (`safe center` : des qu'ils debordent, le
-     defilement repart du bord gauche au lieu de couper les deux bouts). */
-  flex: 1 1 auto; min-width: 0; justify-content: safe center;
+  /* Le rail se REGLE SUR SON CONTENU : il ne prend pas la largeur libre du
+     bandeau, il prend celle de ses onglets. Un aplat qui deborde de dix
+     centimetres a droite se lit comme une zone vide a remplir, alors que le
+     rail est complet.
+
+     `flex: 0 1 auto` : il ne grandit pas, mais il peut encore RETRECIR - sur un
+     ecran etroit les onglets defilent dans le rail plutot que de sortir du
+     bandeau. `safe center` sert alors : des qu'ils debordent, le defilement
+     repart du bord gauche au lieu de couper les deux bouts.
+
+     Aucune largeur n'est calculee nulle part : ajouter une tranche allonge le
+     rail, la retirer le raccourcit, et le curseur suit puisqu'il se
+     repositionne sur l'onglet actif. */
+  flex: 0 1 auto; min-width: 0; justify-content: safe center;
+  /* Deux marges automatiques - ici et sur les actions - se partagent l'espace
+     libre : le rail reste centre dans le bandeau tout en collant a ses
+     onglets. */
+  margin-inline: auto;
   padding: 3px; border-radius: var(--radius-pill);
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
@@ -1138,7 +1152,11 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 
 /* Menu du dossier : le resume porte le nom, la liste porte les actions. */
 .menu-dossier__liste {
-  position: absolute; top: calc(100% + 5px); left: 0; z-index: 60;
+  /* CENTRE sous son bouton, et non aligne sur son bord gauche : un menu qui
+     part d un cote donne a croire qu il appartient a ce qui se trouve de ce
+     cote-la. Il pend de son declencheur, il doit pendre droit. */
+  position: absolute; top: calc(100% + 5px); left: 50%; transform: translateX(-50%);
+  z-index: 60;
   display: flex; flex-direction: column; min-width: 210px; padding: 4px;
   background: var(--bg-primary); border: 1px solid var(--border-color-strong);
   border-radius: var(--radius-md); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
@@ -1151,6 +1169,9 @@ td.col-tranche--debut, th.col-tranche--debut { border-left: 2px solid var(--cat,
 .menu-dossier__liste button:hover { background: var(--bg-secondary); color: var(--text-primary); }
 
 .entete__dossier {
+  /* Repere du menu deroulant : sans lui, l absolu du menu s accrocherait a un
+     ancetre quelconque et le centrage porterait sur la mauvaise boite. */
+  position: relative;
   display: inline-flex; align-items: center; gap: 6px; flex: none;
   margin-left: 10px; padding: 4px 8px 4px 9px;
   appearance: none; cursor: pointer;
@@ -2650,12 +2671,6 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
              plus d'une opération de démonstration, on ferme le dossier ou on en
              ouvre un autre depuis la bibliothèque. -->
         <div class="entete__groupe">
-          <!-- « Fermer » vit ici, au bout du rail d'onglets : il termine le
-               travail sur le dossier ouvert. Il ne paraît que dans une
-               simulation - sans dossier ouvert, il n'a rien à fermer. -->
-          <button type="button" id="btn-fermer-sim" class="bouton bouton--discret"
-                  title="Fermer la simulation ouverte">Fermer</button>
-          <span class="entete__filet" aria-hidden="true"></span>
           <button type="button" id="btn-theme" class="bouton bouton--icone" aria-label="Changer de thème">☀</button>
         </div>
       </div>
@@ -16534,36 +16549,6 @@ function fermerSimulation(issue = 'enregistrer') {
 }
 
 /**
- * Ferme en demandant quoi faire des modifications, s'il y en a.
- *
- * Trois issues et non deux : enregistrer, abandonner, ou renoncer a fermer.
- * Un `confirm` n'en offre que deux, et forcer le choix entre « perdre » et
- * « garder » sans porte de sortie fait cliquer au hasard.
- */
-async function fermerSimulationAvecConfirmation() {
-  if (!idSimulationOuverte) return;
-  // Rien de modifie : on ferme sans rien demander. Une confirmation qui
-  // n'a aucun enjeu apprend a cliquer sans lire.
-  let issue = "enregistrer";
-  if (modificationsEnAttente()) {
-    const r = await ouvrirBoite({
-      titre: `Fermer « ${etat.identite?.nom ?? 'cette simulation'} » ?`,
-      texte: 'Cette simulation a été modifiée depuis son ouverture.',
-      actions: [
-        { cle: 'annuler', libelle: 'Annuler', style: 'discret' },
-        { cle: 'abandonner', libelle: 'Abandonner les modifications', style: 'danger' },
-        { cle: 'enregistrer', libelle: 'Enregistrer et fermer', style: 'principal' },
-      ],
-    });
-    if (r === null) return;
-    issue = r;
-  }
-  fermerSimulation(issue === "abandonner" ? "abandonner" : "enregistrer");
-  rendreBibliotheque();
-  afficherEcran('simulations');
-}
-
-/**
  * Les onglets de montage n'ont de sens qu'avec un dossier ouvert.
  *
  * Sans cette garde, on saisirait dans le vide : `memoriserSaisie` refuse
@@ -18314,6 +18299,13 @@ document.addEventListener('change', async (ev) => {
 });
 
 document.addEventListener('click', async (ev) => {
+  // Un menu deroulant reste ouvert tant qu on ne le referme pas : `details` ne
+  // se ferme QUE sur son propre resume. Un clic ailleurs doit suffire, sinon il
+  // flotte au-dessus de l ecran sur lequel on vient de repartir.
+  const menuDossier = document.getElementById('menu-dossier');
+  if (menuDossier?.open && !(/** @type {HTMLElement} */ (ev.target)).closest?.('#menu-dossier')) {
+    menuDossier.open = false;
+  }
   const el = /** @type {HTMLElement} */ (ev.target);
 
   // Un menu de tranches ouvert se ferme des qu'on clique AILLEURS. `details`
@@ -18498,10 +18490,6 @@ document.addEventListener('click', async (ev) => {
   }
   if (el.closest('#btn-telecharger-pdf')) {
     telechargerPDF();
-    return;
-  }
-  if (el.closest('#btn-fermer-sim')) {
-    fermerSimulationAvecConfirmation();
     return;
   }
 

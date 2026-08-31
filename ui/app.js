@@ -6818,36 +6818,6 @@ function fermerSimulation(issue = 'enregistrer') {
 }
 
 /**
- * Ferme en demandant quoi faire des modifications, s'il y en a.
- *
- * Trois issues et non deux : enregistrer, abandonner, ou renoncer a fermer.
- * Un `confirm` n'en offre que deux, et forcer le choix entre « perdre » et
- * « garder » sans porte de sortie fait cliquer au hasard.
- */
-async function fermerSimulationAvecConfirmation() {
-  if (!idSimulationOuverte) return;
-  // Rien de modifie : on ferme sans rien demander. Une confirmation qui
-  // n'a aucun enjeu apprend a cliquer sans lire.
-  let issue = "enregistrer";
-  if (modificationsEnAttente()) {
-    const r = await ouvrirBoite({
-      titre: `Fermer « ${etat.identite?.nom ?? 'cette simulation'} » ?`,
-      texte: 'Cette simulation a été modifiée depuis son ouverture.',
-      actions: [
-        { cle: 'annuler', libelle: 'Annuler', style: 'discret' },
-        { cle: 'abandonner', libelle: 'Abandonner les modifications', style: 'danger' },
-        { cle: 'enregistrer', libelle: 'Enregistrer et fermer', style: 'principal' },
-      ],
-    });
-    if (r === null) return;
-    issue = r;
-  }
-  fermerSimulation(issue === "abandonner" ? "abandonner" : "enregistrer");
-  rendreBibliotheque();
-  afficherEcran('simulations');
-}
-
-/**
  * Les onglets de montage n'ont de sens qu'avec un dossier ouvert.
  *
  * Sans cette garde, on saisirait dans le vide : `memoriserSaisie` refuse
@@ -8598,6 +8568,13 @@ document.addEventListener('change', async (ev) => {
 });
 
 document.addEventListener('click', async (ev) => {
+  // Un menu deroulant reste ouvert tant qu on ne le referme pas : `details` ne
+  // se ferme QUE sur son propre resume. Un clic ailleurs doit suffire, sinon il
+  // flotte au-dessus de l ecran sur lequel on vient de repartir.
+  const menuDossier = document.getElementById('menu-dossier');
+  if (menuDossier?.open && !(/** @type {HTMLElement} */ (ev.target)).closest?.('#menu-dossier')) {
+    menuDossier.open = false;
+  }
   const el = /** @type {HTMLElement} */ (ev.target);
 
   // Un menu de tranches ouvert se ferme des qu'on clique AILLEURS. `details`
@@ -8782,10 +8759,6 @@ document.addEventListener('click', async (ev) => {
   }
   if (el.closest('#btn-telecharger-pdf')) {
     telechargerPDF();
-    return;
-  }
-  if (el.closest('#btn-fermer-sim')) {
-    fermerSimulationAvecConfirmation();
     return;
   }
 

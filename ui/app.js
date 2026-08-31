@@ -32,6 +32,7 @@ import {
   chercherEquilibre,
   optimiser,
   plage,
+  scenarios,
   tornade,
 } from '../src/sensibilite.js';
 // Le depot est importe par NOMS et non en bloc : le generateur de la version
@@ -7577,6 +7578,131 @@ function rendreQuestionEquilibre() {
   }
 }
 
+/** Leviers retenus dans la table des scenarios, et ordre de classement. */
+const leviersScenarios = new Set(LEVIERS.filter((l) => l.actionnable).map((l) => l.code));
+let triScenarios = 'resultat';
+
+/** Cases a cocher : un levier par case, l actionnable coche d office. */
+function rendreChoixScenarios() {
+  const zone = document.getElementById('scen-leviers');
+  if (!zone || zone.children.length) return;
+  zone.innerHTML = LEVIERS.map(
+    (l) =>
+      `<label class="case"><input type="checkbox" data-levier-scenario="${att(l.code)}"` +
+      `${leviersScenarios.has(l.code) ? ' checked' : ''} /> ${att(l.libelle)}</label>`,
+  ).join('');
+}
+
+/**
+ * Enumere les combinaisons et les classe.
+ *
+ * Le classement par RESULTAT met toujours en tete le scenario qui pousse tout
+ * du bon cote : c'est vrai et sans interet, puisque personne ne l'obtient. Le
+ * classement au RAPPORT divise le gain par l'effort et remonte les assemblages
+ * qui rapportent le plus par cran negocie - c'est celui qu'on lit quand on
+ * prepare une reunion.
+ */
+function rendreScenarios() {
+  const message = document.getElementById('scen-message');
+  const table = document.getElementById('table-scenarios');
+  if (!message || !table || !dernierResultat) return;
+
+  const choisis = [...leviersScenarios];
+  if (!choisis.length) {
+    message.className = 'optim optim--hors';
+    message.innerHTML = `<p class="optim__verdict">Cochez au moins une hypothèse.</p>`;
+    table.querySelector('thead').innerHTML = '';
+    table.querySelector('tbody').innerHTML = '';
+    return;
+  }
+
+  const r = scenarios(etatPourAnalyse(), referentielsPourAnalyse(), {
+    indicateur: indicateurSensibilite,
+    contexte: contexteLecture(),
+    leviers: choisis.map((code) => ({ code, crans: [-1, 0, 1] })),
+  });
+
+  if (r.etat === 'trop de combinaisons') {
+    message.className = 'optim optim--hors';
+    message.innerHTML =
+      `<p class="optim__verdict">⚠ ${att(nb(r.total))} combinaisons, c’est trop.</p>` +
+      `<p class="optim__detail">Chaque hypothèse cochée multiplie la table par trois. ` +
+      `Au-delà de ${att(nb(r.max))} combinaisons le calcul prendrait plusieurs minutes : ` +
+      `décochez-en pour redescendre. La liste n’est pas tronquée, elle n’est pas calculée - ` +
+      `une liste incomplète qu’on croirait entière serait pire que pas de liste.</p>`;
+    table.querySelector('thead').innerHTML = '';
+    table.querySelector('tbody').innerHTML = '';
+    return;
+  }
+
+  const unite = r.indicateur.unite;
+  const ecrire = (v) => valeurIndicateur(v, unite);
+  const signe = (v) => (v > 0 ? '+' : '');
+  // Le RAPPORT n'a de sens que sur un scenario qui bouge : celui qui ne touche
+  // a rien a un effort nul, et diviser par zero le mettrait en tete de tout.
+  const rapport = (s) => (s.effort > 0 && s.ecart !== null ? s.ecart / s.effort : null);
+  const sens = r.indicateur.sens;
+  const liste = [...r.scenarios];
+  if (triScenarios === 'rapport') {
+    liste.sort((a, b) => {
+      const ra = rapport(a);
+      const rb = rapport(b);
+      if ((ra === null) !== (rb === null)) return ra === null ? 1 : -1;
+      if (ra === null) return 0;
+      return sens === 1 ? rb - ra : ra - rb;
+    });
+  }
+
+  message.className = 'optim';
+  message.innerHTML =
+    `<p class="optim__detail">${att(nb(r.total))} combinaisons calculées. Référence : ` +
+    `<strong>${att(ecrire(r.reference))}</strong>. Les écarts et le rapport se lisent ` +
+    `par rapport à elle.</p>` +
+    // Les leviers sans prise sont NOMMES : sans cela on croirait avoir teste
+    // une hypothese qui n a jamais bouge.
+    (r.sansPrise.length
+      ? `<p class=\"optim__detail\">Écartés faute de prise sur cette opération : ` +
+        `${att(r.sansPrise.map((s) => s.libelle).join(', '))}.</p>`
+      : '');
+
+  table.querySelector('thead').innerHTML =
+    `<tr><th class="num">N°</th><th>Composition</th><th class="num">Effort</th>` +
+    `<th class="num">${att(r.indicateur.libelle)}</th><th class="num">Écart</th>` +
+    `<th class="num">Par cran</th><th class="num">Interaction</th></tr>`;
+
+  table.querySelector('tbody').innerHTML = liste
+    .map((s, i) => {
+      const compo = s.mouvements.length
+        ? s.mouvements
+            .map(
+              (m) =>
+                `<span class="scen-mvt scen-mvt--${m.cran > 0 ? 'haut' : 'bas'}">` +
+                `${att(m.libelle)} ${signe(m.cran)}${m.cran}</span>`,
+            )
+            .join(' ')
+        : '<em>l’opération telle qu’elle est</em>';
+      const rp = rapport(s);
+      // L INTERACTION ne se lit que sur un assemblage : sur un levier seul elle
+      // vaut zero par construction, l afficher ferait croire a une mesure.
+      const inter =
+        s.mouvements.length > 1 && s.interaction !== null
+          ? `${signe(s.interaction)}${ecrire(s.interaction)}`
+          : '-';
+      return (
+        `<tr class="${s.mouvements.length ? '' : 'poste--reference'}">` +
+        `<td class="num">${i + 1}</td><td>${compo}</td>` +
+        `<td class="num">${s.effort || '-'}</td>` +
+        `<td class="num">${att(ecrire(s.valeur))}</td>` +
+        `<td class="num ${s.ecart < 0 ? 'montant--negatif' : ''}">${
+          s.ecart === null ? '-' : signe(s.ecart) + att(ecrire(s.ecart))
+        }</td>` +
+        `<td class="num">${rp === null ? '-' : signe(rp) + att(ecrire(rp))}</td>` +
+        `<td class="num ${s.interaction < 0 ? 'montant--negatif' : ''}">${att(inter)}</td></tr>`
+      );
+    })
+    .join('');
+}
+
 /**
  * Cherche la version la plus soutenable, et l'ecrit en toutes lettres.
  *
@@ -7732,6 +7858,7 @@ function resoudreEquilibre() {
 
 function rendreSensibilite() {
   rendreQuestionEquilibre();
+  rendreChoixScenarios();
   const zone = document.getElementById('tornade');
   if (!zone) return;
   if (!dernierResultat) {
@@ -8320,6 +8447,12 @@ document.addEventListener('input', (ev) => {
   if (el.id === 'sens-indicateur') {
     indicateurSensibilite = el.value;
     rendreSensibilite();
+    return;
+  }
+
+  if (el.id === 'scen-tri') {
+    triScenarios = el.value;
+    rendreScenarios();
     return;
   }
 
@@ -9038,6 +9171,17 @@ document.addEventListener('click', async (ev) => {
     return;
   }
 
+  if (el.closest('#btn-scenarios')) {
+    rendreScenarios();
+    return;
+  }
+  const caseScenario = /** @type {HTMLInputElement|null} */ (el.closest('[data-levier-scenario]'));
+  if (caseScenario) {
+    const code = caseScenario.dataset.levierScenario;
+    if (caseScenario.checked) leviersScenarios.add(code);
+    else leviersScenarios.delete(code);
+    return;
+  }
   if (el.closest('#btn-optimiser')) {
     resoudreOptimisation();
     return;

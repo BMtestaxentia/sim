@@ -702,6 +702,38 @@
         </div>
       </section>
 
+      <!-- TOUS LES SCENARIOS. La tornade fait varier un levier a la fois ;
+           celle-ci enumere les combinaisons completes et les classe. Ce
+           qu elle seule peut montrer : l INTERACTION, quand deux leviers
+           ensemble ne font pas la somme de leurs effets separes. -->
+      <section class="bloc">
+        <h2 class="bloc__titre">Tous les scénarios</h2>
+        <p class="sens-chapeau__texte">
+          Chaque hypothèse cochée prend trois valeurs - un cran en dessous, telle quelle,
+          un cran au-dessus - et l’opération est recalculée pour chaque combinaison.
+          La colonne <em>Interaction</em> dit ce que l’assemblage fait en plus de la somme
+          de ses parties : elle trahit les seuils que le moteur franchit.
+        </p>
+        <div class="equilibre__question" id="scen-leviers"></div>
+        <div class="equilibre__question">
+          <button type="button" class="bouton bouton--principal" id="btn-scenarios">
+            Générer les scénarios</button>
+          <label class="champ champ--enligne">
+            <span>Classer par</span>
+            <select id="scen-tri">
+              <option value="resultat">Meilleur résultat</option>
+              <option value="rapport">Meilleur rapport à l’effort</option>
+            </select>
+          </label>
+        </div>
+        <div class="optim" id="scen-message" data-restitution></div>
+        <div class="table-defilante">
+          <table class="tableau" id="table-scenarios" data-restitution>
+            <thead></thead><tbody></tbody>
+          </table>
+        </div>
+      </section>
+
       <!-- LE BOUTON. Il ne pose aucune question : son objectif est ecrit dans
            sa phrase - que l operation se paie sur son horizon. Pour viser autre
            chose, la recherche manuelle est juste en dessous. -->

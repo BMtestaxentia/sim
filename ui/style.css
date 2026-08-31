@@ -1505,6 +1505,24 @@ body.sans-simulation .entete__dossier { display: none; }
 .optim__liste li:last-child { border-bottom: none; }
 .optim__liste .num { font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* --- LA TABLE DES SCENARIOS -------------------------------------------
+   Chaque mouvement porte une pastille : on lit la composition d un scenario
+   sans la dechiffrer, et le sens de chaque cran se voit a la couleur. */
+.case { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+.scen-mvt {
+  display: inline-block; padding: 1px 7px; margin: 1px 2px 1px 0;
+  border-radius: var(--radius-pill); font-size: 11px; font-weight: 650;
+  white-space: nowrap;
+}
+.scen-mvt--haut {
+  background: color-mix(in srgb, var(--info-accent) 20%, transparent); color: var(--info-text);
+}
+.scen-mvt--bas {
+  background: color-mix(in srgb, var(--coral-accent) 20%, transparent); color: var(--coral-text);
+}
+#table-scenarios td { font-size: 12px; }
+#table-scenarios em { color: var(--text-tertiary); font-size: 11.5px; }
+
 /* La ligne de reference du balayage : celle dont la variation est nulle. */
 .poste--reference td { background: var(--bg-tertiary); font-weight: 700; }
 /* Un champ dans une barre : le libelle a gauche, le champ a sa suite. */

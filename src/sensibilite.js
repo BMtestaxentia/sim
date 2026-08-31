@@ -756,3 +756,169 @@ export function optimiser(entrees, referentiels, options = {}) {
     combinaison,
   };
 }
+
+/**
+ * R-SENS-4 - TOUS LES SCENARIOS.
+ *
+ * La tornade fait varier UN levier a la fois ; l optimiseur cherche le moindre
+ * effort sur deux. Celle-ci enumere les COMBINAISONS COMPLETES : chaque levier
+ * retenu prend tour a tour chacune de ses valeurs, on relance le moteur sur
+ * chaque assemblage, et on classe.
+ *
+ * Ce que cela apporte et que les deux autres ne peuvent pas donner :
+ * l INTERACTION. Le moteur n est pas lineaire - seuils de TVA, plafonds de
+ * droit a pret, franchissement du seuil d imposition, plafond de provision -
+ * si bien que deux leviers ensemble ne font pas toujours la somme de leurs
+ * effets separes. Chaque scenario porte donc son ecart a cette somme. Un ecart
+ * franc signale un seuil qu on vient de passer, et c est exactement ce qu on
+ * ne peut pas deviner d une tornade.
+ *
+ * Deux avertissements sur le classement, et ils comptent :
+ *
+ *   - le meilleur scenario est toujours celui qui pousse tous les leviers du
+ *     bon cote. C est vrai et sans interet. La colonne d EFFORT est donc
+ *     indissociable du classement : elle dit ce que le scenario coute a
+ *     obtenir, en crans de negociation, et permet de trier au rapport plutot
+ *     qu au resultat brut ;
+ *   - l enumeration explose. Quatre leviers a trois valeurs font quatre-vingt-
+ *     un calculs, huit leviers en font six mille cinq cent soixante et un. Le
+ *     plafond est explicite et le refus l est aussi : on ne tronque pas en
+ *     silence une liste que l utilisateur croira complete.
+ *
+ * @param {any} entrees
+ * @param {any} referentiels
+ * @param {{leviers?: Array<{code: string, crans?: number[]}>, indicateur?: string,
+ *   contexte?: any, max?: number}} [options]
+ */
+export function scenarios(entrees, referentiels, options = {}) {
+  const indicateur = indicateurDe(options.indicateur ?? INDICATEURS[0].code);
+  if (!indicateur) throw new Error(`Indicateur inconnu : ${options.indicateur}`);
+  const max = options.max ?? 500;
+
+  // Par defaut, les leviers sur lesquels on a prise, a un cran de part et
+  // d autre. Zero est TOUJOURS present : sans lui la liste ne contiendrait pas
+  // l operation telle qu elle est, et il n y aurait rien a quoi se comparer.
+  const demandes =
+    options.leviers ??
+    LEVIERS.filter((l) => l.actionnable).map((l) => ({ code: l.code, crans: [-1, 0, 1] }));
+
+  const axes = [];
+  for (const d of demandes) {
+    const levier = levierDe(d.code);
+    if (!levier) throw new Error(`Levier inconnu : ${d.code}`);
+    const crans = [...new Set([...(d.crans ?? [-1, 0, 1]), 0])].sort((a, b) => a - b);
+    axes.push({ levier, crans });
+  }
+
+  // LES LEVIERS SANS PRISE QUITTENT L ENUMERATION. Garder un levier qui ne
+  // decale rien triple la table de lignes IDENTIQUES aux precedentes : trois
+  // compositions differentes, un seul chiffre, et le lecteur cherche l erreur.
+  // Meme regle qu ailleurs - un levier muet est pire qu un levier absent.
+  const sansPrise = [];
+  const retenus = [];
+  for (const a of axes) {
+    const essai = { entrees: copier(entrees), referentiels: copier(referentiels) };
+    const cran = a.crans.find((c) => c !== 0) ?? 1;
+    if (a.levier.appliquer(essai, cran * a.levier.amplitude) === false) {
+      sansPrise.push({ code: a.levier.code, libelle: a.levier.libelle });
+    } else {
+      retenus.push(a);
+    }
+  }
+  axes.length = 0;
+  axes.push(...retenus);
+
+  const total = axes.reduce((n, a) => n * a.crans.length, 1);
+  if (total > max) {
+    return {
+      etat: 'trop de combinaisons',
+      sansPrise,
+      indicateur,
+      total,
+      max,
+      axes: axes.map((a) => ({ code: a.levier.code, libelle: a.levier.libelle, valeurs: a.crans.length })),
+      scenarios: [],
+    };
+  }
+
+  const mesurer = (mouvements) => {
+    const contexte = { entrees: copier(entrees), referentiels: copier(referentiels) };
+    let mordu = true;
+    for (const m of mouvements) {
+      if (m.variation === 0) continue;
+      if (m.levier.appliquer(contexte, m.variation) === false) mordu = false;
+    }
+    try {
+      return { valeur: indicateur.lire(calculer(contexte.entrees, contexte.referentiels), options.contexte), mordu };
+    } catch (e) {
+      return { valeur: null, mordu, erreur: /** @type {Error} */ (e).message };
+    }
+  };
+
+  const reference = mesurer([]).valeur;
+
+  // EFFETS ISOLES, calcules une fois : ils servent a la fois de repere et de
+  // base a l interaction. Les recalculer par scenario multiplierait le cout par
+  // le nombre de leviers sans rien apprendre de plus.
+  const isole = new Map();
+  for (const a of axes) {
+    for (const c of a.crans) {
+      if (c === 0) continue;
+      const cle = `${a.levier.code}:${c}`;
+      const m = mesurer([{ levier: a.levier, variation: c * a.levier.amplitude }]);
+      isole.set(cle, m.valeur === null || reference === null ? null : m.valeur - reference);
+    }
+  }
+
+  /** Produit cartesien, en profondeur : la liste tient en memoire, elle est bornee. */
+  const combinaisons = axes.reduce(
+    (acc, a) => acc.flatMap((debut) => a.crans.map((c) => [...debut, { axe: a, cran: c }])),
+    [[]],
+  );
+
+  const liste = combinaisons.map((combo) => {
+    const mouvements = combo.map(({ axe, cran }) => ({
+      levier: axe.levier,
+      variation: cran * axe.levier.amplitude,
+    }));
+    const m = mesurer(mouvements);
+    const bouges = combo.filter((c) => c.cran !== 0);
+    const sommeIsolee = bouges.reduce((s, c) => {
+      const e = isole.get(`${c.axe.levier.code}:${c.cran}`);
+      return s === null || e === null ? null : s + e;
+    }, 0);
+    const ecart = m.valeur === null || reference === null ? null : m.valeur - reference;
+    return {
+      // L EFFORT est la somme des crans parcourus, en valeur absolue : deux
+      // leviers pousses d un cran chacun coutent autant qu un seul pousse de
+      // deux, ce qui est discutable mais dit au moins quelque chose de stable.
+      effort: bouges.reduce((s, c) => s + Math.abs(c.cran), 0),
+      mouvements: bouges.map((c) => ({
+        code: c.axe.levier.code,
+        libelle: c.axe.levier.libelle,
+        unite: c.axe.levier.unite,
+        cran: c.cran,
+        variation: c.cran * c.axe.levier.amplitude,
+      })),
+      valeur: m.valeur,
+      ecart,
+      // INTERACTION : ce que la combinaison fait EN PLUS de la somme de ses
+      // parties. Nulle sur un moteur lineaire, elle ne l est pas ici.
+      interaction: ecart === null || sommeIsolee === null ? null : ecart - sommeIsolee,
+      erreur: m.erreur ?? null,
+      applique: m.mordu,
+    };
+  });
+
+  // Classement dans le sens FAVORABLE de l indicateur. Les scenarios sans
+  // valeur ferment la marche : ils n ont pas echoue au classement, ils n ont
+  // pas pu etre calcules.
+  const signe = indicateur.sens === 1 ? -1 : 1;
+  liste.sort((a, b) => {
+    if ((a.valeur === null) !== (b.valeur === null)) return a.valeur === null ? 1 : -1;
+    if (a.valeur === null) return 0;
+    return signe * (a.valeur - b.valeur);
+  });
+
+  return { etat: 'ok', indicateur, reference, total, sansPrise, scenarios: liste };
+}

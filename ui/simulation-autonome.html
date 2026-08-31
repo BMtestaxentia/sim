@@ -1519,6 +1519,24 @@ body.sans-simulation .entete__dossier { display: none; }
 .optim__liste li:last-child { border-bottom: none; }
 .optim__liste .num { font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* --- LA TABLE DES SCENARIOS -------------------------------------------
+   Chaque mouvement porte une pastille : on lit la composition d un scenario
+   sans la dechiffrer, et le sens de chaque cran se voit a la couleur. */
+.case { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+.scen-mvt {
+  display: inline-block; padding: 1px 7px; margin: 1px 2px 1px 0;
+  border-radius: var(--radius-pill); font-size: 11px; font-weight: 650;
+  white-space: nowrap;
+}
+.scen-mvt--haut {
+  background: color-mix(in srgb, var(--info-accent) 20%, transparent); color: var(--info-text);
+}
+.scen-mvt--bas {
+  background: color-mix(in srgb, var(--coral-accent) 20%, transparent); color: var(--coral-text);
+}
+#table-scenarios td { font-size: 12px; }
+#table-scenarios em { color: var(--text-tertiary); font-size: 11.5px; }
+
 /* La ligne de reference du balayage : celle dont la variation est nulle. */
 .poste--reference td { background: var(--bg-tertiary); font-weight: 700; }
 /* Un champ dans une barre : le libelle a gauche, le champ a sa suite. */
@@ -3398,6 +3416,38 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
           <table class="tableau" id="table-balayage">
             <thead></thead>
             <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TOUS LES SCENARIOS. La tornade fait varier un levier a la fois ;
+           celle-ci enumere les combinaisons completes et les classe. Ce
+           qu elle seule peut montrer : l INTERACTION, quand deux leviers
+           ensemble ne font pas la somme de leurs effets separes. -->
+      <section class="bloc">
+        <h2 class="bloc__titre">Tous les scénarios</h2>
+        <p class="sens-chapeau__texte">
+          Chaque hypothèse cochée prend trois valeurs - un cran en dessous, telle quelle,
+          un cran au-dessus - et l’opération est recalculée pour chaque combinaison.
+          La colonne <em>Interaction</em> dit ce que l’assemblage fait en plus de la somme
+          de ses parties : elle trahit les seuils que le moteur franchit.
+        </p>
+        <div class="equilibre__question" id="scen-leviers"></div>
+        <div class="equilibre__question">
+          <button type="button" class="bouton bouton--principal" id="btn-scenarios">
+            Générer les scénarios</button>
+          <label class="champ champ--enligne">
+            <span>Classer par</span>
+            <select id="scen-tri">
+              <option value="resultat">Meilleur résultat</option>
+              <option value="rapport">Meilleur rapport à l’effort</option>
+            </select>
+          </label>
+        </div>
+        <div class="optim" id="scen-message" data-restitution></div>
+        <div class="table-defilante">
+          <table class="tableau" id="table-scenarios" data-restitution>
+            <thead></thead><tbody></tbody>
           </table>
         </div>
       </section>
@@ -9837,6 +9887,172 @@ function optimiser(entrees, referentiels, options = {}) {
     pistes,
     combinaison,
   };
+}
+
+/**
+ * R-SENS-4 - TOUS LES SCENARIOS.
+ *
+ * La tornade fait varier UN levier a la fois ; l optimiseur cherche le moindre
+ * effort sur deux. Celle-ci enumere les COMBINAISONS COMPLETES : chaque levier
+ * retenu prend tour a tour chacune de ses valeurs, on relance le moteur sur
+ * chaque assemblage, et on classe.
+ *
+ * Ce que cela apporte et que les deux autres ne peuvent pas donner :
+ * l INTERACTION. Le moteur n est pas lineaire - seuils de TVA, plafonds de
+ * droit a pret, franchissement du seuil d imposition, plafond de provision -
+ * si bien que deux leviers ensemble ne font pas toujours la somme de leurs
+ * effets separes. Chaque scenario porte donc son ecart a cette somme. Un ecart
+ * franc signale un seuil qu on vient de passer, et c est exactement ce qu on
+ * ne peut pas deviner d une tornade.
+ *
+ * Deux avertissements sur le classement, et ils comptent :
+ *
+ *   - le meilleur scenario est toujours celui qui pousse tous les leviers du
+ *     bon cote. C est vrai et sans interet. La colonne d EFFORT est donc
+ *     indissociable du classement : elle dit ce que le scenario coute a
+ *     obtenir, en crans de negociation, et permet de trier au rapport plutot
+ *     qu au resultat brut ;
+ *   - l enumeration explose. Quatre leviers a trois valeurs font quatre-vingt-
+ *     un calculs, huit leviers en font six mille cinq cent soixante et un. Le
+ *     plafond est explicite et le refus l est aussi : on ne tronque pas en
+ *     silence une liste que l utilisateur croira complete.
+ *
+ * @param {any} entrees
+ * @param {any} referentiels
+ * @param {{leviers?: Array<{code: string, crans?: number[]}>, indicateur?: string,
+ *   contexte?: any, max?: number}} [options]
+ */
+function scenarios(entrees, referentiels, options = {}) {
+  const indicateur = indicateurDe(options.indicateur ?? INDICATEURS[0].code);
+  if (!indicateur) throw new Error(`Indicateur inconnu : ${options.indicateur}`);
+  const max = options.max ?? 500;
+
+  // Par defaut, les leviers sur lesquels on a prise, a un cran de part et
+  // d autre. Zero est TOUJOURS present : sans lui la liste ne contiendrait pas
+  // l operation telle qu elle est, et il n y aurait rien a quoi se comparer.
+  const demandes =
+    options.leviers ??
+    LEVIERS.filter((l) => l.actionnable).map((l) => ({ code: l.code, crans: [-1, 0, 1] }));
+
+  const axes = [];
+  for (const d of demandes) {
+    const levier = levierDe(d.code);
+    if (!levier) throw new Error(`Levier inconnu : ${d.code}`);
+    const crans = [...new Set([...(d.crans ?? [-1, 0, 1]), 0])].sort((a, b) => a - b);
+    axes.push({ levier, crans });
+  }
+
+  // LES LEVIERS SANS PRISE QUITTENT L ENUMERATION. Garder un levier qui ne
+  // decale rien triple la table de lignes IDENTIQUES aux precedentes : trois
+  // compositions differentes, un seul chiffre, et le lecteur cherche l erreur.
+  // Meme regle qu ailleurs - un levier muet est pire qu un levier absent.
+  const sansPrise = [];
+  const retenus = [];
+  for (const a of axes) {
+    const essai = { entrees: copier(entrees), referentiels: copier(referentiels) };
+    const cran = a.crans.find((c) => c !== 0) ?? 1;
+    if (a.levier.appliquer(essai, cran * a.levier.amplitude) === false) {
+      sansPrise.push({ code: a.levier.code, libelle: a.levier.libelle });
+    } else {
+      retenus.push(a);
+    }
+  }
+  axes.length = 0;
+  axes.push(...retenus);
+
+  const total = axes.reduce((n, a) => n * a.crans.length, 1);
+  if (total > max) {
+    return {
+      etat: 'trop de combinaisons',
+      sansPrise,
+      indicateur,
+      total,
+      max,
+      axes: axes.map((a) => ({ code: a.levier.code, libelle: a.levier.libelle, valeurs: a.crans.length })),
+      scenarios: [],
+    };
+  }
+
+  const mesurer = (mouvements) => {
+    const contexte = { entrees: copier(entrees), referentiels: copier(referentiels) };
+    let mordu = true;
+    for (const m of mouvements) {
+      if (m.variation === 0) continue;
+      if (m.levier.appliquer(contexte, m.variation) === false) mordu = false;
+    }
+    try {
+      return { valeur: indicateur.lire(calculer(contexte.entrees, contexte.referentiels), options.contexte), mordu };
+    } catch (e) {
+      return { valeur: null, mordu, erreur: /** @type {Error} */ (e).message };
+    }
+  };
+
+  const reference = mesurer([]).valeur;
+
+  // EFFETS ISOLES, calcules une fois : ils servent a la fois de repere et de
+  // base a l interaction. Les recalculer par scenario multiplierait le cout par
+  // le nombre de leviers sans rien apprendre de plus.
+  const isole = new Map();
+  for (const a of axes) {
+    for (const c of a.crans) {
+      if (c === 0) continue;
+      const cle = `${a.levier.code}:${c}`;
+      const m = mesurer([{ levier: a.levier, variation: c * a.levier.amplitude }]);
+      isole.set(cle, m.valeur === null || reference === null ? null : m.valeur - reference);
+    }
+  }
+
+  /** Produit cartesien, en profondeur : la liste tient en memoire, elle est bornee. */
+  const combinaisons = axes.reduce(
+    (acc, a) => acc.flatMap((debut) => a.crans.map((c) => [...debut, { axe: a, cran: c }])),
+    [[]],
+  );
+
+  const liste = combinaisons.map((combo) => {
+    const mouvements = combo.map(({ axe, cran }) => ({
+      levier: axe.levier,
+      variation: cran * axe.levier.amplitude,
+    }));
+    const m = mesurer(mouvements);
+    const bouges = combo.filter((c) => c.cran !== 0);
+    const sommeIsolee = bouges.reduce((s, c) => {
+      const e = isole.get(`${c.axe.levier.code}:${c.cran}`);
+      return s === null || e === null ? null : s + e;
+    }, 0);
+    const ecart = m.valeur === null || reference === null ? null : m.valeur - reference;
+    return {
+      // L EFFORT est la somme des crans parcourus, en valeur absolue : deux
+      // leviers pousses d un cran chacun coutent autant qu un seul pousse de
+      // deux, ce qui est discutable mais dit au moins quelque chose de stable.
+      effort: bouges.reduce((s, c) => s + Math.abs(c.cran), 0),
+      mouvements: bouges.map((c) => ({
+        code: c.axe.levier.code,
+        libelle: c.axe.levier.libelle,
+        unite: c.axe.levier.unite,
+        cran: c.cran,
+        variation: c.cran * c.axe.levier.amplitude,
+      })),
+      valeur: m.valeur,
+      ecart,
+      // INTERACTION : ce que la combinaison fait EN PLUS de la somme de ses
+      // parties. Nulle sur un moteur lineaire, elle ne l est pas ici.
+      interaction: ecart === null || sommeIsolee === null ? null : ecart - sommeIsolee,
+      erreur: m.erreur ?? null,
+      applique: m.mordu,
+    };
+  });
+
+  // Classement dans le sens FAVORABLE de l indicateur. Les scenarios sans
+  // valeur ferment la marche : ils n ont pas echoue au classement, ils n ont
+  // pas pu etre calcules.
+  const signe = indicateur.sens === 1 ? -1 : 1;
+  liste.sort((a, b) => {
+    if ((a.valeur === null) !== (b.valeur === null)) return a.valeur === null ? 1 : -1;
+    if (a.valeur === null) return 0;
+    return signe * (a.valeur - b.valeur);
+  });
+
+  return { etat: 'ok', indicateur, reference, total, sansPrise, scenarios: liste };
 }
 
 
@@ -17646,6 +17862,131 @@ function rendreQuestionEquilibre() {
   }
 }
 
+/** Leviers retenus dans la table des scenarios, et ordre de classement. */
+const leviersScenarios = new Set(LEVIERS.filter((l) => l.actionnable).map((l) => l.code));
+let triScenarios = 'resultat';
+
+/** Cases a cocher : un levier par case, l actionnable coche d office. */
+function rendreChoixScenarios() {
+  const zone = document.getElementById('scen-leviers');
+  if (!zone || zone.children.length) return;
+  zone.innerHTML = LEVIERS.map(
+    (l) =>
+      `<label class="case"><input type="checkbox" data-levier-scenario="${att(l.code)}"` +
+      `${leviersScenarios.has(l.code) ? ' checked' : ''} /> ${att(l.libelle)}</label>`,
+  ).join('');
+}
+
+/**
+ * Enumere les combinaisons et les classe.
+ *
+ * Le classement par RESULTAT met toujours en tete le scenario qui pousse tout
+ * du bon cote : c'est vrai et sans interet, puisque personne ne l'obtient. Le
+ * classement au RAPPORT divise le gain par l'effort et remonte les assemblages
+ * qui rapportent le plus par cran negocie - c'est celui qu'on lit quand on
+ * prepare une reunion.
+ */
+function rendreScenarios() {
+  const message = document.getElementById('scen-message');
+  const table = document.getElementById('table-scenarios');
+  if (!message || !table || !dernierResultat) return;
+
+  const choisis = [...leviersScenarios];
+  if (!choisis.length) {
+    message.className = 'optim optim--hors';
+    message.innerHTML = `<p class="optim__verdict">Cochez au moins une hypothèse.</p>`;
+    table.querySelector('thead').innerHTML = '';
+    table.querySelector('tbody').innerHTML = '';
+    return;
+  }
+
+  const r = scenarios(etatPourAnalyse(), referentielsPourAnalyse(), {
+    indicateur: indicateurSensibilite,
+    contexte: contexteLecture(),
+    leviers: choisis.map((code) => ({ code, crans: [-1, 0, 1] })),
+  });
+
+  if (r.etat === 'trop de combinaisons') {
+    message.className = 'optim optim--hors';
+    message.innerHTML =
+      `<p class="optim__verdict">⚠ ${att(nb(r.total))} combinaisons, c’est trop.</p>` +
+      `<p class="optim__detail">Chaque hypothèse cochée multiplie la table par trois. ` +
+      `Au-delà de ${att(nb(r.max))} combinaisons le calcul prendrait plusieurs minutes : ` +
+      `décochez-en pour redescendre. La liste n’est pas tronquée, elle n’est pas calculée - ` +
+      `une liste incomplète qu’on croirait entière serait pire que pas de liste.</p>`;
+    table.querySelector('thead').innerHTML = '';
+    table.querySelector('tbody').innerHTML = '';
+    return;
+  }
+
+  const unite = r.indicateur.unite;
+  const ecrire = (v) => valeurIndicateur(v, unite);
+  const signe = (v) => (v > 0 ? '+' : '');
+  // Le RAPPORT n'a de sens que sur un scenario qui bouge : celui qui ne touche
+  // a rien a un effort nul, et diviser par zero le mettrait en tete de tout.
+  const rapport = (s) => (s.effort > 0 && s.ecart !== null ? s.ecart / s.effort : null);
+  const sens = r.indicateur.sens;
+  const liste = [...r.scenarios];
+  if (triScenarios === 'rapport') {
+    liste.sort((a, b) => {
+      const ra = rapport(a);
+      const rb = rapport(b);
+      if ((ra === null) !== (rb === null)) return ra === null ? 1 : -1;
+      if (ra === null) return 0;
+      return sens === 1 ? rb - ra : ra - rb;
+    });
+  }
+
+  message.className = 'optim';
+  message.innerHTML =
+    `<p class="optim__detail">${att(nb(r.total))} combinaisons calculées. Référence : ` +
+    `<strong>${att(ecrire(r.reference))}</strong>. Les écarts et le rapport se lisent ` +
+    `par rapport à elle.</p>` +
+    // Les leviers sans prise sont NOMMES : sans cela on croirait avoir teste
+    // une hypothese qui n a jamais bouge.
+    (r.sansPrise.length
+      ? `<p class=\"optim__detail\">Écartés faute de prise sur cette opération : ` +
+        `${att(r.sansPrise.map((s) => s.libelle).join(', '))}.</p>`
+      : '');
+
+  table.querySelector('thead').innerHTML =
+    `<tr><th class="num">N°</th><th>Composition</th><th class="num">Effort</th>` +
+    `<th class="num">${att(r.indicateur.libelle)}</th><th class="num">Écart</th>` +
+    `<th class="num">Par cran</th><th class="num">Interaction</th></tr>`;
+
+  table.querySelector('tbody').innerHTML = liste
+    .map((s, i) => {
+      const compo = s.mouvements.length
+        ? s.mouvements
+            .map(
+              (m) =>
+                `<span class="scen-mvt scen-mvt--${m.cran > 0 ? 'haut' : 'bas'}">` +
+                `${att(m.libelle)} ${signe(m.cran)}${m.cran}</span>`,
+            )
+            .join(' ')
+        : '<em>l’opération telle qu’elle est</em>';
+      const rp = rapport(s);
+      // L INTERACTION ne se lit que sur un assemblage : sur un levier seul elle
+      // vaut zero par construction, l afficher ferait croire a une mesure.
+      const inter =
+        s.mouvements.length > 1 && s.interaction !== null
+          ? `${signe(s.interaction)}${ecrire(s.interaction)}`
+          : '-';
+      return (
+        `<tr class="${s.mouvements.length ? '' : 'poste--reference'}">` +
+        `<td class="num">${i + 1}</td><td>${compo}</td>` +
+        `<td class="num">${s.effort || '-'}</td>` +
+        `<td class="num">${att(ecrire(s.valeur))}</td>` +
+        `<td class="num ${s.ecart < 0 ? 'montant--negatif' : ''}">${
+          s.ecart === null ? '-' : signe(s.ecart) + att(ecrire(s.ecart))
+        }</td>` +
+        `<td class="num">${rp === null ? '-' : signe(rp) + att(ecrire(rp))}</td>` +
+        `<td class="num ${s.interaction < 0 ? 'montant--negatif' : ''}">${att(inter)}</td></tr>`
+      );
+    })
+    .join('');
+}
+
 /**
  * Cherche la version la plus soutenable, et l'ecrit en toutes lettres.
  *
@@ -17801,6 +18142,7 @@ function resoudreEquilibre() {
 
 function rendreSensibilite() {
   rendreQuestionEquilibre();
+  rendreChoixScenarios();
   const zone = document.getElementById('tornade');
   if (!zone) return;
   if (!dernierResultat) {
@@ -18389,6 +18731,12 @@ document.addEventListener('input', (ev) => {
   if (el.id === 'sens-indicateur') {
     indicateurSensibilite = el.value;
     rendreSensibilite();
+    return;
+  }
+
+  if (el.id === 'scen-tri') {
+    triScenarios = el.value;
+    rendreScenarios();
     return;
   }
 
@@ -19107,6 +19455,17 @@ document.addEventListener('click', async (ev) => {
     return;
   }
 
+  if (el.closest('#btn-scenarios')) {
+    rendreScenarios();
+    return;
+  }
+  const caseScenario = /** @type {HTMLInputElement|null} */ (el.closest('[data-levier-scenario]'));
+  if (caseScenario) {
+    const code = caseScenario.dataset.levierScenario;
+    if (caseScenario.checked) leviersScenarios.add(code);
+    else leviersScenarios.delete(code);
+    return;
+  }
   if (el.closest('#btn-optimiser')) {
     resoudreOptimisation();
     return;

@@ -20,6 +20,7 @@ import {
   tornade,
   chercherEquilibre,
   optimiser,
+  scenarios,
 } from '../src/sensibilite.js';
 
 const racine = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -377,5 +378,90 @@ describe('recherche de la version la plus soutenable', () => {
     const empreinte = JSON.stringify(ENTREES);
     optimiser(ENTREES, REFERENTIELS, { objectif: 'autofinancement_cumule', cible: 0 });
     expect(JSON.stringify(ENTREES)).toBe(empreinte);
+  });
+});
+
+describe('tous les scenarios', () => {
+  const trois = [
+    { code: 'prix_revient', crans: [-1, 0, 1] },
+    { code: 'subventions', crans: [-1, 0, 1] },
+  ];
+
+  it('enumere le produit cartesien, zero compris', () => {
+    const r = scenarios(ENTREES, REFERENTIELS, { indicateur: 'autofinancement_cumule', leviers: trois });
+    expect(r.etat).toBe('ok');
+    expect(r.total).toBe(9);
+    expect(r.scenarios.length).toBe(9);
+    // Le scenario « on ne touche a rien » DOIT etre la : sans lui, rien a quoi
+    // se comparer.
+    const inchange = r.scenarios.find((s) => s.mouvements.length === 0);
+    expect(inchange).toBeDefined();
+    expect(inchange.ecart).toBe(0);
+    expect(inchange.valeur).toBe(r.reference);
+  });
+
+  it('ajoute le zero meme si on ne le demande pas', () => {
+    const r = scenarios(ENTREES, REFERENTIELS, {
+      indicateur: 'autofinancement_cumule',
+      leviers: [{ code: 'prix_revient', crans: [-1, 1] }],
+    });
+    expect(r.total).toBe(3);
+    expect(r.scenarios.some((s) => s.mouvements.length === 0)).toBe(true);
+  });
+
+  it('classe dans le sens favorable de l indicateur', () => {
+    const r = scenarios(ENTREES, REFERENTIELS, { indicateur: 'autofinancement_cumule', leviers: trois });
+    const v = r.scenarios.map((s) => s.valeur);
+    for (let k = 1; k < v.length; k++) expect(v[k]).toBeLessThanOrEqual(v[k - 1]);
+  });
+
+  it('mesure l INTERACTION, nulle sur un levier seul', () => {
+    const r = scenarios(ENTREES, REFERENTIELS, { indicateur: 'autofinancement_cumule', leviers: trois });
+    for (const s of r.scenarios) {
+      if (s.mouvements.length <= 1) expect(s.interaction).toBeCloseTo(0, 6);
+    }
+  });
+
+  it('mesure une interaction NON NULLE la ou le moteur cesse d etre lineaire', () => {
+    // Prix de revient et subventions s additionnent presque parfaitement sur
+    // cette operation : leur interaction est sous l euro. Il faut le Livret A,
+    // qui rejoue tout l amortissement, pour que la combinaison cesse de valoir
+    // la somme de ses parties. C est une propriete du MOTEUR, pas du module -
+    // et c est justement ce que la table est faite pour reveler.
+    const r = scenarios(ENTREES, REFERENTIELS, {
+      indicateur: 'autofinancement_cumule',
+      leviers: [
+        { code: 'prix_revient', crans: [-1, 0, 1] },
+        { code: 'livret_a', crans: [-1, 0, 1] },
+      ],
+    });
+    const croisees = r.scenarios.filter((s) => s.mouvements.length === 2);
+    expect(croisees.length).toBe(4);
+    expect(croisees.some((s) => Math.abs(s.interaction) > 100)).toBe(true);
+  });
+
+  it('refuse au-dela du plafond, sans tronquer en silence', () => {
+    const r = scenarios(ENTREES, REFERENTIELS, {
+      indicateur: 'autofinancement_cumule',
+      leviers: trois,
+      max: 4,
+    });
+    expect(r.etat).toBe('trop de combinaisons');
+    expect(r.scenarios).toEqual([]);
+    // Il dit COMBIEN, pour qu on sache quoi retirer.
+    expect(r.total).toBe(9);
+    expect(r.axes.length).toBe(2);
+  });
+
+  it('laisse les entrees d origine intactes', () => {
+    const empreinte = JSON.stringify(ENTREES);
+    scenarios(ENTREES, REFERENTIELS, { indicateur: 'autofinancement_cumule', leviers: trois });
+    expect(JSON.stringify(ENTREES)).toBe(empreinte);
+  });
+
+  it('refuse un levier inconnu', () => {
+    expect(() =>
+      scenarios(ENTREES, REFERENTIELS, { leviers: [{ code: 'inconnu', crans: [0] }] }),
+    ).toThrow(/Levier inconnu/);
   });
 });

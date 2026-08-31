@@ -323,8 +323,27 @@ export function calculer(entrees, referentiels) {
     (expEntree.mode_redevance ?? 'forfaitaire') === 'transparence'
       ? cfgApport.taux_redevance_transparence
       : cfgApport.taux_defaut) ?? 0;
-  /** Apport automatique d'une tranche : la part du referentiel sur son PR TTC. */
-  const apportAutoDe = (c) => arrondiEuro((bilan.par_tranche?.[c]?.total_ttc_eur ?? 0) * tauxApport);
+  /**
+   * Taux d'apport RETENU pour une tranche : celui qu'elle declare, sinon celui
+   * du referentiel.
+   *
+   * La part de 5 % est une regle de place, pas une loi : une operation la
+   * negocie, et un programme mixte ne la negocie pas au meme niveau sur toutes
+   * ses tranches. Le taux se surcharge donc TRANCHE PAR TRANCHE, la ou le
+   * montant se surcharge deja. Les deux surcharges ne se contredisent pas :
+   * un montant saisi fait foi et le taux ne sert plus qu'a la lecture, un
+   * montant laisse au calcul suit le taux.
+   *
+   * Zero est une valeur LEGITIME - une tranche sans apport - donc seul le vide
+   * rend la main au referentiel.
+   */
+  const tauxApportDe = (c) => {
+    const v = entrees.taux_apport_par_produit?.[c];
+    return v === undefined || v === null || v === '' ? tauxApport : (Number(v) || 0);
+  };
+  /** Apport automatique d'une tranche : sa part sur son prix de revient TTC. */
+  const apportAutoDe = (c) =>
+    arrondiEuro((bilan.par_tranche?.[c]?.total_ttc_eur ?? 0) * tauxApportDe(c));
   const apportSaisi = (c) => {
     const v = entrees.fonds_propres_par_produit?.[c];
     return v === undefined || v === null || v === '' ? null : (Number(v) || 0);
@@ -383,7 +402,13 @@ export function calculer(entrees, referentiels) {
       // qu'afficher un nombre, sans jamais dire s'il est subi ou choisi.
       montant_auto: fpParProduit ? apportSaisi(c) === null : false,
       montant_auto_eur: fpParProduit ? apportAutoDe(c) : null,
-      taux_apport: fpParProduit ? tauxApport : null,
+      // Le taux EFFECTIF de la tranche, celui qui a servi au calcul, et non
+      // celui du referentiel : c'est lui que l'ecran affiche et propose a la
+      // saisie. `taux_apport_reference` dit ce que le referentiel aurait donne,
+      // pour que l'ecran sache s'il montre une surcharge ou un defaut.
+      taux_apport: fpParProduit ? tauxApportDe(c) : null,
+      taux_apport_reference: fpParProduit ? tauxApport : null,
+      taux_apport_surcharge: fpParProduit ? tauxApportDe(c) !== tauxApport : false,
       remuneres: taux > 0,
       reconstitues: duree > 0,
       taux_remuneration: taux,

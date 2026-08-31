@@ -1405,3 +1405,70 @@ describe('R-AMT-6 - un PHB 2.0 se monte avec le moteur en place', () => {
     expect(t.at(-1).crd_eur).toBeCloseTo(0, 6);
   });
 });
+
+describe('R-FIN-7 - taux d apport surcharge tranche par tranche', () => {
+  // La part de 5 % est une regle de place, pas une loi : une operation la
+  // negocie, et un programme mixte ne la negocie pas au meme niveau sur toutes
+  // ses tranches. Le taux se surcharge donc la ou le montant se surcharge deja.
+  const op = (surcharges = {}) => ({
+    identite: { zone_123: 2, zone_ABC: 'B1' },
+    dates: { annee_mise_en_location: 2028, duree_simulation_ans: 20 },
+    lots: [
+      { code_produit: 'PLUS', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 40 },
+      { code_produit: 'PLAI', nb_logements: 4, shab_m2: 240, surfaces_annexes_m2: 24 },
+    ],
+    postes_bilan: [
+      { chapitre: 'charge_fonciere', libelle: 'Terrain', montant_ht_eur: 400000, taux_tva: 0.055 },
+      { chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 1200000, taux_tva: 0.1 },
+    ],
+    // Aucun montant saisi : les deux tranches sont en apport AUTOMATIQUE, seul
+    // cas ou le taux commande quelque chose.
+    fonds_propres_par_produit: {},
+    ...surcharges,
+  });
+  const calc = (s) => calculer(op(s), REFERENTIELS);
+  const fp = (r, c) => r.exploitation.fonds_propres_par_tranche[c];
+
+  it('applique le taux du referentiel quand rien n est surcharge', () => {
+    const r = calc();
+    for (const c of ['PLUS', 'PLAI']) {
+      expect(fp(r, c).taux_apport).toBe(fp(r, c).taux_apport_reference);
+      expect(fp(r, c).taux_apport_surcharge).toBe(false);
+    }
+  });
+
+  it('n applique la surcharge qu a LA tranche qui la porte', () => {
+    const ref = calc();
+    const r = calc({ taux_apport_par_produit: { PLUS: 0.08 } });
+    const pr = ref.bilan.par_tranche.PLUS.total_ttc_eur;
+    // 8 % du prix de revient TTC de la tranche, et non 5 %.
+    expect(fp(r, 'PLUS').montant_eur).toBe(Math.round(pr * 0.08));
+    expect(fp(r, 'PLUS').taux_apport).toBe(0.08);
+    expect(fp(r, 'PLUS').taux_apport_surcharge).toBe(true);
+    // La tranche voisine n a pas bouge d un euro.
+    expect(fp(r, 'PLAI').montant_eur).toBe(fp(ref, 'PLAI').montant_eur);
+    expect(fp(r, 'PLAI').taux_apport_surcharge).toBe(false);
+  });
+
+  it('rend la main au referentiel sur une surcharge VIDE, mais pas sur un zero', () => {
+    const ref = calc();
+    for (const vide of [null, undefined, '']) {
+      const r = calc({ taux_apport_par_produit: { PLUS: vide } });
+      expect(fp(r, 'PLUS').montant_eur, `vide = ${String(vide)}`).toBe(fp(ref, 'PLUS').montant_eur);
+    }
+    // Zero est une valeur LEGITIME - une tranche sans apport - et se distingue
+    // du vide. Les confondre rendrait un apport nul impossible a exprimer.
+    const zero = calc({ taux_apport_par_produit: { PLUS: 0 } });
+    expect(fp(zero, 'PLUS').montant_eur).toBe(0);
+    expect(fp(zero, 'PLUS').taux_apport).toBe(0);
+  });
+
+  it('laisse le MONTANT saisi faire foi, taux surcharge ou non', () => {
+    const r = calc({
+      fonds_propres_par_produit: { PLUS: 123456 },
+      taux_apport_par_produit: { PLUS: 0.08 },
+    });
+    expect(fp(r, 'PLUS').montant_eur).toBe(123456);
+    expect(fp(r, 'PLUS').montant_auto).toBe(false);
+  });
+});

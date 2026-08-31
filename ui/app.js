@@ -216,6 +216,9 @@ const etat = {
   // masque cette regle dans l'operation de demonstration, qui est justement ce
   // qu'on ouvre pour la decouvrir.
   fonds_propres_par_produit: {},
+  // R-FIN-7 : taux d'apport surcharge, tranche par tranche. Vide, c'est la
+  // part du referentiel qui s'applique.
+  taux_apport_par_produit: {},
   // R-FIN-7 : regime des fonds propres, tranche par tranche.
   remuneration_fonds_propres: {},
   // R-EXP-7 : regime de produits par tranche, loyers ou redevance.
@@ -754,6 +757,7 @@ function elaguerProduitsAbsents() {
 
   purger(etat.loyers_par_produit);
   purger(etat.fonds_propres_par_produit);
+  purger(etat.taux_apport_par_produit);
   purger(etat.remuneration_fonds_propres);
   purger(etat.regimes_par_produit);
 
@@ -949,7 +953,22 @@ function rendreStructureTranches() {
                   </span>
                 </div>
                 <div class="jetons">
-                  <span class="jeton"><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-fp="${code}">-</span></span>
+                  <!-- La part se SAISIT, elle ne fait pas que s'afficher : les
+                       5 % sont une regle de place qu'une operation negocie, et
+                       un programme mixte ne la negocie pas au meme niveau sur
+                       toutes ses tranches. Champ vide = part du referentiel,
+                       lue en filigrane ; zero reste une valeur legitime, une
+                       tranche sans apport, donc seul le vide rend la main.
+                       Le champ est masque des qu'un MONTANT est saisi : c'est
+                       alors lui qui fait foi, et proposer un taux qui ne
+                       commande plus rien serait un mensonge d'interface. -->
+                  <span class="jeton jeton--saisi"><span class="jeton__cle">part du prix de revient</span><input
+                    type="number" step="0.1" min="0" class="jeton__champ"
+                    data-champ="taux_apport_par_produit.${code}" data-type="pourcentage"
+                    data-part-fp-saisie="${code}" aria-label="Part du prix de revient en fonds propres"
+                    value="${valNum(enPourcent(etat.taux_apport_par_produit?.[code]))}" /><span
+                    class="jeton__unite">%</span></span>
+                  <span class="jeton jeton--fige" data-part-fp-figee="${code}" hidden><span class="jeton__cle">part du prix de revient</span><span class="jeton__valeur" data-part-fp="${code}">-</span></span>
                   <span class="jeton"><span class="jeton__cle">reconstitution</span><span class="jeton__valeur" data-reconstitution-fp="${code}">-</span></span>
                   ${
                     RFP.remuneres || RFP.reconstitues
@@ -2374,6 +2393,30 @@ function rendreValeurs(r) {
       // ne reconstruit pas la table, seul ce passage voit la premiere frappe.
       champApport.closest('.ligne--fp')?.classList.toggle('fp--auto', fp.montant_auto === true);
     }
+
+    // La part se saisit tant que le MONTANT est automatique. Des qu'un montant
+    // est saisi, c'est lui qui commande : le champ de taux cede la place a la
+    // part CONSTATEE, celle que le montant represente vraiment. Deux jetons et
+    // non un champ qu'on desactive : desactive, il continuerait d'afficher un
+    // taux qui n'a plus servi a rien.
+    const jetonSaisi = document.querySelector(`[data-part-fp-saisie="${code}"]`);
+    const jetonFige = document.querySelector(`[data-part-fp-figee="${code}"]`);
+    const enAuto = fp?.montant_auto === true;
+    if (jetonSaisi) {
+      const champ = /** @type {HTMLInputElement} */ (jetonSaisi);
+      // Le taux du referentiel se lit en filigrane, jamais comme valeur : posee,
+      // elle deviendrait une saisie et cesserait de suivre le referentiel.
+      champ.placeholder =
+        fp?.taux_apport_reference === null || fp?.taux_apport_reference === undefined
+          ? ''
+          : String(Math.round(fp.taux_apport_reference * 1000) / 10);
+      champ.title = fp?.taux_apport_surcharge
+        ? `Part saisie. Vider le champ rend la main au référentiel (${pct(fp.taux_apport_reference ?? 0, 1)}).`
+        : `Part du référentiel. Saisir une valeur ici remplace les ${pct(fp?.taux_apport_reference ?? 0, 1)}.`;
+      const parent = champ.closest('.jeton');
+      if (parent) /** @type {HTMLElement} */ (parent).hidden = !enAuto;
+    }
+    if (jetonFige) /** @type {HTMLElement} */ (jetonFige).hidden = enAuto;
 
     const annuite = document.querySelector(`[data-annuite-fp="${code}"]`);
     if (annuite) annuite.textContent = fp?.annuite_eur ? `${eur(fp.annuite_eur)}/an` : '-';
@@ -6617,7 +6660,8 @@ const CLE_ECRAN = 'moteur-sim.ecran';
 /** Les seules racines memorisees : ce que l'utilisateur a saisi, rien d'autre. */
 const RACINES_PERSISTEES = [
   'identite', 'dates', 'lots', 'postes_bilan', 'loyers_par_produit', 'subventions',
-  'fonds_propres_par_produit', 'remuneration_fonds_propres', 'regimes_par_produit', 'tresorerie',
+  'fonds_propres_par_produit', 'taux_apport_par_produit', 'remuneration_fonds_propres',
+  'regimes_par_produit', 'tresorerie',
   'mode_prets', 'prets',
   'exploitation', 'profils', 'profil_actif', 'options',
 ];
@@ -9739,6 +9783,7 @@ const ETAT_INITIAL = (() => {
   vierge.prets = [];
   vierge.loyers_par_produit = {};
   vierge.fonds_propres_par_produit = {};
+  vierge.taux_apport_par_produit = {};
   vierge.remuneration_fonds_propres = {};
   vierge.regimes_par_produit = {};
   return vierge;

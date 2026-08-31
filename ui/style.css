@@ -779,6 +779,36 @@ td.calc { text-align: right; }
 }
 .jeton__valeur { font-weight: 650; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 
+/* Jeton SAISISSABLE : un jeton qui porte un champ au lieu d'une valeur morte.
+   Il garde exactement la silhouette des autres - meme fond, meme bordure, meme
+   hauteur - pour que la ligne de jetons ne se deforme pas quand l'un d'eux
+   devient modifiable. Ce qui le signale est le soulignement pointille sous le
+   nombre, la meme convention que le montant automatique d'un pret. */
+/* `display: inline-flex` ci-dessus l'emporte sur la valeur par defaut de
+   l'attribut `hidden`, qui ne fait que poser `display: none` au niveau de la
+   feuille du navigateur. Sans cette ligne, cacher un jeton ne le cache pas. */
+.jeton[hidden] { display: none; }
+.jeton--saisi { padding-right: 7px; }
+.jeton__champ {
+  width: 3.4em; padding: 0; border: 0; background: none;
+  font: inherit; font-weight: 650; font-variant-numeric: tabular-nums;
+  color: var(--text-primary); text-align: right;
+  border-bottom: 1px dashed var(--border-color);
+}
+/* Le filigrane du referentiel : present, mais sans se faire passer pour une
+   saisie. Meme traitement que le montant calcule d'un pret. */
+.jeton__champ::placeholder { color: var(--text-tertiary); font-weight: 500; opacity: 1; }
+.jeton__champ:hover { border-bottom-color: var(--text-tertiary); }
+.jeton__champ:focus {
+  outline: none; border-bottom-style: solid; border-bottom-color: var(--info-accent);
+}
+/* Les fleches d'un champ `number` volent la moitie de la largeur d'un jeton et
+   n'apportent rien a un taux qu'on tape. */
+.jeton__champ::-webkit-outer-spin-button,
+.jeton__champ::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.jeton__champ { -moz-appearance: textfield; appearance: textfield; }
+.jeton__unite { font-weight: 650; color: var(--text-primary); }
+
 /* ============================================================ CYCLE DE VIE */
 
 /* Frise d'un pret : preparation, preficancement, differe, amortissement, solde.

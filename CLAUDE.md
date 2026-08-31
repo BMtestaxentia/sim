@@ -19,7 +19,7 @@ La spécification de référence est `docs/DICTIONNAIRE_REGLES_MOTEUR_PLUSPLAI_v
   - Les **fixtures réelles** (exports d'annexes et de matrices LEON) vivent dans `fixtures-reelles/`, **ignoré par git**. Les trois fichiers `golden*.test.js` les lisent quand elles sont là et **se sautent** sinon : `npm test` passe dans les deux cas, avec ou sans elles.
   - Les opérations sont désignées par des **codes** dans tout le dépôt : `OP-1` à `OP-6` pour les fixtures, `H-1` à `H-7` pour les exports Horizon 50. La table de correspondance est dans `fixtures-reelles/CORRESPONDANCE.md`, hors du dépôt.
   - Ne jamais réintroduire un nom de commune, un numéro de simulation, un nom de fichier interne ni un nom de personne dans un fichier suivi par git. Les communes du **zonage** font exception : c'est de la donnée publique (data.gouv.fr).
-  - L'application sème trois **opérations de démonstration inventées** au premier chargement : c'est ce que voit un visiteur de la page publique.
+  - L'application sème quatre **opérations de démonstration** au premier chargement : c'est ce que voit un visiteur de la page publique. Trois sont entièrement inventées ; la quatrième (EHPAD 16 places) reprend un montage de test, publié sur décision explicite du métier le 31/08/2026, sans nom d'établissement ni numéro de simulation.
 
 ## 3. Stack technique
 

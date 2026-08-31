@@ -77,6 +77,11 @@ function nomenclatureEnPostes(valeursInitiales = {}) {
       libelle: p.libelle,
       montant_ht_eur: valeursInitiales[p.id]?.montant_ht_eur ?? null,
       taux_tva: valeursInitiales[p.id]?.taux_tva ?? tauxDefaut,
+      // R-TVA-2 : un poste HORS CHAMP de la livraison a soi-meme garde son TTC
+      // de saisie au lieu d'etre recalcule au taux du produit. La propriete
+      // n'est posee que quand elle est vraie, pour que les quarante-cinq autres
+      // postes restent des objets identiques a ce qu'ils etaient.
+      ...(valeursInitiales[p.id]?.hors_lasm ? { hors_lasm: true } : {}),
     })),
   );
 }
@@ -9758,6 +9763,7 @@ const ETAT_INITIAL = (() => {
  */
 const EXEMPLES = [
   {
+    id: 'tilleuls',
     nom: 'Les Tilleuls',
     groupe: 'Démonstration',
     identite: {
@@ -9788,6 +9794,7 @@ const EXEMPLES = [
     ],
   },
   {
+    id: 'ateliers',
     nom: 'Cour des Ateliers',
     groupe: 'Démonstration',
     identite: {
@@ -9811,6 +9818,7 @@ const EXEMPLES = [
     subventions: [{ libelle: 'Département', montant_eur: 45000, affectation: null }],
   },
   {
+    id: 'verrieres',
     nom: 'Îlot Verrières',
     groupe: 'Démonstration',
     identite: {
@@ -9846,6 +9854,98 @@ const EXEMPLES = [
       { libelle: 'Action logement :', montant_eur: 55000, affectation: null },
     ],
   },
+  // EHPAD : le seul montage de la serie qui ne ressemble a aucun autre, et la
+  // raison de sa presence. Trois choses n'apparaissent nulle part ailleurs :
+  //
+  //  - AUCUN PRET. L'operation est portee a 100 % par des fonds propres
+  //    remuneres a 2,5 % et reconstitues sur trente ans (R-FIN-7). Sans annuite
+  //    d'emprunt pour la couvrir, la charge de fonds propres se lit enfin seule.
+  //  - UNE TVA A 5,5 % SUR DU PLS. Un etablissement medico-social releve du 6 du
+  //    I de l'article L. 312-1 du CASF, vise par le CGI 278 sexies, la ou le
+  //    referentiel donne 10 % au foyer PLS ordinaire. La surcharge passe par un
+  //    PROFIL (R-PARAM) : elle voyage avec le dossier et se lit a l'ecran des
+  //    parametres, plutot que de se cacher dans le taux de chaque ligne. C'est
+  //    la question Q-40.
+  //  - UNE REDEVANCE et non des loyers : le regime foyer (R-EXP-7).
+  {
+    id: 'ehpad',
+    nom: 'EHPAD 16 places',
+    groupe: 'Démonstration',
+    identite: {
+      commune: 'Lyon',
+      departement: 'Rhône (69)',
+      zone_ABC: 'A',
+      zone_123: 2,
+      type_operation: 'Neuf',
+    },
+    dates: {
+      date_debut_travaux: '2026-08-25',
+      duree_chantier_mois: 22,
+      date_livraison: '2028-06-05',
+      duree_simulation_ans: 61,
+    },
+    lots: [
+      { code_produit: 'FPLS', nombre: 16, shab_totale: 320, annexes_totales: 0, typologie: 'T1', batiment: 'A' },
+    ],
+    postes: {
+      bat_travaux: { montant_ht_eur: 2750000, taux_tva: 0.055 },
+      bat_aleas: { montant_ht_eur: 300000, taux_tva: 0.055 },
+      hon_architecte: { montant_ht_eur: 305000, taux_tva: 0.055 },
+      hon_geometre: { montant_ht_eur: 30000, taux_tva: 0.055 },
+      hon_assurances: { montant_ht_eur: 17106.215, taux_tva: 0.055 },
+      hon_sps: { montant_ht_eur: 14100, taux_tva: 0.055 },
+      hon_conduite_operation: { montant_ht_eur: 36243, taux_tva: 0.055 },
+      // Hors champ de la livraison a soi-meme : le TTC reste le HT. Sans ce
+      // marqueur les interets prendraient 5,5 % comme le reste, et le prix de
+      // revient serait faux de 10 016 EUR.
+      ff_interets_prefi: { montant_ht_eur: 182116.69609125, taux_tva: 0, hors_lasm: true },
+    },
+    subventions: [],
+    // Racines que les trois autres exemples n'ont pas besoin de toucher.
+    reste: {
+      fonds_propres_par_produit: { FPLS: 3824450.61791625 },
+      remuneration_fonds_propres: {
+        FPLS: { remuneres: true, taux: 0.025, reconstitues: true, duree_reconstitution_ans: 30 },
+      },
+      regimes_par_produit: {
+        FPLS: {
+          mode: 'redevance',
+          mode_redevance: 'forfaitaire',
+          // Redevance d'equilibre : elle couvre exactement les charges, charge
+          // de fonds propres comprise. Valeur de l'annee de mise en location.
+          redevance_annuelle_eur: 236380.82,
+          redevance_annee_valeur: 2028,
+        },
+      },
+      exploitation: {
+        // Les frais de gestion s'assoient ici sur le PRIX DE REVIENT, a 0,3 %,
+        // et non sur les loyers : c'est l'assiette des operations en redevance.
+        frais_gestion_pct_loyers: 0,
+        frais_gestion_pct_prix_revient: 0.003,
+        taux_vacance_impayes: 0,
+        gros_entretien_eur_m2: 0,
+        pge_taux: 0.006,
+        pge_base_eur: 3642333.921825,
+        tfpb_par_logement_eur: 345,
+        annee_debut_tfpb: 2053,
+        nb_lits: 16,
+        mode: 'redevance',
+        mode_redevance: 'forfaitaire',
+        redevance_annuelle_eur: 236380.82,
+        redevance_annee_valeur: 2028,
+      },
+      profils: [
+        { id: 'referentiel', nom: 'AXENTIA HER 2027 (référentiel)', parametrage: {} },
+        {
+          id: 'ehpad-casf',
+          nom: 'AXENTIA HER 2027 · EHPAD (TVA 5,5 %)',
+          parametrage: { baremes: { tva: { lasm_par_produit: { FPLS: 0.055 } } } },
+          parametrage_sauve: { baremes: { tva: { lasm_par_produit: { FPLS: 0.055 } } } },
+        },
+      ],
+      profil_actif: 'ehpad-casf',
+    },
+  },
 ];
 
 /**
@@ -9857,10 +9957,40 @@ const EXEMPLES = [
  */
 const CLE_EXEMPLES_SEMES = 'moteur-sim.exemples-semes';
 
-/** Pose le marqueur de semis et rend le compte inchange, pour s ecrire en une ligne. */
-function marquerSemis(poses) {
+/**
+ * Ce qui a DEJA ete seme, exemple par exemple.
+ *
+ * Un simple booleen ne suffisait pas, et c'est la lecon d'un ajout : marquer
+ * « les exemples ont ete semes » interdit toute arrivee ulterieure, puisque le
+ * marqueur d'hier bloque l'exemple d'aujourd'hui. Un REGISTRE d'identifiants
+ * tient les deux besoins a la fois : un exemple supprime ne revient pas, un
+ * exemple neuf arrive quand meme.
+ *
+ * L'ancien booleen se migre en registre des trois premiers : un poste qui les
+ * avait deja ne doit pas les voir reapparaitre en double.
+ */
+function registreSemis() {
+  let brut = null;
   try {
-    localStorage.setItem(CLE_EXEMPLES_SEMES, '1');
+    brut = localStorage.getItem(CLE_EXEMPLES_SEMES);
+  } catch {
+    return null; // stockage indisponible : rien a lire, rien a ecrire
+  }
+  if (brut === null) return [];
+  // Le booleen de la premiere version valait pour les trois exemples d'alors.
+  if (brut === '1') return ['tilleuls', 'ateliers', 'verrieres'];
+  try {
+    const l = JSON.parse(brut);
+    return Array.isArray(l) ? l : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Ecrit le registre et rend le compte inchange, pour s'ecrire en une ligne. */
+function marquerSemis(ids, poses) {
+  try {
+    localStorage.setItem(CLE_EXEMPLES_SEMES, JSON.stringify(ids));
   } catch {
     /* stockage indisponible : rien a memoriser, rien a reparer */
   }
@@ -9868,25 +9998,38 @@ function marquerSemis(poses) {
 }
 
 function semerExemples() {
-  // UNE FOIS, jamais deux. La bibliotheque vide ne suffit pas comme condition :
-  // qui supprime les trois exemples les verrait revenir au rechargement suivant,
-  // et une suppression qu'on defait est une suppression qui n'a pas eu lieu.
-  try {
-    if (localStorage.getItem(CLE_EXEMPLES_SEMES)) return 0;
-  } catch {
-    /* stockage indisponible : on tente le semis, il echouera de lui-meme */
-  }
-  if (listerSimulations().length) return marquerSemis(0);
+  const deja = registreSemis();
+  if (deja === null) return 0;
+  const tous = EXEMPLES.map((e) => e.id);
+  // Bibliotheque non vide ET aucun semis connu : ce sont les dossiers de
+  // quelqu'un, pas une page neuve. On enregistre tout comme seme sans rien y
+  // ajouter, plutot que de deposer quatre demonstrations chez lui.
+  if (!deja.length && listerSimulations().length) return marquerSemis(tous, 0);
+  const aSemer = EXEMPLES.filter((e) => !deja.includes(e.id));
+  if (!aSemer.length) return 0;
   let poses = 0;
-  for (const ex of EXEMPLES) {
+  const faits = [...deja];
+  for (const ex of aSemer) {
     const sim = structuredClone(ETAT_INITIAL);
     sim.identite = { ...sim.identite, ...ex.identite, nom: ex.nom, groupe: ex.groupe };
+    if (ex.dates) sim.dates = { ...sim.dates, ...structuredClone(ex.dates) };
     sim.lots = ex.lots.flatMap((l) => repartirEnLots(l));
     sim.postes_bilan = nomenclatureEnPostes(ex.postes);
     sim.subventions = structuredClone(ex.subventions);
-    if (ajouterSimulation(sim)) poses += 1;
+    // Racines supplementaires : un montage en redevance, des fonds propres
+    // remuneres ou un profil de parametres derive ne se decrivent pas avec les
+    // quatre cles ci-dessus. Elles REMPLACENT la racine, sans fusion : une
+    // fusion profonde laisserait trainer les valeurs de l'etat vierge au milieu
+    // de celles de l'exemple, et on ne saurait plus lesquelles ont ete voulues.
+    for (const [cle, valeur] of Object.entries(ex.reste ?? {})) {
+      sim[cle] = structuredClone(valeur);
+    }
+    if (ajouterSimulation(sim)) {
+      poses += 1;
+      faits.push(ex.id);
+    }
   }
-  return marquerSemis(poses);
+  return marquerSemis(faits, poses);
 }
 
 semerExemples();

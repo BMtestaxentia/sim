@@ -30,6 +30,7 @@ import {
   OBJECTIFS,
   balayerLevier,
   chercherEquilibre,
+  optimiser,
   plage,
   tornade,
 } from '../src/sensibilite.js';
@@ -7558,7 +7559,11 @@ function rendreQuestionEquilibre() {
     ).join('');
   }
   if (!l.options.length) {
-    l.innerHTML = LEVIERS.map(
+    // Seuls les leviers ACTIONNABLES : on ne choisit pas le Livret A ni le taux
+    // de vacance, on les subit. Les proposer ici laissait croire a une marge de
+    // manoeuvre qui n'existe pas. Ils restent dans la tornade, ou la question
+    // est de savoir ce qui pese, non ce qu'on peut faire.
+    l.innerHTML = LEVIERS.filter((x) => x.actionnable).map(
       (x) => `<option value="${att(x.code)}">${att(x.libelle)}</option>`,
     ).join('');
   }
@@ -7570,6 +7575,106 @@ function rendreQuestionEquilibre() {
     zone.className = 'equilibre__reponse equilibre__reponse--vide';
     zone.textContent = "Choisissez ce qu’il faut atteindre, puis cliquez sur « Chercher ».";
   }
+}
+
+/**
+ * Cherche la version la plus soutenable, et l'ecrit en toutes lettres.
+ *
+ * L'objectif est FIXE - que l'autofinancement cumule repasse au-dessus de zero -
+ * et il est ecrit dans la phrase du bloc. Un bouton qui demande trois reglages
+ * avant de repondre n'en est plus un ; qui veut viser autre chose a la recherche
+ * manuelle juste en dessous.
+ */
+function resoudreOptimisation() {
+  const zone = document.getElementById('optim-reponse');
+  if (!zone || !dernierResultat) return;
+  const r = optimiser(etatPourAnalyse(), referentielsPourAnalyse(), {
+    objectif: 'autofinancement_cumule',
+    cible: 0,
+    contexte: contexteLecture(),
+  });
+  const ecrire = (v) => valeurIndicateur(v, r.objectif.unite);
+  const signe = (v) => (v > 0 ? '+' : '');
+  const mouvement = (m) => `${m.libelle.toLowerCase()} ${signe(m.variation)}${pct(m.variation, 1)}`;
+  // L'EFFORT se dit en crans du levier et non en pourcents : c'est ce qui rend
+  // deux leviers comparables. Un cran vaut l'amplitude de reference du levier -
+  // 5 % sur un prix de revient, 20 % sur une subvention.
+  const crans = (e) => `${nb(Math.round(e * 10) / 10)} cran${e >= 2 ? 's' : ''}`;
+
+  if (r.etat === 'deja') {
+    zone.className = 'optim optim--bon';
+    zone.innerHTML =
+      `<p class="optim__verdict">✓ L’opération tient déjà.</p>` +
+      `<p class="optim__detail">L’autofinancement cumulé atteint ` +
+      `<strong>${att(ecrire(r.valeur))}</strong>, soit ${att(ecrire(r.marge))} au-dessus du ` +
+      `seuil. Rien à négocier pour la faire tenir.</p>`;
+    return;
+  }
+
+  if (r.etat === 'hors de portee') {
+    zone.className = 'optim optim--hors';
+    zone.innerHTML =
+      `<p class="optim__verdict">⚠ Aucune version ne tient, dans les limites explorées.</p>` +
+      `<p class="optim__detail">L’autofinancement cumulé part de ` +
+      `<strong>${att(ecrire(r.valeur))}</strong>. Même poussé à ${att(crans(r.effort_max))}, ` +
+      `aucun levier n’atteint zéro :</p>` +
+      `<ul class="optim__liste">${r.pistes
+        .map(
+          (p) =>
+            `<li><span>${att(p.libelle)}</span>` +
+            `<span class="num">au mieux ${att(ecrire(p.extreme))}</span></li>`,
+        )
+        .join('')}</ul>` +
+      // Les leviers sans prise se disent ICI AUSSI : conclure « rien n'y fait »
+      // sans preciser qu'un des deux n'a pas ete essaye serait un demi-mensonge.
+      (r.sansPrise.length
+        ? `<p class="optim__detail">Et ${att(r.sansPrise.join(', ').toLowerCase())} ` +
+          `n’a pas pu être essayé : l’opération n’en porte pas.</p>`
+        : '') +
+      `<p class="optim__detail">C’est le programme ou les loyers qu’il faut revoir, ` +
+      `pas la négociation.</p>`;
+    return;
+  }
+
+  const gagnantes = r.pistes.filter((p) => p.trouve);
+  const tete = gagnantes[0];
+  const combi = r.combinaison?.trouve ? r.combinaison : null;
+  // La combinaison passe DEVANT quand elle coute moins d'effort : partager la
+  // charge entre deux leviers demande moins a chacun, et c'est ce qu'on fait en
+  // vrai - on negocie un peu le prix ET on cherche un peu de subvention.
+  const meilleure =
+    combi && (!tete || combi.effort < tete.effort - 1e-9)
+      ? {
+          texte: combi.mouvements.map(mouvement).join(' et '),
+          effort: combi.effort,
+          valeur: combi.valeur,
+        }
+      : { texte: mouvement(tete), effort: tete.effort, valeur: tete.valeur };
+
+  zone.className = 'optim optim--bon';
+  zone.innerHTML =
+    `<p class="optim__verdict">✓ Le plus court chemin : ` +
+    `<strong>${att(meilleure.texte)}</strong>.</p>` +
+    `<p class="optim__detail">L’autofinancement cumulé passe de ${att(ecrire(r.valeur))} à ` +
+    `<strong>${att(ecrire(meilleure.valeur))}</strong>, pour ${att(crans(meilleure.effort))} ` +
+    `d’effort.</p>` +
+    `<ul class="optim__liste">${gagnantes
+      .map(
+        (p) =>
+          `<li><span>${att(p.libelle)} seul</span><span class="num">` +
+          `${signe(p.variation)}${att(pct(p.variation, 1))} · ${att(crans(p.effort))}</span></li>`,
+      )
+      .join('')}${
+      combi
+        ? `<li><span>Les deux ensemble</span><span class="num">${att(
+            combi.mouvements.map((m) => `${signe(m.variation)}${pct(m.variation, 1)}`).join(' / '),
+          )} · ${att(crans(combi.effort))}</span></li>`
+        : ''
+    }</ul>` +
+    (r.sansPrise.length
+      ? `<p class="optim__detail">Sans prise sur cette opération : ` +
+        `${att(r.sansPrise.join(', '))}.</p>`
+      : '');
 }
 
 /** Resout la question et ecrit la reponse en toutes lettres. */
@@ -8933,6 +9038,10 @@ document.addEventListener('click', async (ev) => {
     return;
   }
 
+  if (el.closest('#btn-optimiser')) {
+    resoudreOptimisation();
+    return;
+  }
   if (el.closest('#btn-equilibre')) {
     resoudreEquilibre();
     return;

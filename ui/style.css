@@ -1462,6 +1462,49 @@ body.sans-simulation .entete__dossier { display: none; }
 }
 .tornade__muets span { color: var(--text-tertiary); }
 
+/* --- LA QUESTION D EQUILIBRE ------------------------------------------
+   Elle se lit comme une PHRASE : « amener X a Y en jouant sur Z ». Trois
+   champs sur une ligne, separes par les mots qui les relient, plutot qu un
+   formulaire en colonnes ou il faudrait deviner ce qui se combine.
+
+   Ces regles avaient disparu avec la reecriture du bloc de la tornade : le
+   formulaire se retrouvait sans mise en forme, et la reponse sans ses
+   couleurs d etat. */
+.equilibre__question {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px;
+}
+.equilibre__question .champ > span { color: var(--text-tertiary); font-size: 12px; }
+.equilibre__reponse { margin: 0; font-size: 13px; line-height: 1.6; }
+.equilibre__reponse strong { font-size: 15px; }
+.equilibre__reponse--vide { color: var(--text-tertiary); }
+.equilibre__reponse--hors { color: var(--warning-text); }
+.equilibre__reponse--sans { color: var(--text-tertiary); font-style: italic; }
+
+/* --- LA REPONSE DU BOUTON ---------------------------------------------
+   Un VERDICT en une phrase, son detail, puis les chemins chiffres. Dans cet
+   ordre : qui ne lit qu une ligne doit repartir avec la reponse, pas avec un
+   tableau a interpreter. */
+.optim:empty { display: none; }
+.optim {
+  margin-top: 4px; padding: 12px 14px; border-radius: var(--radius-md);
+  border-left: 3px solid var(--neutral-accent); background: var(--neutral-bg);
+}
+.optim--bon { border-left-color: var(--success-accent); background: var(--success-bg); }
+.optim--hors { border-left-color: var(--warning-accent); background: var(--warning-bg); }
+.optim__verdict { margin: 0 0 6px; font-size: 14px; font-weight: 700; }
+.optim--bon .optim__verdict { color: var(--success-text); }
+.optim--hors .optim__verdict { color: var(--warning-text); }
+.optim__detail { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--text-secondary); }
+/* Les chemins, en lignes tabulaires : on les compare, donc les nombres
+   doivent tomber les uns sous les autres. */
+.optim__liste { list-style: none; margin: 10px 0; padding: 0; max-width: 460px; }
+.optim__liste li {
+  display: flex; justify-content: space-between; gap: 16px;
+  padding: 5px 0; border-bottom: 1px solid var(--border-color); font-size: 12.5px;
+}
+.optim__liste li:last-child { border-bottom: none; }
+.optim__liste .num { font-weight: 700; font-variant-numeric: tabular-nums; }
+
 /* La ligne de reference du balayage : celle dont la variation est nulle. */
 .poste--reference td { background: var(--bg-tertiary); font-weight: 700; }
 /* Un champ dans une barre : le libelle a gauche, le champ a sa suite. */

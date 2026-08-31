@@ -19,6 +19,7 @@ import {
   plage,
   tornade,
   chercherEquilibre,
+  optimiser,
 } from '../src/sensibilite.js';
 
 const racine = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -300,5 +301,81 @@ describe('cumul lu a une annee', () => {
     });
     expect(t.reference).toBe(reference.exploitation.lignes[19].cumul_autofinancement_eur);
     expect(t.reference).not.toBe(reference.exploitation.indicateurs.resultat_cumule_final_eur);
+  });
+});
+
+describe('recherche de la version la plus soutenable', () => {
+  it('dit « deja » quand la cible est atteinte, avec la marge', () => {
+    const valeur = reference.exploitation.indicateurs.resultat_cumule_final_eur;
+    const r = optimiser(ENTREES, REFERENTIELS, {
+      objectif: 'autofinancement_cumule',
+      cible: valeur - 100000,
+    });
+    expect(r.etat).toBe('deja');
+    expect(r.marge).toBeCloseTo(100000, 0);
+    expect(r.pistes).toEqual([]);
+  });
+
+  it('ne propose que les leviers ACTIONNABLES', () => {
+    const r = optimiser(ENTREES, REFERENTIELS, {
+      objectif: 'autofinancement_cumule',
+      cible: reference.exploitation.indicateurs.resultat_cumule_final_eur + 200000,
+    });
+    const proposes = [...r.pistes.map((p) => p.code), ...r.sansPrise];
+    // Aucun levier de contexte - Livret A, vacance, frais de gestion - ne doit
+    // figurer dans ce qu on propose de FAIRE.
+    expect(proposes).not.toContain('livret_a');
+    expect(proposes).not.toContain('vacance_impayes');
+  });
+
+  it('trouve un chemin, et ce chemin verifie l objectif', () => {
+    const cible = reference.exploitation.indicateurs.resultat_cumule_final_eur + 150000;
+    const r = optimiser(ENTREES, REFERENTIELS, { objectif: 'autofinancement_cumule', cible });
+    expect(r.etat).toBe('atteignable');
+    const gagnante = r.pistes.find((p) => p.trouve);
+    expect(gagnante).toBeDefined();
+    // On REJOUE le chemin propose et on relit : la promesse doit tenir.
+    const { points } = balayerLevier(ENTREES, REFERENTIELS, gagnante.code, [gagnante.variation]);
+    const atteint = points[0].resultat.exploitation.indicateurs.resultat_cumule_final_eur;
+    expect(atteint).toBeGreaterThanOrEqual(cible - 1000);
+  });
+
+  it('classe les pistes par effort croissant', () => {
+    const r = optimiser(ENTREES, REFERENTIELS, {
+      objectif: 'autofinancement_cumule',
+      cible: reference.exploitation.indicateurs.resultat_cumule_final_eur + 150000,
+    });
+    const efforts = r.pistes.filter((p) => p.trouve).map((p) => p.effort);
+    for (let k = 1; k < efforts.length; k++) expect(efforts[k]).toBeGreaterThanOrEqual(efforts[k - 1]);
+  });
+
+  it('rend un effort combine plus petit que le meilleur effort seul', () => {
+    const r = optimiser(ENTREES, REFERENTIELS, {
+      objectif: 'autofinancement_cumule',
+      cible: reference.exploitation.indicateurs.resultat_cumule_final_eur + 150000,
+    });
+    if (r.combinaison?.trouve && r.pistes.some((p) => p.trouve)) {
+      const seul = Math.min(...r.pistes.filter((p) => p.trouve).map((p) => p.effort));
+      // Partager l effort ne peut pas coûter PLUS cher que de tout demander a un
+      // seul levier : chacun avance moins loin.
+      expect(r.combinaison.effort).toBeLessThanOrEqual(seul + 1e-6);
+    }
+  });
+
+  it('dit non quand la cible est hors de portee, sans se rabattre sur un a-peu-pres', () => {
+    const r = optimiser(ENTREES, REFERENTIELS, {
+      objectif: 'autofinancement_cumule',
+      cible: 1e12,
+    });
+    expect(r.etat).toBe('hors de portee');
+    expect(r.pistes.every((p) => !p.trouve)).toBe(true);
+    // Et il dit ce que l effort maximal permet quand meme d atteindre.
+    expect(r.pistes.every((p) => p.extreme !== undefined)).toBe(true);
+  });
+
+  it('laisse les entrees d origine intactes', () => {
+    const empreinte = JSON.stringify(ENTREES);
+    optimiser(ENTREES, REFERENTIELS, { objectif: 'autofinancement_cumule', cible: 0 });
+    expect(JSON.stringify(ENTREES)).toBe(empreinte);
   });
 });

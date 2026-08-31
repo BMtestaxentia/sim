@@ -702,6 +702,23 @@
         </div>
       </section>
 
+      <!-- LE BOUTON. Il ne pose aucune question : son objectif est ecrit dans
+           sa phrase - que l operation se paie sur son horizon. Pour viser autre
+           chose, la recherche manuelle est juste en dessous. -->
+      <section class="bloc">
+        <h2 class="bloc__titre">Que faudrait-il pour que ça tienne&nbsp;?</h2>
+        <p class="sens-chapeau__texte">
+          Cherche le plus petit mouvement des hypothèses sur lesquelles vous avez la main
+          - le prix de revient et les subventions - pour que l’autofinancement cumulé
+          repasse au-dessus de zéro.
+        </p>
+        <div class="equilibre__question">
+          <button type="button" class="bouton bouton--principal" id="btn-optimiser">
+            Chercher la version qui tient</button>
+        </div>
+        <div class="optim" id="optim-reponse" data-restitution></div>
+      </section>
+
       <!-- La question posee a l envers : non plus « que se passe-t-il si »,
            mais « de combien faut-il bouger pour atteindre cela ». Meme
            catalogue de leviers, meme moteur, resolu par dichotomie. -->

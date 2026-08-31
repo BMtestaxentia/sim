@@ -52,8 +52,16 @@ const copier = (v) => JSON.parse(JSON.stringify(v));
  * essaye ». La difference est tout sauf cosmetique : elle separe un resultat
  * d'une absence de resultat.
  *
+ * `actionnable` distingue ce sur quoi le monteur a PRISE de ce qu il subit.
+ * Negocier un prix, aller chercher une subvention sont des decisions ; le
+ * Livret A, la vacance, les frais de gestion sont du contexte. Les deux
+ * comptent dans la tornade - savoir ce qui pese ne demande pas d'y pouvoir
+ * quelque chose - mais seuls les premiers ont leur place la ou on cherche quoi
+ * FAIRE.
+ *
  * @type {Array<{code: string, libelle: string, unite: 'relatif'|'points'|'annees',
- *   amplitude: number, appliquer: (c: {entrees: any, referentiels: any}, v: number) => void}>}
+ *   amplitude: number, actionnable?: boolean,
+ *   appliquer: (c: {entrees: any, referentiels: any}, v: number) => void}>}
  */
 export const LEVIERS = [
   {
@@ -77,6 +85,7 @@ export const LEVIERS = [
     libelle: 'Prix de revient',
     unite: 'relatif',
     amplitude: 0.05,
+    actionnable: true,
     appliquer: (c, v) => {
       let mordu = false;
       for (const p of c.entrees.postes_bilan ?? []) {
@@ -93,6 +102,7 @@ export const LEVIERS = [
     libelle: 'Subventions',
     unite: 'relatif',
     amplitude: 0.2,
+    actionnable: true,
     appliquer: (c, v) => {
       let mordu = false;
       for (const s of c.entrees.subventions ?? []) {
@@ -400,6 +410,10 @@ export const OBJECTIFS = [
     code: 'fonds_propres',
     libelle: 'Fonds propres appelés',
     unite: 'eur',
+    // `sens` dit dans quel sens on veut aller : -1, moins il y en a, mieux
+    // c'est. Sans lui, « atteindre la cible » ne veut rien dire - on ne sait
+    // pas si on la veut au-dessus ou en dessous.
+    sens: -1,
     cible_defaut: 0,
     lire: (r) => r?.indicateurs?.fonds_propres_eur ?? null,
   },
@@ -407,6 +421,7 @@ export const OBJECTIFS = [
     code: 'autofinancement_cumule',
     libelle: 'Autofinancement cumulé',
     unite: 'eur',
+    sens: 1,
     cible_defaut: 0,
     lire: cumulAutofinancement,
   },
@@ -414,6 +429,7 @@ export const OBJECTIFS = [
     code: 'creux_cumul',
     libelle: 'Creux du cumul',
     unite: 'eur',
+    sens: 1,
     cible_defaut: 0,
     lire: (r) => r?.exploitation?.indicateurs?.creux_cumul_eur ?? null,
   },
@@ -568,5 +584,175 @@ export function chercherEquilibre(entrees, referentiels, options) {
       milieu.ecart !== null && Math.abs(milieu.ecart) <= tolerance
         ? null
         : 'la dichotomie n’a pas convergé dans la tolérance demandée',
+  };
+}
+
+/**
+ * R-SENS-3 - RECHERCHE DE LA VERSION LA PLUS SOUTENABLE.
+ *
+ * « Optimiser » une operation ne veut rien dire tant qu on n a pas dit
+ * OPTIMISER QUOI, et surtout A QUEL PRIX. Maximiser l'autofinancement
+ * repondrait « supprimez la depense » ; minimiser les fonds propres,
+ * « demandez tout en subvention ». Les deux sont vrais et inutiles.
+ *
+ * La question utile est renversee : quel est le MOINDRE EFFORT qui fait tenir
+ * l'operation ? On se donne un objectif de tenue - l'autofinancement cumule
+ * repasse au-dessus de zero, par defaut - et on cherche le plus petit
+ * mouvement des leviers sur lesquels le monteur a prise.
+ *
+ * L'EFFORT est la mesure commune. Une variation brute ne se compare pas d'un
+ * levier a l autre : -12 % de prix de revient et +180 % de subventions ne sont
+ * pas du meme ordre de difficulte. Chaque levier declare une amplitude de
+ * reference - son « cran » -, et l effort est le nombre de crans a parcourir.
+ * Deux crans de prix, c est -10 % : dur mais discutable. Neuf crans de
+ * subvention, c est une autre operation.
+ *
+ * Trois reponses possibles, et la troisieme compte autant que les autres :
+ *
+   - l'operation tient deja. On le dit, avec la marge ;
+ *   - un levier seul suffit, ou une combinaison des deux. On donne le chemin ;
+ *   - rien n'y arrive dans les limites explorees. On le dit, avec ce que
+ *     l effort maximal permet quand meme d atteindre. Un outil qui ne sait pas
+ *     dire non fait prendre des decisions sur du vent.
+ *
+ * La COMBINAISON partage l effort a parts egales entre les leviers : chacun
+ * avance du meme nombre de crans, dans le sens qui ameliore. Ce n est pas la
+ * seule repartition possible, c est la plus honnete a defaut de savoir ce qui
+ * coute le plus cher a l'organisme - et elle se lit d'une phrase.
+ *
+ * @param {any} entrees
+ * @param {any} referentiels
+ * @param {{objectif?: string, cible?: number, leviers?: string[],
+ *   effort_max?: number, contexte?: any}} [options]
+ */
+export function optimiser(entrees, referentiels, options = {}) {
+  const objectif = objectifDe(options.objectif ?? 'autofinancement_cumule');
+  if (!objectif) throw new Error(`Objectif inconnu : ${options.objectif}`);
+  const cible = options.cible ?? objectif.cible_defaut;
+  const codes = options.leviers ?? LEVIERS.filter((l) => l.actionnable).map((l) => l.code);
+  // Quatre crans : au-dela, ce n est plus la meme operation. La borne se
+  // remonte a l appel pour qui veut explorer plus loin.
+  const effortMax = options.effort_max ?? 4;
+
+  const lire = (r) => (r ? objectif.lire(r, options.contexte) : null);
+  const satisfait = (v) =>
+    v !== null && (objectif.sens === 1 ? v >= cible : v <= cible);
+
+  /** Applique un effort - en crans - a plusieurs leviers a la fois. */
+  const essayer = (mouvements) => {
+    const contexte = { entrees: copier(entrees), referentiels: copier(referentiels) };
+    let mordu = mouvements.length === 0;
+    for (const { code, variation } of mouvements) {
+      const levier = levierDe(code);
+      if (!levier || variation === 0) continue;
+      if (levier.appliquer(contexte, variation) !== false) mordu = true;
+    }
+    try {
+      return { valeur: lire(calculer(contexte.entrees, contexte.referentiels)), mordu };
+    } catch {
+      return { valeur: null, mordu };
+    }
+  };
+
+  const depart = essayer([]);
+  if (satisfait(depart.valeur)) {
+    return {
+      etat: 'deja',
+      objectif,
+      cible,
+      valeur: depart.valeur,
+      marge: depart.valeur - cible,
+      pistes: [],
+      combinaison: null,
+    };
+  }
+
+  // SENS D AMELIORATION de chaque levier, mesure et non suppose : baisser un
+  // prix de revient aide, baisser une subvention nuit, et rien ne dit qu un
+  // levier futur suivra la meme regle. Deux passages suffisent a le savoir.
+  const utiles = [];
+  for (const code of codes) {
+    const levier = levierDe(code);
+    if (!levier) continue;
+    const bas = essayer([{ code, variation: -levier.amplitude }]);
+    const haut = essayer([{ code, variation: levier.amplitude }]);
+    if (!bas.mordu && !haut.mordu) {
+      utiles.push({ code, libelle: levier.libelle, levier, sens: 0, raison: 'sans prise' });
+      continue;
+    }
+    if (bas.valeur === null || haut.valeur === null) continue;
+    const mieuxEnHaut =
+      objectif.sens === 1 ? haut.valeur > bas.valeur : haut.valeur < bas.valeur;
+    utiles.push({ code, libelle: levier.libelle, levier, sens: mieuxEnHaut ? 1 : -1 });
+  }
+
+  /** Plus petit effort, en crans, qui satisfait - ou `null`. */
+  const chercherEffort = (mouvementsPour) => {
+    const extreme = essayer(mouvementsPour(effortMax));
+    if (!satisfait(extreme.valeur)) return { trouve: false, extreme: extreme.valeur };
+    let bas = 0;
+    let haut = effortMax;
+    let valeur = extreme.valeur;
+    // Vingt-cinq resserrements : la precision tombe sous le millieme de cran,
+    // bien plus fin que ce qu une negociation sait tenir.
+    for (let k = 0; k < 25; k++) {
+      const milieu = (bas + haut) / 2;
+      const essai = essayer(mouvementsPour(milieu));
+      if (satisfait(essai.valeur)) {
+        haut = milieu;
+        valeur = essai.valeur;
+      } else {
+        bas = milieu;
+      }
+    }
+    return { trouve: true, effort: haut, valeur };
+  };
+
+  const pistes = utiles
+    .filter((u) => u.sens !== 0)
+    .map((u) => {
+      const r = chercherEffort((e) => [{ code: u.code, variation: u.sens * e * u.levier.amplitude }]);
+      return {
+        code: u.code,
+        libelle: u.libelle,
+        unite: u.levier.unite,
+        amplitude: u.levier.amplitude,
+        ...r,
+        variation: r.trouve ? u.sens * r.effort * u.levier.amplitude : null,
+      };
+    })
+    .sort((a, b) => (a.trouve === b.trouve ? (a.effort ?? 0) - (b.effort ?? 0) : a.trouve ? -1 : 1));
+
+  const ensemble = utiles.filter((u) => u.sens !== 0);
+  const combinaison =
+    ensemble.length > 1
+      ? (() => {
+          const r = chercherEffort((e) =>
+            ensemble.map((u) => ({ code: u.code, variation: u.sens * e * u.levier.amplitude })),
+          );
+          return {
+            ...r,
+            mouvements: r.trouve
+              ? ensemble.map((u) => ({
+                  code: u.code,
+                  libelle: u.libelle,
+                  unite: u.levier.unite,
+                  variation: u.sens * r.effort * u.levier.amplitude,
+                }))
+              : [],
+          };
+        })()
+      : null;
+
+  const possible = pistes.some((p) => p.trouve) || combinaison?.trouve;
+  return {
+    etat: possible ? 'atteignable' : 'hors de portee',
+    objectif,
+    cible,
+    valeur: depart.valeur,
+    effort_max: effortMax,
+    sansPrise: utiles.filter((u) => u.sens === 0).map((u) => u.libelle),
+    pistes,
+    combinaison,
   };
 }

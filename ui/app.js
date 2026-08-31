@@ -7659,44 +7659,105 @@ function rendreSensibilite() {
   derniereTornade = t;
 
   const ref = document.getElementById('sens-reference');
+  const essayes = t.barres.filter((b) => b.applique);
+  const muets = t.barres.filter((b) => !b.applique);
   if (ref) {
-    ref.textContent = `⚙ Référence : ${valeurIndicateur(t.reference, t.indicateur.unite)}. ` +
-      `${t.barres.filter((b) => b.applique).length} leviers essayés sur ${t.barres.length}.`;
+    // La REFERENCE en toutes lettres et en gros : tout le reste de la page se
+    // lit par rapport a elle, elle ne peut pas etre une note de bas de page.
+    ref.innerHTML =
+      `<span class="sens-chapeau__valeur">${att(
+        valeurIndicateur(t.reference, t.indicateur.unite),
+      )}</span>` +
+      `<span class="sens-chapeau__legende">${att(t.indicateur.libelle.toLowerCase())}` +
+      `${anneeCumul ? ` en ${anneeCumul}` : ''}, tel que l’opération est saisie aujourd’hui</span>`;
   }
 
-  // L echelle est commune a toutes les barres : c est ce qui permet de les
-  // comparer d un coup d oeil, et c est tout l interet de la figure.
-  const maxi = Math.max(...t.barres.map((b) => b.ecart ?? 0), 1);
-  const bornes = t.barres.flatMap((b) => [b.bas, b.haut, t.reference]).filter((x) => !nul(x));
+  // ECHELLE COMMUNE a toutes les barres : c est ce qui permet de les comparer
+  // d un coup d oeil, et c est tout l interet de la figure. Elle englobe la
+  // reference, sans quoi son trait sortirait du cadre.
+  const bornes = essayes.flatMap((b) => [b.bas, b.haut]).concat([t.reference]).filter((x) => !nul(x));
   const min = Math.min(...bornes);
-  const etendue = Math.max(...bornes) - min || 1;
+  const max = Math.max(...bornes);
+  const etendue = max - min || 1;
   const part = (v) => ((v - min) / etendue) * 100;
+  const rr = part(t.reference);
 
-  zone.innerHTML = t.barres
-    .map((b) => {
-      if (!b.applique) {
-        return `<div class="tornade__ligne tornade__ligne--muette">
-          <span class="tornade__nom">${att(b.libelle)}</span>
-          <span class="tornade__piste"><span class="tornade__absent">levier sans prise sur cette opération</span></span>
-          <span class="tornade__poids">-</span></div>`;
-      }
-      const g = Math.min(part(b.bas), part(b.haut));
-      const d = Math.max(part(b.bas), part(b.haut));
-      const levier = LEVIERS.find((l) => l.code === b.code);
-      return `<button type="button" class="tornade__ligne${
-        levierDeplie === b.code ? ' tornade__ligne--ouverte' : ''
-      }" data-levier="${att(b.code)}">
-        <span class="tornade__nom">${att(b.libelle)}
-          <small>${att(amplitudeLisible(levier, b.amplitude))}</small></span>
-        <span class="tornade__piste">
-          <span class="tornade__barre" style="left:${g.toFixed(2)}%;width:${(d - g).toFixed(2)}%"></span>
-          <span class="tornade__reference" style="left:${part(t.reference).toFixed(2)}%"></span>
-        </span>
-        <span class="tornade__poids">${valeurIndicateur(b.ecart, t.indicateur.unite)}</span>
-      </button>`;
-    })
-    .join('');
+  // SENS de lecture : +1 dit qu une hausse est une bonne nouvelle. La moitie
+  // de barre qui va du bon cote se colore en vert, l autre en rouge. Sans
+  // cela une barre ne dit que « ca bouge », jamais « ca se degrade » - et
+  // c'est pourtant la seule chose qu'on veut savoir devant un directoire.
+  const favorableADroite = t.indicateur.sens === 1;
 
+  zone.innerHTML =
+    essayes
+      .map((b) => {
+        const g = Math.min(part(b.bas), part(b.haut));
+        const d = Math.max(part(b.bas), part(b.haut));
+        const levier = LEVIERS.find((l) => l.code === b.code);
+        // Deux segments : ce qui tombe sous la reference, ce qui la depasse.
+        const sousRef = [g, Math.min(d, rr)];
+        const surRef = [Math.max(g, rr), d];
+        const segment = (bornes, bon) =>
+          bornes[1] - bornes[0] > 0.05
+            ? `<span class="tornade__segment tornade__segment--${bon ? 'bon' : 'mauvais'}"` +
+              ` style="left:${bornes[0].toFixed(2)}%;width:${(bornes[1] - bornes[0]).toFixed(2)}%"></span>`
+            : '';
+        const ouverte = levierDeplie === b.code;
+        return `<button type="button" class="tornade__ligne${
+          ouverte ? ' tornade__ligne--ouverte' : ''
+        }" data-levier="${att(b.code)}" aria-expanded="${ouverte}">
+          <span class="tornade__nom">${att(b.libelle)}
+            <small>testé à ${att(amplitudeLisible(levier, b.amplitude))}</small></span>
+          <span class="tornade__extreme num">${att(valeurIndicateur(Math.min(b.bas, b.haut), t.indicateur.unite))}</span>
+          <span class="tornade__piste">
+            ${segment(sousRef, !favorableADroite)}
+            ${segment(surRef, favorableADroite)}
+            <span class="tornade__reference" style="left:${rr.toFixed(2)}%"></span>
+          </span>
+          <span class="tornade__extreme num">${att(valeurIndicateur(Math.max(b.bas, b.haut), t.indicateur.unite))}</span>
+          <span class="tornade__poids">${att(valeurIndicateur(b.ecart, t.indicateur.unite))}
+            <small>d’écart</small></span>
+        </button>`;
+      })
+      .join('') +
+    // La REGLE sous les barres : sans elle, on voit qu une barre est plus
+    // longue qu une autre sans savoir de combien a combien.
+    // La regle est une RANGEE DE LA MEME GRILLE, cellules vides comprises :
+    // caler ses bords a coups de marges codees en dur ignorait les gouttieres et
+    // la decalait de huit pixels a gauche, cent vingt-quatre a droite.
+    `<div class="tornade__regle">
+      <span></span><span></span>
+      <span class="tornade__regle__piste">
+        <span class="num">${att(valeurIndicateur(min, t.indicateur.unite))}</span>
+        <span class="tornade__regle__ref" style="left:${rr.toFixed(2)}%">référence</span>
+        <span class="num">${att(valeurIndicateur(max, t.indicateur.unite))}</span>
+      </span>
+      <span></span><span></span>
+    </div>` +
+    // Les leviers sans prise sont REGROUPES a part. Meles aux autres, ils se
+    // lisaient comme des leviers sans effet, ce qui est le contraire de ce
+    // qu'ils disent.
+    (muets.length
+      ? `<p class="tornade__muets">Sans prise sur cette opération : ${muets
+          .map((b) => att(b.libelle))
+          .join(', ')}. ` +
+        `<span>Rien n’a été essayé de ce côté-là - l’opération ne porte pas de quoi les faire varier.</span></p>`
+      : '');
+
+  const lecture = document.getElementById('sens-lecture');
+  if (lecture) {
+    const tete = essayes[0];
+    lecture.innerHTML = tete
+      ? `⚙ <strong>${att(tete.libelle)}</strong> pèse le plus : à ${att(
+          amplitudeLisible(
+            LEVIERS.find((l) => l.code === tete.code),
+            tete.amplitude,
+          ),
+        )} près, il déplace ${att(t.indicateur.libelle.toLowerCase())} de ` +
+        `<strong>${att(valeurIndicateur(tete.ecart, t.indicateur.unite))}</strong>. ` +
+        `Cliquez une ligne pour voir le détail de ses variations.`
+      : '';
+  }
   rendreBalayage();
 }
 

@@ -1364,46 +1364,124 @@ body.sans-simulation .entete__dossier { display: none; }
 .barre-perimetre .bandeau { flex: 1; margin-bottom: 0; justify-content: center; }
 .barre-perimetre .bascule[hidden] { display: none; }
 
-/* --- TORNADE ---------------------------------------------------------
-   Une barre par levier, toutes a la MEME echelle : c est ce qui permet de les
-   comparer d un coup d oeil, et c est tout l interet de la figure. Le trait
-   vertical marque la reference ; une barre qui la chevauche dit que le levier
-   fait basculer le resultat de part et d autre. */
-/* La question se lit comme une PHRASE : « amener X a Y en jouant sur Z ».
-   Trois champs sur une ligne, separes par les mots qui les relient, plutot
-   qu un formulaire en colonnes ou il faudrait deviner ce qui se combine. */
-.equilibre__question { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
-.equilibre__question .champ > span { color: var(--text-tertiary); font-size: 12px; }
-.equilibre__reponse { margin: 0; font-size: 13px; line-height: 1.6; }
-.equilibre__reponse strong { font-size: 15px; }
-.equilibre__reponse--vide { color: var(--text-tertiary); }
-.equilibre__reponse--hors { color: var(--warning-text); }
-.equilibre__reponse--sans { color: var(--text-tertiary); font-style: italic; }
+/* --- SENSIBILITE ------------------------------------------------------
+   Le chapeau porte la question et la reference. Il vient AVANT les barres :
+   une figure qu on lit sans savoir ce qu elle mesure ne se lit pas, elle se
+   devine. */
+.sens-chapeau {
+  display: grid; grid-template-columns: 1fr auto; gap: 6px 24px; align-items: start;
+}
+.sens-chapeau__texte {
+  margin: 4px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--text-secondary);
+  max-width: 62ch;
+}
+.sens-chapeau__reglages { display: flex; align-items: center; gap: 14px; }
+/* La reference occupe toute la largeur, sous les deux colonnes : c est la
+   valeur a laquelle tout le reste de la page se compare. */
+.sens-chapeau__reference {
+  grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px;
+  margin: 8px 0 0; padding-top: 10px; border-top: 1px solid var(--border-color);
+}
+.sens-chapeau__valeur {
+  font-size: 24px; font-weight: 800; letter-spacing: -0.02em;
+  color: var(--text-primary); font-variant-numeric: tabular-nums;
+}
+.sens-chapeau__legende { font-size: 12px; color: var(--text-tertiary); }
 
+/* --- LA TORNADE -------------------------------------------------------
+   Une ligne par hypothese, toutes a la MEME echelle : c est ce qui permet de
+   les comparer d un coup d oeil, et c est tout l interet de la figure.
+
+   Cinq colonnes, dans l ordre ou on les lit : ce qui varie, la valeur basse,
+   la piste, la valeur haute, le poids. Les deux valeurs encadrent la piste
+   au lieu de la resumer plus loin - on lit « de tant a tant » sans deplacer
+   les yeux. */
 .tornade__ligne {
-  display: grid; grid-template-columns: 190px 1fr 120px; align-items: center;
-  gap: 12px; width: 100%; padding: 6px 8px; border: none; border-radius: var(--radius-sm);
-  background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  display: grid;
+  grid-template-columns: 190px 96px minmax(120px, 1fr) 96px 118px;
+  align-items: center; gap: 10px; width: 100%;
+  padding: 7px 8px; border: none; border-radius: var(--radius-sm);
+  background: transparent; color: inherit; font: inherit; text-align: left;
+  cursor: pointer;
 }
 .tornade__ligne:hover { background: var(--bg-tertiary); }
 .tornade__ligne--ouverte { background: var(--bg-tertiary); box-shadow: inset 2px 0 0 var(--cat-1); }
-.tornade__ligne--muette { cursor: default; opacity: 0.55; }
-.tornade__nom { font-size: 12px; font-weight: 600; }
-.tornade__nom small { display: block; font-weight: 500; color: var(--text-tertiary); font-size: 10.5px; }
-.tornade__piste { position: relative; height: 18px; border-radius: 3px; background: var(--bg-tertiary); }
-.tornade__ligne:hover .tornade__piste { background: var(--bg-secondary); }
-.tornade__barre {
-  position: absolute; top: 3px; bottom: 3px; min-width: 2px;
-  border-radius: 2px; background: var(--cat-1);
+.tornade__nom { font-size: 12.5px; font-weight: 650; line-height: 1.3; }
+.tornade__nom small {
+  display: block; font-weight: 500; color: var(--text-tertiary); font-size: 10.5px;
 }
-/* Le trait de reference passe PAR-DESSUS la barre : c est un repere de lecture,
-   pas une donnee, et il doit rester visible meme au milieu d un aplat. */
+/* Les deux extremes sont GRIS : ils bornent la piste, ils ne sont pas la
+   reponse. Le poids, lui, est la reponse - il porte le contraste. */
+.tornade__extreme {
+  font-size: 11.5px; color: var(--text-tertiary); font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tornade__ligne .tornade__extreme:nth-of-type(1) { text-align: right; }
+.tornade__piste {
+  position: relative; height: 20px; border-radius: 3px; background: var(--bg-tertiary);
+}
+.tornade__ligne:hover .tornade__piste { background: var(--bg-secondary); }
+/* Deux segments par barre, de part et d autre de la reference. La couleur ne
+   decore pas : elle dit de quel cote la variation ameliore l operation et de
+   quel cote elle la degrade. Une barre monochrome ne disait que « ca bouge ». */
+.tornade__segment { position: absolute; top: 3px; bottom: 3px; min-width: 2px; }
+.tornade__segment--bon {
+  background: color-mix(in srgb, var(--success-accent) 70%, transparent);
+  border-radius: 0 2px 2px 0;
+}
+.tornade__segment--mauvais {
+  background: color-mix(in srgb, var(--danger-accent) 70%, transparent);
+  border-radius: 2px 0 0 2px;
+}
+/* Le trait de reference passe PAR-DESSUS les segments : c est un repere de
+   lecture, pas une donnee, et il doit rester visible au milieu d un aplat. */
 .tornade__reference {
-  position: absolute; top: -2px; bottom: -2px; width: 2px;
+  position: absolute; top: -3px; bottom: -3px; width: 2px;
   background: var(--text-primary); transform: translateX(-1px);
 }
-.tornade__poids { text-align: right; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.tornade__absent { font-size: 11px; color: var(--text-tertiary); padding-left: 4px; }
+.tornade__poids {
+  text-align: right; font-size: 13px; font-weight: 800;
+  font-variant-numeric: tabular-nums; line-height: 1.2;
+}
+.tornade__poids small {
+  display: block; font-size: 10px; font-weight: 500; color: var(--text-tertiary);
+}
+
+/* LA REGLE. Sans elle on voit qu une barre est plus longue qu une autre sans
+   savoir de combien a combien. Elle se cale sur la colonne de la piste. */
+.tornade__regle {
+  /* MEME GRILLE que les rangees, gouttieres et remplissage compris : c est la
+     seule facon de garantir que la regle tombe pile sous la piste, quelles que
+     soient les largeurs. */
+  display: grid;
+  grid-template-columns: 190px 96px minmax(120px, 1fr) 96px 118px;
+  gap: 10px; padding: 0 8px; margin-top: 2px;
+}
+.tornade__regle__piste {
+  position: relative; display: flex; justify-content: space-between;
+  padding-top: 6px; border-top: 1px solid var(--border-color);
+  font-size: 10.5px; color: var(--text-tertiary);
+}
+.tornade__regle__ref {
+  position: absolute; top: 6px; transform: translateX(-50%);
+  color: var(--text-secondary); font-weight: 600; white-space: nowrap;
+}
+
+/* Les leviers sans prise, REGROUPES en une phrase. Meles aux barres ils se
+   lisaient comme des leviers sans effet, ce qui est le contraire de ce qu ils
+   disent : ils n ont pas ete essayes. */
+.tornade__muets {
+  margin: 14px 0 0; padding: 9px 11px; border-radius: var(--radius-sm);
+  background: var(--bg-tertiary); font-size: 11.5px; color: var(--text-secondary);
+}
+.tornade__muets span { color: var(--text-tertiary); }
+
+/* La ligne de reference du balayage : celle dont la variation est nulle. */
+.poste--reference td { background: var(--bg-tertiary); font-weight: 700; }
+/* Un champ dans une barre : le libelle a gauche, le champ a sa suite. */
+.champ--enligne { flex-direction: row; align-items: center; gap: 8px; margin: 0; }
+.champ--enligne > span { white-space: nowrap; }
+.aide--enligne { margin: 0; }
 /* La ligne de reference du balayage : celle dont la variation est nulle. */
 .poste--reference td { background: var(--bg-tertiary); font-weight: 700; }
 /* Un champ dans une barre : le libelle a gauche, le champ a sa suite. */
@@ -3240,35 +3318,59 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
            coute dix-sept passages du moteur, et la relancer a chaque frappe
            rendrait la saisie poussive pour un chiffre que personne ne regarde
            a cet instant. -->
-      <div class="barre-perimetre">
-        <label class="champ champ--enligne">
-          <span>Indicateur observé</span>
-          <select id="sens-indicateur"></select>
-        </label>
-        <label class="champ champ--enligne">
-          <span>Cumul lu en</span>
-          <input type="text" inputmode="numeric" id="sens-annee" size="6" />
-        </label>
-        <p class="aide aide--enligne" id="sens-reference"></p>
-      </div>
+
+      <!-- CHAPEAU. La page pose sa question en toutes lettres avant de montrer
+           quoi que ce soit : sans elle, le lecteur doit reconstituer ce qu on
+           lui demande de regarder a partir de barres. -->
+      <section class="bloc sens-chapeau">
+        <div class="sens-chapeau__question">
+          <h2 class="bloc__titre">Qu’est-ce qui fait bouger cette opération&nbsp;?</h2>
+          <p class="sens-chapeau__texte">
+            Chaque hypothèse est poussée vers le haut puis vers le bas, et l’opération
+            entièrement recalculée à chaque fois. Les plus lourdes sont en tête.
+          </p>
+        </div>
+        <div class="sens-chapeau__reglages">
+          <label class="champ champ--enligne">
+            <span>Je regarde</span>
+            <select id="sens-indicateur"></select>
+          </label>
+          <label class="champ champ--enligne" id="champ-annee">
+            <span>à l’année</span>
+            <input type="text" inputmode="numeric" id="sens-annee" size="6" />
+          </label>
+        </div>
+        <p class="sens-chapeau__reference" id="sens-reference" data-restitution></p>
+      </section>
 
       <section class="bloc">
-        <h2 class="bloc__titre">Ce qui pèse sur le résultat</h2>
+        <h2 class="bloc__titre">Ce qui pèse le plus</h2>
         <div id="tornade" data-restitution></div>
-        <p class="aide">
-          ⚙ Chaque barre montre l’écart de l’indicateur entre les deux bornes du levier.
-          Le trait vertical marque la valeur de référence. Cliquer une barre en déplie le détail.
-        </p>
+        <p class="aide" id="sens-lecture"></p>
+      </section>
+
+      <section class="bloc" id="bloc-balayage" hidden>
+        <h2 class="bloc__titre" id="titre-balayage">Le détail</h2>
+        <div class="table-defilante">
+          <table class="tableau" id="table-balayage">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </section>
 
       <!-- La question posee a l envers : non plus « que se passe-t-il si »,
            mais « de combien faut-il bouger pour atteindre cela ». Meme
            catalogue de leviers, meme moteur, resolu par dichotomie. -->
       <section class="bloc">
-        <h2 class="bloc__titre">Recherche d’équilibre</h2>
+        <h2 class="bloc__titre">Et pour viser une valeur précise&nbsp;?</h2>
+        <p class="sens-chapeau__texte">
+          Le tableau ci-dessus dit ce qui pèse. Celui-ci répond à l’inverse&nbsp;:
+          de combien faut-il bouger une hypothèse pour arriver où l’on veut.
+        </p>
         <div class="equilibre__question">
           <label class="champ champ--enligne">
-            <span>Amener</span>
+            <span>Amener le</span>
             <select id="eq-objectif"></select>
           </label>
           <label class="champ champ--enligne">
@@ -3285,15 +3387,6 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
         <p class="equilibre__reponse" id="eq-reponse" data-restitution></p>
       </section>
 
-      <section class="bloc" id="bloc-balayage" hidden>
-        <h2 class="bloc__titre" id="titre-balayage">Balayage</h2>
-        <div class="table-defilante">
-          <table class="tableau" id="table-balayage">
-            <thead></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
     </main>
 
     <main class="ecran" id="ecran-exports" role="tabpanel" hidden>
@@ -17390,44 +17483,105 @@ function rendreSensibilite() {
   derniereTornade = t;
 
   const ref = document.getElementById('sens-reference');
+  const essayes = t.barres.filter((b) => b.applique);
+  const muets = t.barres.filter((b) => !b.applique);
   if (ref) {
-    ref.textContent = `⚙ Référence : ${valeurIndicateur(t.reference, t.indicateur.unite)}. ` +
-      `${t.barres.filter((b) => b.applique).length} leviers essayés sur ${t.barres.length}.`;
+    // La REFERENCE en toutes lettres et en gros : tout le reste de la page se
+    // lit par rapport a elle, elle ne peut pas etre une note de bas de page.
+    ref.innerHTML =
+      `<span class="sens-chapeau__valeur">${att(
+        valeurIndicateur(t.reference, t.indicateur.unite),
+      )}</span>` +
+      `<span class="sens-chapeau__legende">${att(t.indicateur.libelle.toLowerCase())}` +
+      `${anneeCumul ? ` en ${anneeCumul}` : ''}, tel que l’opération est saisie aujourd’hui</span>`;
   }
 
-  // L echelle est commune a toutes les barres : c est ce qui permet de les
-  // comparer d un coup d oeil, et c est tout l interet de la figure.
-  const maxi = Math.max(...t.barres.map((b) => b.ecart ?? 0), 1);
-  const bornes = t.barres.flatMap((b) => [b.bas, b.haut, t.reference]).filter((x) => !nul(x));
+  // ECHELLE COMMUNE a toutes les barres : c est ce qui permet de les comparer
+  // d un coup d oeil, et c est tout l interet de la figure. Elle englobe la
+  // reference, sans quoi son trait sortirait du cadre.
+  const bornes = essayes.flatMap((b) => [b.bas, b.haut]).concat([t.reference]).filter((x) => !nul(x));
   const min = Math.min(...bornes);
-  const etendue = Math.max(...bornes) - min || 1;
+  const max = Math.max(...bornes);
+  const etendue = max - min || 1;
   const part = (v) => ((v - min) / etendue) * 100;
+  const rr = part(t.reference);
 
-  zone.innerHTML = t.barres
-    .map((b) => {
-      if (!b.applique) {
-        return `<div class="tornade__ligne tornade__ligne--muette">
-          <span class="tornade__nom">${att(b.libelle)}</span>
-          <span class="tornade__piste"><span class="tornade__absent">levier sans prise sur cette opération</span></span>
-          <span class="tornade__poids">-</span></div>`;
-      }
-      const g = Math.min(part(b.bas), part(b.haut));
-      const d = Math.max(part(b.bas), part(b.haut));
-      const levier = LEVIERS.find((l) => l.code === b.code);
-      return `<button type="button" class="tornade__ligne${
-        levierDeplie === b.code ? ' tornade__ligne--ouverte' : ''
-      }" data-levier="${att(b.code)}">
-        <span class="tornade__nom">${att(b.libelle)}
-          <small>${att(amplitudeLisible(levier, b.amplitude))}</small></span>
-        <span class="tornade__piste">
-          <span class="tornade__barre" style="left:${g.toFixed(2)}%;width:${(d - g).toFixed(2)}%"></span>
-          <span class="tornade__reference" style="left:${part(t.reference).toFixed(2)}%"></span>
-        </span>
-        <span class="tornade__poids">${valeurIndicateur(b.ecart, t.indicateur.unite)}</span>
-      </button>`;
-    })
-    .join('');
+  // SENS de lecture : +1 dit qu une hausse est une bonne nouvelle. La moitie
+  // de barre qui va du bon cote se colore en vert, l autre en rouge. Sans
+  // cela une barre ne dit que « ca bouge », jamais « ca se degrade » - et
+  // c'est pourtant la seule chose qu'on veut savoir devant un directoire.
+  const favorableADroite = t.indicateur.sens === 1;
 
+  zone.innerHTML =
+    essayes
+      .map((b) => {
+        const g = Math.min(part(b.bas), part(b.haut));
+        const d = Math.max(part(b.bas), part(b.haut));
+        const levier = LEVIERS.find((l) => l.code === b.code);
+        // Deux segments : ce qui tombe sous la reference, ce qui la depasse.
+        const sousRef = [g, Math.min(d, rr)];
+        const surRef = [Math.max(g, rr), d];
+        const segment = (bornes, bon) =>
+          bornes[1] - bornes[0] > 0.05
+            ? `<span class="tornade__segment tornade__segment--${bon ? 'bon' : 'mauvais'}"` +
+              ` style="left:${bornes[0].toFixed(2)}%;width:${(bornes[1] - bornes[0]).toFixed(2)}%"></span>`
+            : '';
+        const ouverte = levierDeplie === b.code;
+        return `<button type="button" class="tornade__ligne${
+          ouverte ? ' tornade__ligne--ouverte' : ''
+        }" data-levier="${att(b.code)}" aria-expanded="${ouverte}">
+          <span class="tornade__nom">${att(b.libelle)}
+            <small>testé à ${att(amplitudeLisible(levier, b.amplitude))}</small></span>
+          <span class="tornade__extreme num">${att(valeurIndicateur(Math.min(b.bas, b.haut), t.indicateur.unite))}</span>
+          <span class="tornade__piste">
+            ${segment(sousRef, !favorableADroite)}
+            ${segment(surRef, favorableADroite)}
+            <span class="tornade__reference" style="left:${rr.toFixed(2)}%"></span>
+          </span>
+          <span class="tornade__extreme num">${att(valeurIndicateur(Math.max(b.bas, b.haut), t.indicateur.unite))}</span>
+          <span class="tornade__poids">${att(valeurIndicateur(b.ecart, t.indicateur.unite))}
+            <small>d’écart</small></span>
+        </button>`;
+      })
+      .join('') +
+    // La REGLE sous les barres : sans elle, on voit qu une barre est plus
+    // longue qu une autre sans savoir de combien a combien.
+    // La regle est une RANGEE DE LA MEME GRILLE, cellules vides comprises :
+    // caler ses bords a coups de marges codees en dur ignorait les gouttieres et
+    // la decalait de huit pixels a gauche, cent vingt-quatre a droite.
+    `<div class="tornade__regle">
+      <span></span><span></span>
+      <span class="tornade__regle__piste">
+        <span class="num">${att(valeurIndicateur(min, t.indicateur.unite))}</span>
+        <span class="tornade__regle__ref" style="left:${rr.toFixed(2)}%">référence</span>
+        <span class="num">${att(valeurIndicateur(max, t.indicateur.unite))}</span>
+      </span>
+      <span></span><span></span>
+    </div>` +
+    // Les leviers sans prise sont REGROUPES a part. Meles aux autres, ils se
+    // lisaient comme des leviers sans effet, ce qui est le contraire de ce
+    // qu'ils disent.
+    (muets.length
+      ? `<p class="tornade__muets">Sans prise sur cette opération : ${muets
+          .map((b) => att(b.libelle))
+          .join(', ')}. ` +
+        `<span>Rien n’a été essayé de ce côté-là - l’opération ne porte pas de quoi les faire varier.</span></p>`
+      : '');
+
+  const lecture = document.getElementById('sens-lecture');
+  if (lecture) {
+    const tete = essayes[0];
+    lecture.innerHTML = tete
+      ? `⚙ <strong>${att(tete.libelle)}</strong> pèse le plus : à ${att(
+          amplitudeLisible(
+            LEVIERS.find((l) => l.code === tete.code),
+            tete.amplitude,
+          ),
+        )} près, il déplace ${att(t.indicateur.libelle.toLowerCase())} de ` +
+        `<strong>${att(valeurIndicateur(tete.ecart, t.indicateur.unite))}</strong>. ` +
+        `Cliquez une ligne pour voir le détail de ses variations.`
+      : '';
+  }
   rendreBalayage();
 }
 

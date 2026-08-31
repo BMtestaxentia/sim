@@ -661,35 +661,59 @@
            coute dix-sept passages du moteur, et la relancer a chaque frappe
            rendrait la saisie poussive pour un chiffre que personne ne regarde
            a cet instant. -->
-      <div class="barre-perimetre">
-        <label class="champ champ--enligne">
-          <span>Indicateur observé</span>
-          <select id="sens-indicateur"></select>
-        </label>
-        <label class="champ champ--enligne">
-          <span>Cumul lu en</span>
-          <input type="text" inputmode="numeric" id="sens-annee" size="6" />
-        </label>
-        <p class="aide aide--enligne" id="sens-reference"></p>
-      </div>
+
+      <!-- CHAPEAU. La page pose sa question en toutes lettres avant de montrer
+           quoi que ce soit : sans elle, le lecteur doit reconstituer ce qu on
+           lui demande de regarder a partir de barres. -->
+      <section class="bloc sens-chapeau">
+        <div class="sens-chapeau__question">
+          <h2 class="bloc__titre">Qu’est-ce qui fait bouger cette opération&nbsp;?</h2>
+          <p class="sens-chapeau__texte">
+            Chaque hypothèse est poussée vers le haut puis vers le bas, et l’opération
+            entièrement recalculée à chaque fois. Les plus lourdes sont en tête.
+          </p>
+        </div>
+        <div class="sens-chapeau__reglages">
+          <label class="champ champ--enligne">
+            <span>Je regarde</span>
+            <select id="sens-indicateur"></select>
+          </label>
+          <label class="champ champ--enligne" id="champ-annee">
+            <span>à l’année</span>
+            <input type="text" inputmode="numeric" id="sens-annee" size="6" />
+          </label>
+        </div>
+        <p class="sens-chapeau__reference" id="sens-reference" data-restitution></p>
+      </section>
 
       <section class="bloc">
-        <h2 class="bloc__titre">Ce qui pèse sur le résultat</h2>
+        <h2 class="bloc__titre">Ce qui pèse le plus</h2>
         <div id="tornade" data-restitution></div>
-        <p class="aide">
-          ⚙ Chaque barre montre l’écart de l’indicateur entre les deux bornes du levier.
-          Le trait vertical marque la valeur de référence. Cliquer une barre en déplie le détail.
-        </p>
+        <p class="aide" id="sens-lecture"></p>
+      </section>
+
+      <section class="bloc" id="bloc-balayage" hidden>
+        <h2 class="bloc__titre" id="titre-balayage">Le détail</h2>
+        <div class="table-defilante">
+          <table class="tableau" id="table-balayage">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </section>
 
       <!-- La question posee a l envers : non plus « que se passe-t-il si »,
            mais « de combien faut-il bouger pour atteindre cela ». Meme
            catalogue de leviers, meme moteur, resolu par dichotomie. -->
       <section class="bloc">
-        <h2 class="bloc__titre">Recherche d’équilibre</h2>
+        <h2 class="bloc__titre">Et pour viser une valeur précise&nbsp;?</h2>
+        <p class="sens-chapeau__texte">
+          Le tableau ci-dessus dit ce qui pèse. Celui-ci répond à l’inverse&nbsp;:
+          de combien faut-il bouger une hypothèse pour arriver où l’on veut.
+        </p>
         <div class="equilibre__question">
           <label class="champ champ--enligne">
-            <span>Amener</span>
+            <span>Amener le</span>
             <select id="eq-objectif"></select>
           </label>
           <label class="champ champ--enligne">
@@ -706,15 +730,6 @@
         <p class="equilibre__reponse" id="eq-reponse" data-restitution></p>
       </section>
 
-      <section class="bloc" id="bloc-balayage" hidden>
-        <h2 class="bloc__titre" id="titre-balayage">Balayage</h2>
-        <div class="table-defilante">
-          <table class="tableau" id="table-balayage">
-            <thead></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
     </main>
 
     <main class="ecran" id="ecran-exports" role="tabpanel" hidden>

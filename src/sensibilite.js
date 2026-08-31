@@ -150,12 +150,44 @@ export const LEVIERS = [
   {
     code: 'frais_gestion',
     libelle: 'Frais de gestion',
-    unite: 'points',
-    amplitude: 0.01,
+    unite: 'relatif',
+    amplitude: 0.2,
     appliquer: (c, v) => {
+      // Trois assiettes possibles et UNE SEULE en place par operation (R-EXP) :
+      // en % des loyers, en % du prix de revient, ou en forfait. Le levier
+      // decale CELLE QUI GOUVERNE, en part relative - la meme discipline que le
+      // gros entretien.
+      //
+      // La version precedente ajoutait des points a la variante en % des
+      // loyers, quelle que soit l'assiette en place. Or les assiettes sont
+      // EXCLUSIVES dans le compte : poser un % des loyers sur une operation
+      // assise sur le prix de revient ne s'y ajoutait pas, il la REMPLACAIT.
+      // Sur un foyer a 0,3 % du prix de revient, « +1 pt de frais de gestion »
+      // troquait 11 500 EUR de charge annuelle contre 2 400, et la tornade
+      // montrait un levier qui AMELIORE l'operation en la chargeant.
+      //
+      // Le decalage RELATIF remplace les points pour la meme raison : un point
+      // vaut un septieme d'une assiette a 7 % des loyers et quatre fois une
+      // assiette a 0,3 % du prix de revient - la meme secousse ne peut pas
+      // s'ecrire en points sur les deux.
       const e = (c.entrees.exploitation ??= {});
-      e.frais_gestion_pct_loyers = Math.max(0, (e.frais_gestion_pct_loyers ?? 0) + v);
-      return true;
+      if ((e.frais_gestion_pct_loyers ?? 0) > 0) {
+        e.frais_gestion_pct_loyers *= 1 + v;
+        return true;
+      }
+      const surPR =
+        e.frais_gestion_pct_prix_revient ??
+        c.referentiels?.baremes?.charges_exploitation?.frais_gestion_pct_prix_revient ??
+        0;
+      if (surPR > 0) {
+        e.frais_gestion_pct_prix_revient = Math.max(0, surPR * (1 + v));
+        return true;
+      }
+      if ((e.frais_gestion_annuels_eur ?? 0) > 0) {
+        e.frais_gestion_annuels_eur *= 1 + v;
+        return true;
+      }
+      return false;
     },
   },
   {
@@ -268,6 +300,19 @@ export const INDICATEURS = [
     unite: 'nombre',
     sens: -1,
     lire: (r) => r?.exploitation?.indicateurs?.exercices_deficitaires ?? null,
+  },
+  {
+    // La meme grandeur que l'OBJECTIF du meme code : elle manquait au catalogue
+    // des indicateurs, si bien qu'une tornade ne savait pas dire ce qu'un
+    // levier fait aux fonds propres appeles alors que la recherche d'equilibre
+    // savait les viser. Les deux catalogues partagent desormais leurs trois
+    // grandeurs communes, et une vue peut passer de l'un a l'autre sans table
+    // de correspondance.
+    code: 'fonds_propres',
+    libelle: 'Fonds propres appelés',
+    unite: 'eur',
+    sens: -1,
+    lire: (r) => r?.indicateurs?.fonds_propres_eur ?? null,
   },
 ];
 

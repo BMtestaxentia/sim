@@ -1380,117 +1380,109 @@ body.sans-simulation .entete__dossier { display: none; }
 .barre-perimetre .bandeau { flex: 1; margin-bottom: 0; justify-content: center; }
 .barre-perimetre .bascule[hidden] { display: none; }
 
-/* --- SENSIBILITE ------------------------------------------------------
-   Le chapeau porte la question et la reference. Il vient AVANT les barres :
-   une figure qu on lit sans savoir ce qu elle mesure ne se lit pas, elle se
-   devine. */
-.sens-chapeau {
-  display: grid; grid-template-columns: 1fr auto; gap: 6px 24px; align-items: start;
-}
-.sens-chapeau__texte {
-  margin: 4px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--text-secondary);
-  max-width: 62ch;
-}
-.sens-chapeau__reglages { display: flex; align-items: center; gap: 14px; }
-/* La reference occupe toute la largeur, sous les deux colonnes : c est la
-   valeur a laquelle tout le reste de la page se compare. */
-.sens-chapeau__reference {
-  grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px;
-  margin: 8px 0 0; padding-top: 10px; border-top: 1px solid var(--border-color);
-}
-.sens-chapeau__valeur {
-  font-size: 24px; font-weight: 800; letter-spacing: -0.02em;
-  color: var(--text-primary); font-variant-numeric: tabular-nums;
-}
-.sens-chapeau__legende { font-size: 12px; color: var(--text-tertiary); }
+/* --- SENSIBILITE : LE DIAGNOSTIC --------------------------------------
+   L ecran repond avant qu on demande : verdict, points de bascule, tempete,
+   marges. Les briques de restitution (.optim, .indicateurs) sont celles du
+   reste de l appli ; ici ne vivent que les JAUGES DE BASCULE et leurs
+   dependances. */
 
-/* --- LA TORNADE -------------------------------------------------------
-   Une ligne par hypothese, toutes a la MEME echelle : c est ce qui permet de
-   les comparer d un coup d oeil, et c est tout l interet de la figure.
+/* Verdict rouge : l etat que .optim n avait pas - il connaissait le bon et
+   l avertissement, pas le constat d echec. */
+.optim--mauvais { border-left-color: var(--danger-accent); background: var(--danger-bg); }
+.optim--mauvais .optim__verdict { color: var(--danger-text); }
 
-   Cinq colonnes, dans l ordre ou on les lit : ce qui varie, la valeur basse,
-   la piste, la valeur haute, le poids. Les deux valeurs encadrent la piste
-   au lieu de la resumer plus loin - on lit « de tant a tant » sans deplacer
-   les yeux. */
-.tornade__ligne {
-  display: grid;
-  grid-template-columns: 190px 96px minmax(120px, 1fr) 96px 118px;
-  align-items: center; gap: 10px; width: 100%;
-  padding: 7px 8px; border: none; border-radius: var(--radius-sm);
-  background: transparent; color: inherit; font: inherit; text-align: left;
-  cursor: pointer;
+#lecture-sensibilite { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+#tuiles-sensibilite { margin-top: 12px; }
+#tuiles-sensibilite:empty { display: none; }
+
+/* --- LES JAUGES DE BASCULE --------------------------------------------
+   Une ligne par hypothese : son nom, la piste qui va de l hypothese actuelle
+   (a gauche) au bout de la plage exploree (a droite), et la phrase de seuil.
+   Le trait sur la piste est le POINT DE BASCULE : avant lui l operation
+   tient, apres elle casse. Plus il est a gauche, plus c est fragile - et
+   c est la distance qui classe les lignes. */
+#jauges-bascule { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.bascule__ligne {
+  display: grid; grid-template-columns: 230px minmax(160px, 1fr) 260px;
+  gap: 4px 18px; align-items: center;
+  width: 100%; text-align: left; font: inherit; color: inherit;
+  background: none; border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm); padding: 9px 12px; cursor: pointer;
 }
-.tornade__ligne:hover { background: var(--bg-tertiary); }
-.tornade__ligne--ouverte { background: var(--bg-tertiary); box-shadow: inset 2px 0 0 var(--cat-1); }
-.tornade__nom { font-size: 12.5px; font-weight: 650; line-height: 1.3; }
-.tornade__nom small {
-  display: block; font-weight: 500; color: var(--text-tertiary); font-size: 10.5px;
+.bascule__ligne:hover { background: var(--bg-tertiary); }
+.bascule__ligne--ouverte {
+  background: var(--bg-tertiary);
+  box-shadow: inset 2px 0 0 var(--cat-1);
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
 }
-/* Les deux extremes sont GRIS : ils bornent la piste, ils ne sont pas la
-   reponse. Le poids, lui, est la reponse - il porte le contraste. */
-.tornade__extreme {
-  font-size: 11.5px; color: var(--text-tertiary); font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+.bascule__nom { font-size: 12.5px; font-weight: 650; line-height: 1.3; }
+.bascule__nom small {
+  display: block; font-size: 10.5px; font-weight: 500;
+  color: var(--text-tertiary); margin-top: 2px;
 }
-.tornade__ligne .tornade__extreme:nth-of-type(1) { text-align: right; }
-.tornade__piste {
-  position: relative; height: 20px; border-radius: 3px; background: var(--bg-tertiary);
+.bascule__piste {
+  position: relative; height: 16px; border-radius: 8px;
+  background: var(--bg-tertiary); overflow: hidden;
 }
-.tornade__ligne:hover .tornade__piste { background: var(--bg-secondary); }
-/* Deux segments par barre, de part et d autre de la reference. La couleur ne
-   decore pas : elle dit de quel cote la variation ameliore l operation et de
-   quel cote elle la degrade. Une barre monochrome ne disait que « ca bouge ». */
-.tornade__segment { position: absolute; top: 3px; bottom: 3px; min-width: 2px; }
-.tornade__segment--bon {
-  background: color-mix(in srgb, var(--success-accent) 70%, transparent);
-  border-radius: 0 2px 2px 0;
+.bascule__zone { position: absolute; top: 0; bottom: 0; }
+.bascule__zone--tient { background: color-mix(in srgb, var(--success-accent) 30%, transparent); }
+.bascule__zone--casse { background: color-mix(in srgb, var(--danger-accent) 26%, transparent); }
+/* Les graduations marquent les AMPLITUDES du levier - son alea courant.
+   Une bascule avant la premiere graduation se franchit sans le vouloir. */
+.bascule__grad {
+  position: absolute; top: 3px; bottom: 3px; width: 1px;
+  background: var(--border-color-strong); opacity: 0.6;
 }
-.tornade__segment--mauvais {
-  background: color-mix(in srgb, var(--danger-accent) 70%, transparent);
-  border-radius: 2px 0 0 2px;
+.bascule__seuil {
+  position: absolute; top: -1px; bottom: -1px; width: 2px;
+  background: var(--text-primary);
 }
-/* Le trait de reference passe PAR-DESSUS les segments : c est un repere de
-   lecture, pas une donnee, et il doit rester visible au milieu d un aplat. */
-.tornade__reference {
-  position: absolute; top: -3px; bottom: -3px; width: 2px;
-  background: var(--text-primary); transform: translateX(-1px);
+.bascule__seuil-txt {
+  display: flex; align-items: center; gap: 8px; justify-content: flex-end;
+  font-size: 12px; color: var(--text-secondary); text-align: right;
 }
-.tornade__poids {
-  text-align: right; font-size: 13px; font-weight: 800;
-  font-variant-numeric: tabular-nums; line-height: 1.2;
+.bascule__badge {
+  flex: none; font-size: 9px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.05em; padding: 2px 8px; border-radius: 999px;
 }
-.tornade__poids small {
-  display: block; font-size: 10px; font-weight: 500; color: var(--text-tertiary);
+.bascule__badge--fragile { background: var(--danger-bg); color: var(--danger-text); }
+.bascule__badge--surveiller { background: var(--warning-bg); color: var(--warning-text); }
+.bascule__badge--solide, .bascule__badge--robuste { background: var(--success-bg); color: var(--success-text); }
+.bascule__badge--retour { background: var(--info-bg); color: var(--info-text); }
+/* Le depli prolonge la ligne ouverte : memes bords, sans couture. */
+.bascule__depli {
+  border: 1px solid var(--border-color); border-top: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  padding: 12px 14px; background: var(--bg-secondary);
+  margin-top: -6px;
 }
 
-/* LA REGLE. Sans elle on voit qu une barre est plus longue qu une autre sans
-   savoir de combien a combien. Elle se cale sur la colonne de la piste. */
-.tornade__regle {
-  /* MEME GRILLE que les rangees, gouttieres et remplissage compris : c est la
-     seule facon de garantir que la regle tombe pile sous la piste, quelles que
-     soient les largeurs. */
-  display: grid;
-  grid-template-columns: 190px 96px minmax(120px, 1fr) 96px 118px;
-  gap: 10px; padding: 0 8px; margin-top: 2px;
-}
-.tornade__regle__piste {
-  position: relative; display: flex; justify-content: space-between;
-  padding-top: 6px; border-top: 1px solid var(--border-color);
-  font-size: 10.5px; color: var(--text-tertiary);
-}
-.tornade__regle__ref {
-  position: absolute; top: 6px; transform: translateX(-50%);
-  color: var(--text-secondary); font-weight: 600; white-space: nowrap;
+/* Mini-graphe du cumul dans le depli : la saisie en gris, la variante au
+   point de bascule en couleur, le zero en pointille. */
+.mini-cumul { display: block; width: 100%; height: auto; margin: 8px 0 2px; }
+.mini-cumul__zero { stroke: var(--border-color-strong); stroke-width: 1; stroke-dasharray: 4 4; }
+.mini-cumul__ref { fill: none; stroke: var(--text-tertiary); stroke-width: 1.5; }
+.mini-cumul__var { fill: none; stroke: var(--cat-1); stroke-width: 2; }
+.mini-cumul__leg--ref { color: var(--text-tertiary); }
+.mini-cumul__leg--var { color: var(--cat-1); font-weight: 650; }
+
+/* Les outils replies en pied d ecran. Le summary reprend le titre de bloc,
+   avec le curseur qui dit qu il s ouvre. */
+details.bloc > summary.bloc__titre { cursor: pointer; margin-bottom: 0; }
+details[open].bloc > summary.bloc__titre { margin-bottom: 12px; }
+.outil-sens { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+.outil-sens__titre {
+  margin: 0 0 10px; font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-secondary);
 }
 
-/* Les leviers sans prise, REGROUPES en une phrase. Meles aux barres ils se
-   lisaient comme des leviers sans effet, ce qui est le contraire de ce qu ils
-   disent : ils n ont pas ete essayes. */
+/* L encart des hypotheses sans prise, sous les jauges. */
 .tornade__muets {
   margin: 14px 0 0; padding: 9px 11px; border-radius: var(--radius-sm);
   background: var(--bg-tertiary); font-size: 11.5px; color: var(--text-secondary);
 }
 .tornade__muets span { color: var(--text-tertiary); }
+
 
 /* --- LA QUESTION D EQUILIBRE ------------------------------------------
    Elle se lit comme une PHRASE : « amener X a Y en jouant sur Z ». Trois

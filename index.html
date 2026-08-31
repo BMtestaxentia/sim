@@ -1394,117 +1394,109 @@ body.sans-simulation .entete__dossier { display: none; }
 .barre-perimetre .bandeau { flex: 1; margin-bottom: 0; justify-content: center; }
 .barre-perimetre .bascule[hidden] { display: none; }
 
-/* --- SENSIBILITE ------------------------------------------------------
-   Le chapeau porte la question et la reference. Il vient AVANT les barres :
-   une figure qu on lit sans savoir ce qu elle mesure ne se lit pas, elle se
-   devine. */
-.sens-chapeau {
-  display: grid; grid-template-columns: 1fr auto; gap: 6px 24px; align-items: start;
-}
-.sens-chapeau__texte {
-  margin: 4px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--text-secondary);
-  max-width: 62ch;
-}
-.sens-chapeau__reglages { display: flex; align-items: center; gap: 14px; }
-/* La reference occupe toute la largeur, sous les deux colonnes : c est la
-   valeur a laquelle tout le reste de la page se compare. */
-.sens-chapeau__reference {
-  grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px;
-  margin: 8px 0 0; padding-top: 10px; border-top: 1px solid var(--border-color);
-}
-.sens-chapeau__valeur {
-  font-size: 24px; font-weight: 800; letter-spacing: -0.02em;
-  color: var(--text-primary); font-variant-numeric: tabular-nums;
-}
-.sens-chapeau__legende { font-size: 12px; color: var(--text-tertiary); }
+/* --- SENSIBILITE : LE DIAGNOSTIC --------------------------------------
+   L ecran repond avant qu on demande : verdict, points de bascule, tempete,
+   marges. Les briques de restitution (.optim, .indicateurs) sont celles du
+   reste de l appli ; ici ne vivent que les JAUGES DE BASCULE et leurs
+   dependances. */
 
-/* --- LA TORNADE -------------------------------------------------------
-   Une ligne par hypothese, toutes a la MEME echelle : c est ce qui permet de
-   les comparer d un coup d oeil, et c est tout l interet de la figure.
+/* Verdict rouge : l etat que .optim n avait pas - il connaissait le bon et
+   l avertissement, pas le constat d echec. */
+.optim--mauvais { border-left-color: var(--danger-accent); background: var(--danger-bg); }
+.optim--mauvais .optim__verdict { color: var(--danger-text); }
 
-   Cinq colonnes, dans l ordre ou on les lit : ce qui varie, la valeur basse,
-   la piste, la valeur haute, le poids. Les deux valeurs encadrent la piste
-   au lieu de la resumer plus loin - on lit « de tant a tant » sans deplacer
-   les yeux. */
-.tornade__ligne {
-  display: grid;
-  grid-template-columns: 190px 96px minmax(120px, 1fr) 96px 118px;
-  align-items: center; gap: 10px; width: 100%;
-  padding: 7px 8px; border: none; border-radius: var(--radius-sm);
-  background: transparent; color: inherit; font: inherit; text-align: left;
-  cursor: pointer;
+#lecture-sensibilite { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+#tuiles-sensibilite { margin-top: 12px; }
+#tuiles-sensibilite:empty { display: none; }
+
+/* --- LES JAUGES DE BASCULE --------------------------------------------
+   Une ligne par hypothese : son nom, la piste qui va de l hypothese actuelle
+   (a gauche) au bout de la plage exploree (a droite), et la phrase de seuil.
+   Le trait sur la piste est le POINT DE BASCULE : avant lui l operation
+   tient, apres elle casse. Plus il est a gauche, plus c est fragile - et
+   c est la distance qui classe les lignes. */
+#jauges-bascule { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.bascule__ligne {
+  display: grid; grid-template-columns: 230px minmax(160px, 1fr) 260px;
+  gap: 4px 18px; align-items: center;
+  width: 100%; text-align: left; font: inherit; color: inherit;
+  background: none; border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm); padding: 9px 12px; cursor: pointer;
 }
-.tornade__ligne:hover { background: var(--bg-tertiary); }
-.tornade__ligne--ouverte { background: var(--bg-tertiary); box-shadow: inset 2px 0 0 var(--cat-1); }
-.tornade__nom { font-size: 12.5px; font-weight: 650; line-height: 1.3; }
-.tornade__nom small {
-  display: block; font-weight: 500; color: var(--text-tertiary); font-size: 10.5px;
+.bascule__ligne:hover { background: var(--bg-tertiary); }
+.bascule__ligne--ouverte {
+  background: var(--bg-tertiary);
+  box-shadow: inset 2px 0 0 var(--cat-1);
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
 }
-/* Les deux extremes sont GRIS : ils bornent la piste, ils ne sont pas la
-   reponse. Le poids, lui, est la reponse - il porte le contraste. */
-.tornade__extreme {
-  font-size: 11.5px; color: var(--text-tertiary); font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+.bascule__nom { font-size: 12.5px; font-weight: 650; line-height: 1.3; }
+.bascule__nom small {
+  display: block; font-size: 10.5px; font-weight: 500;
+  color: var(--text-tertiary); margin-top: 2px;
 }
-.tornade__ligne .tornade__extreme:nth-of-type(1) { text-align: right; }
-.tornade__piste {
-  position: relative; height: 20px; border-radius: 3px; background: var(--bg-tertiary);
+.bascule__piste {
+  position: relative; height: 16px; border-radius: 8px;
+  background: var(--bg-tertiary); overflow: hidden;
 }
-.tornade__ligne:hover .tornade__piste { background: var(--bg-secondary); }
-/* Deux segments par barre, de part et d autre de la reference. La couleur ne
-   decore pas : elle dit de quel cote la variation ameliore l operation et de
-   quel cote elle la degrade. Une barre monochrome ne disait que « ca bouge ». */
-.tornade__segment { position: absolute; top: 3px; bottom: 3px; min-width: 2px; }
-.tornade__segment--bon {
-  background: color-mix(in srgb, var(--success-accent) 70%, transparent);
-  border-radius: 0 2px 2px 0;
+.bascule__zone { position: absolute; top: 0; bottom: 0; }
+.bascule__zone--tient { background: color-mix(in srgb, var(--success-accent) 30%, transparent); }
+.bascule__zone--casse { background: color-mix(in srgb, var(--danger-accent) 26%, transparent); }
+/* Les graduations marquent les AMPLITUDES du levier - son alea courant.
+   Une bascule avant la premiere graduation se franchit sans le vouloir. */
+.bascule__grad {
+  position: absolute; top: 3px; bottom: 3px; width: 1px;
+  background: var(--border-color-strong); opacity: 0.6;
 }
-.tornade__segment--mauvais {
-  background: color-mix(in srgb, var(--danger-accent) 70%, transparent);
-  border-radius: 2px 0 0 2px;
+.bascule__seuil {
+  position: absolute; top: -1px; bottom: -1px; width: 2px;
+  background: var(--text-primary);
 }
-/* Le trait de reference passe PAR-DESSUS les segments : c est un repere de
-   lecture, pas une donnee, et il doit rester visible au milieu d un aplat. */
-.tornade__reference {
-  position: absolute; top: -3px; bottom: -3px; width: 2px;
-  background: var(--text-primary); transform: translateX(-1px);
+.bascule__seuil-txt {
+  display: flex; align-items: center; gap: 8px; justify-content: flex-end;
+  font-size: 12px; color: var(--text-secondary); text-align: right;
 }
-.tornade__poids {
-  text-align: right; font-size: 13px; font-weight: 800;
-  font-variant-numeric: tabular-nums; line-height: 1.2;
+.bascule__badge {
+  flex: none; font-size: 9px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.05em; padding: 2px 8px; border-radius: 999px;
 }
-.tornade__poids small {
-  display: block; font-size: 10px; font-weight: 500; color: var(--text-tertiary);
+.bascule__badge--fragile { background: var(--danger-bg); color: var(--danger-text); }
+.bascule__badge--surveiller { background: var(--warning-bg); color: var(--warning-text); }
+.bascule__badge--solide, .bascule__badge--robuste { background: var(--success-bg); color: var(--success-text); }
+.bascule__badge--retour { background: var(--info-bg); color: var(--info-text); }
+/* Le depli prolonge la ligne ouverte : memes bords, sans couture. */
+.bascule__depli {
+  border: 1px solid var(--border-color); border-top: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  padding: 12px 14px; background: var(--bg-secondary);
+  margin-top: -6px;
 }
 
-/* LA REGLE. Sans elle on voit qu une barre est plus longue qu une autre sans
-   savoir de combien a combien. Elle se cale sur la colonne de la piste. */
-.tornade__regle {
-  /* MEME GRILLE que les rangees, gouttieres et remplissage compris : c est la
-     seule facon de garantir que la regle tombe pile sous la piste, quelles que
-     soient les largeurs. */
-  display: grid;
-  grid-template-columns: 190px 96px minmax(120px, 1fr) 96px 118px;
-  gap: 10px; padding: 0 8px; margin-top: 2px;
-}
-.tornade__regle__piste {
-  position: relative; display: flex; justify-content: space-between;
-  padding-top: 6px; border-top: 1px solid var(--border-color);
-  font-size: 10.5px; color: var(--text-tertiary);
-}
-.tornade__regle__ref {
-  position: absolute; top: 6px; transform: translateX(-50%);
-  color: var(--text-secondary); font-weight: 600; white-space: nowrap;
+/* Mini-graphe du cumul dans le depli : la saisie en gris, la variante au
+   point de bascule en couleur, le zero en pointille. */
+.mini-cumul { display: block; width: 100%; height: auto; margin: 8px 0 2px; }
+.mini-cumul__zero { stroke: var(--border-color-strong); stroke-width: 1; stroke-dasharray: 4 4; }
+.mini-cumul__ref { fill: none; stroke: var(--text-tertiary); stroke-width: 1.5; }
+.mini-cumul__var { fill: none; stroke: var(--cat-1); stroke-width: 2; }
+.mini-cumul__leg--ref { color: var(--text-tertiary); }
+.mini-cumul__leg--var { color: var(--cat-1); font-weight: 650; }
+
+/* Les outils replies en pied d ecran. Le summary reprend le titre de bloc,
+   avec le curseur qui dit qu il s ouvre. */
+details.bloc > summary.bloc__titre { cursor: pointer; margin-bottom: 0; }
+details[open].bloc > summary.bloc__titre { margin-bottom: 12px; }
+.outil-sens { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+.outil-sens__titre {
+  margin: 0 0 10px; font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-secondary);
 }
 
-/* Les leviers sans prise, REGROUPES en une phrase. Meles aux barres ils se
-   lisaient comme des leviers sans effet, ce qui est le contraire de ce qu ils
-   disent : ils n ont pas ete essayes. */
+/* L encart des hypotheses sans prise, sous les jauges. */
 .tornade__muets {
   margin: 14px 0 0; padding: 9px 11px; border-radius: var(--radius-sm);
   background: var(--bg-tertiary); font-size: 11.5px; color: var(--text-secondary);
 }
 .tornade__muets span { color: var(--text-tertiary); }
+
 
 /* --- LA QUESTION D EQUILIBRE ------------------------------------------
    Elle se lit comme une PHRASE : « amener X a Y en jouant sur Z ». Trois
@@ -3429,128 +3421,130 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
          l'impression du navigateur : rien à installer, et le texte du document
          reste sélectionnable. L'écran lui-même ne s'imprime jamais. -->
     <main class="ecran" id="ecran-sensibilite" role="tabpanel" hidden>
-      <!-- L analyse ne se lance QU EN ARRIVANT sur cet ecran : une tornade
-           coute dix-sept passages du moteur, et la relancer a chaque frappe
-           rendrait la saisie poussive pour un chiffre que personne ne regarde
-           a cet instant. -->
+      <!-- ECRAN REPONSE-FORME. L'ancien ecran etait quatre outils empiles :
+           une tornade, un generateur de scenarios, un bouton magique et une
+           recherche de cible - chacun attendait qu'on lui demande quelque
+           chose. Celui-ci calcule TOUT a l'arrivee et livre des conclusions :
+           un verdict, les points de bascule, la tempete, les marges de
+           manoeuvre. Les outils survivent, replies en pied de page.
 
-      <!-- CHAPEAU. La page pose sa question en toutes lettres avant de montrer
-           quoi que ce soit : sans elle, le lecteur doit reconstituer ce qu on
-           lui demande de regarder a partir de barres. -->
-      <section class="bloc sens-chapeau">
-        <div class="sens-chapeau__question">
-          <h2 class="bloc__titre">Qu’est-ce qui fait bouger cette opération&nbsp;?</h2>
-          <p class="sens-chapeau__texte">
-            Chaque hypothèse est poussée vers le haut puis vers le bas, et l’opération
-            entièrement recalculée à chaque fois. Les plus lourdes sont en tête.
-          </p>
-        </div>
-        <div class="sens-chapeau__reglages">
+           Le calcul se deroule en PHASES entrecoupees de setTimeout pour ne
+           pas geler la page, chaque phase peignant ce qu'elle sait ; un jeton
+           d'obsolescence abandonne la suite si le dossier ou la lecture a
+           change entre-temps. -->
+
+      <!-- 1. LE VERDICT. La reponse d'abord : l'operation tient, tient mais
+           passe par le rouge, ou ne tient pas. Zero passage moteur - tout se
+           lit dans le resultat deja calcule - donc peint immediatement. -->
+      <section class="bloc">
+        <div class="optim" id="verdict-sensibilite" data-restitution></div>
+        <div class="indicateurs" id="tuiles-sensibilite" data-restitution></div>
+        <!-- La ligne de lecture dit SUR QUOI tout l'ecran est mesure, et
+             permet d'en changer. Les reglages restent caches tant qu'on ne
+             les demande pas : la lecture par defaut est la bonne dans presque
+             tous les cas, et trois selecteurs en tete de page redonneraient
+             l'ecran d'outils qu'on quitte. -->
+        <p class="aide" id="lecture-sensibilite">
+          <span id="lecture-resume" data-restitution></span>
+          <button type="button" class="bouton bouton--discret" id="btn-lecture">
+            Changer la lecture</button>
+        </p>
+        <div class="equilibre__question" id="reglages-lecture" hidden>
           <label class="champ champ--enligne">
-            <span>Je regarde</span>
-            <select id="sens-indicateur"></select>
+            <span>Mesurer</span>
+            <select id="lect-objectif"></select>
           </label>
-          <label class="champ champ--enligne" id="champ-annee">
+          <label class="champ champ--enligne">
             <span>à l’année</span>
-            <input type="text" inputmode="numeric" id="sens-annee" size="6" />
-          </label>
-        </div>
-        <p class="sens-chapeau__reference" id="sens-reference" data-restitution></p>
-      </section>
-
-      <section class="bloc">
-        <h2 class="bloc__titre">Ce qui pèse le plus</h2>
-        <div id="tornade" data-restitution></div>
-        <p class="aide" id="sens-lecture"></p>
-      </section>
-
-      <section class="bloc" id="bloc-balayage" hidden>
-        <h2 class="bloc__titre" id="titre-balayage">Le détail</h2>
-        <div class="table-defilante">
-          <table class="tableau" id="table-balayage">
-            <thead></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- TOUS LES SCENARIOS. La tornade fait varier un levier a la fois ;
-           celle-ci enumere les combinaisons completes et les classe. Ce
-           qu elle seule peut montrer : l INTERACTION, quand deux leviers
-           ensemble ne font pas la somme de leurs effets separes. -->
-      <section class="bloc">
-        <h2 class="bloc__titre">Tous les scénarios</h2>
-        <p class="sens-chapeau__texte">
-          Chaque hypothèse cochée prend trois valeurs - un cran en dessous, telle quelle,
-          un cran au-dessus - et l’opération est recalculée pour chaque combinaison.
-          La colonne <em>Interaction</em> dit ce que l’assemblage fait en plus de la somme
-          de ses parties : elle trahit les seuils que le moteur franchit.
-        </p>
-        <div class="equilibre__question" id="scen-leviers"></div>
-        <div class="equilibre__question">
-          <button type="button" class="bouton bouton--principal" id="btn-scenarios">
-            Générer les scénarios</button>
-          <label class="champ champ--enligne">
-            <span>Classer par</span>
-            <select id="scen-tri">
-              <option value="resultat">Meilleur résultat</option>
-              <option value="rapport">Meilleur rapport à l’effort</option>
-            </select>
-          </label>
-        </div>
-        <div class="optim" id="scen-message" data-restitution></div>
-        <div class="table-defilante">
-          <table class="tableau" id="table-scenarios" data-restitution>
-            <thead></thead><tbody></tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- LE BOUTON. Il ne pose aucune question : son objectif est ecrit dans
-           sa phrase - que l operation se paie sur son horizon. Pour viser autre
-           chose, la recherche manuelle est juste en dessous. -->
-      <section class="bloc">
-        <h2 class="bloc__titre">Que faudrait-il pour que ça tienne&nbsp;?</h2>
-        <p class="sens-chapeau__texte">
-          Cherche le plus petit mouvement des hypothèses sur lesquelles vous avez la main
-          - le prix de revient et les subventions - pour que l’autofinancement cumulé
-          repasse au-dessus de zéro.
-        </p>
-        <div class="equilibre__question">
-          <button type="button" class="bouton bouton--principal" id="btn-optimiser">
-            Chercher la version qui tient</button>
-        </div>
-        <div class="optim" id="optim-reponse" data-restitution></div>
-      </section>
-
-      <!-- La question posee a l envers : non plus « que se passe-t-il si »,
-           mais « de combien faut-il bouger pour atteindre cela ». Meme
-           catalogue de leviers, meme moteur, resolu par dichotomie. -->
-      <section class="bloc">
-        <h2 class="bloc__titre">Et pour viser une valeur précise&nbsp;?</h2>
-        <p class="sens-chapeau__texte">
-          Le tableau ci-dessus dit ce qui pèse. Celui-ci répond à l’inverse&nbsp;:
-          de combien faut-il bouger une hypothèse pour arriver où l’on veut.
-        </p>
-        <div class="equilibre__question">
-          <label class="champ champ--enligne">
-            <span>Amener le</span>
-            <select id="eq-objectif"></select>
+            <input type="text" inputmode="numeric" id="lect-annee" size="6" />
           </label>
           <label class="champ champ--enligne">
-            <span>à</span>
-            <input type="text" inputmode="decimal" id="eq-cible" value="0" size="12" />
+            <span>seuil de bascule à</span>
+            <input type="text" inputmode="decimal" id="lect-cible" size="10" />
           </label>
-          <label class="champ champ--enligne">
-            <span>en jouant sur</span>
-            <select id="eq-levier"></select>
-          </label>
-          <button type="button" class="bouton bouton--principal" id="btn-equilibre">
-            Chercher</button>
         </div>
-        <p class="equilibre__reponse" id="eq-reponse" data-restitution></p>
       </section>
 
+      <!-- 2. LES POINTS DE BASCULE. Le coeur de l'ecran : non plus « ce que
+           chaque hypothese pese » en euros abstraits, mais « jusqu'ou
+           l'operation encaisse avant de casser ». Une jauge par hypothese,
+           la plus fragile en tete. -->
+      <section class="bloc">
+        <h2 class="bloc__titre" id="titre-bascules">Ce que l’opération encaisse</h2>
+        <p class="aide" id="soustitre-bascules"></p>
+        <div id="jauges-bascule" data-restitution></div>
+        <p class="tornade__muets" id="bascules-sans-prise" data-restitution hidden></p>
+      </section>
+
+      <!-- 3. LA TEMPETE. Les fragilites ne viennent jamais une par une : les
+           trois plus proches de leur seuil, poussees ensemble d'un cran, en
+           une phrase. C'est ce que l'ancienne table de scenarios savait dire
+           en cent lignes. -->
+      <section class="bloc" id="bloc-tempete" hidden>
+        <h2 class="bloc__titre">Et si tout dérapait en même temps&nbsp;?</h2>
+        <div class="optim" id="tempete-sensibilite" data-restitution></div>
+      </section>
+
+      <!-- 4. LES MARGES DE MANOEUVRE. Calculees d'office, plus de bouton :
+           ce que le monteur peut negocier - prix de revient, subventions -
+           et ce que chaque geste rapporte. -->
+      <section class="bloc" id="bloc-marges" hidden>
+        <h2 class="bloc__titre" id="titre-marges">Ce que l’on peut faire</h2>
+        <div class="optim" id="marges-sensibilite" data-restitution></div>
+      </section>
+
+      <!-- 5. LES OUTILS, replies. Toutes les capacites de l'ancien ecran
+           restent atteignables : viser une valeur precise, croiser des
+           hypotheses choisies. Elles ne s'imposent plus a la lecture. -->
+      <details class="bloc" id="outils-sensibilite">
+        <summary class="bloc__titre">Aller plus loin</summary>
+
+        <div class="outil-sens">
+          <h3 class="outil-sens__titre">Viser une valeur précise</h3>
+          <div class="equilibre__question">
+            <label class="champ champ--enligne">
+              <span>Amener le</span>
+              <select id="eq-objectif"></select>
+            </label>
+            <label class="champ champ--enligne">
+              <span>à</span>
+              <input type="text" inputmode="decimal" id="eq-cible" value="0" size="12" />
+            </label>
+            <label class="champ champ--enligne">
+              <span>en jouant sur</span>
+              <select id="eq-levier"></select>
+            </label>
+            <button type="button" class="bouton bouton--principal" id="btn-equilibre">
+              Chercher</button>
+          </div>
+          <p class="equilibre__reponse" id="eq-reponse" data-restitution></p>
+        </div>
+
+        <div class="outil-sens">
+          <h3 class="outil-sens__titre">Croiser des hypothèses</h3>
+          <p class="aide">Chaque hypothèse cochée prend trois valeurs - un cran en dessous,
+            telle quelle, un cran au-dessus - et l’opération est recalculée pour chaque
+            combinaison.</p>
+          <div class="equilibre__question" id="scen-leviers"></div>
+          <div class="equilibre__question">
+            <button type="button" class="bouton bouton--principal" id="btn-scenarios">
+              Comparer les combinaisons</button>
+            <label class="champ champ--enligne">
+              <span>Classer par</span>
+              <select id="scen-tri">
+                <option value="resultat">Meilleur résultat</option>
+                <option value="rapport">Meilleur rapport à l’effort</option>
+              </select>
+            </label>
+          </div>
+          <div class="optim" id="scen-message" data-restitution></div>
+          <div class="table-defilante">
+            <table class="tableau" id="table-scenarios" data-restitution>
+              <thead></thead><tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </details>
     </main>
 
     <main class="ecran" id="ecran-exports" role="tabpanel" hidden>
@@ -9361,12 +9355,44 @@ const LEVIERS = [
   {
     code: 'frais_gestion',
     libelle: 'Frais de gestion',
-    unite: 'points',
-    amplitude: 0.01,
+    unite: 'relatif',
+    amplitude: 0.2,
     appliquer: (c, v) => {
+      // Trois assiettes possibles et UNE SEULE en place par operation (R-EXP) :
+      // en % des loyers, en % du prix de revient, ou en forfait. Le levier
+      // decale CELLE QUI GOUVERNE, en part relative - la meme discipline que le
+      // gros entretien.
+      //
+      // La version precedente ajoutait des points a la variante en % des
+      // loyers, quelle que soit l'assiette en place. Or les assiettes sont
+      // EXCLUSIVES dans le compte : poser un % des loyers sur une operation
+      // assise sur le prix de revient ne s'y ajoutait pas, il la REMPLACAIT.
+      // Sur un foyer a 0,3 % du prix de revient, « +1 pt de frais de gestion »
+      // troquait 11 500 EUR de charge annuelle contre 2 400, et la tornade
+      // montrait un levier qui AMELIORE l'operation en la chargeant.
+      //
+      // Le decalage RELATIF remplace les points pour la meme raison : un point
+      // vaut un septieme d'une assiette a 7 % des loyers et quatre fois une
+      // assiette a 0,3 % du prix de revient - la meme secousse ne peut pas
+      // s'ecrire en points sur les deux.
       const e = (c.entrees.exploitation ??= {});
-      e.frais_gestion_pct_loyers = Math.max(0, (e.frais_gestion_pct_loyers ?? 0) + v);
-      return true;
+      if ((e.frais_gestion_pct_loyers ?? 0) > 0) {
+        e.frais_gestion_pct_loyers *= 1 + v;
+        return true;
+      }
+      const surPR =
+        e.frais_gestion_pct_prix_revient ??
+        c.referentiels?.baremes?.charges_exploitation?.frais_gestion_pct_prix_revient ??
+        0;
+      if (surPR > 0) {
+        e.frais_gestion_pct_prix_revient = Math.max(0, surPR * (1 + v));
+        return true;
+      }
+      if ((e.frais_gestion_annuels_eur ?? 0) > 0) {
+        e.frais_gestion_annuels_eur *= 1 + v;
+        return true;
+      }
+      return false;
     },
   },
   {
@@ -9479,6 +9505,19 @@ const INDICATEURS = [
     unite: 'nombre',
     sens: -1,
     lire: (r) => r?.exploitation?.indicateurs?.exercices_deficitaires ?? null,
+  },
+  {
+    // La meme grandeur que l'OBJECTIF du meme code : elle manquait au catalogue
+    // des indicateurs, si bien qu'une tornade ne savait pas dire ce qu'un
+    // levier fait aux fonds propres appeles alors que la recherche d'equilibre
+    // savait les viser. Les deux catalogues partagent desormais leurs trois
+    // grandeurs communes, et une vue peut passer de l'un a l'autre sans table
+    // de correspondance.
+    code: 'fonds_propres',
+    libelle: 'Fonds propres appelés',
+    unite: 'eur',
+    sens: -1,
+    lire: (r) => r?.indicateurs?.fonds_propres_eur ?? null,
   },
 ];
 
@@ -17929,27 +17968,84 @@ function dateDuJour() {
 
 // ------------------------------------------------------- sensibilite
 
-/** Indicateur observe par la tornade, et levier deplie sous elle. */
-let indicateurSensibilite = INDICATEURS[0].code;
+/*
+ * L'ECRAN EST UN DIAGNOSTIC, PAS UNE BOITE A OUTILS.
+ *
+ * Deux versions precedentes presentaient des instruments - tornade, generateur
+ * de scenarios, bouton magique, recherche de cible - et laissaient au lecteur
+ * le soin d'en tirer des conclusions. Elles ont ete refusees pour la meme
+ * raison : il fallait savoir quoi demander avant d'obtenir quoi que ce soit.
+ *
+ * Celui-ci calcule tout a l'arrivee et repond dans l'ordre ou l'on se pose
+ * les questions :
+ *
+ *   1. le VERDICT : l'operation tient, tient mais passe par le rouge, ou ne
+ *      tient pas - lu dans le resultat deja calcule, peint immediatement ;
+ *   2. les POINTS DE BASCULE : pour chaque hypothese, la distance entre sa
+ *      valeur actuelle et le point ou l'operation casse. « Bascule a +0,9 pt
+ *      de vacance » se cite en comite ; « ce levier pese 258 000 EUR », qui
+ *      etait la reponse de la tornade, ne se cite pas ;
+ *   3. la TEMPETE : les fragilites les plus proches poussees ensemble, en une
+ *      phrase, la ou l'ancienne table de scenarios alignait cent lignes ;
+ *   4. les MARGES DE MANOEUVRE : ce que la negociation peut rattraper,
+ *      calcule d'office quand l'operation ne tient pas.
+ *
+ * Les outils survivent, replies en pied de page : viser une valeur precise,
+ * croiser des hypotheses choisies.
+ *
+ * MECANIQUE. Le moteur est synchrone et pur ; l'analyse complete coute de
+ * l'ordre de quatre cents passages (mesure : ~5 ms le passage sur une
+ * operation a quatre tranches). Elle se deroule donc en PHASES entrecoupees
+ * de `setTimeout(0)`, chaque phase peignant ce qu'elle sait, et un JETON
+ * d'obsolescence abandonne la suite si le dossier ou la lecture change en
+ * cours de route. Le tout est mis en CACHE sur l'identite de `dernierResultat`
+ * (le moteur le remplace a chaque recalcul) : revenir sur l'ecran ou deplier
+ * une jauge ne recalcule rien.
+ */
+
+/** Objectif sur lequel tout l'ecran est mesure (catalogue OBJECTIFS). */
+let objectifSensibilite = OBJECTIFS[1].code; // autofinancement_cumule
 /** Annee ou lire un cumul. Vide = fin de l'horizon. */
 let anneeCumul = null;
+/** Cible du seuil de bascule. Vide = la cible par defaut de l'objectif. */
+let cibleBascule = null;
 /** Reglages de LECTURE, passes a chaque indicateur et a chaque objectif. */
 const contexteLecture = () => ({ annee_cumul: anneeCumul });
+/** Jauge depliee (code de levier), ou null. */
 let levierDeplie = null;
-/** Derniere tornade calculee, pour ne pas la refaire au moindre clic. */
-let derniereTornade = null;
+/** Jeton d'obsolescence : incremente a chaque lancement, verifie apres chaque pause. */
+let jetonAnalyse = 0;
+/**
+ * Analyse en cache : { resultat, objectif, cible, annee, tornade, seuils,
+ * tempete, marges, balayages: Map<code, points>, finie }.
+ * `resultat` est l'OBJET `dernierResultat` au moment du calcul : le moteur en
+ * cree un neuf a chaque recalcul, l'identite fait donc office de version.
+ */
+let analyseSensibilite = null;
+
+/*
+ * CONVENTIONS DE PRESENTATION des jauges - de l'affichage, pas du metier,
+ * documentees ici plutot que semees dans le code :
+ *  - la plage exploree va jusqu'a QUATRE amplitudes du levier : au-dela, ce
+ *    n'est plus la meme operation (meme borne que l'optimiseur, R-SENS-3) ;
+ *  - une bascule a moins d'UNE amplitude est FRAGILE : l'alea courant suffit
+ *    a la franchir. A moins de DEUX, elle est A SURVEILLER. Au-dela, SOLIDE.
+ */
+const PLAGE_BASCULE_AMPLITUDES = 4;
+const SEUIL_FRAGILE_AMPLITUDES = 1;
+const SEUIL_SURVEILLER_AMPLITUDES = 2;
 
 /** Mise en forme d une valeur selon l unite de son indicateur. */
 function valeurIndicateur(v, unite) {
   if (nul(v)) return '-';
   if (unite === 'eur') return eur(v);
   if (unite === 'taux') return pct(v, 2);
-  if (unite === 'annee') return String(v);
   return nb(v);
 }
 
-/** Amplitude d un levier, ecrite dans son unite. */
+/** Amplitude d un levier, en toutes lettres : « ± 5 % », « ± 0,5 pt », « ± 5 ans ». */
 function amplitudeLisible(levier, amplitude) {
+  if (!levier) return '';
   if (levier.unite === 'annees') return `± ${amplitude} ans`;
   // Un decalage de taux se dit en POINTS, pas en pourcent : « ± 0,5 % » sur un
   // taux se lirait comme un demi-pourcent de sa valeur, soit deux cents fois
@@ -17958,16 +18054,751 @@ function amplitudeLisible(levier, amplitude) {
   return `± ${pct(amplitude, 0)}`;
 }
 
+/** Variation signee d un levier, dans l unite du levier : « +3,2 % », « -0,5 pt », « +5 ans ». */
+function variationLisible(unite, v) {
+  const signe = v > 0 ? '+' : '';
+  if (unite === 'annees') return `${signe}${Math.round(v)} ans`;
+  if (unite === 'points') return `${signe}${pct(v, 2).replace(' %', ' pt')}`;
+  return `${signe}${pct(v, 1)}`;
+}
+
+/** Premiere lettre en minuscule, le reste intact : « Livret A » devient « livret A ». */
+const minuscule = (s) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+
+/** L objectif mesure et la cible de bascule effective. */
+const objectifCourant = () => objectifDe(objectifSensibilite) ?? OBJECTIFS[0];
+const cibleEffective = () => (nul(cibleBascule) ? objectifCourant().cible_defaut : cibleBascule);
+
 /**
- * Analyse de sensibilite de l'operation ouverte.
- *
- * Appelee a l'arrivee sur l'ecran et non a chaque frappe : une tornade coute
- * dix-sept passages du moteur. Le resultat est garde tant que le calcul ne
- * change pas.
+ * L operation SATISFAIT-elle la cible ? `sens` de l objectif dit dans quel
+ * sens on veut etre : +1 au-dessus, -1 en dessous.
  */
+function satisfaitCible(valeur, objectif, cible) {
+  if (nul(valeur)) return false;
+  return objectif.sens === 1 ? valeur >= cible : valeur <= cible;
+}
+
+// ---------------------------------------------------------------- verdict
+
+/**
+ * Verdict a TROIS etats, et pas deux : une operation dont le cumul finit
+ * positif mais PLONGE en cours de route tient sur le papier et pas en
+ * tresorerie. La distinguer est exactement ce qu un comite demande.
+ * Zero passage moteur : tout se lit dans `dernierResultat`.
+ */
+function rendreVerdictSensibilite() {
+  const zone = document.getElementById('verdict-sensibilite');
+  const tuiles = document.getElementById('tuiles-sensibilite');
+  if (!zone || !tuiles || !dernierResultat) return;
+  const ind = dernierResultat.exploitation?.indicateurs ?? {};
+  const ctx = contexteLecture();
+  const cumul = indicateurDe('autofinancement_cumule')?.lire(dernierResultat, ctx) ?? null;
+  const creux = ind.creux_cumul_eur ?? null;
+  const deficitaires = ind.exercices_deficitaires ?? 0;
+  const derniereAnnee = dernierResultat.exploitation?.lignes?.at(-1)?.annee ?? null;
+  const quand = anneeCumul ?? derniereAnnee;
+
+  let classe = 'optim optim--bon';
+  let phrase;
+  if (nul(cumul)) {
+    classe = 'optim optim--hors';
+    phrase = `Le cumul d’autofinancement n’est pas lisible${anneeCumul ? ` en ${att(anneeCumul)} : l’année est hors de l’horizon simulé` : ''}.`;
+  } else if (cumul < 0) {
+    classe = 'optim optim--mauvais';
+    phrase =
+      `⚠ <strong>L’opération ne tient pas en l’état</strong> : l’autofinancement cumulé ` +
+      `finit à <strong>${att(eur(cumul))}</strong>${quand ? ` en ${att(quand)}` : ''}.`;
+  } else if ((creux ?? 0) < 0) {
+    classe = 'optim optim--hors';
+    phrase =
+      `<strong>L’opération tient à terme, mais passe par le rouge</strong> : le cumul plonge à ` +
+      `<strong>${att(eur(creux))}</strong>${ind.annee_creux_cumul ? ` en ${att(ind.annee_creux_cumul)}` : ''}` +
+      `${deficitaires ? ` et ${att(nb(deficitaires))} exercice${deficitaires > 1 ? 's sont déficitaires' : ' est déficitaire'}` : ''}, ` +
+      `avant de finir à <strong>${att(eur(cumul))}</strong>${quand ? ` en ${att(quand)}` : ''}.`;
+  } else {
+    phrase =
+      `✓ <strong>L’opération tient</strong> : l’autofinancement cumulé finit à ` +
+      `<strong>${att(eur(cumul))}</strong>${quand ? ` en ${att(quand)}` : ''} sans jamais passer en négatif.`;
+  }
+  zone.className = classe;
+  zone.innerHTML =
+    `<p class="optim__verdict">${phrase}</p>` +
+    // La clause de fragilite se remplit quand les seuils sont connus : elle
+    // nomme la menace la plus proche, ou dit qu il n y en a pas.
+    `<p class="optim__detail" id="verdict-fragilite" hidden></p>`;
+
+  const t = [
+    { l: 'Autofinancement cumulé', v: eur(cumul), d: quand ? `à fin ${quand}` : 'fin d’horizon' },
+    {
+      l: 'Creux du cumul',
+      v: eur(creux),
+      d: ind.annee_creux_cumul ? `atteint en ${ind.annee_creux_cumul}` : 'point bas du cumul',
+    },
+    { l: 'Exercices déficitaires', v: nb(deficitaires), d: 'sur tout l’horizon' },
+    { l: 'TRI de l’opération', v: valeurIndicateur(ind.tri, 'taux'), d: 'taux de rentabilité interne' },
+    {
+      l: 'Fonds propres appelés',
+      v: eur(dernierResultat.indicateurs?.fonds_propres_eur),
+      d: 'apport au plan de financement',
+    },
+  ];
+  tuiles.innerHTML = t
+    .map(
+      (i) =>
+        `<div class="indicateur"><div class="indicateur__libelle">${att(i.l)}</div>` +
+        `<div class="indicateur__valeur">${att(i.v)}</div>` +
+        `<div class="indicateur__detail">${att(i.d)}</div></div>`,
+    )
+    .join('');
+
+  const resume = document.getElementById('lecture-resume');
+  if (resume) {
+    const o = objectifCourant();
+    resume.textContent =
+      `Seuils mesurés sur : ${o.libelle.toLowerCase()}` +
+      `${anneeCumul ? ` en ${anneeCumul}` : derniereAnnee ? ` en fin d’horizon (${derniereAnnee})` : ''}` +
+      `, bascule à ${valeurIndicateur(cibleEffective(), o.unite)}.`;
+  }
+}
+
+/** Peuple les reglages de lecture, une fois. */
+function peuplerReglagesLecture() {
+  const sel = document.getElementById('lect-objectif');
+  if (sel && !sel.options.length) {
+    sel.innerHTML = OBJECTIFS.map(
+      (o) => `<option value="${att(o.code)}">${att(o.libelle)}</option>`,
+    ).join('');
+  }
+  if (sel) sel.value = objectifSensibilite;
+  const annee = /** @type {HTMLInputElement|null} */ (document.getElementById('lect-annee'));
+  if (annee) {
+    const lignes = dernierResultat?.exploitation?.lignes ?? [];
+    annee.placeholder = lignes.length ? String(lignes.at(-1).annee) : '';
+    if (nul(anneeCumul) && document.activeElement !== annee) annee.value = '';
+  }
+  const cible = /** @type {HTMLInputElement|null} */ (document.getElementById('lect-cible'));
+  if (cible && document.activeElement !== cible) {
+    cible.placeholder = valeurIndicateur(objectifCourant().cible_defaut, objectifCourant().unite);
+    if (nul(cibleBascule)) cible.value = '';
+  }
+}
+
+// ---------------------------------------------------------------- bascules
+
+/**
+ * Point de bascule d UN levier : la variation qui amene l objectif a la cible.
+ *
+ * Le SENS de recherche depend de l etat de depart : une operation qui tient
+ * cherche la degradation qui la fait casser, une operation qui ne tient pas
+ * cherche l amelioration qui la remet a flot. La barre de tornade, deja
+ * calculee, donne le sens gratuitement : elle porte la valeur de l objectif a
+ * -amplitude et a +amplitude.
+ */
+function calculerBascule(entrees, refs, barre, objectif, cible, reference) {
+  const levier = levierDe(barre.code);
+  const base = {
+    code: barre.code,
+    libelle: barre.libelle,
+    unite: barre.unite,
+    amplitude: barre.amplitude,
+    actionnable: levier?.actionnable === true,
+    ecart_tornade: barre.ecart,
+  };
+  if (!barre.applique) return { ...base, applique: false };
+
+  const tient = satisfaitCible(reference, objectif, cible);
+  // Une valeur DEGRADE quand elle va contre le sens de l objectif.
+  const degrade = (v) => !nul(v) && (objectif.sens === 1 ? v < reference : v > reference);
+  const ameliore = (v) => !nul(v) && (objectif.sens === 1 ? v > reference : v < reference);
+  const versLeMal = degrade(barre.haut) ? 1 : degrade(barre.bas) ? -1 : 0;
+  const versLeBien = ameliore(barre.haut) ? 1 : ameliore(barre.bas) ? -1 : 0;
+  const direction = tient ? versLeMal : versLeBien;
+  // Aucune direction ne va du cote cherche : le levier ne peut ni casser ni
+  // sauver l operation dans sa plage. C est une information, pas une absence.
+  if (direction === 0) return { ...base, applique: true, mode: tient ? 'bascule' : 'retour', inerte: true };
+
+  const eq = chercherEquilibre(entrees, refs, {
+    levier: barre.code,
+    objectif: objectif.code,
+    cible,
+    contexte: contexteLecture(),
+    bornes: [0, direction * PLAGE_BASCULE_AMPLITUDES * barre.amplitude],
+    iterations_max: 30,
+  });
+  if (eq.applique === false) return { ...base, applique: false };
+  return {
+    ...base,
+    applique: true,
+    mode: tient ? 'bascule' : 'retour',
+    direction,
+    trouve: eq.trouve,
+    approche: !eq.trouve && !nul(eq.variation) && nul(eq.atteignable),
+    variation: eq.variation ?? null,
+    valeur: eq.valeur ?? null,
+    atteignable: eq.atteignable ?? null,
+    resultat: eq.resultat ?? null,
+    distance: nul(eq.variation) ? null : Math.abs(eq.variation) / barre.amplitude,
+  };
+}
+
+/** Badge de proximite d une bascule. */
+function badgeBascule(s) {
+  // Le levier inerte d abord : « voie de retour » sur un levier sans effet
+  // promettrait un chemin qui n existe pas.
+  if (s.inerte) return { classe: 'robuste', texte: 'sans effet' };
+  if (s.mode === 'retour') return { classe: 'retour', texte: 'voie de retour' };
+  if (!s.trouve && !s.approche) return { classe: 'robuste', texte: 'robuste' };
+  if (s.distance < SEUIL_FRAGILE_AMPLITUDES) return { classe: 'fragile', texte: 'fragile' };
+  if (s.distance < SEUIL_SURVEILLER_AMPLITUDES) return { classe: 'surveiller', texte: 'à surveiller' };
+  return { classe: 'solide', texte: 'solide' };
+}
+
+/** Phrase de seuil d une jauge : ce qu on cite en reunion. */
+function phraseBascule(s, objectif) {
+  const o = objectif.libelle.toLowerCase();
+  if (s.inerte) {
+    // Un levier qui ne deplace pas la grandeur mesuree le dit sans detour :
+    // « ne suffit pas a redresser » laissait croire a un effet trop faible,
+    // alors qu il n y a pas d effet du tout.
+    return `sans effet sur ${o}`;
+  }
+  if (s.mode === 'retour') {
+    if (s.trouve && s.variation === 0) return 'déjà au niveau visé';
+    if (s.trouve) return `revient à flot à ${variationLisible(s.unite, s.variation)}`;
+    if (s.approche) return `revient à flot vers ${variationLisible(s.unite, s.variation)} (approché)`;
+    const borne = s.atteignable
+      ? objectif.sens === 1
+        ? Math.max(...s.atteignable)
+        : Math.min(...s.atteignable)
+      : null;
+    return `ne suffit pas seul${nul(borne) ? '' : ` : au mieux ${valeurIndicateur(borne, objectif.unite)}`}`;
+  }
+  if (s.trouve && s.variation === 0) return 'déjà au point de bascule';
+  if (s.trouve) return `bascule à ${variationLisible(s.unite, s.variation)}`;
+  if (s.approche) return `bascule vers ${variationLisible(s.unite, s.variation)} (approché)`;
+  const pire = s.atteignable
+    ? objectif.sens === 1
+      ? Math.min(...s.atteignable)
+      : Math.max(...s.atteignable)
+    : null;
+  return `pas de bascule jusqu’à ${variationLisible(s.unite, s.direction * PLAGE_BASCULE_AMPLITUDES * s.amplitude)}${
+    nul(pire) ? '' : ` · au pire ${valeurIndicateur(pire, objectif.unite)}`
+  }`;
+}
+
+/** Ordre d affichage : les plus fragiles d abord, les robustes ensuite. */
+function comparerBascules(a, b) {
+  const rang = (s) => (s.inerte || (!s.trouve && !s.approche) ? 1 : 0);
+  if (rang(a) !== rang(b)) return rang(a) - rang(b);
+  return (a.distance ?? Infinity) - (b.distance ?? Infinity);
+}
+
+/** La liste des jauges, completes ou en cours de calcul. */
+function peindreJauges(seuils, enCours) {
+  const zone = document.getElementById('jauges-bascule');
+  if (!zone) return;
+  const objectif = objectifCourant();
+  const appliques = seuils.filter((s) => s.applique);
+  const tries = [...appliques].sort(comparerBascules);
+
+  const jauge = (s) => {
+    // La piste va de l hypothese actuelle (gauche) au bout de la plage
+    // exploree (droite). Le trait de bascule se pose au prorata ; les
+    // graduations marquent les amplitudes, l alea courant du levier.
+    const pos = nul(s.distance) ? null : Math.min(100, (s.distance / PLAGE_BASCULE_AMPLITUDES) * 100);
+    const grads = Array.from({ length: PLAGE_BASCULE_AMPLITUDES - 1 }, (_, k) => {
+      const x = ((k + 1) / PLAGE_BASCULE_AMPLITUDES) * 100;
+      return `<span class="bascule__grad" style="left:${x}%"></span>`;
+    }).join('');
+    const inverse = s.mode === 'retour';
+    if (s.inerte || nul(pos)) {
+      return `<span class="bascule__piste"><span class="bascule__zone bascule__zone--${
+        inverse ? 'casse' : 'tient'
+      }" style="left:0;width:100%"></span>${grads}</span>`;
+    }
+    return (
+      `<span class="bascule__piste">` +
+      `<span class="bascule__zone bascule__zone--${inverse ? 'casse' : 'tient'}" style="left:0;width:${pos.toFixed(1)}%"></span>` +
+      `<span class="bascule__zone bascule__zone--${inverse ? 'tient' : 'casse'}" style="left:${pos.toFixed(1)}%;width:${(100 - pos).toFixed(1)}%"></span>` +
+      `${grads}<span class="bascule__seuil" style="left:${pos.toFixed(1)}%"></span></span>`
+    );
+  };
+
+  zone.innerHTML =
+    tries
+      .map((s) => {
+        const b = badgeBascule(s);
+        const ouverte = levierDeplie === s.code;
+        const poids = nul(s.ecart_tornade)
+          ? ''
+          : `à ${amplitudeLisible(levierDe(s.code), s.amplitude)} : ${valeurIndicateur(s.ecart_tornade, objectif.unite)} d’écart`;
+        return (
+          `<button type="button" class="bascule__ligne${ouverte ? ' bascule__ligne--ouverte' : ''}" ` +
+          `data-bascule="${att(s.code)}" aria-expanded="${ouverte}">` +
+          `<span class="bascule__nom">${att(s.libelle)}` +
+          `<small>${att(s.actionnable ? 'négociable' : 'subi')}${poids ? ' · ' + att(poids) : ''}</small></span>` +
+          `${jauge(s)}` +
+          `<span class="bascule__seuil-txt"><span class="bascule__badge bascule__badge--${b.classe}">${att(b.texte)}</span>` +
+          `<span>${att(phraseBascule(s, objectif))}</span></span>` +
+          `</button>` +
+          (ouverte ? `<div class="bascule__depli" data-depli="${att(s.code)}"></div>` : '')
+        );
+      })
+      .join('') +
+    (enCours
+      ? `<p class="aide">Points de bascule en cours de calcul... ${appliques.length} hypothèse${
+          appliques.length > 1 ? 's' : ''
+        } examinée${appliques.length > 1 ? 's' : ''}.</p>`
+      : '');
+
+  const muets = seuils.filter((s) => s.applique === false);
+  const zoneMuets = document.getElementById('bascules-sans-prise');
+  if (zoneMuets) {
+    zoneMuets.hidden = !muets.length || enCours;
+    if (muets.length) {
+      zoneMuets.innerHTML =
+        `Sans prise sur cette opération : ${muets.map((s) => att(s.libelle)).join(', ')}. ` +
+        `<span>Rien n’a été essayé de ce côté-là - l’opération ne porte pas de quoi les faire varier.</span>`;
+    }
+  }
+  if (!enCours && levierDeplie) rendreDepliBascule(levierDeplie);
+}
+
+/**
+ * Titre et sous-titre de la section des jauges, selon le verdict.
+ *
+ * « Ne tient pas » ne se dit que sur la cible PAR DEFAUT : sur une cible
+ * choisie, l operation peut fort bien tenir sans l atteindre, et le lui
+ * reprocher serait faux.
+ */
+function poserTitreBascules(tient) {
+  const titre = document.getElementById('titre-bascules');
+  const sous = document.getElementById('soustitre-bascules');
+  // Le vocabulaire de SURVIE - tenir, etre a flot - n a de sens que sur les
+  // lectures qui la mesurent, cumul et creux, a leur cible par defaut. Sur
+  // les fonds propres appeles ou une cible choisie, ne pas l atteindre n est
+  // pas une avarie : le ton redevient neutre.
+  const lectureDeSurvie =
+    (objectifSensibilite === 'autofinancement_cumule' || objectifSensibilite === 'creux_cumul') &&
+    nul(cibleBascule);
+  const cibleChoisie = !lectureDeSurvie;
+  if (titre) {
+    titre.textContent = tient
+      ? 'Ce que l’opération encaisse'
+      : cibleChoisie
+        ? 'Ce qui l’amènerait au niveau visé'
+        : 'Ce qui la ramènerait à flot';
+  }
+  if (sous) {
+    sous.textContent = tient
+      ? 'Chaque hypothèse est poussée jusqu’au point où l’opération casse. Les plus fragiles sont en tête ; cliquez une ligne pour le détail.'
+      : cibleChoisie
+        ? 'Le niveau visé n’est pas atteint : chaque ligne dit le mouvement qui, à lui seul, y amènerait l’opération.'
+        : 'L’opération ne tient pas : chaque ligne dit le mouvement qui, à lui seul, la ramènerait au niveau visé.';
+  }
+}
+
+/** Clause de fragilite du verdict, une fois les seuils connus. */
+function poserClauseFragilite(seuils, tient) {
+  const clause = document.getElementById('verdict-fragilite');
+  if (!clause) return;
+  if (!tient) {
+    clause.hidden = true;
+    return;
+  }
+  const fragiles = seuils
+    .filter((s) => s.applique && s.mode === 'bascule' && (s.trouve || s.approche))
+    .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
+  const tete = fragiles[0];
+  clause.hidden = false;
+  if (!tete) {
+    clause.textContent = 'Aucune hypothèse testée ne la fait basculer dans les plages explorées.';
+  } else if (tete.distance < SEUIL_FRAGILE_AMPLITUDES) {
+    clause.innerHTML =
+      `Mais elle est à la merci d’une hypothèse : <strong>${att(minuscule(tete.libelle))}</strong>, ` +
+      `${att(variationLisible(tete.unite, tete.variation))} suffit à la faire basculer.`;
+  } else {
+    clause.innerHTML = `Le point à surveiller : <strong>${att(minuscule(tete.libelle))}</strong>, bascule à ${att(
+      variationLisible(tete.unite, tete.variation),
+    )}.`;
+  }
+}
+
+// ---------------------------------------------------------------- tempete
+
+/**
+ * Les trois bascules les plus proches, poussees ENSEMBLE d une amplitude dans
+ * leur sens defavorable. Une seule phrase, et l ecart a la somme des effets
+ * isoles - le moteur n est pas lineaire, et c est ici que cela se voit.
+ */
+function calculerTempete(entrees, refs, seuils, objectif) {
+  const candidats = seuils
+    .filter((s) => s.applique && s.mode === 'bascule' && !s.inerte && s.direction)
+    .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
+    .slice(0, 3);
+  if (candidats.length < 2) return null;
+  const r = scenarios(entrees, refs, {
+    indicateur: objectif.code,
+    contexte: contexteLecture(),
+    leviers: candidats.map((s) => ({ code: s.code, crans: [0, s.direction] })),
+  });
+  if (r.etat === 'trop de combinaisons') return null;
+  const complet = r.scenarios.find((s) => s.mouvements.length === candidats.length);
+  if (!complet || nul(complet.valeur)) return null;
+  return { candidats, reference: r.reference, scenario: complet };
+}
+
+function peindreTempete(tempete, objectif) {
+  const bloc = document.getElementById('bloc-tempete');
+  const zone = document.getElementById('tempete-sensibilite');
+  if (!bloc || !zone) return;
+  bloc.hidden = !tempete;
+  if (!tempete) return;
+  const noms = tempete.candidats.map((c) => minuscule(c.libelle));
+  const liste =
+    noms.length > 1 ? `${noms.slice(0, -1).join(', ')} et ${noms.at(-1)}` : noms[0];
+  const s = tempete.scenario;
+  const casse = !satisfaitCible(s.valeur, objectif, cibleEffective());
+  const inter = s.interaction;
+  const detailInter = nul(inter)
+    ? ''
+    : Math.abs(inter) < Math.max(1, Math.abs(s.ecart ?? 0) * 0.01)
+      ? ' Les effets s’additionnent simplement.'
+      : (objectif.sens === 1) === inter < 0
+        ? ` Ensemble, ces dérives coûtent ${eur(Math.abs(inter))} de plus que la somme de leurs effets pris séparément.`
+        : ` L’assemblage coûte ${eur(Math.abs(inter))} de moins que la somme de ses parties.`;
+  zone.className = casse ? 'optim optim--hors' : 'optim';
+  zone.innerHTML =
+    `<p class="optim__detail">Si ${att(liste)} dérapent ensemble d’un cran chacun, ` +
+    `${att(objectif.libelle.toLowerCase())} ${casse ? 'tombe' : 'passe'} à ` +
+    `<strong>${att(valeurIndicateur(s.valeur, objectif.unite))}</strong>` +
+    `${casse ? ' : l’opération ne tient plus' : ''}.${att(detailInter)}</p>`;
+}
+
+// ---------------------------------------------------------------- marges
+
+/**
+ * Ce que la negociation peut rattraper, en toutes lettres. Calcule d office
+ * quand l operation ne satisfait pas la cible ; quand elle tient, le verdict
+ * le dit deja et la section reste cachee.
+ */
+function peindreMarges(marges, objectif) {
+  const bloc = document.getElementById('bloc-marges');
+  const zone = document.getElementById('marges-sensibilite');
+  if (!bloc || !zone) return;
+  if (!marges || marges.etat === 'deja') {
+    bloc.hidden = true;
+    return;
+  }
+  bloc.hidden = false;
+  const ecrire = (v) => valeurIndicateur(v, objectif.unite);
+  const mouvement = (m) => `${minuscule(m.libelle)} ${variationLisible(m.unite, m.variation)}`;
+
+  if (marges.etat === 'hors de portee') {
+    zone.className = 'optim optim--hors';
+    zone.innerHTML =
+      `<p class="optim__verdict">⚠ La négociation seule n’y suffit pas, dans les limites explorées.</p>` +
+      `<ul class="optim__liste">${marges.pistes
+        .map(
+          (p) =>
+            `<li><span>${att(p.libelle)}</span><span class="num">au mieux ${att(ecrire(p.extreme))}</span></li>`,
+        )
+        .join('')}</ul>` +
+      (marges.sansPrise.length
+        ? `<p class="optim__detail">Sans objet sur ce dossier : ${att(marges.sansPrise.join(', ').toLowerCase())}.</p>`
+        : '') +
+      `<p class="optim__detail">C’est le programme ou les loyers qu’il faut revoir, pas la négociation.</p>`;
+    return;
+  }
+
+  const gagnantes = marges.pistes.filter((p) => p.trouve);
+  const combi = marges.combinaison?.trouve ? marges.combinaison : null;
+  const tete = gagnantes[0];
+  const meilleure =
+    combi && (!tete || combi.effort < tete.effort - 1e-9)
+      ? { texte: combi.mouvements.map(mouvement).join(' et '), valeur: combi.valeur }
+      : tete
+        ? { texte: mouvement(tete), valeur: tete.valeur }
+        : null;
+  if (!meilleure) {
+    bloc.hidden = true;
+    return;
+  }
+  zone.className = 'optim optim--bon';
+  zone.innerHTML =
+    `<p class="optim__verdict">✓ Le plus court chemin : <strong>${att(meilleure.texte)}</strong>.</p>` +
+    `<p class="optim__detail">${att(objectifCourant().libelle)} passe de ${att(ecrire(marges.valeur))} à ` +
+    `<strong>${att(ecrire(meilleure.valeur))}</strong>.</p>` +
+    `<ul class="optim__liste">${gagnantes
+      .map(
+        (p) =>
+          `<li><span>${att(p.libelle)} seul</span><span class="num">${att(
+            variationLisible(p.unite, p.variation),
+          )}</span></li>`,
+      )
+      .join('')}${
+      combi
+        ? `<li><span>Les deux ensemble</span><span class="num">${att(
+            combi.mouvements.map((m) => variationLisible(m.unite, m.variation)).join(' / '),
+          )}</span></li>`
+        : ''
+    }</ul>` +
+    (marges.sansPrise.length
+      ? `<p class="optim__detail">Sans objet sur ce dossier : ${att(marges.sansPrise.join(', ').toLowerCase())}.</p>`
+      : '');
+}
+
+// ---------------------------------------------------------------- depli
+
+/**
+ * Annee de SORTIE DEFINITIVE du rouge : celle qui suit le dernier cumul
+ * negatif. « Premier exercice positif » etait vrai et trompeur sur un cumul
+ * qui demarre positif, plonge, puis remonte. Null si le cumul ne passe
+ * jamais en negatif.
+ */
+function anneeSortieDuRouge(resultat) {
+  const lignes = resultat?.exploitation?.lignes ?? [];
+  const dernierRouge = lignes.findLast((l) => (l.cumul_autofinancement_eur ?? 0) < 0);
+  if (!dernierRouge) return null;
+  const i = lignes.indexOf(dernierRouge);
+  return lignes[i + 1]?.annee ?? null;
+}
+
+/**
+ * Mini-graphe du cumul : la trajectoire SAISIE en gris, la trajectoire au
+ * POINT DE BASCULE en couleur, la ligne de zero en pointille. Aucun passage
+ * moteur : les deux resultats sont deja en cache.
+ */
+function miniGrapheCumul(reference, variante) {
+  const serieRef = (reference?.exploitation?.lignes ?? []).map((l) => l.cumul_autofinancement_eur ?? 0);
+  const serieVar = (variante?.exploitation?.lignes ?? []).map((l) => l.cumul_autofinancement_eur ?? 0);
+  if (serieRef.length < 2) return '';
+  const tout = [...serieRef, ...serieVar, 0];
+  const min = Math.min(...tout);
+  const max = Math.max(...tout);
+  const etendue = max - min || 1;
+  const L = 600;
+  const H = 110;
+  const y = (v) => 6 + (H - 12) * (1 - (v - min) / etendue);
+  const trace = (serie) =>
+    serie
+      .map((v, i) => `${((i / (serie.length - 1)) * L).toFixed(1)},${y(v).toFixed(1)}`)
+      .join(' ');
+  return (
+    `<svg class="mini-cumul" viewBox="0 0 ${L} ${H}" role="img" aria-label="Cumul d’autofinancement, saisie et variante au point de bascule">` +
+    `<line class="mini-cumul__zero" x1="0" y1="${y(0).toFixed(1)}" x2="${L}" y2="${y(0).toFixed(1)}" />` +
+    `<polyline class="mini-cumul__ref" points="${trace(serieRef)}" />` +
+    (serieVar.length > 1 ? `<polyline class="mini-cumul__var" points="${trace(serieVar)}" />` : '') +
+    `</svg>` +
+    `<p class="aide">Cumul d’autofinancement : <span class="mini-cumul__leg mini-cumul__leg--ref">telle que saisie</span>` +
+    (serieVar.length > 1 ? ` · <span class="mini-cumul__leg mini-cumul__leg--var">au point de bascule</span>` : '') +
+    `</p>`
+  );
+}
+
+/** Detail d une jauge depliee : synthese, mini-graphe, balayage. */
+function rendreDepliBascule(code) {
+  const zone = document.querySelector(`[data-depli="${code}"]`);
+  const a = analyseSensibilite;
+  if (!zone || !a) return;
+  const s = a.seuils.find((x) => x.code === code);
+  const objectif = objectifDe(a.objectif) ?? OBJECTIFS[0];
+  if (!s) return;
+
+  // Balayage en cache par levier : sept points qui ENCADRENT le seuil quand il
+  // existe, l amplitude courante sinon.
+  if (!a.balayages.has(code)) {
+    const portee = Math.max(s.amplitude, Math.abs(s.variation ?? 0) * 1.25);
+    a.balayages.set(
+      code,
+      balayerLevier(etatPourAnalyse(), referentielsPourAnalyse(), code, plage(portee, 7)).points,
+    );
+  }
+  const points = a.balayages.get(code);
+
+  const charnieres = (() => {
+    if (!s.resultat) return '';
+    const avant = anneeSortieDuRouge(dernierResultat);
+    const apres = anneeSortieDuRouge(s.resultat);
+    if (avant === apres) return '';
+    const dire = (annee) => (nul(annee) ? 'jamais dans le rouge' : `sort du rouge en ${annee}`);
+    return `<p class="aide">Cumul : ${att(dire(apres))} à ce niveau, contre ${att(dire(avant))} aujourd’hui.</p>`;
+  })();
+
+  const lignesTable = points
+    .map((p) => {
+      const v = objectif.lire(p.resultat, contexteLecture());
+      const tri = indicateurDe('tri')?.lire(p.resultat, contexteLecture());
+      const ecart = nul(v) || nul(a.reference) ? null : v - a.reference;
+      return `<tr class="${p.variation === 0 ? 'poste--reference' : ''}">
+        <td>${att(variationLisible(s.unite, p.variation))}${p.variation === 0 ? ' <em>(saisie)</em>' : ''}</td>
+        <td class="num">${p.erreur ? att(p.erreur) : valeurIndicateur(v, objectif.unite)}</td>
+        <td class="num ${ecart < 0 ? 'montant--negatif' : ''}">${
+          nul(ecart) ? '-' : (ecart > 0 ? '+' : '') + valeurIndicateur(ecart, objectif.unite)
+        }</td>
+        <td class="num">${valeurIndicateur(tri, 'taux')}</td></tr>`;
+    })
+    .join('');
+
+  zone.innerHTML =
+    (s.trouve && s.resultat && !nul(s.variation) && s.variation !== 0
+      ? `<p class="aide">À ${att(variationLisible(s.unite, s.variation))}, ${att(
+          objectif.libelle.toLowerCase(),
+        )} rejoint le niveau visé (${att(valeurIndicateur(a.cible, objectif.unite))}).</p>`
+      : '') +
+    miniGrapheCumul(dernierResultat, s.resultat) +
+    charnieres +
+    `<div class="table-defilante"><table class="tableau">
+      <thead><tr><th>Variation</th><th class="num">${att(objectif.libelle)}</th>
+      <th class="num">Écart</th><th class="num">TRI</th></tr></thead>
+      <tbody>${lignesTable}</tbody></table></div>`;
+}
+
+// ---------------------------------------------------------------- pipeline
+
+/** L analyse en cache vaut-elle encore pour ce resultat et cette lecture ? */
+function analyseValide() {
+  const a = analyseSensibilite;
+  return (
+    !!a &&
+    a.resultat === dernierResultat &&
+    a.objectif === objectifSensibilite &&
+    a.cible === cibleEffective() &&
+    a.annee === anneeCumul
+  );
+}
+
+/**
+ * Le pipeline : verdict tout de suite, puis tornade, seuils un par un,
+ * tempete et marges. Chaque etape peint des qu elle sait ; le jeton abandonne
+ * la suite si le dossier ou la lecture change en cours de route.
+ */
+async function lancerAnalyseSensibilite() {
+  const jeton = ++jetonAnalyse;
+  const objectif = objectifCourant();
+  const cible = cibleEffective();
+  const resultatDeDepart = dernierResultat;
+  const entrees = etatPourAnalyse();
+  const refs = referentielsPourAnalyse();
+  const pause = () => new Promise((r) => setTimeout(r, 0));
+  /**
+   * L analyse est perimee dans deux cas qui ne se traitent pas pareil :
+   *  - un pipeline PLUS RECENT a pris la main (jeton depasse) : lui vit, on
+   *    s efface sans bruit ;
+   *  - le RESULTAT MOTEUR a change sous nos pieds - une saisie retouchee, un
+   *    parametre deplace - sans que personne ne relance : s arreter la
+   *    laisserait l ecran sur « en cours de calcul » pour toujours. On
+   *    RELANCE donc l analyse sur le nouveau resultat, si l ecran est
+   *    toujours affiche.
+   */
+  const perime = () => {
+    if (jeton !== jetonAnalyse) return true;
+    if (dernierResultat === resultatDeDepart) return false;
+    const ecran = document.getElementById('ecran-sensibilite');
+    if (ecran && !ecran.hidden && dernierResultat) setTimeout(rendreSensibilite, 0);
+    return true;
+  };
+
+  peindreJauges([], true);
+  await pause();
+  if (perime()) return;
+
+  // La tornade lue sur l objectif : dix-sept passages, et deux services - le
+  // poids de chaque levier, et le SENS dans lequel il degrade.
+  const t = tornade(entrees, refs, { indicateur: objectif.code, contexte: contexteLecture() });
+  const tient = satisfaitCible(t.reference, objectif, cible);
+  poserTitreBascules(tient);
+  await pause();
+  if (perime()) return;
+
+  const seuils = [];
+  const a = {
+    resultat: resultatDeDepart,
+    objectif: objectif.code,
+    cible,
+    annee: anneeCumul,
+    reference: t.reference,
+    seuils,
+    balayages: new Map(),
+    finie: false,
+  };
+  analyseSensibilite = a;
+
+  // Les seuils, un levier a la fois, l ecran se remplissant au fil de l eau.
+  for (const barre of t.barres) {
+    seuils.push(calculerBascule(entrees, refs, barre, objectif, cible, t.reference));
+    peindreJauges(seuils, true);
+    await pause();
+    if (perime()) return;
+  }
+
+  peindreJauges(seuils, false);
+  poserClauseFragilite(seuils, tient);
+
+  // La tempete, puis les marges : chacune peut coûter quelques dizaines de
+  // passages, chacune a sa pause.
+  const tempete = calculerTempete(entrees, refs, seuils, objectif);
+  peindreTempete(tempete, objectif);
+  await pause();
+  if (perime()) return;
+
+  const marges = tient
+    ? null
+    : optimiser(entrees, refs, { objectif: objectif.code, cible, contexte: contexteLecture() });
+  peindreMarges(marges, objectif);
+  a.tempete = tempete;
+  a.marges = marges;
+  a.finie = true;
+  // Une jauge depliee PENDANT la tempete ou les marges attendait la fin :
+  // son contenu ne se remplit que quand l analyse est declaree finie. Un
+  // dernier repeint la sert, et ne coute des passages moteur que si un depli
+  // est ouvert (le balayage se met alors en cache).
+  peindreJauges(seuils, false);
+}
+
+function rendreSensibilite() {
+  rendreQuestionEquilibre();
+  rendreChoixScenarios();
+  peuplerReglagesLecture();
+  const verdict = document.getElementById('verdict-sensibilite');
+  if (!verdict) return;
+  if (!dernierResultat) {
+    verdict.className = 'optim';
+    verdict.innerHTML = '<p class="optim__detail">Aucun résultat : la saisie est incomplète.</p>';
+    const jauges = document.getElementById('jauges-bascule');
+    if (jauges) jauges.innerHTML = '';
+    for (const id of ['bloc-tempete', 'bloc-marges']) {
+      const b = document.getElementById(id);
+      if (b) b.hidden = true;
+    }
+    return;
+  }
+  rendreVerdictSensibilite();
+  if (analyseValide()) {
+    // Tout est en cache : on repeint sans un seul passage moteur.
+    const a = analyseSensibilite;
+    const objectif = objectifCourant();
+    const tient = satisfaitCible(a.reference, objectif, a.cible);
+    poserTitreBascules(tient);
+    peindreJauges(a.seuils, !a.finie);
+    if (a.finie) {
+      poserClauseFragilite(a.seuils, tient);
+      peindreTempete(a.tempete, objectif);
+      peindreMarges(a.marges, objectif);
+    }
+    return;
+  }
+  lancerAnalyseSensibilite();
+}
+
+// ------------------------------------------------- outils replies
+
 /** Question posee a la recherche d equilibre, et sa derniere reponse. */
 let equilibreObjectif = OBJECTIFS[0].code;
-let equilibreLevier = LEVIERS[0].code;
+// Le premier levier ACTIONNABLE, pas le premier du catalogue : le selecteur
+// ne propose que les actionnables, et un etat qui pointe hors de sa liste fait
+// calculer autre chose que ce que l ecran affiche.
+let equilibreLevier = (LEVIERS.find((l) => l.actionnable) ?? LEVIERS[0]).code;
 
 /**
  * Prepare la question, sans la resoudre.
@@ -17988,8 +18819,8 @@ function rendreQuestionEquilibre() {
   if (!l.options.length) {
     // Seuls les leviers ACTIONNABLES : on ne choisit pas le Livret A ni le taux
     // de vacance, on les subit. Les proposer ici laissait croire a une marge de
-    // manoeuvre qui n'existe pas. Ils restent dans la tornade, ou la question
-    // est de savoir ce qui pese, non ce qu'on peut faire.
+    // manoeuvre qui n'existe pas. Les jauges, elles, les couvrent tous - la
+    // question y est de savoir ce qui casse, non ce qu'on peut faire.
     l.innerHTML = LEVIERS.filter((x) => x.actionnable).map(
       (x) => `<option value="${att(x.code)}">${att(x.libelle)}</option>`,
     ).join('');
@@ -18004,7 +18835,62 @@ function rendreQuestionEquilibre() {
   }
 }
 
-/** Leviers retenus dans la table des scenarios, et ordre de classement. */
+/** Resout la question et ecrit la reponse en toutes lettres. */
+function resoudreEquilibre() {
+  const zone = document.getElementById('eq-reponse');
+  if (!zone || !dernierResultat) return;
+  const cible = lireMontant(document.getElementById('eq-cible')?.value);
+  if (nul(cible)) {
+    zone.className = 'equilibre__reponse equilibre__reponse--vide';
+    zone.textContent = 'Indiquez la valeur à atteindre.';
+    return;
+  }
+
+  const r = chercherEquilibre(etatPourAnalyse(), referentielsPourAnalyse(), {
+    levier: equilibreLevier,
+    objectif: equilibreObjectif,
+    cible,
+    contexte: contexteLecture(),
+  });
+  const ecrire = (v) => valeurIndicateur(v, r.objectif.unite);
+  const quand = anneeCumul ? ` en ${anneeCumul}` : '';
+
+  if (!r.applique) {
+    zone.className = 'equilibre__reponse equilibre__reponse--sans';
+    zone.textContent = `${r.levier.libelle} : ${r.raison}.`;
+    return;
+  }
+  if (!r.trouve) {
+    zone.className = 'equilibre__reponse equilibre__reponse--hors';
+    zone.innerHTML = r.atteignable
+      ? `⚠ Hors de portée. En jouant sur ${att(r.levier.libelle)} seul, ` +
+        `${att(r.objectif.libelle.toLowerCase())} ne descend pas sous ` +
+        `<strong>${att(ecrire(r.atteignable[0]))}</strong> ni ne monte au-dessus de ` +
+        `<strong>${att(ecrire(r.atteignable[1]))}</strong>.`
+      : `⚠ ${att(r.raison)}.`;
+    return;
+  }
+  // La version TROUVEE se decrit au-dela de la seule variation : le resultat
+  // complet est la, autant dire ce que cette version vaut sur les grandeurs
+  // qu un comite regarde.
+  const indVersion = r.resultat?.exploitation?.indicateurs;
+  const portrait = indVersion
+    ? ` <span class="aide">Cette version : creux ${att(eur(indVersion.creux_cumul_eur))}, ` +
+      `${att(nb(indVersion.exercices_deficitaires ?? 0))} exercice${(indVersion.exercices_deficitaires ?? 0) > 1 ? 's' : ''} déficitaire${(indVersion.exercices_deficitaires ?? 0) > 1 ? 's' : ''}, ` +
+      `TRI ${att(valeurIndicateur(indVersion.tri, 'taux'))}.</span>`
+    : '';
+  zone.className = 'equilibre__reponse';
+  zone.innerHTML =
+    r.iterations === 0
+      ? `✓ Déjà atteint : ${att(r.objectif.libelle.toLowerCase())} vaut ` +
+        `<strong>${att(ecrire(r.valeur))}</strong>, rien à changer.`
+      : `✓ Il faut <strong>${att(variationLisible(r.levier.unite, r.variation))}</strong> sur ` +
+        `${att(minuscule(r.levier.libelle))} pour amener ` +
+        `${att(r.objectif.libelle.toLowerCase())}${quand} à ` +
+        `<strong>${att(ecrire(r.valeur))}</strong>.${portrait}`;
+}
+
+/** Leviers retenus dans la table des combinaisons, et ordre de classement. */
 const leviersScenarios = new Set(LEVIERS.filter((l) => l.actionnable).map((l) => l.code));
 let triScenarios = 'resultat';
 
@@ -18043,7 +18929,7 @@ function rendreScenarios() {
   }
 
   const r = scenarios(etatPourAnalyse(), referentielsPourAnalyse(), {
-    indicateur: indicateurSensibilite,
+    indicateur: objectifSensibilite,
     contexte: contexteLecture(),
     leviers: choisis.map((code) => ({ code, crans: [-1, 0, 1] })),
   });
@@ -18082,22 +18968,21 @@ function rendreScenarios() {
   message.className = 'optim';
   message.innerHTML =
     `<p class="optim__detail">${att(nb(r.total))} combinaisons calculées. Référence : ` +
-    `<strong>${att(ecrire(r.reference))}</strong>. Les écarts et le rapport se lisent ` +
-    `par rapport à elle.</p>` +
+    `<strong>${att(ecrire(r.reference))}</strong>. Les écarts se lisent par rapport à elle.</p>` +
     // Les leviers sans prise sont NOMMES : sans cela on croirait avoir teste
     // une hypothese qui n a jamais bouge.
     (r.sansPrise.length
-      ? `<p class=\"optim__detail\">Écartés faute de prise sur cette opération : ` +
+      ? `<p class="optim__detail">Écartés faute de prise sur cette opération : ` +
         `${att(r.sansPrise.map((s) => s.libelle).join(', '))}.</p>`
       : '');
 
   table.querySelector('thead').innerHTML =
-    `<tr><th class="num">N°</th><th>Composition</th><th class="num">Effort</th>` +
+    `<tr><th>Composition</th><th class="num">Effort</th>` +
     `<th class="num">${att(r.indicateur.libelle)}</th><th class="num">Écart</th>` +
-    `<th class="num">Par cran</th><th class="num">Interaction</th></tr>`;
+    `<th class="num">Gain par effort</th><th class="num">Effet de seuil</th></tr>`;
 
   table.querySelector('tbody').innerHTML = liste
-    .map((s, i) => {
+    .map((s) => {
       const compo = s.mouvements.length
         ? s.mouvements
             .map(
@@ -18108,15 +18993,15 @@ function rendreScenarios() {
             .join(' ')
         : '<em>l’opération telle qu’elle est</em>';
       const rp = rapport(s);
-      // L INTERACTION ne se lit que sur un assemblage : sur un levier seul elle
-      // vaut zero par construction, l afficher ferait croire a une mesure.
+      // L EFFET DE SEUIL ne se lit que sur un assemblage : sur un levier seul
+      // il vaut zero par construction, l afficher ferait croire a une mesure.
       const inter =
         s.mouvements.length > 1 && s.interaction !== null
           ? `${signe(s.interaction)}${ecrire(s.interaction)}`
           : '-';
       return (
         `<tr class="${s.mouvements.length ? '' : 'poste--reference'}">` +
-        `<td class="num">${i + 1}</td><td>${compo}</td>` +
+        `<td>${compo}</td>` +
         `<td class="num">${s.effort || '-'}</td>` +
         `<td class="num">${att(ecrire(s.valeur))}</td>` +
         `<td class="num ${s.ecart < 0 ? 'montant--negatif' : ''}">${
@@ -18125,342 +19010,6 @@ function rendreScenarios() {
         `<td class="num">${rp === null ? '-' : signe(rp) + att(ecrire(rp))}</td>` +
         `<td class="num ${s.interaction < 0 ? 'montant--negatif' : ''}">${att(inter)}</td></tr>`
       );
-    })
-    .join('');
-}
-
-/**
- * Cherche la version la plus soutenable, et l'ecrit en toutes lettres.
- *
- * L'objectif est FIXE - que l'autofinancement cumule repasse au-dessus de zero -
- * et il est ecrit dans la phrase du bloc. Un bouton qui demande trois reglages
- * avant de repondre n'en est plus un ; qui veut viser autre chose a la recherche
- * manuelle juste en dessous.
- */
-function resoudreOptimisation() {
-  const zone = document.getElementById('optim-reponse');
-  if (!zone || !dernierResultat) return;
-  const r = optimiser(etatPourAnalyse(), referentielsPourAnalyse(), {
-    objectif: 'autofinancement_cumule',
-    cible: 0,
-    contexte: contexteLecture(),
-  });
-  const ecrire = (v) => valeurIndicateur(v, r.objectif.unite);
-  const signe = (v) => (v > 0 ? '+' : '');
-  const mouvement = (m) => `${m.libelle.toLowerCase()} ${signe(m.variation)}${pct(m.variation, 1)}`;
-  // L'EFFORT se dit en crans du levier et non en pourcents : c'est ce qui rend
-  // deux leviers comparables. Un cran vaut l'amplitude de reference du levier -
-  // 5 % sur un prix de revient, 20 % sur une subvention.
-  const crans = (e) => `${nb(Math.round(e * 10) / 10)} cran${e >= 2 ? 's' : ''}`;
-
-  if (r.etat === 'deja') {
-    zone.className = 'optim optim--bon';
-    zone.innerHTML =
-      `<p class="optim__verdict">✓ L’opération tient déjà.</p>` +
-      `<p class="optim__detail">L’autofinancement cumulé atteint ` +
-      `<strong>${att(ecrire(r.valeur))}</strong>, soit ${att(ecrire(r.marge))} au-dessus du ` +
-      `seuil. Rien à négocier pour la faire tenir.</p>`;
-    return;
-  }
-
-  if (r.etat === 'hors de portee') {
-    zone.className = 'optim optim--hors';
-    zone.innerHTML =
-      `<p class="optim__verdict">⚠ Aucune version ne tient, dans les limites explorées.</p>` +
-      `<p class="optim__detail">L’autofinancement cumulé part de ` +
-      `<strong>${att(ecrire(r.valeur))}</strong>. Même poussé à ${att(crans(r.effort_max))}, ` +
-      `aucun levier n’atteint zéro :</p>` +
-      `<ul class="optim__liste">${r.pistes
-        .map(
-          (p) =>
-            `<li><span>${att(p.libelle)}</span>` +
-            `<span class="num">au mieux ${att(ecrire(p.extreme))}</span></li>`,
-        )
-        .join('')}</ul>` +
-      // Les leviers sans prise se disent ICI AUSSI : conclure « rien n'y fait »
-      // sans preciser qu'un des deux n'a pas ete essaye serait un demi-mensonge.
-      (r.sansPrise.length
-        ? `<p class="optim__detail">Et ${att(r.sansPrise.join(', ').toLowerCase())} ` +
-          `n’a pas pu être essayé : l’opération n’en porte pas.</p>`
-        : '') +
-      `<p class="optim__detail">C’est le programme ou les loyers qu’il faut revoir, ` +
-      `pas la négociation.</p>`;
-    return;
-  }
-
-  const gagnantes = r.pistes.filter((p) => p.trouve);
-  const tete = gagnantes[0];
-  const combi = r.combinaison?.trouve ? r.combinaison : null;
-  // La combinaison passe DEVANT quand elle coute moins d'effort : partager la
-  // charge entre deux leviers demande moins a chacun, et c'est ce qu'on fait en
-  // vrai - on negocie un peu le prix ET on cherche un peu de subvention.
-  const meilleure =
-    combi && (!tete || combi.effort < tete.effort - 1e-9)
-      ? {
-          texte: combi.mouvements.map(mouvement).join(' et '),
-          effort: combi.effort,
-          valeur: combi.valeur,
-        }
-      : { texte: mouvement(tete), effort: tete.effort, valeur: tete.valeur };
-
-  zone.className = 'optim optim--bon';
-  zone.innerHTML =
-    `<p class="optim__verdict">✓ Le plus court chemin : ` +
-    `<strong>${att(meilleure.texte)}</strong>.</p>` +
-    `<p class="optim__detail">L’autofinancement cumulé passe de ${att(ecrire(r.valeur))} à ` +
-    `<strong>${att(ecrire(meilleure.valeur))}</strong>, pour ${att(crans(meilleure.effort))} ` +
-    `d’effort.</p>` +
-    `<ul class="optim__liste">${gagnantes
-      .map(
-        (p) =>
-          `<li><span>${att(p.libelle)} seul</span><span class="num">` +
-          `${signe(p.variation)}${att(pct(p.variation, 1))} · ${att(crans(p.effort))}</span></li>`,
-      )
-      .join('')}${
-      combi
-        ? `<li><span>Les deux ensemble</span><span class="num">${att(
-            combi.mouvements.map((m) => `${signe(m.variation)}${pct(m.variation, 1)}`).join(' / '),
-          )} · ${att(crans(combi.effort))}</span></li>`
-        : ''
-    }</ul>` +
-    (r.sansPrise.length
-      ? `<p class="optim__detail">Sans prise sur cette opération : ` +
-        `${att(r.sansPrise.join(', '))}.</p>`
-      : '');
-}
-
-/** Resout la question et ecrit la reponse en toutes lettres. */
-function resoudreEquilibre() {
-  const zone = document.getElementById('eq-reponse');
-  if (!zone || !dernierResultat) return;
-  const cible = lireMontant(document.getElementById('eq-cible')?.value);
-  if (nul(cible)) {
-    zone.className = 'equilibre__reponse equilibre__reponse--vide';
-    zone.textContent = 'Indiquez la valeur à atteindre.';
-    return;
-  }
-
-  const r = chercherEquilibre(etatPourAnalyse(), referentielsPourAnalyse(), {
-    levier: equilibreLevier,
-    objectif: equilibreObjectif,
-    cible,
-    contexte: contexteLecture(),
-  });
-  const ecrire = (v) => valeurIndicateur(v, r.objectif.unite);
-  const quand = anneeCumul ? ` en ${anneeCumul}` : '';
-  const variation = (v) =>
-    r.levier.unite === 'annees'
-      ? `${v > 0 ? '+' : ''}${Math.round(v)} ans`
-      : r.levier.unite === 'points'
-        ? `${v > 0 ? '+' : ''}${pct(v, 2).replace(' %', ' pt')}`
-        : `${v > 0 ? '+' : ''}${pct(v, 1)}`;
-
-  if (!r.applique) {
-    zone.className = 'equilibre__reponse equilibre__reponse--sans';
-    zone.textContent = `${r.levier.libelle} : ${r.raison}.`;
-    return;
-  }
-  if (!r.trouve) {
-    zone.className = 'equilibre__reponse equilibre__reponse--hors';
-    zone.innerHTML = r.atteignable
-      ? `⚠ Hors de portée. En jouant sur ${att(r.levier.libelle)} seul, ` +
-        `${att(r.objectif.libelle.toLowerCase())} ne descend pas sous ` +
-        `<strong>${att(ecrire(r.atteignable[0]))}</strong> ni ne monte au-dessus de ` +
-        `<strong>${att(ecrire(r.atteignable[1]))}</strong>.`
-      : `⚠ ${att(r.raison)}.`;
-    return;
-  }
-  zone.className = 'equilibre__reponse';
-  zone.innerHTML =
-    r.iterations === 0
-      ? `✓ Déjà atteint : ${att(r.objectif.libelle.toLowerCase())} vaut ` +
-        `<strong>${att(ecrire(r.valeur))}</strong>, rien à changer.`
-      : `✓ Il faut <strong>${att(variation(r.variation))}</strong> sur ` +
-        `${att(r.levier.libelle.toLowerCase())} pour amener ` +
-        `${att(r.objectif.libelle.toLowerCase())}${quand} à ` +
-        `<strong>${att(ecrire(r.valeur))}</strong>. ` +
-        `<span class="aide">Trouvé en ${r.iterations} itérations.</span>`;
-}
-
-function rendreSensibilite() {
-  rendreQuestionEquilibre();
-  rendreChoixScenarios();
-  const zone = document.getElementById('tornade');
-  if (!zone) return;
-  if (!dernierResultat) {
-    zone.innerHTML = '<p class="vide">Aucun résultat : la saisie est incomplète.</p>';
-    document.getElementById('bloc-balayage').hidden = true;
-    return;
-  }
-
-  const choix = document.getElementById('sens-indicateur');
-  if (choix && !choix.options.length) {
-    choix.innerHTML = INDICATEURS.map(
-      (i) => `<option value="${att(i.code)}">${att(i.libelle)}</option>`,
-    ).join('');
-  }
-  if (choix) choix.value = indicateurSensibilite;
-
-  const champAnnee = document.getElementById('sens-annee');
-  if (champAnnee) {
-    const lignes = dernierResultat.exploitation?.lignes ?? [];
-    // Le filigrane porte la DERNIERE annee : c'est ce que le champ vide
-    // signifie, et l'ecrire evite d'avoir a le deviner.
-    champAnnee.placeholder = lignes.length ? String(lignes.at(-1).annee) : '';
-    if (nul(anneeCumul)) champAnnee.value = '';
-  }
-
-  const t = tornade(etatPourAnalyse(), referentielsPourAnalyse(), {
-    indicateur: indicateurSensibilite,
-    contexte: contexteLecture(),
-  });
-  derniereTornade = t;
-
-  const ref = document.getElementById('sens-reference');
-  const essayes = t.barres.filter((b) => b.applique);
-  const muets = t.barres.filter((b) => !b.applique);
-  if (ref) {
-    // La REFERENCE en toutes lettres et en gros : tout le reste de la page se
-    // lit par rapport a elle, elle ne peut pas etre une note de bas de page.
-    ref.innerHTML =
-      `<span class="sens-chapeau__valeur">${att(
-        valeurIndicateur(t.reference, t.indicateur.unite),
-      )}</span>` +
-      `<span class="sens-chapeau__legende">${att(t.indicateur.libelle.toLowerCase())}` +
-      `${anneeCumul ? ` en ${anneeCumul}` : ''}, tel que l’opération est saisie aujourd’hui</span>`;
-  }
-
-  // ECHELLE COMMUNE a toutes les barres : c est ce qui permet de les comparer
-  // d un coup d oeil, et c est tout l interet de la figure. Elle englobe la
-  // reference, sans quoi son trait sortirait du cadre.
-  const bornes = essayes.flatMap((b) => [b.bas, b.haut]).concat([t.reference]).filter((x) => !nul(x));
-  const min = Math.min(...bornes);
-  const max = Math.max(...bornes);
-  const etendue = max - min || 1;
-  const part = (v) => ((v - min) / etendue) * 100;
-  const rr = part(t.reference);
-
-  // SENS de lecture : +1 dit qu une hausse est une bonne nouvelle. La moitie
-  // de barre qui va du bon cote se colore en vert, l autre en rouge. Sans
-  // cela une barre ne dit que « ca bouge », jamais « ca se degrade » - et
-  // c'est pourtant la seule chose qu'on veut savoir devant un directoire.
-  const favorableADroite = t.indicateur.sens === 1;
-
-  zone.innerHTML =
-    essayes
-      .map((b) => {
-        const g = Math.min(part(b.bas), part(b.haut));
-        const d = Math.max(part(b.bas), part(b.haut));
-        const levier = LEVIERS.find((l) => l.code === b.code);
-        // Deux segments : ce qui tombe sous la reference, ce qui la depasse.
-        const sousRef = [g, Math.min(d, rr)];
-        const surRef = [Math.max(g, rr), d];
-        const segment = (bornes, bon) =>
-          bornes[1] - bornes[0] > 0.05
-            ? `<span class="tornade__segment tornade__segment--${bon ? 'bon' : 'mauvais'}"` +
-              ` style="left:${bornes[0].toFixed(2)}%;width:${(bornes[1] - bornes[0]).toFixed(2)}%"></span>`
-            : '';
-        const ouverte = levierDeplie === b.code;
-        return `<button type="button" class="tornade__ligne${
-          ouverte ? ' tornade__ligne--ouverte' : ''
-        }" data-levier="${att(b.code)}" aria-expanded="${ouverte}">
-          <span class="tornade__nom">${att(b.libelle)}
-            <small>testé à ${att(amplitudeLisible(levier, b.amplitude))}</small></span>
-          <span class="tornade__extreme num">${att(valeurIndicateur(Math.min(b.bas, b.haut), t.indicateur.unite))}</span>
-          <span class="tornade__piste">
-            ${segment(sousRef, !favorableADroite)}
-            ${segment(surRef, favorableADroite)}
-            <span class="tornade__reference" style="left:${rr.toFixed(2)}%"></span>
-          </span>
-          <span class="tornade__extreme num">${att(valeurIndicateur(Math.max(b.bas, b.haut), t.indicateur.unite))}</span>
-          <span class="tornade__poids">${att(valeurIndicateur(b.ecart, t.indicateur.unite))}
-            <small>d’écart</small></span>
-        </button>`;
-      })
-      .join('') +
-    // La REGLE sous les barres : sans elle, on voit qu une barre est plus
-    // longue qu une autre sans savoir de combien a combien.
-    // La regle est une RANGEE DE LA MEME GRILLE, cellules vides comprises :
-    // caler ses bords a coups de marges codees en dur ignorait les gouttieres et
-    // la decalait de huit pixels a gauche, cent vingt-quatre a droite.
-    `<div class="tornade__regle">
-      <span></span><span></span>
-      <span class="tornade__regle__piste">
-        <span class="num">${att(valeurIndicateur(min, t.indicateur.unite))}</span>
-        <span class="tornade__regle__ref" style="left:${rr.toFixed(2)}%">référence</span>
-        <span class="num">${att(valeurIndicateur(max, t.indicateur.unite))}</span>
-      </span>
-      <span></span><span></span>
-    </div>` +
-    // Les leviers sans prise sont REGROUPES a part. Meles aux autres, ils se
-    // lisaient comme des leviers sans effet, ce qui est le contraire de ce
-    // qu'ils disent.
-    (muets.length
-      ? `<p class="tornade__muets">Sans prise sur cette opération : ${muets
-          .map((b) => att(b.libelle))
-          .join(', ')}. ` +
-        `<span>Rien n’a été essayé de ce côté-là - l’opération ne porte pas de quoi les faire varier.</span></p>`
-      : '');
-
-  const lecture = document.getElementById('sens-lecture');
-  if (lecture) {
-    const tete = essayes[0];
-    lecture.innerHTML = tete
-      ? `⚙ <strong>${att(tete.libelle)}</strong> pèse le plus : à ${att(
-          amplitudeLisible(
-            LEVIERS.find((l) => l.code === tete.code),
-            tete.amplitude,
-          ),
-        )} près, il déplace ${att(t.indicateur.libelle.toLowerCase())} de ` +
-        `<strong>${att(valeurIndicateur(tete.ecart, t.indicateur.unite))}</strong>. ` +
-        `Cliquez une ligne pour voir le détail de ses variations.`
-      : '';
-  }
-  rendreBalayage();
-}
-
-/** Detail d un levier : une ligne par point de mesure. */
-function rendreBalayage() {
-  const bloc = document.getElementById('bloc-balayage');
-  if (!bloc) return;
-  const levier = LEVIERS.find((l) => l.code === levierDeplie);
-  bloc.hidden = !levier || !dernierResultat;
-  if (bloc.hidden) return;
-
-  const barre = derniereTornade?.barres.find((b) => b.code === levier.code);
-  const amplitude = barre?.amplitude ?? levier.amplitude;
-  const { points } = balayerLevier(
-    etatPourAnalyse(),
-    referentielsPourAnalyse(),
-    levier.code,
-    plage(amplitude, 7),
-  );
-  const indicateur = INDICATEURS.find((i) => i.code === indicateurSensibilite);
-
-  document.getElementById('titre-balayage').textContent =
-    `${levier.libelle} · ${indicateur.libelle}`;
-  const tab = document.getElementById('table-balayage');
-  tab.querySelector('thead').innerHTML =
-    `<tr><th>Variation</th><th class="num">${att(indicateur.libelle)}</th>` +
-    '<th class="num">Écart à la référence</th></tr>';
-  tab.querySelector('tbody').innerHTML = points
-    .map((p) => {
-      const v = indicateur.lire(p.resultat, contexteLecture());
-      const ecart = nul(v) || nul(derniereTornade?.reference) ? null : v - derniereTornade.reference;
-      const variation =
-        levier.unite === 'annees'
-          ? `${p.variation > 0 ? '+' : ''}${p.variation} ans`
-          : `${p.variation > 0 ? '+' : ''}${
-              levier.unite === 'points'
-                ? pct(p.variation, 2).replace(' %', ' pt')
-                : pct(p.variation, 1)
-            }`;
-      return `<tr class="${p.variation === 0 ? 'poste--reference' : ''}">
-        <td>${att(variation)}</td>
-        <td class="num">${p.erreur ? att(p.erreur) : valeurIndicateur(v, indicateur.unite)}</td>
-        <td class="num ${ecart < 0 ? 'montant--negatif' : ''}">${
-          nul(ecart) ? '-' : (ecart > 0 ? '+' : '') + valeurIndicateur(ecart, indicateur.unite)
-        }</td></tr>`;
     })
     .join('');
 }
@@ -18870,8 +19419,14 @@ document.addEventListener('input', (ev) => {
     return;
   }
 
-  if (el.id === 'sens-indicateur') {
-    indicateurSensibilite = el.value;
+  // Reglages de lecture du diagnostic : chacun invalide l analyse en cache
+  // (la cle de validite porte objectif, cible et annee) et relance le pipeline.
+  if (el.id === 'lect-objectif') {
+    objectifSensibilite = el.value;
+    // La cible saisie valait pour l objectif quitte : on rend la main a la
+    // cible par defaut du nouveau plutot que de viser 0 EUR de fonds propres
+    // parce qu on visait 0 EUR de cumul.
+    cibleBascule = null;
     rendreSensibilite();
     return;
   }
@@ -18882,9 +19437,16 @@ document.addEventListener('input', (ev) => {
     return;
   }
 
-  if (el.id === 'sens-annee') {
+  if (el.id === 'lect-annee') {
     const n = lireMontant(el.value);
     anneeCumul = nul(n) ? null : Math.round(n);
+    rendreSensibilite();
+    return;
+  }
+
+  if (el.id === 'lect-cible') {
+    const n = lireMontant(el.value);
+    cibleBascule = nul(n) ? null : n;
     rendreSensibilite();
     return;
   }
@@ -19616,19 +20178,25 @@ document.addEventListener('click', async (ev) => {
     else leviersScenarios.delete(code);
     return;
   }
-  if (el.closest('#btn-optimiser')) {
-    resoudreOptimisation();
-    return;
-  }
   if (el.closest('#btn-equilibre')) {
     resoudreEquilibre();
     return;
   }
-  const barreTornade = el.closest('[data-levier]');
-  if (barreTornade) {
-    const code = /** @type {HTMLElement} */ (barreTornade).dataset.levier;
+  // Les reglages de lecture se devoilent sur demande : la lecture par defaut
+  // est la bonne dans presque tous les cas.
+  if (el.closest('#btn-lecture')) {
+    const reglages = document.getElementById('reglages-lecture');
+    if (reglages) reglages.hidden = !reglages.hidden;
+    return;
+  }
+  const ligneBascule = el.closest('[data-bascule]');
+  if (ligneBascule) {
+    const code = /** @type {HTMLElement} */ (ligneBascule).dataset.bascule;
     levierDeplie = levierDeplie === code ? null : code;
-    rendreSensibilite();
+    // Repeindre les jauges suffit : l analyse est en cache, aucun passage
+    // moteur, et le depli se remplit depuis ce cache.
+    if (analyseValide()) peindreJauges(analyseSensibilite.seuils, !analyseSensibilite.finie);
+    else rendreSensibilite();
     return;
   }
   const perimExp = el.closest('[data-perimetre-compte]');

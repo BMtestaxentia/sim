@@ -465,3 +465,62 @@ describe('tous les scenarios', () => {
     ).toThrow(/Levier inconnu/);
   });
 });
+
+describe('levier frais de gestion : il decale l assiette QUI GOUVERNE', () => {
+  // Les trois assiettes du compte sont exclusives (R-EXP) : la version en % des
+  // loyers, des qu elle existe, remplace celle en % du prix de revient. La
+  // premiere version du levier ajoutait des points de la variante loyers quelle
+  // que soit l assiette en place : sur une operation assise sur le prix de
+  // revient, pousser le levier VERS LE HAUT troquait la charge contre une plus
+  // petite, et la tornade montrait un levier qui ameliore l operation en la
+  // chargeant.
+  const indicateur = INDICATEURS.find((i) => i.code === 'autofinancement_cumule');
+  const cumulDe = (entrees, variation) => {
+    const { points } = balayerLevier(entrees, REFERENTIELS, 'frais_gestion', [variation]);
+    return indicateur.lire(points[0].resultat, {});
+  };
+
+  it('degrade le cumul quand il monte, sur une assiette en % des loyers', () => {
+    const ref = indicateur.lire(calculer(structuredClone(ENTREES), REFERENTIELS), {});
+    expect(cumulDe(ENTREES, 0.2)).toBeLessThan(ref);
+    expect(cumulDe(ENTREES, -0.2)).toBeGreaterThan(ref);
+  });
+
+  it('degrade le cumul quand il monte, sur une assiette en % du prix de revient', () => {
+    const entrees = structuredClone(ENTREES);
+    entrees.exploitation.frais_gestion_pct_loyers = 0;
+    entrees.exploitation.frais_gestion_pct_prix_revient = 0.003;
+    const ref = indicateur.lire(calculer(structuredClone(entrees), REFERENTIELS), {});
+    expect(cumulDe(entrees, 0.2)).toBeLessThan(ref);
+    expect(cumulDe(entrees, -0.2)).toBeGreaterThan(ref);
+  });
+
+  it('mord sur l assiette du bareme quand la saisie n en fixe aucune', () => {
+    const entrees = structuredClone(ENTREES);
+    entrees.exploitation.frais_gestion_pct_loyers = 0;
+    delete entrees.exploitation.frais_gestion_pct_prix_revient;
+    // Le moteur assoit alors les frais sur le taux du referentiel : le levier
+    // doit le decaler, pas rendre « sans prise ».
+    const { points } = balayerLevier(entrees, REFERENTIELS, 'frais_gestion', [0.2]);
+    expect(points[0].applique).toBe(true);
+    const ref = indicateur.lire(calculer(structuredClone(entrees), REFERENTIELS), {});
+    expect(indicateur.lire(points[0].resultat, {})).toBeLessThan(ref);
+  });
+});
+
+describe('indicateur fonds propres appeles', () => {
+  it('lit l apport du plan de financement, et baisse avec le prix de revient', () => {
+    const indicateur = INDICATEURS.find((i) => i.code === 'fonds_propres');
+    expect(indicateur).toBeDefined();
+    expect(indicateur.sens).toBe(-1);
+    // L apport AUTOMATIQUE (part du referentiel sur le prix de revient) ne
+    // s active que si la racine par produit existe, meme vide : c est ce que
+    // l ecran envoie toujours. Sans elle, l apport est un scalaire absent.
+    const entrees = structuredClone(ENTREES);
+    entrees.fonds_propres_par_produit = {};
+    const ref = indicateur.lire(calculer(structuredClone(entrees), REFERENTIELS), {});
+    expect(ref).toBeGreaterThan(0);
+    const { points } = balayerLevier(entrees, REFERENTIELS, 'prix_revient', [-0.05]);
+    expect(indicateur.lire(points[0].resultat, {})).toBeLessThan(ref);
+  });
+});

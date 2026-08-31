@@ -1700,16 +1700,21 @@ body.sans-simulation .entete__dossier { display: none; }
 /* ============================================================ GRAPHE */
 
 .legende-graphe { display: inline-flex; align-items: center; gap: 12px; font-size: 10.5px; color: var(--text-tertiary); font-weight: 500; text-transform: none; letter-spacing: 0; }
-.puce--positif, .puce--negatif, .puce--cumul {
+.puce--positif, .puce--negatif, .puce--cumul, .puce--cumul-comptable {
   display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px;
 }
 .puce--positif { background: var(--success-accent); }
 .puce--negatif { background: var(--danger-accent); }
 .puce--cumul { background: var(--info-accent); border-radius: 50%; }
+/* Le resultat comptable se distingue de l autofinancement par la TEINTE et
+   par le TRAIT : violet, et tirete comme sa courbe. Deux bleus voisins les
+   auraient rendus indiscernables la ou tout l interet est de les comparer. */
+.puce--cumul-comptable { background: var(--purple-accent); border-radius: 50%; }
 
 .graphe__barre--positif { fill: var(--success-accent); }
 .graphe__barre--negatif { fill: var(--danger-accent); }
 .graphe__cumul { fill: none; stroke: var(--info-accent); stroke-width: 2; }
+.graphe__cumul--comptable { stroke: var(--purple-accent); stroke-dasharray: 5 3; }
 .graphe__zero { stroke: var(--border-color-strong); stroke-width: 1; }
 .graphe__repere { stroke: var(--warning-accent); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.7; }
 .graphe__texte { fill: var(--text-tertiary); font-size: 9.5px; }
@@ -3351,11 +3356,12 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
 
       <section class="bloc">
         <h2 class="bloc__titre">
-          Résultat annuel et cumul
+          Autofinancement annuel et cumuls
           <span class="legende-graphe">
-            <span class="legende__item"><span class="legende__puce puce--positif"></span>résultat excédentaire</span>
-            <span class="legende__item"><span class="legende__puce puce--negatif"></span>résultat déficitaire</span>
-            <span class="legende__item"><span class="legende__puce puce--cumul"></span>cumul</span>
+            <span class="legende__item"><span class="legende__puce puce--positif"></span>autofinancement excédentaire</span>
+            <span class="legende__item"><span class="legende__puce puce--negatif"></span>autofinancement déficitaire</span>
+            <span class="legende__item"><span class="legende__puce puce--cumul"></span>autofinancement cumulé</span>
+            <span class="legende__item"><span class="legende__puce puce--cumul-comptable"></span>résultat comptable cumulé</span>
           </span>
         </h2>
         <div id="graphe-exploitation" data-restitution></div>
@@ -13597,12 +13603,22 @@ function grapheExploitation(lignes, evenements) {
   const hauteurTrace = H - marge.haut - marge.bas;
 
   const resultats = lignes.map((l) => l.autofinancement_eur);
+  // DEUX cumuls, comme LEON les met cote a cote : l'autofinancement, qui est de
+  // la tresorerie - il rembourse du capital - et le resultat comptable, qui
+  // porte les dotations aux amortissements a la place. Ils divergent d'autant
+  // plus que l'operation est jeune, et c'est precisement ce que le lecteur vient
+  // chercher : une operation peut etre deficitaire au compte de resultat tout en
+  // degageant du cash, et l'inverse.
   const cumuls = lignes.map((l) => l.cumul_autofinancement_eur);
+  const cumulsCompta = lignes.map((l) => l.cumul_resultat_comptable_eur ?? 0);
   const maxRes = Math.max(...resultats, 0);
   const minRes = Math.min(...resultats, 0);
   const etendueRes = maxRes - minRes || 1;
-  const maxCum = Math.max(...cumuls, 0);
-  const minCum = Math.min(...cumuls, 0);
+  // UNE SEULE echelle pour les deux courbes. Leur donner chacune la sienne les
+  // ferait paraitre voisines quand elles sont eloignees, et l'ecart entre les
+  // deux est tout l'interet de les tracer ensemble.
+  const maxCum = Math.max(...cumuls, ...cumulsCompta, 0);
+  const minCum = Math.min(...cumuls, ...cumulsCompta, 0);
   const etendueCum = maxCum - minCum || 1;
 
   const pas = largeurTrace / lignes.length;
@@ -13617,11 +13633,14 @@ function grapheExploitation(lignes, evenements) {
       const y1 = yRes(l.autofinancement_eur);
       const haut = Math.max(1, Math.abs(y1 - y0));
       const classe = l.autofinancement_eur < 0 ? 'negatif' : 'positif';
-      return `<rect class="graphe__barre--${classe}" x="${(xCentre(i) - largeurBarre / 2).toFixed(1)}" y="${Math.min(y0, y1).toFixed(1)}" width="${largeurBarre.toFixed(1)}" height="${haut.toFixed(1)}"><title>${l.annee} : résultat ${eur(l.autofinancement_eur)}, cumul ${eur(l.cumul_autofinancement_eur)}</title></rect>`;
+      return `<rect class="graphe__barre--${classe}" x="${(xCentre(i) - largeurBarre / 2).toFixed(1)}" y="${Math.min(y0, y1).toFixed(1)}" width="${largeurBarre.toFixed(1)}" height="${haut.toFixed(1)}"><title>${l.annee} : autofinancement ${eur(l.autofinancement_eur)}, cumulé ${eur(l.cumul_autofinancement_eur)} · résultat comptable cumulé ${eur(l.cumul_resultat_comptable_eur ?? 0)}</title></rect>`;
     })
     .join('');
 
-  const trace = lignes.map((l, i) => `${xCentre(i).toFixed(1)},${yCum(l.cumul_autofinancement_eur).toFixed(1)}`).join(' ');
+  const traceDe = (valeurs) =>
+    valeurs.map((v, i) => `${xCentre(i).toFixed(1)},${yCum(v).toFixed(1)}`).join(' ');
+  const trace = traceDe(cumuls);
+  const traceCompta = traceDe(cumulsCompta);
 
   // Reperes verticaux. Deux ecueils, tous deux visibles des qu'une operation
   // porte six prets :
@@ -13675,13 +13694,14 @@ function grapheExploitation(lignes, evenements) {
     .join('');
 
   return `<svg viewBox="0 0 ${L} ${H}" role="img"
-      aria-label="Résultat annuel en barres et cumul en ligne, de ${lignes[0].annee} à ${lignes.at(-1).annee}">
+      aria-label="Autofinancement annuel en barres, cumuls d’autofinancement et de résultat comptable en lignes, de ${lignes[0].annee} à ${lignes.at(-1).annee}">
       <line class="graphe__zero" x1="${marge.gauche}" y1="${yRes(0).toFixed(1)}" x2="${L - marge.droite}" y2="${yRes(0).toFixed(1)}" />
       ${barres}
+      <polyline class="graphe__cumul graphe__cumul--comptable" points="${traceCompta}" />
       <polyline class="graphe__cumul" points="${trace}" />
       ${reperes}${axe}
-      <text class="graphe__texte" x="${marge.gauche}" y="${H - 2}">Résultat de l’année, échelle ${eur(minRes)} à ${eur(maxRes)}</text>
-      <text class="graphe__texte" x="${L - marge.droite}" y="${H - 2}" text-anchor="end">Cumul, échelle ${eur(minCum)} à ${eur(maxCum)}</text>
+      <text class="graphe__texte" x="${marge.gauche}" y="${H - 2}">Autofinancement de l’année, échelle ${eur(minRes)} à ${eur(maxRes)}</text>
+      <text class="graphe__texte" x="${L - marge.droite}" y="${H - 2}" text-anchor="end">Cumuls, échelle commune ${eur(minCum)} à ${eur(maxCum)}</text>
     </svg>`;
 }
 

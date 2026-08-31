@@ -1686,16 +1686,21 @@ body.sans-simulation .entete__dossier { display: none; }
 /* ============================================================ GRAPHE */
 
 .legende-graphe { display: inline-flex; align-items: center; gap: 12px; font-size: 10.5px; color: var(--text-tertiary); font-weight: 500; text-transform: none; letter-spacing: 0; }
-.puce--positif, .puce--negatif, .puce--cumul {
+.puce--positif, .puce--negatif, .puce--cumul, .puce--cumul-comptable {
   display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px;
 }
 .puce--positif { background: var(--success-accent); }
 .puce--negatif { background: var(--danger-accent); }
 .puce--cumul { background: var(--info-accent); border-radius: 50%; }
+/* Le resultat comptable se distingue de l autofinancement par la TEINTE et
+   par le TRAIT : violet, et tirete comme sa courbe. Deux bleus voisins les
+   auraient rendus indiscernables la ou tout l interet est de les comparer. */
+.puce--cumul-comptable { background: var(--purple-accent); border-radius: 50%; }
 
 .graphe__barre--positif { fill: var(--success-accent); }
 .graphe__barre--negatif { fill: var(--danger-accent); }
 .graphe__cumul { fill: none; stroke: var(--info-accent); stroke-width: 2; }
+.graphe__cumul--comptable { stroke: var(--purple-accent); stroke-dasharray: 5 3; }
 .graphe__zero { stroke: var(--border-color-strong); stroke-width: 1; }
 .graphe__repere { stroke: var(--warning-accent); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.7; }
 .graphe__texte { fill: var(--text-tertiary); font-size: 9.5px; }

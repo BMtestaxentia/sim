@@ -3256,12 +3256,22 @@ function grapheExploitation(lignes, evenements) {
   const hauteurTrace = H - marge.haut - marge.bas;
 
   const resultats = lignes.map((l) => l.autofinancement_eur);
+  // DEUX cumuls, comme LEON les met cote a cote : l'autofinancement, qui est de
+  // la tresorerie - il rembourse du capital - et le resultat comptable, qui
+  // porte les dotations aux amortissements a la place. Ils divergent d'autant
+  // plus que l'operation est jeune, et c'est precisement ce que le lecteur vient
+  // chercher : une operation peut etre deficitaire au compte de resultat tout en
+  // degageant du cash, et l'inverse.
   const cumuls = lignes.map((l) => l.cumul_autofinancement_eur);
+  const cumulsCompta = lignes.map((l) => l.cumul_resultat_comptable_eur ?? 0);
   const maxRes = Math.max(...resultats, 0);
   const minRes = Math.min(...resultats, 0);
   const etendueRes = maxRes - minRes || 1;
-  const maxCum = Math.max(...cumuls, 0);
-  const minCum = Math.min(...cumuls, 0);
+  // UNE SEULE echelle pour les deux courbes. Leur donner chacune la sienne les
+  // ferait paraitre voisines quand elles sont eloignees, et l'ecart entre les
+  // deux est tout l'interet de les tracer ensemble.
+  const maxCum = Math.max(...cumuls, ...cumulsCompta, 0);
+  const minCum = Math.min(...cumuls, ...cumulsCompta, 0);
   const etendueCum = maxCum - minCum || 1;
 
   const pas = largeurTrace / lignes.length;
@@ -3276,11 +3286,14 @@ function grapheExploitation(lignes, evenements) {
       const y1 = yRes(l.autofinancement_eur);
       const haut = Math.max(1, Math.abs(y1 - y0));
       const classe = l.autofinancement_eur < 0 ? 'negatif' : 'positif';
-      return `<rect class="graphe__barre--${classe}" x="${(xCentre(i) - largeurBarre / 2).toFixed(1)}" y="${Math.min(y0, y1).toFixed(1)}" width="${largeurBarre.toFixed(1)}" height="${haut.toFixed(1)}"><title>${l.annee} : résultat ${eur(l.autofinancement_eur)}, cumul ${eur(l.cumul_autofinancement_eur)}</title></rect>`;
+      return `<rect class="graphe__barre--${classe}" x="${(xCentre(i) - largeurBarre / 2).toFixed(1)}" y="${Math.min(y0, y1).toFixed(1)}" width="${largeurBarre.toFixed(1)}" height="${haut.toFixed(1)}"><title>${l.annee} : autofinancement ${eur(l.autofinancement_eur)}, cumulé ${eur(l.cumul_autofinancement_eur)} · résultat comptable cumulé ${eur(l.cumul_resultat_comptable_eur ?? 0)}</title></rect>`;
     })
     .join('');
 
-  const trace = lignes.map((l, i) => `${xCentre(i).toFixed(1)},${yCum(l.cumul_autofinancement_eur).toFixed(1)}`).join(' ');
+  const traceDe = (valeurs) =>
+    valeurs.map((v, i) => `${xCentre(i).toFixed(1)},${yCum(v).toFixed(1)}`).join(' ');
+  const trace = traceDe(cumuls);
+  const traceCompta = traceDe(cumulsCompta);
 
   // Reperes verticaux. Deux ecueils, tous deux visibles des qu'une operation
   // porte six prets :
@@ -3334,13 +3347,14 @@ function grapheExploitation(lignes, evenements) {
     .join('');
 
   return `<svg viewBox="0 0 ${L} ${H}" role="img"
-      aria-label="Résultat annuel en barres et cumul en ligne, de ${lignes[0].annee} à ${lignes.at(-1).annee}">
+      aria-label="Autofinancement annuel en barres, cumuls d’autofinancement et de résultat comptable en lignes, de ${lignes[0].annee} à ${lignes.at(-1).annee}">
       <line class="graphe__zero" x1="${marge.gauche}" y1="${yRes(0).toFixed(1)}" x2="${L - marge.droite}" y2="${yRes(0).toFixed(1)}" />
       ${barres}
+      <polyline class="graphe__cumul graphe__cumul--comptable" points="${traceCompta}" />
       <polyline class="graphe__cumul" points="${trace}" />
       ${reperes}${axe}
-      <text class="graphe__texte" x="${marge.gauche}" y="${H - 2}">Résultat de l’année, échelle ${eur(minRes)} à ${eur(maxRes)}</text>
-      <text class="graphe__texte" x="${L - marge.droite}" y="${H - 2}" text-anchor="end">Cumul, échelle ${eur(minCum)} à ${eur(maxCum)}</text>
+      <text class="graphe__texte" x="${marge.gauche}" y="${H - 2}">Autofinancement de l’année, échelle ${eur(minRes)} à ${eur(maxRes)}</text>
+      <text class="graphe__texte" x="${L - marge.droite}" y="${H - 2}" text-anchor="end">Cumuls, échelle commune ${eur(minCum)} à ${eur(maxCum)}</text>
     </svg>`;
 }
 

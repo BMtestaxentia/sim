@@ -2739,13 +2739,84 @@ let vueFinancement = 'consolide';
  * regle de calcul (`financement.par_tranche`), pas une commodite d'affichage.
  * La refaire ici serait la deuxieme occasion de s'en ecarter.
  */
+/**
+ * PLAN DE FINANCEMENT DE PLUSIEURS TRANCHES, additionne.
+ *
+ * Le moteur donne un plan par tranche - emplois par chapitre, subventions,
+ * fonds propres, prets, ecart - et toutes ces grandeurs sont des montants :
+ * les sommer donne le plan du sous-ensemble, sans rien recalculer. C'est la
+ * seule facon honnete de le faire : refaire le calcul sur les seules tranches
+ * retenues donnerait un AUTRE montage - les prets CDC se resolvent sur le
+ * besoin de l'operation entiere - alors qu'on veut lire la part que ces
+ * tranches occupent dans le montage tel qu'il est.
+ *
+ * Une subvention qui arrose plusieurs tranches retenues ne compte qu'UNE ligne,
+ * ses parts additionnees : deux lignes du meme intitule dans une legende de
+ * plan de financement se lisent comme deux subventions.
+ */
+function agregerTranches(r, codes) {
+  const parts = codes.map((c) => r.financement.par_tranche?.[c]).filter(Boolean);
+  if (parts.length === 1) return parts[0];
+  const somme = (cle) => parts.reduce((s, t) => s + (t[cle] ?? 0), 0);
+  /** @type {Record<string, any>} */
+  const chapitres = {};
+  for (const t of parts) {
+    for (const [ch, v] of Object.entries(t.chapitres ?? {})) {
+      if (!v) continue;
+      const c = (chapitres[ch] ??= { ht_eur: 0, tva_eur: 0, ttc_eur: 0, ttc_lasm_eur: 0 });
+      for (const cle of ['ht_eur', 'tva_eur', 'ttc_eur', 'ttc_lasm_eur']) c[cle] += v[cle] ?? 0;
+    }
+  }
+  /** @type {Map<string, any>} */
+  const subventions = new Map();
+  for (const t of parts) {
+    for (const s of t.subventions ?? []) {
+      const dejala = subventions.get(s.libelle);
+      if (dejala) dejala.montant_eur += s.montant_eur;
+      else subventions.set(s.libelle, { ...s });
+    }
+  }
+  return {
+    chapitres,
+    prix_revient_ttc_eur: somme('prix_revient_ttc_eur'),
+    part_su: somme('part_su'),
+    subventions: [...subventions.values()],
+    subventions_eur: somme('subventions_eur'),
+    fonds_propres_eur: somme('fonds_propres_eur'),
+    prets: parts.flatMap((t) => t.prets ?? []),
+    total_prets_eur: somme('total_prets_eur'),
+    ressources_eur: somme('ressources_eur'),
+    ecart_eur: somme('ecart_eur'),
+  };
+}
+
+/** Surfaces et loyers de plusieurs tranches, additionnes. */
+function agregerLoyers(r, codes) {
+  const lignes = codes.map((c) => r.loyers?.find((x) => x.code_produit === c)).filter(Boolean);
+  if (lignes.length === 1) return lignes[0];
+  const somme = (cle) => lignes.reduce((s, l) => s + (l[cle] ?? 0), 0);
+  return {
+    nb_logements: somme('nb_logements'),
+    shab_m2: somme('shab_m2'),
+    su_m2: somme('su_m2'),
+    loyer_annuel_eur: somme('loyer_annuel_eur'),
+  };
+}
+
 function perimetreFinancement(r) {
   const ind = r.indicateurs;
   const eq = r.financement.equilibre;
   const tranches = r.surfaces?.tranches ?? [];
   // Le perimetre retombe sur le consolide des que la tranche choisie disparait
   // du programme : un ecran fige sur une tranche effacee n'afficherait rien.
-  const code = tranches.includes(vueFinancement) ? vueFinancement : null;
+  //
+  // La vue accepte UNE tranche - le selecteur de l'ecran - ou PLUSIEURS : le
+  // document, lui, se cadre sur autant de tranches qu'on en retient. Un
+  // perimetre qui les prend toutes n'en est pas un et retombe sur le consolide,
+  // qui dit la meme chose sans reconstituer ses totaux par addition.
+  const demandes = Array.isArray(vueFinancement) ? vueFinancement : [vueFinancement];
+  const codes = demandes.filter((c) => tranches.includes(c));
+  const code = codes.length && codes.length < tranches.length ? codes[0] : null;
 
   if (!code) {
     const emplois = Object.entries(r.bilan.chapitres).map(([c, v]) => ({
@@ -2789,8 +2860,8 @@ function perimetreFinancement(r) {
     };
   }
 
-  const t = r.financement.par_tranche?.[code] ?? {};
-  const l = r.loyers?.find((x) => x.code_produit === code) ?? {};
+  const t = agregerTranches(r, codes);
+  const l = agregerLoyers(r, codes);
   const emplois = Object.entries(t.chapitres ?? {})
     .filter(([, v]) => v)
     .map(([c, v]) => ({
@@ -2799,12 +2870,13 @@ function perimetreFinancement(r) {
       ht: v.ht_eur,
       couleur: COULEURS[c] ?? COULEURS.frais_divers,
     }));
-  const amortissements = r.amortissements.filter((a) => a.produit === code);
+  const amortissements = r.amortissements.filter((a) => codes.includes(a.produit));
   const cdc = amortissements.filter((a) => a.nature !== 'autre').reduce((s, a) => s + a.montant_eur, 0);
   const ht = emplois.reduce((s, e) => s + (e.ht ?? 0), 0);
   const pr = t.prix_revient_ttc_eur ?? 0;
   return {
-    code,
+    code: codes.length === 1 ? codes[0] : codes.join('+'),
+    codes,
     emplois,
     total_emplois: pr,
     ht_eur: ht,
@@ -7429,9 +7501,19 @@ function policeDe(el) {
  */
 function ajusterColonnesDuDocument(racine) {
   for (const table of racine.querySelectorAll('table[data-ajuster-colonnes]')) {
-    const cols = [...table.querySelectorAll('colgroup col')];
     const largeur = table.getBoundingClientRect().width;
-    if (cols.length < 4 || !largeur) continue;
+    if (!largeur) continue;
+    // Une table sans `colgroup` en recoit un, calque sur sa premiere rangee de
+    // donnees : sans colonnes declarees il n'y a rien ou poser une largeur.
+    if (!table.querySelector('colgroup')) {
+      const rangee = table.querySelector('tbody tr');
+      const n = rangee ? [...rangee.children].reduce((s, c) => s + (c.colSpan || 1), 0) : 0;
+      if (n < 3) continue;
+      table.insertAdjacentHTML('afterbegin', `<colgroup>${'<col />'.repeat(n)}</colgroup>`);
+      table.style.tableLayout = 'fixed';
+    }
+    const cols = [...table.querySelectorAll('colgroup col')];
+    if (cols.length < 3) continue;
 
     const besoins = new Array(cols.length).fill(0);
     const polices = new Map();
@@ -7462,31 +7544,94 @@ function ajusterColonnesDuDocument(racine) {
     const st = modele ? getComputedStyle(modele) : null;
     const marge = st ? parseFloat(st.paddingLeft) + parseFloat(st.paddingRight) + 1 : 8;
 
-    const NUMERO = 0;
-    const LIBELLE = 1;
-    const chiffres = besoins.map((b, i) => (i === NUMERO || i === LIBELLE ? 0 : b + marge));
-    const totalChiffres = chiffres.reduce((s, b) => s + b, 0);
-    if (!totalChiffres) continue;
-    const largeurNumero = Math.max(besoins[NUMERO] + marge, largeur * 0.03);
-    // La colonne des libelles prend ce qui reste, entre un plancher - en deca
-    // duquel « Travaux de construction » se hacherait en quatre lignes - et un
-    // plafond, pour qu une operation a une seule tranche ne lui donne pas la
-    // moitie du tableau.
-    const libelle = Math.min(
-      largeur * 0.28,
-      Math.max(largeur * 0.14, largeur - largeurNumero - totalChiffres),
-    );
-    // Reste a partager entre les colonnes de chiffres, AU PRORATA DE LEUR
-    // BESOIN. Si le compte ne tombe pas juste, chacune est reduite dans la
-    // meme proportion : le debordement, s il subsiste, se repartit au lieu de
-    // frapper la colonne que le modele de poids avait sous-estimee.
-    const echelle = (largeur - largeurNumero - libelle) / totalChiffres;
-    const parts = besoins.map((_, i) =>
-      i === NUMERO ? largeurNumero : i === LIBELLE ? libelle : chiffres[i] * echelle,
-    );
+    // COLONNES DE TEXTE et colonnes de CHIFFRES ne se traitent pas pareil. Un
+    // nombre s aligne a droite et occupe exactement sa largeur : lui en donner
+    // davantage creuse un vide entre son intitule centre et lui, et c est ce
+    // vide qu on lit comme un decalage. Un libelle, au contraire, se coupe en
+    // deux lignes sans dommage et peut donc absorber ce qui reste.
+    //
+    // La nature d une colonne se lit sur ses DONNEES et non sur son rang : la
+    // premiere colonne est un numero dans le prix de revient et un nom de
+    // tranche dans la repartition, et compter les rangs revenait a poser une
+    // regle qui ne vaut que pour un tableau.
+    const rangee = table.querySelector('tbody tr');
+    const texte = new Array(cols.length).fill(false);
+    if (rangee) {
+      let rang = 0;
+      for (const cell of rangee.children) {
+        const span = cell.colSpan || 1;
+        if (span === 1 && rang < cols.length) {
+          texte[rang] = !cell.classList.contains('num') && !cell.querySelector('.num');
+        }
+        rang += span;
+      }
+    }
+    const requis = besoins.map((b) => (b ? b + marge : 0));
+    const total = requis.reduce((s, b) => s + b, 0);
+    if (!total) continue;
+    const indicesTexte = texte.map((t, i) => (t ? i : -1)).filter((i) => i >= 0);
+    const surplus = largeur - total;
+
+    /** @type {number[]} */
+    let parts;
+    if (surplus >= 0 && indicesTexte.length) {
+      // De la place en trop : elle va d'abord aux colonnes de TEXTE, qui
+      // savent l'occuper - un libelle respire, un nombre non. Mais pas sans
+      // limite : tout donner a une colonne unique en faisait un desert de six
+      // cents pixels, avec son intitule centre a perte de vue de ses donnees.
+      // Au-dela du plafond, le reste se repartit sur TOUTES les colonnes, dans
+      // la proportion de leur besoin : la table remplit sa largeur sans qu'une
+      // colonne y devienne absurde.
+      const PLAFOND_TEXTE = 0.45;
+      const besoinTexte = indicesTexte.reduce((s, i) => s + requis[i], 0);
+      const pourTexte = Math.min(surplus, Math.max(0, largeur * PLAFOND_TEXTE - besoinTexte));
+      const bonus = pourTexte / indicesTexte.length;
+      parts = requis.map((b, i) => b + (texte[i] ? bonus : 0));
+      const reste = surplus - pourTexte;
+      if (reste > 0) {
+        const base = parts.reduce((s, b) => s + b, 0);
+        parts = parts.map((b) => b + (base > 0 ? (reste * b) / base : 0));
+      }
+    } else {
+      // Trop etroit : tout le monde se serre dans la meme proportion, plutot
+      // que d ecraser une colonne au hasard.
+      const echelle = largeur / total;
+      parts = requis.map((b) => b * echelle);
+    }
     cols.forEach((col, i) => {
       col.style.width = `${((parts[i] / largeur) * 100).toFixed(3)}%`;
     });
+
+    // UN TITRE CENTRE SUR UNE COLONNE LARGE DONT LES DONNEES SONT A GAUCHE se
+    // lit comme un decalage : « Tranche » flottait au milieu de cinq cents
+    // pixels quand « PLUS » et « PLS » se tenaient au bord. Le titre suit donc
+    // l'alignement de sa colonne des que celle-ci cale a gauche. Les colonnes
+    // de chiffres, elles, gardent leur titre centre : elles font desormais la
+    // largeur de leurs nombres, et le titre tombe juste au-dessus.
+    const gauche = new Array(cols.length).fill(false);
+    if (rangee) {
+      let rang = 0;
+      for (const cell of rangee.children) {
+        const span = cell.colSpan || 1;
+        if (span === 1 && rang < cols.length) {
+          const a = getComputedStyle(cell).textAlign;
+          gauche[rang] = a === 'left' || a === 'start';
+        }
+        rang += span;
+      }
+    }
+    for (const tr of table.querySelectorAll('thead tr')) {
+      const cellules = [...tr.children];
+      if (cellules.reduce((s, c) => s + (c.colSpan || 1), 0) !== cols.length) continue;
+      let rang = 0;
+      for (const cell of cellules) {
+        const span = cell.colSpan || 1;
+        if (span === 1 && gauche[rang] && !cell.classList.contains('doc-bandeau')) {
+          /** @type {HTMLElement} */ (cell).style.textAlign = 'left';
+        }
+        rang += span;
+      }
+    }
   }
 }
 
@@ -7642,7 +7787,7 @@ function ecarterTranches(racine) {
 }
 
 /**
- * RECADRE LE PRIX DE REVIENT SUR UNE TRANCHE.
+ * RECADRE LE PRIX DE REVIENT SUR LES TRANCHES RETENUES.
  *
  * Cadrer le document sur une tranche recalculait deja tout le reste du dossier
  * - emplois, ressources, prets, subventions, compte d'exploitation - mais pas
@@ -7662,9 +7807,14 @@ function ecarterTranches(racine) {
  * Le TTC retenu est celui de la LIVRAISON A SOI-MEME, comme a l'ecran : c'est
  * lui qui devient le prix de revient a financer.
  */
-function recadrerPrixRevientSurTranche(table, code) {
+function recadrerPrixRevientSurTranches(table, codes) {
   const v = dernierResultat?.bilan?.ventilation;
-  if (!v?.par_tranche?.[code]) return;
+  if (!v?.par_tranche) return;
+  const retenus = codes.filter((c) => v.par_tranche[c]);
+  if (!retenus.length) return;
+  /** Somme d une grandeur sur les tranches retenues d un dictionnaire par tranche. */
+  const sur = (parTranche, cle) =>
+    retenus.reduce((s, c) => s + (parTranche?.[c]?.[cle] ?? 0), 0);
 
   /** Ecrit les trois cellules globales d une rangee, quand elle les porte. */
   const poser = (tr, ht, tva, ttc) => {
@@ -7682,35 +7832,78 @@ function recadrerPrixRevientSurTranche(table, code) {
   };
 
   for (const tr of table.querySelectorAll('tbody tr[data-poste]')) {
-    const t = v.postes?.[Number(tr.dataset.poste)]?.par_tranche?.[code];
-    if (t) poser(tr, t.ht_eur, t.tva_eur, t.ttc_lasm_eur);
+    const parTranche = v.postes?.[Number(tr.dataset.poste)]?.par_tranche;
+    if (!parTranche) continue;
+    poser(tr, sur(parTranche, 'ht_eur'), sur(parTranche, 'tva_eur'), sur(parTranche, 'ttc_lasm_eur'));
   }
   for (const tr of table.querySelectorAll('tbody tr[data-chapitre-total]')) {
-    const t = v.chapitres?.[/** @type {HTMLElement} */ (tr).dataset.chapitreTotal]?.par_tranche?.[code];
-    if (t) poser(tr, t.ht_eur, t.tva_eur, t.ttc_lasm_eur);
+    const parTranche =
+      v.chapitres?.[/** @type {HTMLElement} */ (tr).dataset.chapitreTotal]?.par_tranche;
+    if (!parTranche) continue;
+    poser(tr, sur(parTranche, 'ht_eur'), sur(parTranche, 'tva_eur'), sur(parTranche, 'ttc_lasm_eur'));
   }
 
   // Le pied : la rangee du total, puis celle de la base financable. Elles se
   // designent par leur RANG et non par leur intitule - celui-ci est du texte
   // d'affichage, et le jour ou il change le recadrage cesserait sans bruit.
   const pied = [...table.querySelectorAll('tfoot tr')];
-  const t = v.par_tranche[code];
   const total = pied[0];
   if (total) {
     const cellules = [...total.children];
     // Rangee du total : cellule vide, intitule, HT, colonne de commande, puis
     // les tranches, puis TVA et TTC en queue.
-    if (cellules[2]) cellules[2].textContent = eur(t.total_ht_eur);
+    if (cellules[2]) cellules[2].textContent = eur(sur(v.par_tranche, 'total_ht_eur'));
     if (cellules.length >= 2) {
-      cellules[cellules.length - 2].textContent = eur(t.total_tva_eur);
-      cellules[cellules.length - 1].textContent = eur(t.total_ttc_lasm_eur);
+      cellules[cellules.length - 2].textContent = eur(sur(v.par_tranche, 'total_tva_eur'));
+      cellules[cellules.length - 1].textContent = eur(sur(v.par_tranche, 'total_ttc_lasm_eur'));
     }
   }
   const base = pied[1];
   if (base) {
     const cellules = [...base.children];
-    cellules[cellules.length - 1].textContent = eur(t.total_ttc_module_eur);
+    cellules[cellules.length - 1].textContent = eur(sur(v.par_tranche, 'total_ttc_module_eur'));
   }
+}
+
+/**
+ * RECADRE LA REPARTITION PAR FINANCEMENT sur les tranches retenues.
+ *
+ * Ses LIGNES sont deja triees - elles portent `data-tranche` - mais son pied
+ * est ecrit une fois pour l'operation : on lisait « Total 2 358 m2, 100 % »
+ * sous deux lignes qui en totalisaient 1 362 et 57,7 %.
+ *
+ * Les PARTS se recalculent sur le perimetre et non sur l'operation. Un
+ * document cadre sur PLUS et PLS ne parle plus de l'operation nulle part
+ * ailleurs : y laisser des parts qui s'y referent donnerait une colonne dont
+ * personne ne peut retrouver le denominateur, et qui ne somme pas a cent.
+ * PLUS ne vaut donc plus 43,3 % de l'operation mais 74,9 % du perimetre.
+ */
+function recadrerRepartitionSurTranches(table, codes) {
+  const v = dernierResultat?.bilan?.ventilation;
+  if (!table || !v?.par_tranche) return;
+  const retenus = codes.filter((c) => v.par_tranche[c]);
+  if (!retenus.length) return;
+  const somme = (cle) => retenus.reduce((s, c) => s + (v.par_tranche[c][cle] ?? 0), 0);
+  const su = somme('su_m2');
+
+  for (const tr of table.querySelectorAll('tbody tr[data-tranche]')) {
+    const t = v.par_tranche[/** @type {HTMLElement} */ (tr).dataset.tranche];
+    const cellulePart = tr.children[2];
+    if (t && cellulePart) cellulePart.textContent = su > 0 ? pct(t.su_m2 / su, 1) : '-';
+  }
+
+  const pied = table.querySelector('tfoot tr');
+  if (!pied) return;
+  const cellules = [...pied.children];
+  if (cellules[0]) cellules[0].textContent = 'Total';
+  // Le total EST desormais celui des tranches presentees : la marque le dit
+  // au traitement generique, qui renomme sinon en « Total de l operation »
+  // les pieds des tables a lignes triees - et defairait ce recadrage.
+  table.dataset.totalRecadre = '1';
+  if (cellules[1]) cellules[1].textContent = nb(su);
+  if (cellules[2]) cellules[2].textContent = '100 %';
+  if (cellules[3]) cellules[3].textContent = eur(somme('total_ht_eur'));
+  if (cellules[5]) cellules[5].textContent = eur(somme('total_ttc_lasm_eur'));
 }
 
 /**
@@ -7804,24 +7997,20 @@ function adapterPrixRevientAuDocument(copie) {
   // chantier dans une piece qu on joint a un dossier.
   table.querySelector('tr.resume-saisie')?.remove();
 
-  // LE TOTAL DOIT REPONDRE AU TITRE. Cadre sur une tranche, le document parle
-  // d'elle : ses colonnes globales aussi. Cadre sur PLUSIEURS tranches sans
-  // etre cadre sur une seule, le reste du dossier - emplois, ressources,
-  // prets - reste celui de l'operation : les totaux le restent donc aussi, et
-  // le disent, plutot que d'inviter a additionner des colonnes qui ne font pas
-  // le compte.
+  // LE TOTAL DOIT REPONDRE AU TITRE, et il doit valoir la somme des colonnes
+  // qu'on lui montre. Ecarter des tranches recadre donc la table entiere sur
+  // celles qui restent, poste par poste, comme le reste du dossier.
   const perimetre = perimetreDuDocument();
+  const repartition = copie.querySelector('#table-ventilation-pdr');
   if (perimetre) {
-    recadrerPrixRevientSurTranche(table, perimetre);
-  } else if (tranchesRetenues().length < tranchesActives().length) {
-    const nommer = (rangee, texte) => {
-      const cel = rangee?.querySelector('.libelle');
-      if (cel) cel.textContent = texte;
-    };
-    const pied = [...table.querySelectorAll('tfoot tr')];
-    nommer(pied[0], 'Prix de revient total de l’opération');
-    nommer(pied[1], 'Base finançable de l’opération (TTC)');
+    recadrerPrixRevientSurTranches(table, perimetre);
+    recadrerRepartitionSurTranches(repartition, perimetre);
   }
+  // La repartition demande le meme ajustement de colonnes que le prix de
+  // revient : a largeur libre elle etale six colonnes sur toute la page, et
+  // l'ecart entre un intitule centre et ses chiffres cales a droite se lit
+  // alors comme un decalage.
+  if (repartition) repartition.dataset.ajusterColonnes = '1';
 
   // Les montants saisis prennent le FORMAT DU DOCUMENT. Une case de saisie
   // n affiche pas l euro - il se repeterait sur quarante-six lignes et gene
@@ -8937,7 +9126,7 @@ function rendreApercuExport() {
           // trois fois moindres, se confondent sinon avec ceux de
           // l'operation entiere.
           perimetreDuDocument()
-            ? `<span><strong>Périmètre ${att(libelleProduit(perimetreDuDocument()))}</strong></span>`
+            ? `<span><strong>Périmètre ${att(libellePerimetre(perimetreDuDocument()))}</strong></span>`
             : ''
         }
         <span>${att(def.titre)} · édité le ${att(dateDuJour())}</span>
@@ -8946,12 +9135,12 @@ function rendreApercuExport() {
 
   cible.innerHTML = enTete;
 
-  // PERIMETRE DU DOCUMENT. Choisir une seule tranche ne masque pas des
-  // colonnes : cela change ce que le dossier RACONTE. Emplois, ressources,
-  // prets, subventions et fonds propres se recalculent alors pour cette
-  // tranche seule - le moteur sait deja le faire, c'est la vue qu'offre le
-  // selecteur de l'ecran Financement. On la pose le temps du clonage, puis on
-  // rend a l'ecran celle que l'utilisateur y avait laissee.
+  // PERIMETRE DU DOCUMENT. Ecarter des tranches ne masque pas des colonnes :
+  // cela change ce que le dossier RACONTE. Emplois, ressources, prets,
+  // subventions et fonds propres se recalculent sur les tranches retenues -
+  // une, ou plusieurs : le moteur donne un plan par tranche et ces plans
+  // s'additionnent. On pose le perimetre le temps du clonage, puis on rend a
+  // l'ecran la vue que l'utilisateur y avait laissee.
   const vueAvant = vueFinancement;
   const horsCompteAvant = new Set(tranchesHorsCompte);
   // Le compte suit le meme tri que le reste du document : les tranches
@@ -8976,16 +9165,16 @@ function rendreApercuExport() {
     // Les adaptations propres a un ecran se font AVANT le retrait des
     // identifiants, tant qu'on peut encore designer les tables par le leur.
     if (id === 'prix-revient') adapterPrixRevientAuDocument(copie);
-    // La repartition par financement est une autre table, sur le meme ecran :
-    // elle liste une ligne par tranche et subit donc le meme tri. Son TOTAL
-    // reste celui de l'operation entiere - il est marque comme tel plus bas.
-    // Le total d une table triee reste celui de l OPERATION : le prix de
-    // revient ne change pas parce qu on presente une tranche de moins. Il faut
-    // donc le dire, sinon un lecteur additionne les lignes et trouve autre
-    // chose.
+    // Les autres tables a lignes par tranche - hors prix de revient et
+    // repartition, qui se recadrent pour de bon - gardent un total d'operation
+    // sous des lignes triees. Il faut alors le DIRE, sinon un lecteur
+    // additionne les lignes et trouve autre chose.
     if (tranchesRetenues().length < tranchesActives().length) {
       for (const table of copie.querySelectorAll('table')) {
         if (!table.querySelector('tbody [data-tranche]')) continue;
+        // Une table deja recadree porte le total de ce qu'elle montre : la
+        // renommer « de l'operation » defairait ce qui vient d'etre fait.
+        if (table.dataset.totalRecadre) continue;
         const pied = table.querySelector('tfoot .libelle');
         if (pied && pied.textContent.trim() === 'Total') pied.textContent = 'Total de l’opération';
       }
@@ -9075,7 +9264,12 @@ function rendreApercuExport() {
  */
 function perimetreDuDocument() {
   const retenues = tranchesRetenues();
-  return retenues.length === 1 && tranchesActives().length > 1 ? retenues[0] : null;
+  return retenues.length && retenues.length < tranchesActives().length ? retenues : null;
+}
+
+/** Le perimetre en toutes lettres : « PLUS », ou « PLUS + PLS ». */
+function libellePerimetre(codes) {
+  return codes.map((c) => libelleProduit(c)).join(' + ');
 }
 
 function compterPages() {

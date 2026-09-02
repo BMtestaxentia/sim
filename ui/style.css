@@ -2649,6 +2649,17 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
    traverse toute la largeur et reste cale a gauche. */
 .doc .tableau thead th.doc-bandeau { text-align: left; }
 .doc .tableau--entete-figee thead th { position: static !important; }
+/* ...ET SON FILET AVEC LUI. Le filet des intitules figes est un pseudo-element
+   en `position: absolute`, cale sur `left: 0; right: 0` de son TH - qui lui
+   sert de bloc conteneur tant qu'il est `sticky`. Rendu STATIQUE ci-dessus, le
+   TH cesse d'etre ce bloc conteneur : le filet remonte au premier ancetre
+   positionne et, n'en trouvant pas, se cale sur le bloc initial. Il s'etale
+   alors sur TOUTE LA LARGEUR DE LA PAGE, bien au-dela du document. Vingt-deux
+   intitules, vingt-deux filets superposes au meme endroit : un trait noir en
+   travers de l'apercu et de son fond, a une hauteur qui ne correspondait a
+   rien de lisible - et qu'on retrouvait a l'impression.
+   Le document trace ses propres filets d'en-tete : celui-ci n'y a plus d'objet. */
+.doc .tableau--entete-figee thead th::after { display: none !important; }
 /* Les bandeaux et tuiles s'aplatissent : sur papier, un aplat de couleur mange
    de l'encre sans rien dire de plus qu'un filet. */
 .doc .bandeau { background: #f4f4f4 !important; color: #111 !important; border-color: #ccc !important; }

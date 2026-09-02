@@ -6586,7 +6586,90 @@ function positionnerCurseurOnglets() {
   // Un onglet sorti du rail par le defilement doit y revenir : le curseur ne
   // sert a rien sous un onglet invisible.
   actif.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  // Le rail ne se saisit que s'il a de quoi defiler : un curseur de prehension
+  // sur un rail complet promet un geste qui ne ferait rien.
+  nav.classList.toggle('rail--glissable', nav.scrollWidth > nav.clientWidth + 1);
 }
+
+/**
+ * DEFILEMENT AU GLISSER sur un rail horizontal.
+ *
+ * Le rail des onglets defile deja, mais sans barre visible - elle se lisait
+ * comme un soulignement sous les onglets et brouillait l'onglet actif. Restait
+ * la molette, et rien ne disait qu'il y avait quelque chose a aller voir. On
+ * attrape donc le rail et on le tire.
+ *
+ * Le geste ne devient un DEFILEMENT qu'au-dela de quelques pixels : en deca il
+ * reste un clic, et l'onglet s'ouvre normalement. Passe ce seuil, le clic de
+ * fin est avale - sans quoi relacher la souris sur un onglet l'activerait alors
+ * qu'on n'a fait que le faire passer sous le curseur.
+ *
+ * Le tactile est laisse de cote : il fait deja defiler d'un doigt, avec
+ * l'inertie que le systeme sait rendre et que ce code ne saurait pas imiter.
+ */
+function poserDefilementAuGlisser(rail) {
+  if (!rail || rail.dataset.glisserPose) return;
+  rail.dataset.glisserPose = '1';
+  const SEUIL = 4;
+  let actif = false;
+  let deplace = false;
+  let departX = 0;
+  let departScroll = 0;
+
+  rail.addEventListener('pointerdown', (ev) => {
+    if (ev.button !== 0 || ev.pointerType === 'touch') return;
+    if (rail.scrollWidth <= rail.clientWidth + 1) return;
+    actif = true;
+    deplace = false;
+    departX = ev.clientX;
+    departScroll = rail.scrollLeft;
+  });
+
+  rail.addEventListener('pointermove', (ev) => {
+    if (!actif) return;
+    const dx = ev.clientX - departX;
+    if (!deplace) {
+      if (Math.abs(dx) < SEUIL) return;
+      deplace = true;
+      rail.classList.add('rail--glisse');
+      // La capture garde le geste meme quand le curseur sort du rail : sans
+      // elle, tirer un peu vite lachait le rail en cours de route.
+      try {
+        rail.setPointerCapture(ev.pointerId);
+      } catch {
+        /* le navigateur refuse la capture : le glisser marche quand meme tant
+           que le curseur reste sur le rail */
+      }
+    }
+    rail.scrollLeft = departScroll - dx;
+    ev.preventDefault();
+  });
+
+  const finir = (ev) => {
+    if (!actif) return;
+    actif = false;
+    if (!deplace) return;
+    rail.classList.remove('rail--glisse');
+    try {
+      rail.releasePointerCapture(ev.pointerId);
+    } catch {
+      /* deja relachee */
+    }
+    const avaler = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+    };
+    rail.addEventListener('click', avaler, { capture: true });
+    // Le clic suit immediatement le relachement ; le retrait differe d'un tour
+    // de boucle le laisse passer, puis desarme. Sans ce retrait, un glisser
+    // fini hors d'un onglet - donc sans clic - avalerait le clic SUIVANT.
+    setTimeout(() => rail.removeEventListener('click', avaler, { capture: true }), 0);
+  };
+  rail.addEventListener('pointerup', finir);
+  rail.addEventListener('pointercancel', finir);
+}
+
+poserDefilementAuGlisser(document.getElementById('onglets'));
 
 // Le rail change de largeur avec la fenetre et au chargement des polices :
 // dans les deux cas les onglets se deplacent sous un curseur devenu faux.
@@ -7294,6 +7377,117 @@ function normaliserColonnes(table) {
   // encore une colonne dont le contenu deborde, et la mise en page repart a
   // la merci du contenu.
   table.style.tableLayout = 'fixed';
+  // Ces parts sont une PREMIERE APPROXIMATION, posee sans que la table soit
+  // encore dans la page - donc sans rien pouvoir mesurer. La marque demande
+  // leur revision au contenu reel, une fois le document monte.
+  table.dataset.ajusterColonnes = '1';
+}
+
+/**
+ * Largeur d un texte dans une police donnee, sans passer par la mise en page.
+ *
+ * Un canvas mesure sans rien inserer dans le document, donc sans declencher de
+ * calcul de style ni de reflow : on peut interroger des centaines de cellules
+ * sans que la page tressaille.
+ */
+const mesurerTexte = (() => {
+  const ctx = document.createElement('canvas').getContext('2d');
+  return (texte, police) => {
+    if (!ctx) return texte.length * 6;
+    ctx.font = police;
+    return ctx.measureText(texte).width;
+  };
+})();
+
+/** Police d un element, dans la forme abregee qu attend un canvas. */
+function policeDe(el) {
+  const s = getComputedStyle(el);
+  return `${s.fontStyle} ${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
+}
+
+/**
+ * LARGEUR DES COLONNES, AJUSTEE A CE QU ELLES PORTENT VRAIMENT.
+ *
+ * Le partage au poids qui precede lisait une ligne de POSTE, ou la colonne de
+ * TVA ne montre qu un taux - « 10,0 % », quatre caracteres - et lui donnait la
+ * part la plus mince. Mais la meme colonne porte, sur la ligne de total, la
+ * TVA de la tranche : « 271 320 € », deux fois plus large et en gras. Sur une
+ * operation a quatre tranches les nombres du total se touchaient, faute de
+ * quarante-trois pixels pour en loger cinquante-sept.
+ *
+ * On mesure donc, colonne par colonne, le plus large de CE QU ELLE CONTIENT,
+ * en-tetes et pied compris, chacun a sa vraie police. Les colonnes de chiffres
+ * recoivent alors ce qu elles reclament, et la colonne des LIBELLES absorbe la
+ * difference : c est la seule qui ait de la marge, et ses libelles se coupent
+ * en deux lignes sans dommage la ou un montant tronque est une faute.
+ *
+ * Une rangee n est indexee que si ses cellules couvrent EXACTEMENT toutes les
+ * colonnes. C est la garde contre les rangees a `rowspan` - la rangee des
+ * sous-colonnes du prix de revient commence a la quatrieme colonne alors que
+ * son premier enfant est, pour elle, le rang zero, et l indexer decalerait
+ * toutes les mesures d un bloc.
+ */
+function ajusterColonnesDuDocument(racine) {
+  for (const table of racine.querySelectorAll('table[data-ajuster-colonnes]')) {
+    const cols = [...table.querySelectorAll('colgroup col')];
+    const largeur = table.getBoundingClientRect().width;
+    if (cols.length < 4 || !largeur) continue;
+
+    const besoins = new Array(cols.length).fill(0);
+    const polices = new Map();
+    for (const tr of table.querySelectorAll('thead tr, tbody tr, tfoot tr')) {
+      const cellules = [...tr.children];
+      const couverture = cellules.reduce((s, c) => s + (c.colSpan || 1), 0);
+      if (couverture !== cols.length) continue;
+      let rang = 0;
+      for (const cell of cellules) {
+        const span = cell.colSpan || 1;
+        const texte = span === 1 ? cell.textContent.trim() : '';
+        if (texte) {
+          // La police se retient par rangee ET par sorte de cellule : le pied
+          // est en gras, les en-tetes aussi, et les interroger cellule par
+          // cellule couterait un calcul de style par nombre affiche.
+          const cle = `${tr.className}|${cell.tagName}|${cell.className}`;
+          if (!polices.has(cle)) polices.set(cle, policeDe(cell));
+          besoins[rang] = Math.max(besoins[rang], mesurerTexte(texte, polices.get(cle)));
+        }
+        rang += span;
+      }
+    }
+
+    // Marge interieure d une cellule, prise sur le rendu, plus un pixel de
+    // garde : une colonne calee au pixel pres sur son contenu le voit deborder
+    // au premier arrondi de rendu.
+    const modele = table.querySelector('tbody td') ?? table.querySelector('td');
+    const st = modele ? getComputedStyle(modele) : null;
+    const marge = st ? parseFloat(st.paddingLeft) + parseFloat(st.paddingRight) + 1 : 8;
+
+    const NUMERO = 0;
+    const LIBELLE = 1;
+    const chiffres = besoins.map((b, i) => (i === NUMERO || i === LIBELLE ? 0 : b + marge));
+    const totalChiffres = chiffres.reduce((s, b) => s + b, 0);
+    if (!totalChiffres) continue;
+    const largeurNumero = Math.max(besoins[NUMERO] + marge, largeur * 0.03);
+    // La colonne des libelles prend ce qui reste, entre un plancher - en deca
+    // duquel « Travaux de construction » se hacherait en quatre lignes - et un
+    // plafond, pour qu une operation a une seule tranche ne lui donne pas la
+    // moitie du tableau.
+    const libelle = Math.min(
+      largeur * 0.28,
+      Math.max(largeur * 0.14, largeur - largeurNumero - totalChiffres),
+    );
+    // Reste a partager entre les colonnes de chiffres, AU PRORATA DE LEUR
+    // BESOIN. Si le compte ne tombe pas juste, chacune est reduite dans la
+    // meme proportion : le debordement, s il subsiste, se repartit au lieu de
+    // frapper la colonne que le modele de poids avait sous-estimee.
+    const echelle = (largeur - largeurNumero - libelle) / totalChiffres;
+    const parts = besoins.map((_, i) =>
+      i === NUMERO ? largeurNumero : i === LIBELLE ? libelle : chiffres[i] * echelle,
+    );
+    cols.forEach((col, i) => {
+      col.style.width = `${((parts[i] / largeur) * 100).toFixed(3)}%`;
+    });
+  }
 }
 
 /**
@@ -8742,6 +8936,11 @@ function rendreApercuExport() {
     section.appendChild(copie);
     cible.appendChild(section);
   }
+
+  // Les colonnes se revisent ICI et pas pendant l'adaptation : une table qui
+  // n'est pas encore dans la page n'a pas de largeur, et on ne peut mesurer ni
+  // son contenu ni ses polices. Le document est monte, on peut regarder.
+  ajusterColonnesDuDocument(cible);
 
   if (perimetreDuDocument() && dernierResultat) {
     vueFinancement = vueAvant;

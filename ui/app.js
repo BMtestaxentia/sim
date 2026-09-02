@@ -21,7 +21,7 @@
 import { calculer } from '../src/moteur.js';
 import { produitsOrdonnes, ORDRE_PRODUITS } from '../src/produits.js';
 import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
-import { ecartsParametrage } from '../src/parametrage.js';
+import { ecartsParametrage, fusionner } from '../src/parametrage.js';
 import { tauxLASM } from '../src/bilan.js';
 import { sommerComptes, indicateursExploitation } from '../src/exploitation.js';
 import {
@@ -5696,7 +5696,23 @@ const COLONNES_PRESET = [
  * foi, sans quoi ajouter un modele n'aurait aucun effet visible.
  */
 function listePresets() {
-  return surchargeDe('baremes.presets_prets.presets') ?? referentiels.baremes.presets_prets?.presets ?? [];
+  // FUSIONNEE, et non la surcharge brute. La surcharge est un CORRECTIF, pas
+  // une liste : modifier le libelle du deuxieme modele y ecrit un tableau de
+  // deux elements partiels - `[{libelle}, {libelle}]` - ou les seize autres
+  // n'ont rien a faire puisqu'ils n'ont pas bouge. Rendre ce correctif tel quel
+  // faisait disparaitre ces seize modeles de l'ecran au premier rendu complet,
+  // et le geste qui le declenchait etait « Sauvegarder » : on croyait donc que
+  // sauver les avait supprimes.
+  //
+  // La fusion est celle du moteur (R-PARAM) : correctif positionnel par index
+  // tant qu'il ne porte pas d'identifiants, liste faisant autorite des qu'il en
+  // porte - ce qu'ecrivent l'ajout, le retrait et le reordonnancement, qui
+  // posent la liste entiere. L'ecran montre ainsi exactement ce que le moteur
+  // calcule.
+  return fusionner(
+    referentiels.baremes.presets_prets?.presets ?? [],
+    surchargeDe('baremes.presets_prets.presets'),
+  );
 }
 
 /** Nombre d'echeances par an, nomme. Le moteur ne connait que le nombre. */
@@ -10926,7 +10942,7 @@ const EXEMPLES = [
     subventions: [
       { libelle: 'Etat', montant_eur: 108000, affectation: 'PLAI' },
       { libelle: 'Agglomération', montant_eur: 90000, affectation: null },
-      { libelle: 'Action logement :', montant_eur: 55000, affectation: null },
+      { libelle: 'Action logement', montant_eur: 55000, affectation: null },
     ],
   },
   // EHPAD : le seul montage de la serie qui ne ressemble a aucun autre, et la

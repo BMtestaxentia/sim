@@ -271,6 +271,21 @@ describe('R-PARAM - listes a identifiants', () => {
     expect(fusionner([7.4, 6.49, 6.01, 7.85], [, , 6.5])).toEqual([7.4, 6.49, 6.5, 7.85]);
   });
 
+  it('ne TRONQUE pas la liste quand la surcharge ne corrige que ses premiers rangs', () => {
+    // C'est le cas de l'ecran des modeles de pret : corriger le libelle des
+    // deux premiers ecrit un correctif de DEUX elements partiels, sans
+    // identifiant. Il ne doit toucher que ces deux rangs - les seize autres
+    // modeles n'ont pas bouge, ils ne sont pas pour autant supprimes.
+    const r = fusionner(base, [{ libelle: 'Alpha bis' }, { libelle: 'Beta bis' }]);
+    expect(r).toHaveLength(base.length);
+    expect(r[0].libelle).toBe('Alpha bis');
+    expect(r[1].libelle).toBe('Beta bis');
+    // Les rangs corriges gardent le RESTE de leurs champs : un correctif de
+    // libelle ne doit pas emporter la duree ni le taux.
+    expect(r[0].id).toBe(base[0].id);
+    expect(r[2]).toEqual(base[2]);
+  });
+
   it('ne laisse pas une surcharge vide effacer la liste', () => {
     expect(fusionner(base, [])).toEqual(base);
   });

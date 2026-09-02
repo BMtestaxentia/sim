@@ -2681,6 +2681,39 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
 .doc .indicateur__valeur { color: #000 !important; }
 .doc .indicateur__libelle, .doc .indicateur__detail { color: #666 !important; }
 .doc .pastille, .doc .pilule, .doc .jeton { border: 0.2mm solid #ccc; color: #333 !important; background: #fafafa !important; }
+
+/* --- LES SUBVENTIONS, EN LISTE ET NON EN CARTES ------------------------
+   A l ecran, chaque subvention est une carte dans un volet de quatre cents
+   pixels : l aplat la detache de sa voisine et le montant tombe tout de suite
+   apres l intitule. Reprise telle quelle dans le document, la meme carte
+   s etire sur les vingt-sept centimetres de la page - un pave gris par ligne,
+   et un montant rejete si loin de son intitule qu on suit la ligne du doigt.
+
+   Elle redevient donc ce qu elle est sur le papier : une liste de sommes qu on
+   additionne. Largeur bornee pour que les nombres restent sous les yeux de
+   leur libelle, filets au lieu d aplats, et un total qui ferme la colonne.
+   C est la meme grammaire que `.optim__liste`, deja bornee pour cette raison. */
+.doc .liste--sub, .doc .sub__total { max-width: 115mm; }
+.doc .ligne--sub {
+  background: none !important;
+  border-radius: 0;
+  border-bottom: 0.2mm solid #e2e2e2;
+  padding: 1.1mm 0;
+  gap: 0 6mm;
+}
+.doc .liste--sub { gap: 0; }
+.doc .ligne--sub:last-child { border-bottom: none; }
+.doc .sub__libelle { font-size: 8.5pt; font-weight: 600; }
+.doc .sub__montant { font-size: 8.5pt; }
+.doc .sub__part { font-size: 8pt; color: #666 !important; }
+/* L origine reste sous son libelle - elle explique le montant, elle ne le
+   concurrence pas - mais serree : c est un mot, pas une ligne. */
+.doc .sub__origine { font-size: 7.5pt; color: #777 !important; line-height: 1.2; }
+.doc .ligne--sub { grid-template-columns: 1fr auto 12mm; }
+.doc .sub__total {
+  padding: 1.4mm 0 0; margin-top: 0.6mm;
+  border-top: 0.3mm solid #999; color: #000; font-size: 8pt;
+}
 /* Les teintes de produit portent du SENS - elles disent quelle tranche paie
    quoi - et restent donc imprimees. */
 .doc .segment, .doc .biblio-produit, .doc .calc-regle {
@@ -16132,7 +16165,23 @@ const COLONNES_PRESET = [
  * foi, sans quoi ajouter un modele n'aurait aucun effet visible.
  */
 function listePresets() {
-  return surchargeDe('baremes.presets_prets.presets') ?? referentiels.baremes.presets_prets?.presets ?? [];
+  // FUSIONNEE, et non la surcharge brute. La surcharge est un CORRECTIF, pas
+  // une liste : modifier le libelle du deuxieme modele y ecrit un tableau de
+  // deux elements partiels - `[{libelle}, {libelle}]` - ou les seize autres
+  // n'ont rien a faire puisqu'ils n'ont pas bouge. Rendre ce correctif tel quel
+  // faisait disparaitre ces seize modeles de l'ecran au premier rendu complet,
+  // et le geste qui le declenchait etait « Sauvegarder » : on croyait donc que
+  // sauver les avait supprimes.
+  //
+  // La fusion est celle du moteur (R-PARAM) : correctif positionnel par index
+  // tant qu'il ne porte pas d'identifiants, liste faisant autorite des qu'il en
+  // porte - ce qu'ecrivent l'ajout, le retrait et le reordonnancement, qui
+  // posent la liste entiere. L'ecran montre ainsi exactement ce que le moteur
+  // calcule.
+  return fusionner(
+    referentiels.baremes.presets_prets?.presets ?? [],
+    surchargeDe('baremes.presets_prets.presets'),
+  );
 }
 
 /** Nombre d'echeances par an, nomme. Le moteur ne connait que le nombre. */
@@ -21362,7 +21411,7 @@ const EXEMPLES = [
     subventions: [
       { libelle: 'Etat', montant_eur: 108000, affectation: 'PLAI' },
       { libelle: 'Agglomération', montant_eur: 90000, affectation: null },
-      { libelle: 'Action logement :', montant_eur: 55000, affectation: null },
+      { libelle: 'Action logement', montant_eur: 55000, affectation: null },
     ],
   },
   // EHPAD : le seul montage de la serie qui ne ressemble a aucun autre, et la

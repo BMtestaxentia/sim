@@ -18067,6 +18067,78 @@ function ecarterTranches(racine) {
 }
 
 /**
+ * RECADRE LE PRIX DE REVIENT SUR UNE TRANCHE.
+ *
+ * Cadrer le document sur une tranche recalculait deja tout le reste du dossier
+ * - emplois, ressources, prets, subventions, compte d'exploitation - mais pas
+ * la table du prix de revient, qui gardait les totaux de l'operation entiere a
+ * cote de la seule colonne retenue. On lisait donc, sous un en-tete
+ * « Perimetre PLUS », un prix de revient total de 6 260 000 EUR quand la
+ * colonne PLUS en portait 2 713 198 : deux nombres pour la meme grandeur, dans
+ * le meme tableau, et rien pour dire lequel repondait au titre.
+ *
+ * Les valeurs viennent du MOTEUR et non des cellules affichees : la ventilation
+ * porte deja, poste par poste et chapitre par chapitre, la part de chaque
+ * tranche. Les relire evite de reconstituer des montants a partir de chaines
+ * formatees, et surtout d'en refaire les arrondis - le moteur repartit ses
+ * centimes pour que chaque colonne somme juste, ce qu'une addition faite ici
+ * casserait.
+ *
+ * Le TTC retenu est celui de la LIVRAISON A SOI-MEME, comme a l'ecran : c'est
+ * lui qui devient le prix de revient a financer.
+ */
+function recadrerPrixRevientSurTranche(table, code) {
+  const v = dernierResultat?.bilan?.ventilation;
+  if (!v?.par_tranche?.[code]) return;
+
+  /** Ecrit les trois cellules globales d une rangee, quand elle les porte. */
+  const poser = (tr, ht, tva, ttc) => {
+    const champ = tr.querySelector('input[data-type="montant"]');
+    const celluleHT = tr.querySelector('[data-calc="total"]') ?? tr.querySelector('[data-total="ht"]');
+    // Le montant brut, pas le montant formate : la mise en forme du document
+    // passe juste apres et le reprendra a son compte.
+    if (champ) champ.value = nul(ht) ? '' : String(ht);
+    else if (celluleHT) celluleHT.textContent = eur(ht);
+    const cible = (sel) => tr.querySelector(sel);
+    const cTva = cible('[data-calc="tva"]') ?? cible('[data-total="tva"]');
+    const cTtc = cible('[data-calc="ttc"]') ?? cible('[data-total="ttc"]');
+    if (cTva) cTva.textContent = eur(tva);
+    if (cTtc) cTtc.textContent = eur(ttc);
+  };
+
+  for (const tr of table.querySelectorAll('tbody tr[data-poste]')) {
+    const t = v.postes?.[Number(tr.dataset.poste)]?.par_tranche?.[code];
+    if (t) poser(tr, t.ht_eur, t.tva_eur, t.ttc_lasm_eur);
+  }
+  for (const tr of table.querySelectorAll('tbody tr[data-chapitre-total]')) {
+    const t = v.chapitres?.[/** @type {HTMLElement} */ (tr).dataset.chapitreTotal]?.par_tranche?.[code];
+    if (t) poser(tr, t.ht_eur, t.tva_eur, t.ttc_lasm_eur);
+  }
+
+  // Le pied : la rangee du total, puis celle de la base financable. Elles se
+  // designent par leur RANG et non par leur intitule - celui-ci est du texte
+  // d'affichage, et le jour ou il change le recadrage cesserait sans bruit.
+  const pied = [...table.querySelectorAll('tfoot tr')];
+  const t = v.par_tranche[code];
+  const total = pied[0];
+  if (total) {
+    const cellules = [...total.children];
+    // Rangee du total : cellule vide, intitule, HT, colonne de commande, puis
+    // les tranches, puis TVA et TTC en queue.
+    if (cellules[2]) cellules[2].textContent = eur(t.total_ht_eur);
+    if (cellules.length >= 2) {
+      cellules[cellules.length - 2].textContent = eur(t.total_tva_eur);
+      cellules[cellules.length - 1].textContent = eur(t.total_ttc_lasm_eur);
+    }
+  }
+  const base = pied[1];
+  if (base) {
+    const cellules = [...base.children];
+    cellules[cellules.length - 1].textContent = eur(t.total_ttc_module_eur);
+  }
+}
+
+/**
  * Retravaille la table du prix de revient POUR LE DOCUMENT.
  *
  * Un PDF n'a pas a etre la photographie de l'ecran. L'ecran est une grille de
@@ -18156,6 +18228,25 @@ function adapterPrixRevientAuDocument(copie) {
   // l'operation : c'est un reperage utile a l'ecran, une confidence de
   // chantier dans une piece qu on joint a un dossier.
   table.querySelector('tr.resume-saisie')?.remove();
+
+  // LE TOTAL DOIT REPONDRE AU TITRE. Cadre sur une tranche, le document parle
+  // d'elle : ses colonnes globales aussi. Cadre sur PLUSIEURS tranches sans
+  // etre cadre sur une seule, le reste du dossier - emplois, ressources,
+  // prets - reste celui de l'operation : les totaux le restent donc aussi, et
+  // le disent, plutot que d'inviter a additionner des colonnes qui ne font pas
+  // le compte.
+  const perimetre = perimetreDuDocument();
+  if (perimetre) {
+    recadrerPrixRevientSurTranche(table, perimetre);
+  } else if (tranchesRetenues().length < tranchesActives().length) {
+    const nommer = (rangee, texte) => {
+      const cel = rangee?.querySelector('.libelle');
+      if (cel) cel.textContent = texte;
+    };
+    const pied = [...table.querySelectorAll('tfoot tr')];
+    nommer(pied[0], 'Prix de revient total de l’opération');
+    nommer(pied[1], 'Base finançable de l’opération (TTC)');
+  }
 
   // Les montants saisis prennent le FORMAT DU DOCUMENT. Une case de saisie
   // n affiche pas l euro - il se repeterait sur quarante-six lignes et gene

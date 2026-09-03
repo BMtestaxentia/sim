@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import {
   ventilerPoste, tauxLASM, tauxTVAAdmissibles, prixDeRevient, prixDeRevientVentile, ventilerParQuotePart,
 } from '../src/bilan.js';
-import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
+import { arrondirEnConservantLaSomme, arrondiEuro } from '../src/arrondis.js';
 import { agregerSubventions, surchargeFonciere, subventionEtat } from '../src/subventions.js';
 import {
   soldeAFinancer,
@@ -19,12 +19,7 @@ import {
   pretsCDCTheoriques,
   controleEquilibre,
 } from '../src/financement.js';
-import {
-  exonerationTFPB,
-  taxeAmenagement,
-  versementSousDensite,
-  tfpbAnnee,
-} from '../src/fiscalite.js';
+import { exonerationTFPB, taxeAmenagement } from '../src/fiscalite.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const baremes = JSON.parse(readFileSync(join(RACINE, 'referentiels', 'baremes_her_2027.json'), 'utf8'));
@@ -278,43 +273,33 @@ describe('R-FISC - fiscalite', () => {
       .toBe(baremes.taxe_amenagement.idf);
   });
 
-  it('R-FISC-3 : pas de VSD sans seuil de densite institue', () => {
-    expect(
-      versementSousDensite({
-        valeur_terrain_eur: 500000,
-        sdp_m2: 500,
-        surface_terrain_m2: 2000,
-        seuil_densite: 0,
-      }, baremes),
-    ).toBe(0);
+  // R-FISC-3 (versement pour sous-densite) et `tfpbAnnee` ont ete retires du
+  // moteur le 03/09/2026 : le versement est abroge depuis 2021 et `tfpbAnnee`
+  // n'etait appelee que d'ici. Leurs tests partent avec eux - voir la trace en
+  // pied de `src/fiscalite.js`. Ce qui les remplace est teste ailleurs : la
+  // taxe fonciere annee par annee dans `exploitation.test.js`.
+
+  it('R-FISC-2 : le PLAI est exonere, le PLUS abattu de moitie, le libre plein tarif', () => {
+    // CGI art. 1635 quater D, I, 2° (exoneration de plein droit du PLAI) et
+    // 1635 quater I (abattement de 50 % des autres prets aides). Un abattement
+    // uniforme surtaxait le PLAI et sous-taxait le libre sur la meme operation.
+    const r = taxeAmenagement(
+      { sdp_m2: 1200, quotes_parts_sdp: { PLAI: 1 / 3, PLUS: 1 / 3, LIBRE: 1 / 3 } },
+      baremes,
+    );
+    expect(r.par_tranche.PLAI.assiette_eur).toBe(0);
+    expect(r.par_tranche.PLUS.assiette_eur).toBe(arrondiEuro(400 * 0.5 * r.valeur_forfaitaire_eur_m2));
+    expect(r.par_tranche.LIBRE.assiette_eur).toBe(arrondiEuro(400 * r.valeur_forfaitaire_eur_m2));
   });
 
-  it('R-FISC-3 : VSD plafonne a 25 % de la valeur du terrain', () => {
-    const r = versementSousDensite({
-      valeur_terrain_eur: 500000,
-      sdp_m2: 100,
-      surface_terrain_m2: 2000,
-      seuil_densite: 0.5,
-    }, baremes);
-    expect(r).toBe(125000); // plafond atteint
-  });
-
-  it('R-FISC-3 : nul si la densite atteint le seuil', () => {
-    expect(
-      versementSousDensite({
-        valeur_terrain_eur: 500000,
-        sdp_m2: 1500,
-        surface_terrain_m2: 2000,
-        seuil_densite: 0.5,
-      }, baremes),
-    ).toBe(0);
-  });
-
-  it('TFPB : nulle pendant l exoneration, puis indexee', () => {
-    const commun = { annee_debut_tfpb: 2053, nb_logements: 6, montant_par_logement_eur: 345 };
-    expect(tfpbAnnee({ ...commun, annee: 2052 })).toBe(0);
-    expect(tfpbAnnee({ ...commun, annee: 2053 })).toBe(2070); // 6 x 345
-    expect(tfpbAnnee({ ...commun, annee: 2054, taux_indexation: 0.05 })).toBe(Math.round(2070 * 1.05));
+  it('R-FISC-2 : un abattement saisi prime sur le regime des produits', () => {
+    // Recours quand une deliberation locale s'ecarte du droit commun
+    // (exonerations facultatives, art. 1635 quater E).
+    const r = taxeAmenagement(
+      { sdp_m2: 1200, abattement: 1, quotes_parts_sdp: { PLAI: 0.5, LIBRE: 0.5 } },
+      baremes,
+    );
+    expect(r.assiette_eur).toBe(0);
   });
 });
 

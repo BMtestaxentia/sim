@@ -26,7 +26,7 @@ import {
   valeurComptableTerrain,
   baseAmortissementComptable,
 } from './bilan.js';
-import { agregerSubventions, surchargeFonciere } from './subventions.js';
+import { agregerSubventions, resoudreAffectation, surchargeFonciere } from './subventions.js';
 import {
   soldeAFinancer,
   foncierFinancable,
@@ -302,8 +302,18 @@ export function calculer(entrees, referentiels) {
 
   // --- 4. Subventions (R-SUB) ---
   const subventions = agregerSubventions(entrees.subventions ?? [], quotesParts);
+  // R-SUB-2 : la zone et le type d'operation viennent de l'identite ; ils
+  // suffisent a lire la valeur de base au bareme, que la saisie n'a plus a
+  // retaper. Une valeur de base saisie continue de primer.
   const ssf = entrees.surcharge_fonciere
-    ? surchargeFonciere(entrees.surcharge_fonciere, baremes)
+    ? surchargeFonciere(
+        {
+          zone_123: identite.zone_123,
+          type: /acq/i.test(String(identite.type_operation ?? '')) ? 'acq_amelioration' : 'neuf',
+          ...entrees.surcharge_fonciere,
+        },
+        baremes,
+      )
     : null;
   const subventionsTotal = arrondiEuro(subventions.total_eur + (ssf?.subvention_eur ?? 0));
 
@@ -555,13 +565,58 @@ export function calculer(entrees, referentiels) {
     /** @type {Array<{libelle: string, montant_eur: number, affectation: string|null, par_tranche: Record<string, number>}>} */
     const lignesSub = [];
     const ventiler = (libelle, montant, affectation) => {
-      const cible = affectation && codesFinances.includes(affectation) ? affectation : null;
+      // R-SUB-3 - Une affectation peut nommer PLUSIEURS produits : « PLUS-PLAI »
+      // est le cas courant, une aide de l'Etat qui vise les deux tranches
+      // sociales d'une operation mixte. Elle se repartit alors sur ces
+      // tranches-la, au prorata de LEURS surfaces utiles renormalisees, et non
+      // sur l'operation entiere. Avant cette resolution, une affectation qui
+      // n'etait pas exactement un code de tranche etait silencieusement ignoree
+      // et la subvention arrosait tout le programme, tranche libre comprise :
+      // 90 000 EUR affectes « PLUS-PLAI » sur PLAI + PLUS + LIBRE partaient en
+      // trois parts egales, dont une finançait du logement libre.
+      const cibles = resoudreAffectation(affectation, codesFinances);
       /** @type {Record<string, number>} */
       const parTranche = {};
-      for (const c of codesFinances) {
-        parTranche[c] = cible ? (c === cible ? montant : 0) : (quotesParts[c] ?? 0) * montant;
+      if (cibles.length) {
+        const total = cibles.reduce((s, c) => s + (quotesParts[c] ?? 0), 0);
+        for (const c of codesFinances) {
+          if (!cibles.includes(c)) {
+            parTranche[c] = 0;
+          } else if (total > 0) {
+            parTranche[c] = ((quotesParts[c] ?? 0) / total) * montant;
+          } else {
+            // Des tranches nommees mais sans surface : a defaut de cle, parts egales.
+            parTranche[c] = montant / cibles.length;
+          }
+        }
+      } else {
+        for (const c of codesFinances) parTranche[c] = (quotesParts[c] ?? 0) * montant;
       }
-      lignesSub.push({ libelle, montant_eur: montant, affectation: cible, par_tranche: parTranche });
+      lignesSub.push({
+        libelle,
+        montant_eur: montant,
+        // L'affectation RESTITUEE est celle qui a servi : une seule cible garde
+        // son code, plusieurs se rejoignent sous la forme saisie.
+        affectation: cibles.length === 1 ? cibles[0] : cibles.length ? (affectation ?? null) : null,
+        par_tranche: parTranche,
+      });
+
+      // Une subvention qui atterrit sur une tranche non eligible aux aides
+      // publiques - le logement libre - n'est pas corrigee d'office : le montant
+      // saisi fait foi, et rien ne dit qu'il s'agisse d'une aide de l'Etat
+      // plutot que d'une participation de droit commun. Mais elle est DITE :
+      // c'est le montage qui se decide, pas le calcul.
+      const versLibre = codesFinances.filter(
+        (c) => parTranche[c] > 0 && produit(c).eligible_aides_publiques === false,
+      );
+      if (versLibre.length) {
+        alertes.push(
+          `Subvention « ${libelle} » : ${arrondiEuro(
+            versLibre.reduce((s, c) => s + parTranche[c], 0),
+          )} EUR ventiles sur ${versLibre.join(', ')}, tranche(s) hors aide publique. ` +
+            "L'affecter aux tranches concernees la retire du financement du libre.",
+        );
+      }
     };
     for (const s of entrees.subventions ?? []) {
       const m = Number(s.montant_eur) || 0;
@@ -1030,8 +1085,22 @@ export function calculer(entrees, referentiels) {
     baremes,
   );
   tfpb.par_tranche = tfpbParTranche;
+  // R-FISC-2 - La taxe d'amenagement se ventile par tranche : le PLAI en est
+  // exonere de plein droit, le PLUS et le PLS n'ont que l'abattement de 50 %, le
+  // LLI et le libre n'ont ni l'un ni l'autre. Faute de surface de plancher par
+  // tranche, la cle est celle qui sert partout ailleurs, la quote-part de
+  // surface utile - une SDP par tranche viendra la remplacer sans changer le
+  // calcul. Une saisie d'abattement continue de primer sur tout.
   const ta = entrees.taxe_amenagement
-    ? taxeAmenagement(entrees.taxe_amenagement, baremes)
+    ? taxeAmenagement(
+        {
+          ...entrees.taxe_amenagement,
+          quotes_parts_sdp:
+            entrees.taxe_amenagement.quotes_parts_sdp ??
+            (codesPresents.length ? quotesParts : undefined),
+        },
+        baremes,
+      )
     : null;
 
   // --- 8. Exploitation (R-EXP) ---
@@ -1157,6 +1226,26 @@ export function calculer(entrees, referentiels) {
   // toujours le taux, le differe et la liste des charges deductibles.
   const cfgIS = baremes.impot_societes ?? {};
   const produitsSoumisIS = new Set(cfgIS.produits_soumis ?? []);
+
+  // R-EXP-RLS - Reduction de loyer de solidarite (CCH art. L. 442-2-1). Le
+  // bailleur social diminue le loyer de ses locataires beneficiaires de l'APL :
+  // c'est du loyer quittance en moins, pas une charge, et cela ne vise que le
+  // parc conventionne. INACTIVE par defaut - l'allumer d'office deplacerait en
+  // silence le resultat de toutes les simulations deja enregistrees, et le taux
+  // du referentiel est une projection de la note de cadrage, pas un bareme
+  // arrete. La saisie l'active, soit par le drapeau, soit en posant un taux.
+  const cfgRLS = baremes.charges_exploitation?.reduction_loyer_solidarite ?? {};
+  const produitsSoumisRLS = new Set(cfgRLS.produits_soumis ?? []);
+  const rlsActive =
+    exp.rls_actif ?? (exp.rls_taux !== undefined ? true : cfgRLS.actif_par_defaut === true);
+  const tauxRLSBase = exp.rls_taux ?? cfgRLS.taux ?? 0;
+  const tauxRLSDe = (code) => {
+    if (!rlsActive) return 0;
+    // Sans programme, il n'y a pas de tranche a filtrer : l'activation explicite
+    // est tout ce dont on dispose, et elle fait foi.
+    if (code === null) return tauxRLSBase;
+    return produitsSoumisRLS.has(code) ? tauxRLSBase : 0;
+  };
   const soumisIS =
     exp.soumis_is ?? loyers.some((l) => produitsSoumisIS.has(l.code_produit));
 
@@ -1239,6 +1328,13 @@ export function calculer(entrees, referentiels) {
       prix_revient_ttc_eur: prTranche,
       charges_diverses: chargesDiverses,
       loyers_logements_annuels_eur: loyerDe,
+      // R-EXP-RLS - Reduction de loyer de solidarite, decidee TRANCHE PAR
+      // TRANCHE comme l'impot sur les societes, et pour la raison inverse : le
+      // parc conventionne APL la subit, le logement intermediaire et le libre
+      // non. Un taux moyen pose sur l'operation entiere aurait abandonne du
+      // loyer libre a des locataires qui n'y ont pas droit.
+      rls_taux: tauxRLSDe(code),
+      rls_taux_par_annee: exp.rls_taux_par_annee ?? [],
       loyers_annexes_annuels_eur: loyersAnnexesAnnuels * part,
       loyers_divers_annuels_eur: (exp.loyers_divers_annuels_eur ?? 0) * part,
       frais_gestion_annuels_eur: (exp.frais_gestion_annuels_eur ?? 0) * part,
@@ -1336,6 +1432,10 @@ export function calculer(entrees, referentiels) {
     qp_subventions_annuelle_eur: exp.qp_subventions_annuelle_eur ?? 0,
     duree_qp_subventions_ans: exp.duree_qp_subventions_ans ?? 0,
     prix_revient_ttc_eur: bilan.total_ttc_module_eur,
+    // R-EXP-RLS : sans programme, aucune tranche a filtrer - l'activation
+    // explicite de la simulation fait foi.
+    rls_taux: tauxRLSDe(null),
+    rls_taux_par_annee: exp.rls_taux_par_annee ?? [],
     charges_diverses: chargesDiverses,
     loyers_logements_annuels_eur: loyersLogementsAnnuels,
     loyers_annexes_annuels_eur: loyersAnnexesAnnuels,

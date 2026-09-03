@@ -3784,6 +3784,27 @@ function rendreExploitation(r) {
     cel.textContent = d ? eur(d.montant_eur) : '-';
   }
 
+  // R-EXP-RLS : le loyer abandonne de l'annee 1, meme lecture que la colonne
+  // ci-dessus. Il vient du moteur, qui seul sait quelles tranches y sont
+  // soumises - l'ecran ne multiplie rien.
+  const celRLS = document.getElementById('rls-annee-1');
+  if (celRLS) {
+    const rls = e.lignes[0]?.rls_eur ?? 0;
+    celRLS.textContent = rls ? `- ${eur(rls)}` : '-';
+  }
+  const champTauxRLS = document.getElementById('rls-taux');
+  if (champTauxRLS) {
+    const actif = etat.exploitation?.rls_actif === true;
+    champTauxRLS.disabled = !actif;
+    // Tant que la case n'est pas cochee, le champ montre le taux du referentiel
+    // sans l'imposer : c'est une valeur d'attente, pas une saisie.
+    if (etat.exploitation?.rls_taux === undefined || etat.exploitation?.rls_taux === null) {
+      champTauxRLS.value = valNum(
+        enPourcent(referentiels.baremes.charges_exploitation?.reduction_loyer_solidarite?.taux ?? 0),
+      );
+    }
+  }
+
   // --- Tuiles ---
   $('#tuiles-exploitation').innerHTML = [
     {

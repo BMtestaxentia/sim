@@ -117,10 +117,19 @@
     "source": "ParaGEN!B31:B32 ; selection IdF si zone A ou A bis (calculs!B1254)",
     "hors_idf": 892,
     "idf": 1011,
+    "note_valeurs": "Valeurs au 1er janvier 2026 (CGI art. 1635 quater H), verifiees le 03/09/2026 contre collectivites-locales.gouv.fr. Elles sont actualisees chaque annee sur l'indice du cout de la construction : celui-ci ayant recule, elles BAISSENT en 2026 (892 / 1011) apres 930 / 1054 en 2025. Une valeur en repli n'est donc pas le signe d'une erreur de releve.",
     "abattement_logement_social": 0.5,
-    "abattement_source": "50 % reglementaire, applique via ParaGLOB!H54 dans l'assiette (calculs!B1255)"
+    "abattement_source": "50 % reglementaire, applique via ParaGLOB!H54 dans l'assiette (calculs!B1255)",
+    "regimes": {
+      "exoneration": 1,
+      "abattement_50": 0.5,
+      "aucun": 0
+    },
+    "note_regimes": "Part de la valeur forfaitaire RETIREE de l'assiette, par regime. Le regime est une propriete du PRODUIT (produits.js/regime_taxe_amenagement) et non de l'operation : le PLAI et le LLTS ouvrent une exoneration de PLEIN DROIT (CGI art. 1635 quater D, I, 2°), donc une part retiree de 1 ; les autres logements finances par un pret aide de l'Etat - PLUS, PLS, foyers - n'ont que l'abattement de 50 % (art. 1635 quater I), l'exoneration primant sur l'abattement ; le LLI et le libre n'ont ni l'un ni l'autre, faute de pret aide. Un abattement saisi sur la simulation force la valeur pour toute l'operation : c'est le recours quand une deliberation locale s'ecarte du droit commun (exonerations facultatives, art. 1635 quater E)."
   },
   "versement_sous_densite": {
+    "abroge": true,
+    "note": "IMPOT ABROGE, conserve pour memoire et pour qu'une simulation ancienne qui le porte reste lisible. Loi n° 2020-1721 du 29 decembre 2020 (loi de finances pour 2021), article 155 : le versement pour sous-densite disparait au 1er janvier 2021, plus aucun seuil minimal de densite ne peut etre institue et ceux qui existaient cessent de produire effet. Le code qui l'appliquait a ete retire du moteur le 03/09/2026 ; ces valeurs ne sont plus lues.",
     "plafond_valeur_terrain": 0.25,
     "part_valeur_terrain": 0.5,
     "source": "R-FISC-3 ; MIN(valeur_terrain/2 * (1 - SDP/(seuil*surface)), 25 % * valeur_terrain)"
@@ -387,7 +396,8 @@
         "source_logement_social": "CGI art. 1384 A : 15 ans de droit commun, portee a 25 ans pour les logements neufs a usage locatif finances a plus de 50 % en PLUS, PLAI ou PLS (loi 2005-32 du 18/01/2005 art. 92, fenetre d'eligibilite prorogee par les lois de finances successives). Une prolongation de 5 ans porte a 30 ans sous quatre criteres environnementaux sur cinq (art. 1384 A I bis) : NON modelisee.",
         "logement_intermediaire_ans": 20,
         "source_logement_intermediaire": "CGI art. 1384-0 A : 20 ans a compter de l'achevement, pour les logements neufs ayant beneficie du taux reduit de TVA de l'art. 279-0 bis A et loues sous condition de ressources.",
-        "libre_ans": 0,
+        "libre_ans": 2,
+      "source_libre": "CGI art. 1383 : exoneration de droit commun de deux ans des constructions nouvelles, seule dont releve le logement libre. L'annexe LEON de reference LIBRE pose la meme duree. La commune peut avoir supprime sa part par deliberation (art. 1383 I), auquel cas seule la part departementale est exoneree : la duree se surcharge alors sur la simulation (Q-41).",
         "ecart_maquette": "La maquette LEON REWORK donne 0 an au PLI. Le CGI en donne 20, sous conditions de TVA reduite et de location intermediaire. Le referentiel retient 20 ; mettre 0 sur la simulation si l'operation ne remplit pas les conditions de l'art. 279-0 bis A."
       }
     },
@@ -464,6 +474,26 @@
         "note": "Quote-part des frais de siege imputee a l operation. Forfait par logement, indexe comme la gestion. Comme tout poste du catalogue, inactif tant que la saisie ne l active pas."
       }
     ],
+    "reduction_loyer_solidarite": {
+      "libelle": "Réduction de loyer de solidarité (RLS)",
+      "source": "cotisations_her_pmt2026.json/rls, extrait de la note de cadrage PMT 2026-2035 du GIE Habitat en Region : « un taux de RLS projete sur les operations nouvelles a 4 % » du quittancement. CCH art. L. 442-2-1.",
+      "usage": "Part du loyer QUITTANCE que le bailleur social abandonne au titre de la RLS. Ce n'est pas une charge : c'est du loyer en moins, retire avant la vacance, avant les frais de gestion au pourcentage et avant les cotisations assises sur les produits locatifs.",
+      "taux": 0.04,
+      "actif_par_defaut": false,
+      "note_activation": "INACTIF par defaut, comme tous les postes du catalogue de charges. L'activer d'office changerait en silence le resultat de toutes les simulations existantes, golden tests compris, alors que la RLS est une donnee de politique publique revisee chaque annee et que la note HER donne son taux comme une PROJECTION, pas comme un bareme. La saisie l'appelle par `exploitation.rls_actif` ou `exploitation.rls_taux`.",
+      "produits_soumis": [
+        "PLAI",
+        "PLUS",
+        "PLUS33",
+        "PLS",
+        "FPLAI",
+        "FPLUS",
+        "FPLS",
+        "REHAB"
+      ],
+      "note_produits": "La RLS ne vise que le parc conventionne APL. Le logement intermediaire et le logement libre n'y sont pas soumis : leurs locataires ne percoivent pas l'APL au titre de ces logements. Les foyers figurent dans la liste mais ne sont concernes qu'en mode LOYERS : une redevance de foyer n'est pas un loyer quittance au sens de la RLS, et le moteur n'applique le taux qu'aux loyers de logements.",
+      "note_incertitude": "Le referentiel de cotisations porte aussi un taux moyen de lissage et un coefficient de variation par annee, dont il signale lui-meme que la plage d'annees est INDETERMINEE dans la source. Seul le taux de quittancement de 4 % est repris ici, la source le donnant comme sur pour les operations nouvelles (Q-43)."
+    },
     "frais_gestion_pct_prix_revient": 0.003,
     "note_frais_gestion": "Q-17, close le 11/08/2026. Les frais de gestion s assoient sur le PRIX DE REVIENT TTC, a 0,3 % (ParaGLOB!C49, identique sur BOURGES, CHAMBERY et operation de reference foyer PLS). LEON les AFFICHE en euros par logement (ComPLUS!B150) mais les CALCULE comme taux x PR TTC / nb logements (SimPLUS!A36) : c est un cout de structure rapporte a la taille de l operation, pas une commission sur les recettes."
   },

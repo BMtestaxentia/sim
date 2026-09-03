@@ -11,7 +11,13 @@
  */
 
 /**
- * Arrondi mathematique a `decimales` chiffres apres la virgule (demi vers le haut).
+ * Arrondi a `decimales` chiffres apres la virgule, les demis a l'oppose de zero.
+ *
+ * C'est la convention d'Excel et donc celle de LEON : -2,5 donne -3 et non -2.
+ * `Math.round` seul arrondit les demis vers +l'infini et rendrait -2 : la
+ * correction relative ci-dessous ecarte la valeur de zero juste assez pour que
+ * les deux sens se traitent pareil. Un arrondi asymetrique aurait biaise tout
+ * solde negatif dans le meme sens, exercice apres exercice.
  * @param {number} valeur
  * @param {number} decimales
  * @returns {number}
@@ -19,8 +25,16 @@
 export function arrondi(valeur, decimales) {
   if (!Number.isFinite(valeur)) return valeur;
   const f = 10 ** decimales;
-  // +Number.EPSILON : neutralise le bruit flottant (ex. 1.005 -> 1.01 et non 1.00)
-  return Math.round((valeur + Number.EPSILON) * f) / f;
+  // Correction du bruit flottant AVANT l'arrondi. Elle doit etre RELATIVE : un
+  // `+ Number.EPSILON` absolu ne vaut que pour les valeurs proches de 1 et ne
+  // deplace plus rien des que le montant depasse quelques unites - il ne faisait
+  // donc rien la ou il aurait servi, sur des euros. La forme relative rattrape
+  // le cas d'ecole (1,005 -> 1,01) comme celui qu'on rencontre vraiment
+  // (1 234 567,005 -> 1 234 567,01), sans jamais deplacer une valeur qui n'est
+  // pas deja a un ulp de la frontiere.
+  const echelle = valeur * f;
+  const corrige = echelle + Math.sign(echelle) * Math.abs(echelle) * Number.EPSILON * 4;
+  return Math.round(corrige) / f;
 }
 
 /**

@@ -233,9 +233,25 @@ export function loyerProduit(
   const loyerMaxBase = arrondiLoyer(cs * loyerBase);
 
   const force = loyer_sortie_force !== undefined && loyer_sortie_force !== null;
+  // R-LOYER-3 - La marge de majoration est PLAFONNEE. Le plafond est une donnee
+  // de simulation (ParaPLUS!AD30, 12 % au referentiel) et la regle est un simple
+  // minimum, mais elle n'etait appliquee nulle part : le plafond se reglait a
+  // l'ecran sans rien commander, et une marge de 200 % triplait le loyer d'un
+  // PLUS sans un mot. Un loyer qu'aucune convention n'accepterait equilibrait
+  // alors l'operation.
+  //
+  // Le plafond ne s'applique PAS a un produit a loyer de marche : il n'y a pas
+  // de convention a respecter sur du libre, et la marge y est le pari
+  // commercial lui-meme.
+  const plafondMarge = def.loyer_de_marche
+    ? Infinity
+    : (referentiels.constantes_reglementaires.marge_locale_plafond_defaut?.valeur ?? Infinity);
+  const margeAppliquee = margePlafonnee([marge_majoration], plafondMarge);
+  const margePlafonneeAtteinte = margeAppliquee < marge_majoration;
+
   const loyerPratique = force
     ? arrondiLoyer(loyer_sortie_force)
-    : arrondiLoyer(loyerMaxBase * (1 + marge_majoration));
+    : arrondiLoyer(loyerMaxBase * (1 + margeAppliquee));
 
   return {
     cs,
@@ -244,6 +260,11 @@ export function loyerProduit(
     loyer_pratique_eur_m2: loyerPratique,
     loyer_annuel_eur: arrondiEuro(MOIS_PAR_AN * su_m2 * loyerPratique),
     force,
+    /** Marge REELLEMENT appliquee, une fois le plafond R-LOYER-3 passe. */
+    marge_majoration: margeAppliquee,
+    marge_majoration_saisie: marge_majoration,
+    marge_plafonnee: margePlafonneeAtteinte,
+    plafond_marge: Number.isFinite(plafondMarge) ? plafondMarge : null,
   };
 }
 
@@ -268,6 +289,16 @@ export function loyerAnnexesSeparees(annexes) {
  */
 export function controlesLoyer(loyer, code_produit) {
   const alertes = [];
+  // R-LOYER-3 : le plafonnement de la marge se DIT. Il change le loyer de sortie,
+  // donc tout l'equilibre : le laisser s'appliquer en silence ferait chercher
+  // ailleurs la raison d'un compte qui ne tombe plus juste.
+  if (loyer.marge_plafonnee) {
+    alertes.push(
+      `${code_produit} : marge de majoration ramenee de ` +
+        `${(loyer.marge_majoration_saisie * 100).toFixed(1)} % a ` +
+        `${(loyer.marge_majoration * 100).toFixed(1)} %, plafond reglementaire de la simulation`,
+    );
+  }
   // Un plafond conventionnel non saisi vaut zero : le compte serait faux en
   // silence. On le dit plutot que de laisser passer une recette nulle.
   if (loyer.plafond_conventionnel && loyer.loyer_max_base_eur_m2 <= 0) {

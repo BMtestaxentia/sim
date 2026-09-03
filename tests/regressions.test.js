@@ -13,6 +13,8 @@ import { prixDeRevientVentile } from '../src/bilan.js';
 import { scinderPLS, plafondPretsLLI } from '../src/financement.js';
 import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
 import { coefficientStructure } from '../src/loyers.js';
+import { arrondi } from '../src/arrondis.js';
+import { facteurIndexation } from '../src/exploitation.js';
 import { adapterTrajectoires, normaliserTrajectoires } from '../src/trajectoires.js';
 import { calendrierOperation, decalerMois } from '../src/calendrier.js';
 import { resoudreTaux, resoudreDuree, pretsDefautResolus, produitsOrdonnes } from '../src/produits.js';
@@ -1612,5 +1614,141 @@ describe('LIBRE - le logement libre, produit a part entiere', () => {
     );
     expect(r.amortissements[0].tableau).toHaveLength(20);
     expect(r.amortissements[0].tableau[0].taux).toBe(0.045);
+  });
+});
+
+/**
+ * AUDIT REGLEMENTAIRE DU 03/09/2026.
+ *
+ * Quatre regles etaient DECLAREES au dictionnaire et ne s'appliquaient pas, ou
+ * s'appliquaient a cote. Aucune ne levait d'erreur : elles ne se voyaient que
+ * sur les montants, ce qui est exactement la raison d'etre de ce fichier.
+ */
+describe('audit 03/09/2026 - regles declarees qui ne s appliquaient pas', () => {
+  const op = (extra = {}) => ({
+    identite: { zone_123: 2, zone_ABC: 'B1', type_operation: 'Vefa' },
+    dates: { annee_mise_en_location: 2028, duree_simulation_ans: 40 },
+    lots: [
+      { code_produit: 'PLAI', nb_logements: 4, shab_m2: 260, surfaces_annexes_m2: 0 },
+      { code_produit: 'PLUS', nb_logements: 4, shab_m2: 260, surfaces_annexes_m2: 0 },
+      { code_produit: 'LIBRE', nb_logements: 4, shab_m2: 260, surfaces_annexes_m2: 0 },
+    ],
+    postes_bilan: [{ chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 2000000, taux_tva: 0.1 }],
+    ...extra,
+  });
+  const sub = (r, code) => r.financement.par_tranche?.[code]?.subventions_eur ?? 0;
+
+  it('R-SUB-3 : une affectation PLUS-PLAI ne finance QUE le PLUS et le PLAI', () => {
+    // Le defaut : toute affectation qui n'etait pas exactement un code de
+    // tranche etait ignoree en silence, et la subvention arrosait le programme
+    // entier. Sur cette operation, 90 000 EUR affectes « PLUS-PLAI » partaient
+    // en trois parts de 30 000, dont une financait du logement libre.
+    const r = calculer(
+      op({ subventions: [{ libelle: 'Etat', montant_eur: 90000, affectation: 'PLUS-PLAI' }] }),
+      REFERENTIELS,
+    );
+    expect(sub(r, 'PLAI')).toBe(45000);
+    expect(sub(r, 'PLUS')).toBe(45000);
+    expect(sub(r, 'LIBRE')).toBe(0);
+  });
+
+  it('R-SUB-3 : le prorata SU des tranches visees est RENORMALISE', () => {
+    // Deux tranches sociales sur trois : elles se partagent la TOTALITE de
+    // l'aide, pas les deux tiers que donnerait leur quote-part brute.
+    const r = calculer(
+      op({
+        lots: [
+          { code_produit: 'PLAI', nb_logements: 4, shab_m2: 200 },
+          { code_produit: 'PLUS', nb_logements: 4, shab_m2: 600 },
+          { code_produit: 'LIBRE', nb_logements: 4, shab_m2: 200 },
+        ],
+        subventions: [{ libelle: 'Etat', montant_eur: 80000, affectation: 'PLAI+PLUS' }],
+      }),
+      REFERENTIELS,
+    );
+    expect(sub(r, 'PLAI')).toBe(20000); // 200 / 800
+    expect(sub(r, 'PLUS')).toBe(60000); // 600 / 800
+    expect(sub(r, 'LIBRE')).toBe(0);
+  });
+
+  it('R-SUB-3 : une subvention qui ruisselle sur du libre est DITE', () => {
+    // Elle n'est pas corrigee d'office - une participation de collectivite de
+    // droit commun existe - mais elle ne passe plus sans un mot.
+    const r = calculer(op({ subventions: [{ libelle: 'Etat', montant_eur: 90000 }] }), REFERENTIELS);
+    expect(r.alertes.some((a) => /hors aide publique/i.test(a))).toBe(true);
+    expect(sub(r, 'LIBRE')).toBeGreaterThan(0);
+  });
+
+  it('R-LOYER-3 : la marge de majoration est PLAFONNEE, et le dit', () => {
+    // Le plafond etait editable a l'ecran et ne commandait rien : une marge de
+    // 200 % triplait le loyer d'un PLUS sans alerte, sur un loyer qu'aucune
+    // convention n'aurait accepte.
+    const plafond = baremes.constantes_reglementaires.marge_locale_plafond_defaut.valeur;
+    const ref = calculer(op({ loyers_par_produit: { PLUS: { marge_majoration: plafond } } }), REFERENTIELS);
+    const exces = calculer(op({ loyers_par_produit: { PLUS: { marge_majoration: 2 } } }), REFERENTIELS);
+    const loyerPLUS = (r) => r.loyers.find((l) => l.code_produit === 'PLUS').loyer_pratique_eur_m2;
+    expect(loyerPLUS(exces)).toBe(loyerPLUS(ref));
+    expect(exces.alertes.some((a) => /marge de majoration ramenee/i.test(a))).toBe(true);
+    // Le libre n'a pas de convention a respecter : sa marge n'est pas plafonnee.
+    const libre = calculer(op({ loyers_par_produit: { LIBRE: { marge_majoration: 2 } } }), REFERENTIELS);
+    const loyerLIBRE = (r) => r.loyers.find((l) => l.code_produit === 'LIBRE').loyer_pratique_eur_m2;
+    expect(loyerLIBRE(libre)).toBeGreaterThan(loyerLIBRE(ref) * 2);
+  });
+
+  it('R-FISC-2 : le PLAI est exonere de taxe d amenagement, le libre paie plein tarif', () => {
+    const r = calculer(op({ taxe_amenagement: { sdp_m2: 1200, taux_commune: 0.05 } }), REFERENTIELS);
+    const t = r.fiscalite.taxe_amenagement.par_tranche;
+    expect(t.PLAI.assiette_eur).toBe(0);
+    // Le PLUS porte l'abattement de 50 %, le libre rien : a surface egale,
+    // l'assiette du libre vaut exactement le double de celle du PLUS.
+    expect(t.LIBRE.assiette_eur).toBe(t.PLUS.assiette_eur * 2);
+  });
+
+  it('R-EXP-RLS : nulle par defaut, et ne mord que sur le parc conventionne', () => {
+    // Inactive par defaut : l'allumer d'office aurait deplace en silence toutes
+    // les simulations enregistrees, et le taux du referentiel est une projection.
+    const defaut = calculer(op(), REFERENTIELS);
+    expect(defaut.exploitation.lignes[0].rls_eur).toBe(0);
+
+    const active = calculer(op({ exploitation: { rls_actif: true } }), REFERENTIELS);
+    const taux = baremes.charges_exploitation.reduction_loyer_solidarite.taux;
+    const parT = active.exploitation.par_tranche;
+    expect(parT.PLUS.lignes[0].rls_eur).toBeGreaterThan(0);
+    expect(parT.PLAI.lignes[0].rls_eur).toBeGreaterThan(0);
+    // Le logement libre n'est pas conventionne APL : il n'abandonne rien.
+    expect(parT.LIBRE.lignes[0].rls_eur).toBe(0);
+    // C'est du loyer QUITTANCE en moins, pas une charge : il sort des produits.
+    const avant = defaut.exploitation.par_tranche.PLUS.lignes[0].loyers_logements_eur;
+    const apres = parT.PLUS.lignes[0].loyers_logements_eur;
+    expect(apres).toBeCloseTo(avant * (1 - taux), 0);
+  });
+
+  it('R-SUB-2 : la valeur de base se lit au bareme, sans etre retapee', () => {
+    // Elle etait au referentiel, editable a l'ecran, et personne ne la lisait :
+    // la reference de surcharge fonciere devait etre saisie a la main.
+    const r = calculer(
+      op({ surcharge_fonciere: { valeur_fonciere_eur: 500000, su_ssf_m2: 100 } }),
+      REFERENTIELS,
+    );
+    // Zone 2, neuf, collectif : la deuxieme colonne du bareme ParaGEN!D36:G41.
+    const attendue = baremes.valeurs_de_base.neuf.collectif[1];
+    expect(r.subventions.surcharge_fonciere.reference_eur).toBe(attendue * 100);
+  });
+
+  it('arrondis : les demis s ecartent de zero dans les deux sens, comme Excel', () => {
+    // `Math.round` seul rendait -2 pour -2,5 et biaisait tout solde negatif.
+    expect(arrondi(2.5, 0)).toBe(3);
+    expect(arrondi(-2.5, 0)).toBe(-3);
+    // Et la correction de bruit flottant vaut aussi sur les grands montants,
+    // ce qu'un epsilon ABSOLU ne faisait pas.
+    expect(arrondi(1.005, 2)).toBe(1.01);
+    expect(arrondi(1234567.005, 2)).toBe(1234567.01);
+  });
+
+  it('indexation : une trajectoire creuse reprend la derniere valeur connue', () => {
+    // Amorcee a zero, elle tenait l'inflation pour nulle jusqu'a sa premiere
+    // annee renseignee - une sous-estimation silencieuse des charges.
+    expect(facteurIndexation({ 2020: 0.02 }, 2028, 2030)).toBeCloseTo(1.02 ** 2, 12);
+    expect(facteurIndexation({ 2020: 0.02, 2029: 0.03 }, 2028, 2030)).toBeCloseTo(1.03 * 1.03, 12);
   });
 });

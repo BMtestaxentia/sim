@@ -19,9 +19,41 @@ import { arrondiEuro } from './arrondis.js';
  */
 
 /**
+ * R-SUB-3 - Tranches visees par une affectation de subvention.
+ *
+ * Une affectation nomme UN produit ('PLAI') ou PLUSIEURS ('PLUS-PLAI', le cas
+ * courant d'une aide qui vise les deux tranches sociales d'un programme mixte).
+ * Les separateurs admis sont le tiret, la virgule, le plus et l'espace : ce sont
+ * ceux qu'on rencontre dans les annexes LEON et dans les saisies.
+ *
+ * Seuls les produits REELLEMENT presents au programme sont retenus. Une
+ * affectation qui ne designe aucune tranche presente rend une liste vide, ce que
+ * l'appelant traite comme une absence d'affectation : la subvention profite alors
+ * a l'operation entiere, faute de savoir a qui la rattacher.
+ *
+ * Sans cette resolution, toute affectation qui n'etait pas exactement un code de
+ * tranche etait ignoree en silence : la regle etait declaree, pas appliquee.
+ *
+ * @param {string|null|undefined} affectation
+ * @param {string[]} codes_presents
+ * @returns {string[]} codes de tranche vises, dans l'ordre du programme
+ */
+export function resoudreAffectation(affectation, codes_presents) {
+  if (!affectation) return [];
+  const nommes = new Set(
+    String(affectation)
+      .split(/[-,+\s]+/)
+      .map((m) => m.trim().toUpperCase())
+      .filter(Boolean),
+  );
+  return codes_presents.filter((c) => nommes.has(c.toUpperCase()));
+}
+
+/**
  * R-SUB-3 - Agregation des subventions saisies, ventilees par produit.
- * Une subvention affectee a un couple de produits ('PLUS-PLAI') est repartie au
- * prorata des quotes-parts de surface utile.
+ * Une subvention affectee a un couple de produits ('PLUS-PLAI') est repartie
+ * entre CES produits, au prorata de leurs quotes-parts de surface utile
+ * renormalisees - et non sur l'operation entiere.
  * @param {Subvention[]} subventions
  * @param {Record<string, number>} quotes_parts
  * @returns {{par_produit: Record<string, number>, gratuites_eur: number,
@@ -32,17 +64,24 @@ export function agregerSubventions(subventions, quotes_parts) {
   const parProduit = {};
   let gratuites = 0;
   let nonGratuites = 0;
+  const codes = Object.keys(quotes_parts);
 
   for (const sub of subventions) {
     if (!sub.montant_eur) continue;
     if (sub.gratuite) gratuites += sub.montant_eur;
     else nonGratuites += sub.montant_eur;
 
-    const cible = sub.affectation;
-    if (cible && quotes_parts[cible] !== undefined) {
-      parProduit[cible] = (parProduit[cible] ?? 0) + sub.montant_eur;
+    const cibles = resoudreAffectation(sub.affectation, codes);
+    if (cibles.length) {
+      // Prorata SU RENORMALISE sur les seules tranches visees : une aide
+      // PLUS-PLAI se partage entre le PLUS et le PLAI, pas avec le reste.
+      const total = cibles.reduce((s, c) => s + (quotes_parts[c] ?? 0), 0);
+      for (const code of cibles) {
+        const part = total > 0 ? (quotes_parts[code] ?? 0) / total : 1 / cibles.length;
+        parProduit[code] = (parProduit[code] ?? 0) + sub.montant_eur * part;
+      }
     } else {
-      // Affectation multi-produits (ou absente) : ventilation par quote-part SU.
+      // Aucune affectation exploitable : la subvention profite a l'operation.
       for (const [code, qp] of Object.entries(quotes_parts)) {
         parProduit[code] = (parProduit[code] ?? 0) + sub.montant_eur * qp;
       }
@@ -57,6 +96,29 @@ export function agregerSubventions(subventions, quotes_parts) {
     non_gratuites_eur: arrondiEuro(nonGratuites),
     total_eur: arrondiEuro(gratuites + nonGratuites),
   };
+}
+
+/**
+ * R-SUB-2 - Valeur de base (VB) au metre carre, assiette de reference de la
+ * surcharge fonciere. Lue au bareme `valeurs_de_base` : une table par zone
+ * 1/2/3/1bis, croisee neuf / acquisition et collectif / individuel.
+ *
+ * @param {Object} p
+ * @param {string|number} [p.zone_123]
+ * @param {'neuf'|'acq_amelioration'} [p.type]
+ * @param {'collectif'|'individuel'} [p.habitat]
+ * @param {any} referentiels
+ * @returns {number} EUR/m2
+ */
+export function valeurDeBase({ zone_123, type = 'neuf', habitat = 'collectif' }, referentiels) {
+  const table = referentiels.valeurs_de_base;
+  if (!table) return 0;
+  // Le bareme distingue le NEUF de l'ACQUISITION ; le type d'operation du moteur
+  // parle d'acquisition-amelioration, c'est la meme colonne.
+  const colonne = table[type === 'neuf' ? 'neuf' : 'acquisition']?.[habitat];
+  if (!colonne) return 0;
+  const i = table.zones.indexOf(`zone_${zone_123}`);
+  return i < 0 ? 0 : colonne[i];
 }
 
 /**
@@ -87,11 +149,21 @@ export function surchargeFonciere(
     participations_collectivites_eur = 0,
     type = 'neuf',
     eligible = true,
+    zone_123,
+    habitat = 'collectif',
   },
   referentiels,
 ) {
   const cfg = referentiels.constantes_reglementaires.ssf;
-  const reference = valeur_de_base_eur_m2 * su_ssf_m2;
+  // La VALEUR DE BASE est un bareme, pas une saisie : elle se lit par zone, par
+  // type d'operation et par forme d'habitat (ParaGEN!D36:G41). La table etait au
+  // referentiel depuis le debut, editable a l'ecran, et personne ne la lisait :
+  // la reference de surcharge fonciere devait etre retapee a la main a chaque
+  // simulation, avec le risque de la prendre dans la mauvaise colonne. Une
+  // valeur saisie continue de primer - c'est le recours quand un arrete local
+  // s'ecarte du bareme.
+  const vb = valeur_de_base_eur_m2 ?? valeurDeBase({ zone_123, type, habitat }, referentiels);
+  const reference = vb * su_ssf_m2;
   const depassement = valeur_fonciere_eur - reference;
 
   if (!eligible || depassement <= 0) {

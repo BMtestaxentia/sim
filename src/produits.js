@@ -39,6 +39,12 @@
  *                                       et non un plafond reglementaire - le depasser n'est pas une faute
  * @property {boolean} [finance_par_cdc] defaut true. A false, les prets de ce produit ne sont pas
  *                                       des prets sur fonds d'epargne : ils sortent du ratio R-FIN-5
+ * @property {boolean} [eligible_aides_publiques] defaut true. R-SUB-3 : a false, une subvention qui
+ *                                       ventile sur cette tranche est signalee - le libre n'ouvre
+ *                                       droit ni a l'aide a la pierre ni aux subventions de surcharge
+ * @property {'exoneration'|'abattement_50'|'aucun'} [regime_taxe_amenagement] R-FISC-2, defaut
+ *                                       'abattement_50'. CGI art. 1635 quater D (exoneration de plein
+ *                                       droit) et 1635 quater I (abattement)
  * @property {PretDefaut[]} prets_defaut
  * @property {boolean} v1                traite dans la V1 (PLUS/PLAI/PLS) ?
  */
@@ -79,6 +85,11 @@ export const PRODUITS = {
     cle_lasm: 'taux_reduit_simulation',
     coefficient_structure: true,
     duree_exoneration_tfpb_ans: 25,
+    // R-FISC-2 - Exoneration de PLEIN DROIT de taxe d'amenagement. Le PLAI (et le
+    // LLTS outre-mer) est le seul financement aide qui l'ouvre : CGI art. 1635
+    // quater D, I, 2°. Les autres prets aides n'ont que l'abattement de 50 %, et
+    // l'exoneration prime sur l'abattement.
+    regime_taxe_amenagement: 'exoneration',
     prets_defaut: [
       { nature: 'construction', cle_marge: 'PLAI', duree_ref: '40', revisabilite: 'DOUBLE' },
       { nature: 'foncier', cle_marge: 'PLAI', duree_ref: 'zone_abc:B2|C->50,sinon->60', revisabilite: 'DOUBLE' },
@@ -128,6 +139,14 @@ export const PRODUITS = {
     // Le logement libre ne se finance pas sur fonds d'epargne : son pret est un
     // pret bancaire ordinaire, hors ratio R-FIN-5 comme hors droits CDC.
     finance_par_cdc: false,
+    // R-SUB-3 - Ni aide a la pierre, ni surcharge fonciere : une subvention qui
+    // ventile sur une tranche libre est signalee. Le montant saisi fait foi -
+    // une participation de collectivite de droit commun existe - mais le
+    // ruissellement d'une aide publique sur du libre doit se voir.
+    eligible_aides_publiques: false,
+    // R-FISC-2 - Aucun abattement de taxe d'amenagement : le libre ne beneficie
+    // d'aucun pret aide de l'Etat (CGI art. 1635 quater I).
+    regime_taxe_amenagement: 'aucun',
     // UN seul pret, comme le slot LIB de LEON : une banque prete sur l'operation
     // entiere, sans la distinction foncier / construction propre a la CDC.
     prets_defaut: [{ nature: 'construction', preset: 'BANQUE_LIBRE', libelle: 'Prêt bancaire' }],
@@ -144,6 +163,10 @@ export const PRODUITS = {
     cle_lasm: 'taux_reduit_simulation',
     coefficient_structure: false,
     duree_exoneration_tfpb_ans: 20,
+    // R-FISC-2 - Ni exoneration ni abattement de taxe d'amenagement : l'abattement
+    // de 50 % vise les logements finances par un pret AIDE de l'Etat (CGI art.
+    // 1635 quater I), ce que le PLI n'est pas.
+    regime_taxe_amenagement: 'aucun',
     prets_defaut: [
       { nature: 'construction', cle_marge: 'PLI', duree_ref: '35', revisabilite: 'DOUBLE' },
       { nature: 'foncier', cle_marge: 'PLI', duree_ref: '40', revisabilite: 'DOUBLE' },
@@ -185,6 +208,9 @@ export const PRODUITS = {
     coefficient_structure: true,
     foyer: true,
     duree_exoneration_tfpb_ans: 25,
+    // R-FISC-2 - Exoneration de plein droit, comme le PLAI ordinaire dont il
+    // reprend le financement (CGI art. 1635 quater D, I, 2°).
+    regime_taxe_amenagement: 'exoneration',
     prets_defaut: [
       { nature: 'construction', cle_marge: 'PLAI', duree_ref: '40', revisabilite: 'DOUBLE' },
       { nature: 'foncier', cle_marge: 'PLAI', duree_ref: 'zone_abc:B2|C->50,sinon->60', revisabilite: 'DOUBLE' },

@@ -880,6 +880,34 @@
                 sans qu'on l'ait décidé.
               </p>
 
+              <!-- La reduction de loyer de solidarite n'est pas une charge : c'est
+                   du loyer quittance en moins. Elle vit donc hors du tableau des
+                   charges, dont l'assiette et l'indexation n'ont pas de sens pour
+                   elle, mais sur le meme ecran - c'est la meme decision. -->
+              <div class="champs champs--serres">
+                <label class="champ champ--interrupteur">
+                  <input type="checkbox" data-champ="exploitation.rls_actif" data-type="booleen"
+                    data-structure="1" id="rls-actif" />
+                  <span>Réduction de loyer de solidarité</span>
+                </label>
+                <label class="champ">
+                  <span class="champ__libelle">Taux du quittancement (%)</span>
+                  <input type="number" step="0.01" min="0" id="rls-taux"
+                    data-champ="exploitation.rls_taux" data-type="pourcentage" />
+                </label>
+                <div class="champ champ--calc">
+                  <span class="champ__libelle">Loyer abandonné, année 1</span>
+                  <span class="calc" id="rls-annee-1">-</span>
+                </div>
+              </div>
+              <p class="aide">
+                ⚙ La RLS ne vise que le parc conventionné APL : le PLAI, le PLUS, le PLS et les
+                foyers. Le logement intermédiaire et le libre n'y sont pas soumis, et le moteur
+                ne l'applique qu'à leurs tranches. Ce n'est pas une charge mais du loyer
+                quittancé en moins : elle est retirée avant la vacance, avant les frais de
+                gestion au pourcentage et avant les cotisations assises sur les loyers.
+              </p>
+
               <!-- La taxe fonciere se lit avec les autres charges assises sur le
                    logement, mais hors du tableau : celui-ci n'active que des
                    postes facultatifs du referentiel, et elle n'est pas

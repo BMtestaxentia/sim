@@ -30,7 +30,8 @@
       11,
       8,
       18
-    ]
+    ],
+    "note_LIBRE": "La ligne LIBRE n est PAS un plafond reglementaire : aucune convention ne s impose au logement libre. C est une estimation de loyer de MARCHE par zone, point de depart d un montage que la commercialisation peut depasser ou ne pas atteindre. Le moteur ne controle donc pas son depassement."
   },
   "loyers_max_zone_ABC": {
     "unite": "EUR/m2 SU/mois",
@@ -969,6 +970,24 @@
         "plafond_par_logement_eur": 50000,
         "note": "Taux FIXE sur ressource BEI : le taux pose ici est un ordre de grandeur. 9 ans minimum, 35 ans sur le bati et jusqu a 50 ans sur le foncier.",
         "periodicite": 1
+      },
+      {
+        "id": "BANQUE_LIBRE",
+        "libelle": "Prêt bancaire",
+        "principal": true,
+        "produits": [
+          "LIBRE"
+        ],
+        "nature": "autre",
+        "taux": 0.015,
+        "duree_ans": 30,
+        "revisabilite": "TAUX FIXE",
+        "progressivite": 0,
+        "profil_amortissement": "progressif",
+        "differe_ans": 0,
+        "periodicite": 1,
+        "note": "Financement du logement libre. Le logement libre ne releve pas des fonds d epargne : son pret vient d une banque, a taux fixe, et sort du ratio reglementaire prets CDC / prix de revient. Caracteristiques relevees sur le slot LIB de LEON, identiques sur les deux annexes de reference LIBRE et LLI - ce sont donc les valeurs par defaut de la matrice et non un choix d operation. Le TAUX de 1,5 % est celui de ces annexes (2024) : c est une condition de marche, a reactualiser a chaque offre bancaire (Q-42).",
+        "source": "Annexes LEON de reference LIBRE et LLI, onglet IN, caracteristiques_prets slot LIB : 30 ans, taux fixe 1,5 %, progressivite nulle."
       }
     ],
     "note_groupe": "Un GROUPE rassemble les declinaisons d un meme preteur, une par produit de financement. L ecran n en propose qu un bouton par tranche et applique la declinaison qui correspond au produit de cette tranche : sur une tranche PLS, Action Logement ne peut etre qu Action Logement PLS.",

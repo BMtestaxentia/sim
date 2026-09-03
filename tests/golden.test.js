@@ -288,11 +288,12 @@ describe.skipIf(!fixturesReellesPresentes)('golden - OP-2 LLI (bilan et plan de 
     {
       identite: { nom: 'OP-2', zone_123: 2, zone_ABC: 'B1', type_operation: 'VEFA' },
       dates: { annee_mise_en_location: 2026, duree_simulation_ans: 18 },
-      // Le loyer LLI n'est pas testable : son bareme est absent du referentiel
-      // (defaut V5 connu). On passe par le produit LIBRE, dont seul le prix de
-      // revient nous interesse ici - la ventilation etant au prorata SU et
-      // l'operation mono-tranche, le choix n'affecte aucun montant teste.
-      lots: [{ code_produit: 'LIBRE', nb_logements: 121, shab_m2: 6000, surfaces_annexes_m2: 0 }],
+      // OP-2 est une operation LLI, et la tranche le dit. Le detour par le
+      // produit LIBRE datait du defaut V5, quand le bareme de loyer du LLI
+      // pointait vers une cle inexistante ; il est corrige depuis, et le detour
+      // est devenu faux : le libre ne se finance pas sur fonds d'epargne, ce qui
+      // vidait la quotite CDC verifiee plus bas.
+      lots: [{ code_produit: 'LOC', nb_logements: 121, shab_m2: 6000, surfaces_annexes_m2: 0 }],
       postes_bilan: attendus.bilan.postes
         .filter((p) => p.ht)
         .map((p) => ({

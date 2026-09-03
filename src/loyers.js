@@ -276,7 +276,12 @@ export function controlesLoyer(loyer, code_produit) {
         `il ne se deduit d'aucun bareme de zone, il doit etre saisi`,
     );
   }
-  if (loyer.force && loyer.loyer_pratique_eur_m2 > loyer.loyer_max_base_eur_m2) {
+  // Sur un produit a loyer de MARCHE, le bareme de zone n'est qu'une estimation :
+  // le depasser releve de la commercialisation, pas de l'infraction. Alerter
+  // reviendrait a reprocher un montage optimiste, ce que le moteur n'a pas a
+  // juger - et l'alerte perdrait son sens la ou elle en a un, sur le conventionne.
+  const plafondReglementaire = !produit(/** @type {any} */ (code_produit)).loyer_de_marche;
+  if (plafondReglementaire && loyer.force && loyer.loyer_pratique_eur_m2 > loyer.loyer_max_base_eur_m2) {
     alertes.push(
       `${code_produit} : loyer de sortie force (${loyer.loyer_pratique_eur_m2} EUR/m2) ` +
         `superieur au loyer max de base (${loyer.loyer_max_base_eur_m2} EUR/m2)`,

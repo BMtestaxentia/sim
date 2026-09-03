@@ -18,7 +18,7 @@ import { surfaceUtile, quotesPartsSU, loyerProduit, loyerAnnexesSeparees, contro
 import { normaliserTrajectoires } from './trajectoires.js';
 import { calendrierOperation } from './calendrier.js';
 import { tresorerieChantier } from './tresorerie.js';
-import { pretsDefautResolus, produit, marge, ORDRE_PRODUITS } from './produits.js';
+import { pretsDefautResolus, produit, marge, financeParCDC, ORDRE_PRODUITS } from './produits.js';
 import { fusionner, surchargerTrajectoires, ecartsParametrage } from './parametrage.js';
 import {
   prixDeRevient,
@@ -437,8 +437,13 @@ export function calculer(entrees, referentiels) {
 
   // Prets CDC theoriques, sauf si la saisie impose deja les prets.
   const pretsCDCSaisis = pretsSaisis.filter((p) => p.nature !== 'autre');
+  // Une operation dont aucune tranche ne releve des fonds d'epargne n'a pas de
+  // droits CDC a chiffrer : le logement libre se finance en banque. Les calculer
+  // quand meme aurait affiche un droit qui n'existe pas, et fausse le ratio
+  // R-FIN-5 en lui donnant un numerateur sorti de nulle part.
+  const auMoinsUneTrancheCDC = codesPresents.length === 0 || codesPresents.some((c) => financeParCDC(c));
   const cdcTheoriques =
-    pretsCDCSaisis.length > 0
+    pretsCDCSaisis.length > 0 || !auMoinsUneTrancheCDC
       ? null
       : pretsCDCTheoriques({
           solde_eur: solde,
@@ -498,11 +503,42 @@ export function calculer(entrees, referentiels) {
     let prets = [...pretsSaisis];
     if (!prets.some((p) => p.nature === 'foncier' || p.nature === 'construction')) {
       const suffixe = codesFinances.length > 1;
+      // Les NATURES a poser sont celles que le produit declare. La CDC prete en
+      // deux lignes, foncier et construction ; une banque prete en une seule, sur
+      // l'operation entiere. Poser un pret foncier a une tranche qui n'en a pas
+      // lui aurait affecte une part du besoin qu'aucun pret n'aurait ensuite
+      // amortie, et la tranche serait sortie sous-financee sans raison visible.
+      // Un produit qui ne declare aucun pret par defaut garde les deux lignes :
+      // c'est le cas du PLUS 33, finance par les prets de sa tranche PLUS.
+      const naturesDe = (c) => {
+        const declares = produit(c).prets_defaut;
+        return declares.length
+          ? [...new Set(declares.map((d) => d.nature))]
+          : ['foncier', 'construction'];
+      };
+      const modele = {
+        foncier: { code: 'CDC_FONCIER', libelle: 'Prêt CDC foncier' },
+        construction: { code: 'CDC_BATIMENT', libelle: 'Prêt CDC construction' },
+      };
       prets = prets.concat(
-        codesFinances.flatMap((c) => [
-          { code: `CDC_FONCIER_${c}`, libelle: `Prêt CDC foncier${suffixe ? ` ${c}` : ''}`, nature: 'foncier', produit: c, montant_auto: true },
-          { code: `CDC_BATIMENT_${c}`, libelle: `Prêt CDC construction${suffixe ? ` ${c}` : ''}`, nature: 'construction', produit: c, montant_auto: true },
-        ]),
+        codesFinances.flatMap((c) =>
+          naturesDe(c).map((nature) => {
+            const declare = produit(c).prets_defaut.find((d) => d.nature === nature);
+            const base = modele[nature];
+            // Le code comme le libelle cessent d'annoncer la CDC des que la
+            // tranche n'en releve pas : « Pret CDC construction » sur du libre
+            // aurait nomme un preteur qui n'a rien finance.
+            const codeBase = financeParCDC(c) ? base.code : `PRET_${nature.toUpperCase()}`;
+            const libelle = declare?.libelle ?? base.libelle;
+            return {
+              code: `${codeBase}_${c}`,
+              libelle: `${libelle}${suffixe ? ` ${c}` : ''}`,
+              nature,
+              produit: c,
+              montant_auto: true,
+            };
+          }),
+        ),
       );
     }
 
@@ -600,6 +636,9 @@ export function calculer(entrees, referentiels) {
             zone_ABC: identite.zone_ABC,
             livret_a_reference: surcharges.livret_a_origine ?? laOrigine,
             marges: margesPrets,
+            // Les modeles de prets, pour les produits dont le pret par defaut
+            // n'est pas indexe sur le Livret A (le libre, finance en banque).
+            presets: baremes.presets_prets?.presets ?? [],
             // La progressivite des echeances est une regle de MONTAGE, pas une
             // propriete du produit : elle vient du referentiel, ou une surcharge
             // de simulation peut la remplacer.
@@ -854,12 +893,28 @@ export function calculer(entrees, referentiels) {
   const totalPrets = arrondiEuro(amortissements.reduce((s, a) => s + a.montant_eur, 0));
 
   // Seuls les prets CDC entrent au ratio reglementaire R-FIN-5 : un pret
-  // collecteur ou une avance ne sont pas des prets de la Caisse des Depots.
-  const totalPretsCDC = cdcTheoriques
+  // collecteur ou une avance ne sont pas des prets de la Caisse des Depots, et
+  // le pret bancaire d'une tranche libre pas davantage - le logement libre ne
+  // releve pas des fonds d'epargne.
+  // Le droit theorique se calcule sur l'operation entiere : il ne vaut le total
+  // CDC que si TOUTE l'operation en releve. Des qu'une tranche libre s'y melange,
+  // ce sont les prets reellement mobilises qui font foi, tranche par tranche.
+  const toutesTranchesCDC = !codesPresents.some((c) => !financeParCDC(c));
+  const totalPretsCDC = cdcTheoriques && toutesTranchesCDC
     ? cdcTheoriques.total_cdc_eur
     : arrondiEuro(
-        amortissements.filter((a) => a.nature !== 'autre').reduce((s, a) => s + a.montant_eur, 0),
+        amortissements
+          .filter((a) => a.nature !== 'autre' && financeParCDC(a.produit))
+          .reduce((s, a) => s + a.montant_eur, 0),
       );
+
+  // Denominateur du meme ratio : le prix de revient des seules tranches qui en
+  // relevent. Faute de ventilation par tranche, l'operation entiere fait foi.
+  const codesCDC = codesPresents.filter((c) => financeParCDC(c));
+  const prixRevientCDCBrut = arrondiEuro(
+    codesCDC.reduce((s, c) => s + (bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0), 0),
+  );
+  const prixRevientCDC = prixRevientCDCBrut > 0 ? prixRevientCDCBrut : undefined;
 
   const equilibre = controleEquilibre(
     {
@@ -868,6 +923,7 @@ export function calculer(entrees, referentiels) {
       fonds_propres_eur: fondsPropres,
       prets_eur: totalPrets,
       prets_cdc_eur: totalPretsCDC,
+      prix_revient_cdc_eur: prixRevientCDC,
     },
     baremes,
   );

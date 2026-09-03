@@ -282,6 +282,8 @@ export function pretsCDCTheoriques({
  * @param {number} [p.fonds_propres_eur]
  * @param {number} [p.prets_eur]
  * @param {number} [p.prets_cdc_eur]  sous-ensemble CDC, pour le ratio R-FIN-5
+ * @param {number} [p.prix_revient_cdc_eur]  prix de revient des seules tranches financees
+ *   sur fonds d'epargne ; defaut : le prix de revient entier (operation homogene)
  * @param {any} [referentiels]
  */
 export function controleEquilibre(
@@ -291,6 +293,7 @@ export function controleEquilibre(
     fonds_propres_eur = 0,
     prets_eur = 0,
     prets_cdc_eur = 0,
+    prix_revient_cdc_eur,
   },
   referentiels,
 ) {
@@ -301,9 +304,17 @@ export function controleEquilibre(
   if (ecart > 0) alertes.push(`Surfinancement de ${ecart} EUR`);
   if (ecart < 0) alertes.push(`Sous-financement de ${-ecart} EUR`);
 
+  // Le ratio se mesure sur le PERIMETRE des fonds d'epargne, pas sur l'operation
+  // entiere : une tranche libre, financee en banque, n'a rien a faire au
+  // denominateur d'un controle CDC. Sans cette distinction, une operation moitie
+  // PLUS moitie libre affichait 45 % et declenchait une alerte alors qu'aucune
+  // regle n'etait enfreinte. Sur une operation homogene, les deux se confondent.
+  const assietteCDC = Number.isFinite(prix_revient_cdc_eur)
+    ? /** @type {number} */ (prix_revient_cdc_eur)
+    : prix_revient_ttc_module_eur;
   let ratio_cdc = null;
-  if (referentiels && prix_revient_ttc_module_eur > 0) {
-    ratio_cdc = prets_cdc_eur / prix_revient_ttc_module_eur;
+  if (referentiels && assietteCDC > 0) {
+    ratio_cdc = prets_cdc_eur / assietteCDC;
     const mini = referentiels.constantes_reglementaires.controle_ratio_prets_cdc_min.valeur;
     if (prets_cdc_eur > 0 && ratio_cdc < mini) {
       alertes.push(

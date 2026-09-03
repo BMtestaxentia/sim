@@ -985,16 +985,21 @@ describe('R-FISC-1 - duree d exoneration de TFPB par produit (Q-14 close)', () =
     fonds_propres_par_produit: {},
   });
 
-  it('25 ans en logement social, 20 en intermediaire, 0 en libre', () => {
+  it('25 ans en logement social, 20 en intermediaire, 2 en libre', () => {
     const r = calculer(
       op([
         { code_produit: 'PLUS', nb_logements: 5, shab_m2: 350 },
         { code_produit: 'LOC', nb_logements: 5, shab_m2: 350 },
+        { code_produit: 'LIBRE', nb_logements: 5, shab_m2: 350 },
       ]),
       REFERENTIELS,
     );
     expect(r.fiscalite.tfpb.par_tranche.PLUS.duree_exoneration_ans).toBe(25);
     expect(r.fiscalite.tfpb.par_tranche.LOC.duree_exoneration_ans).toBe(20);
+    // Le libre n'a pas d'exoneration LONGUE, mais il a celle de droit commun
+    // des constructions nouvelles : deux ans (CGI art. 1383), duree que porte
+    // aussi l'annexe LEON de reference LIBRE.
+    expect(r.fiscalite.tfpb.par_tranche.LIBRE.duree_exoneration_ans).toBe(2);
   });
 
   it('chaque tranche sort d exoneration a SA date', () => {
@@ -1470,5 +1475,142 @@ describe('R-FIN-7 - taux d apport surcharge tranche par tranche', () => {
     });
     expect(fp(r, 'PLUS').montant_eur).toBe(123456);
     expect(fp(r, 'PLUS').montant_auto).toBe(false);
+  });
+});
+
+/**
+ * LIBRE - le logement libre entre au perimetre actif (03/09/2026).
+ *
+ * Ce n'est pas un produit social de plus : rien de ce qui fait le logement
+ * conventionne ne s'y applique. Pas de coefficient de structure, pas de plafond
+ * de loyer, TVA a 20 %, exoneration de TFPB de droit commun seulement, impot
+ * sur les societes du - et surtout, un financement BANCAIRE, hors fonds
+ * d'epargne. Chacun de ces points a sa ligne ici : ce sont ceux ou le moteur
+ * aurait pu, par defaut, traiter le libre comme du social.
+ */
+describe('LIBRE - le logement libre, produit a part entiere', () => {
+  const op = (extra = {}) => ({
+    identite: { zone_123: 2, zone_ABC: 'B1', type_operation: 'Vefa' },
+    dates: { annee_mise_en_location: 2028, duree_simulation_ans: 40 },
+    lots: [{ code_produit: 'LIBRE', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 40 }],
+    postes_bilan: [
+      { chapitre: 'charge_fonciere', libelle: 'Terrain', montant_ht_eur: 600000, taux_tva: 0.2 },
+      { chapitre: 'batiment', libelle: 'Travaux', montant_ht_eur: 300000, taux_tva: 0.2 },
+    ],
+    ...extra,
+  });
+
+  it('se monte de bout en bout sans saisir un seul pret', () => {
+    const r = calculer(op(), REFERENTIELS);
+    // Le plan tombe juste : le pret bancaire par defaut absorbe le besoin, comme
+    // le pret CDC le fait sur une tranche sociale. Avant l'activation du produit,
+    // la tranche sortait sous-financee de la totalite de son besoin, faute de
+    // caracteristiques de pret resolubles.
+    expect(r.financement.equilibre.equilibre).toBe(true);
+    expect(r.amortissements).toHaveLength(1);
+    expect(r.amortissements[0].libelle).toBe('Prêt bancaire');
+    expect(r.amortissements[0].tableau).toHaveLength(30);
+  });
+
+  it('emprunte a la banque, pas sur fonds d epargne', () => {
+    const r = calculer(op(), REFERENTIELS);
+    // Le pret existe et amortit, mais il ne compte NI dans la quotite CDC, NI
+    // dans les droits theoriques : le logement libre ne releve pas des fonds
+    // d'epargne, et le ratio R-FIN-5 n'a pas a s'appliquer a lui.
+    expect(r.financement.total_prets_eur).toBeGreaterThan(0);
+    expect(r.financement.total_prets_cdc_eur).toBe(0);
+    expect(r.financement.prets_cdc_theoriques).toBeNull();
+    expect(r.financement.equilibre.alertes).toEqual([]);
+  });
+
+  it('ne fait pas echouer le ratio CDC d une operation mixte', () => {
+    // Moitie PLUS, moitie libre. Les prets CDC couvrent 90 % de la tranche PLUS,
+    // soit 45 % de l'operation entiere : rapporte au mauvais denominateur, le
+    // controle des 50 % se declenchait alors qu'aucune regle n'est enfreinte.
+    const r = calculer(
+      op({
+        lots: [
+          { code_produit: 'PLUS', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 0 },
+          { code_produit: 'LIBRE', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 0 },
+        ],
+      }),
+      REFERENTIELS,
+    );
+    expect(r.financement.equilibre.alertes.filter((a) => /ratio prets cdc/i.test(a))).toEqual([]);
+    expect(r.financement.equilibre.ratio_prets_cdc).toBeGreaterThan(0.5);
+  });
+
+  it('loue au marche : pas de coefficient de structure, pas de plafond a franchir', () => {
+    const r = calculer(op(), REFERENTIELS);
+    const l = r.loyers[0];
+    expect(l.cs).toBe(1);
+    // Le CS des produits sociaux (0,77 x ...) ne s'applique pas : le loyer de
+    // reference est l'estimation de zone elle-meme, sans correction de structure.
+    // Un logement libre ne se loue pas a la surface utile corrigee mais au prix
+    // que le marche accepte. Sur la meme tranche en PLUS, le CS mord.
+    expect(l.loyer_max_base_eur_m2).toBe(l.loyer_base_eur_m2);
+    const social = calculer(
+      op({ lots: [{ code_produit: 'PLUS', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 40 }] }),
+      REFERENTIELS,
+    );
+    expect(social.loyers[0].cs).not.toBe(1);
+    // Un loyer de sortie SUPERIEUR a l'estimation ne leve aucune alerte : c'est
+    // un pari commercial, pas une infraction. Sur du conventionne, si.
+    const force = calculer(
+      op({ loyers_par_produit: { LIBRE: { loyer_sortie_force: 16 } } }),
+      REFERENTIELS,
+    );
+    expect(force.loyers[0].loyer_pratique_eur_m2).toBe(16);
+    expect(force.alertes.filter((a) => /superieur au loyer max/i.test(a))).toEqual([]);
+  });
+
+  it('porte la TVA au taux normal et paie l impot sur les societes', () => {
+    const r = calculer(op(), REFERENTIELS);
+    expect(r.bilan.taux_lasm).toBe(0.2);
+    expect(r.bilan.total_ttc_lasm_eur).toBe(900000 * 1.2);
+    // Le libre est hors service d'interet general : il est assujetti a l'IS,
+    // la ou le logement conventionne en est exonere.
+    expect(r.exploitation.totaux.impot_societes_eur).toBeGreaterThan(0);
+    const social = calculer(
+      op({ lots: [{ code_produit: 'PLUS', nb_logements: 6, shab_m2: 400, surfaces_annexes_m2: 40 }] }),
+      REFERENTIELS,
+    );
+    expect(social.exploitation.totaux.impot_societes_eur).toBeNull();
+  });
+
+  it('lit ses caracteristiques de pret dans le modele, surcharge comprise', () => {
+    const resolus = pretsDefautResolus('LIBRE', {
+      zone_ABC: 'B1',
+      livret_a_reference: 0.02,
+      marges: MARGES,
+      presets: baremes.presets_prets.presets,
+    });
+    // UN seul pret, et pas deux : une banque prete sur l'operation, sans la
+    // distinction foncier / construction propre a la CDC.
+    expect(resolus).toHaveLength(1);
+    expect(resolus[0].duree_ans).toBe(30);
+    expect(resolus[0].revisabilite).toBe('TAUX FIXE');
+    // Le taux ne suit PAS le Livret A : il vient du modele, tel quel.
+    expect(resolus[0].taux).toBe(0.015);
+    expect(resolus[0].spread).toBeUndefined();
+
+    // Et il suit le modele quand l'ecran Parametres le modifie : une seule
+    // source pour le taux, celle que l'utilisateur voit deja.
+    const r = calculer(
+      op({
+        parametrage: {
+          baremes: {
+            presets_prets: {
+              presets: baremes.presets_prets.presets.map((p) =>
+                p.id === 'BANQUE_LIBRE' ? { ...p, taux: 0.045, duree_ans: 20 } : p,
+              ),
+            },
+          },
+        },
+      }),
+      REFERENTIELS,
+    );
+    expect(r.amortissements[0].tableau).toHaveLength(20);
+    expect(r.amortissements[0].tableau[0].taux).toBe(0.045);
   });
 });

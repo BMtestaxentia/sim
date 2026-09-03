@@ -19,7 +19,7 @@
  * dans une portee unique et refuse les collisions de noms racine.
  */
 import { calculer } from '../src/moteur.js';
-import { produitsOrdonnes, ORDRE_PRODUITS } from '../src/produits.js';
+import { produitsOrdonnes, produit, ORDRE_PRODUITS } from '../src/produits.js';
 import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
 import { ecartsParametrage, fusionner } from '../src/parametrage.js';
 import { tauxLASM } from '../src/bilan.js';
@@ -785,21 +785,32 @@ function elaguerProduitsAbsents() {
 }
 
 /**
- * R-FIN-3 - Chaque tranche presente au programme porte un pret CDC foncier et un
- * pret CDC construction, crees des son apparition et en montant AUTOMATIQUE.
+ * R-FIN-3 - Chaque tranche presente au programme porte les prets STRUCTURANTS de
+ * son produit, crees des son apparition et en montant AUTOMATIQUE.
  *
- * Ils disparaissent avec elle : voir `elaguerProduitsAbsents`.
+ * La CDC prete en deux lignes, foncier et construction ; une banque prete en une
+ * seule, sur l'operation entiere. Les natures a poser sont donc celles que le
+ * produit declare, et non un couple fixe : poser un pret foncier a une tranche
+ * libre lui aurait affecte une part du besoin qu'aucun pret n'aurait amortie, et
+ * la tranche serait sortie sous-financee sans raison visible. Un produit qui ne
+ * declare aucun pret - le PLUS 33, finance par sa tranche PLUS - garde le couple.
+ *
+ * Ils disparaissent avec la tranche : voir `elaguerProduitsAbsents`.
  */
 function pretsCDCParDefaut(codes) {
   for (const code of codes) {
-    for (const [nature, libelle] of [
-      ['foncier', 'Prêt CDC foncier'],
-      ['construction', 'Prêt CDC construction'],
-    ]) {
+    const declares = produit(code).prets_defaut;
+    const natures = declares.length
+      ? [...new Set(declares.map((d) => d.nature))]
+      : ['foncier', 'construction'];
+    const nomCDC = { foncier: 'Prêt CDC foncier', construction: 'Prêt CDC construction' };
+    for (const nature of natures) {
+      const declare = declares.find((d) => d.nature === nature);
+      const libelle = declare?.libelle ?? nomCDC[nature];
       const existe = etat.prets.some((p) => p.produit === code && p.nature === nature);
       if (existe) continue;
       etat.prets.push({
-        code: `CDC_${nature.toUpperCase()}_${code}`,
+        code: `${declare?.preset ? 'PRET' : 'CDC'}_${nature.toUpperCase()}_${code}`,
         libelle: `${libelle} ${code}`,
         nature,
         produit: code,
@@ -1223,6 +1234,11 @@ function presetsDisponibles(p, i) {
   const vus = new Set();
   const proposes = [];
   for (const x of tous) {
+    // Un modele qui NOMME ses produits ne se propose qu'a eux, groupe ou pas :
+    // un pret bancaire de logement libre n'a rien a faire sur une tranche PLAI.
+    // Un modele qui n'en nomme aucun reste ouvert a tous - c'est ainsi que se
+    // declare un modele maison, dont personne ne sait a quel produit le reserver.
+    if (Array.isArray(x.produits) && !x.produits.includes(p.produit)) continue;
     if (!x.groupe) {
       proposes.push({ id: x.id, libelle: x.libelle, note: x.note });
       continue;
@@ -2359,10 +2375,14 @@ function rendreValeurs(r) {
       // cesse de se lire comme une chaine - la fleche de liaison se retrouve en
       // fin de rang, pointant vers le vide. Empilee, elle se lit comme le
       // calcul qu'elle est : une etape par ligne, valeurs alignees a droite.
+      // Sur un produit a loyer de marche, l'etape n'est pas un plafond mais une
+      // estimation : la nommer « plafond » ferait croire a une limite que le
+      // montage n'aurait pas le droit de franchir, alors qu'il le peut.
+      const marche = produit(code)?.loyer_de_marche;
       chaine.innerHTML = [
-        ['Barème de zone', `${nb(l.loyer_base_eur_m2)} €/m²`],
+        [marche ? 'Estimation de marché' : 'Barème de zone', `${nb(l.loyer_base_eur_m2)} €/m²`],
         ['Coefficient de structure', nb(l.cs)],
-        ['Loyer plafond', `${nb(l.loyer_max_base_eur_m2)} €/m²`],
+        [marche ? 'Loyer de référence' : 'Loyer plafond', `${nb(l.loyer_max_base_eur_m2)} €/m²`],
         [l.force ? 'Loyer de sortie forcé' : 'Loyer de sortie', `${nb(l.loyer_pratique_eur_m2)} €/m²`],
         ['Loyer annuel', eur(l.loyer_annuel_eur)],
       ]
@@ -3117,7 +3137,15 @@ function rendreControles(r) {
   const eq = r.financement.equilibre;
   const alerteHorizon = r.alertes.find((a) => /horizon de simulation/i.test(a));
   const alerteLignes = r.alertes.find((a) => /lignes de programme/i.test(a));
-  const loyerHorsPlafond = r.loyers.filter((l) => l.force && l.loyer_pratique_eur_m2 > l.loyer_max_base_eur_m2);
+  // Le libre n'a pas de plafond a depasser : son bareme est une estimation de
+  // marche. L'inclure aurait signale une infraction la ou il n'y a qu'un pari
+  // commercial, et aurait affaibli l'alerte la ou elle porte, sur le conventionne.
+  const loyerHorsPlafond = r.loyers.filter(
+    (l) =>
+      l.force &&
+      l.loyer_pratique_eur_m2 > l.loyer_max_base_eur_m2 &&
+      !produit(l.code_produit)?.loyer_de_marche,
+  );
   const sansProgramme = !r.indicateurs.nb_logements || !r.indicateurs.su_m2;
 
   const controles = [

@@ -4,9 +4,9 @@
  * le moteur y est duplique 14 fois, un onglet par produit, avec des divergences
  * de bugs. Ici le produit est une DONNEE, jamais du code duplique).
  *
- * V1 : PLUS / PLAI / PLS habitat. Les autres (LIBRE, LOC/LLI, foyers) sont
- * declares en squelette pour figer l'architecture des le depart ; ils seront
- * completes a leur tour sans reecriture du moteur.
+ * Perimetre actif : PLUS / PLUS 33 / PLAI / PLS, les trois foyers, le LLI et le
+ * LIBRE. La rehabilitation reste declaree en squelette pour figer l'architecture ;
+ * elle sera completee a son tour sans reecriture du moteur.
  *
  * Chaque produit decrit : le schema de loyer (barreme + majorations applicables),
  * le taux de LASM (TVA de livraison a soi-meme), et le jeu de prets CDC par defaut.
@@ -17,9 +17,12 @@
  *
  * @typedef {Object} PretDefaut
  * @property {'construction'|'foncier'} nature
- * @property {string} cle_marge       cle tarifaire dans baremes.prets_cdc.marges (ex. 'PLUS')
- * @property {string} duree_ref       cle de duree (ex. '40', 'zone_abc:B2|C->50,sinon->60')
- * @property {'DOUBLE'|'D.LIMITEE'|'SIMPLE'} revisabilite
+ * @property {string} [cle_marge]     cle tarifaire dans baremes.prets_cdc.marges (ex. 'PLUS')
+ * @property {string} [duree_ref]     cle de duree (ex. '40', 'zone_abc:B2|C->50,sinon->60')
+ * @property {'DOUBLE'|'D.LIMITEE'|'SIMPLE'} [revisabilite]
+ * @property {string} [preset]        id d'un modele de `baremes.presets_prets` d'ou tout est lu,
+ *                                    pour un pret qui n'est pas indexe sur le Livret A
+ * @property {string} [libelle]       nom du pret a l'ecran, quand « Pret CDC » serait faux
  *
  * @typedef {Object} DefinitionProduit
  * @property {CodeProduit} code
@@ -32,6 +35,10 @@
  * @property {number} duree_exoneration_tfpb_ans  R-FISC-1, propriete du PRODUIT (CGI)
  * @property {boolean} [foyer]           R-SURF-2 : le CS prend le facteur foyers (38 et non 20)
  * @property {boolean} [loyer_par_convention] R-LOYER : pas de bareme de zone, le plafond est conventionnel
+ * @property {boolean} [loyer_de_marche] R-LOYER : le bareme de zone est une INDICATION de marche
+ *                                       et non un plafond reglementaire - le depasser n'est pas une faute
+ * @property {boolean} [finance_par_cdc] defaut true. A false, les prets de ce produit ne sont pas
+ *                                       des prets sur fonds d'epargne : ils sortent du ratio R-FIN-5
  * @property {PretDefaut[]} prets_defaut
  * @property {boolean} v1                traite dans la V1 (PLUS/PLAI/PLS) ?
  */
@@ -101,7 +108,6 @@ export const PRODUITS = {
     ],
     v1: true,
   },
-  // --- Hors V1 : squelettes pour figer l'architecture parametrique ---
   LIBRE: {
     code: 'LIBRE',
     libelle: 'Libre',
@@ -109,9 +115,26 @@ export const PRODUITS = {
     zonage: '123',
     cle_lasm: 'taux_normal',
     coefficient_structure: false, // loyer de marche, pas de CS
-    duree_exoneration_tfpb_ans: 0,
-    prets_defaut: [],
-    v1: false,
+    // Le bareme LIBRE n'est pas un plafond : aucune convention ne s'impose au
+    // logement libre. C'est une estimation de loyer de marche par zone, que le
+    // montage peut depasser sans faute - d'ou l'absence de controle de plafond.
+    loyer_de_marche: true,
+    // R-FISC-1. Le logement libre ne releve d'aucune exoneration longue du CGI,
+    // mais bien de l'exoneration de DROIT COMMUN de deux ans des constructions
+    // nouvelles (CGI art. 1383). LEON pose la meme duree : l'annexe de reference
+    // LIBRE porte annee_debut_tfpb = mise en location + 2. La commune peut avoir
+    // supprime sa part par deliberation (Q-41) ; la duree se surcharge alors.
+    duree_exoneration_tfpb_ans: 2,
+    // Le logement libre ne se finance pas sur fonds d'epargne : son pret est un
+    // pret bancaire ordinaire, hors ratio R-FIN-5 comme hors droits CDC.
+    finance_par_cdc: false,
+    // UN seul pret, comme le slot LIB de LEON : une banque prete sur l'operation
+    // entiere, sans la distinction foncier / construction propre a la CDC.
+    prets_defaut: [{ nature: 'construction', preset: 'BANQUE_LIBRE', libelle: 'Prêt bancaire' }],
+    // Active a la demande du metier le 03/09/2026. Loyer de marche, TVA a 20 %,
+    // exoneration de TFPB de deux ans, IS du (le libre est hors service d'interet
+    // general) et financement bancaire : tout est en place.
+    v1: true,
   },
   LOC: {
     code: 'LOC',
@@ -184,6 +207,7 @@ export const PRODUITS = {
     v1: true,
   },
 
+  // --- Hors V1 : squelette pour figer l'architecture parametrique -----------
   // --- Rehabilitation (ParaREH, BilREH) -------------------------------------
   // La rehabilitation se distingue sur un point de fond : le loyer ne sort
   // d'aucun bareme de zone. ParaREH!A23 « Loyer maxi convention » est une
@@ -320,22 +344,71 @@ export function resoudreDuree(duree_ref, zone_ABC) {
  * Le `spread` est reporte a cote du taux : c'est lui que l'ecran donne a
  * modifier, le taux n'en etant que la somme avec le Livret A.
  *
+ * Un pret par defaut qui designe un MODELE (`preset`) y lit tout : il n'est pas
+ * indexe sur le Livret A, et lui chercher une marge n'aurait pas de sens. C'est
+ * le cas du logement libre, finance par une banque et non sur fonds d'epargne.
+ * Passer par les modeles plutot que par un second jeu de constantes garde UNE
+ * seule source au taux, celle que l'ecran Parametres donne deja a modifier.
+ *
  * @param {CodeProduit} code
  * @param {Object} contexte
  * @param {string} [contexte.zone_ABC]
  * @param {number} contexte.livret_a_reference
  * @param {Record<string, any>} contexte.marges  grille `baremes.prets_cdc.marges`
+ * @param {Array<any>} [contexte.presets]  liste `baremes.presets_prets.presets`, surcharges comprises
  * @param {number} [contexte.progressivite] progressivite appliquee (AXENTIA : -0,005)
- * @returns {Array<{nature: string, taux: number|null, spread: number, cle_marge: string, duree_ans: number, revisabilite: string, progressivite: number}>}
+ * @returns {Array<Record<string, any>>}
  */
-export function pretsDefautResolus(code, { zone_ABC, livret_a_reference, marges, progressivite = 0 }) {
-  return produit(code).prets_defaut.map((p) => ({
-    nature: p.nature,
-    taux: resoudreTaux(p.cle_marge, livret_a_reference, marges),
-    spread: marge(p.cle_marge, marges),
-    cle_marge: p.cle_marge,
-    duree_ans: resoudreDuree(p.duree_ref, zone_ABC),
-    revisabilite: p.revisabilite,
-    progressivite,
-  }));
+export function pretsDefautResolus(
+  code,
+  { zone_ABC, livret_a_reference, marges, presets = [], progressivite = 0 },
+) {
+  return produit(code).prets_defaut.map((p) => {
+    if (p.preset) {
+      const modele = presets.find((x) => x && x.id === p.preset);
+      if (!modele) {
+        throw new Error(
+          `Modele de pret « ${p.preset} » introuvable. Renseigner baremes.presets_prets.presets.`,
+        );
+      }
+      // La NATURE et le LIBELLE viennent du produit, pas du modele : le modele
+      // decrit un pret hors fonds d'epargne (nature « autre »), alors que ce
+      // pret-ci est bien le pret principal de sa tranche et doit en absorber le
+      // besoin. Le reste - taux, duree, profil - est lu tel quel.
+      const { id, nature: _n, libelle: _l, groupe: _g, produits: _p, note: _no, ...caracteristiques } = modele;
+      return {
+        ...caracteristiques,
+        nature: p.nature,
+        libelle: p.libelle ?? modele.libelle,
+        preset: id,
+        // Un modele a taux fixe n'a pas de marge : la progressivite d'usage de
+        // la CDC ne s'y applique pas davantage, elle vient du modele.
+        progressivite: modele.progressivite ?? 0,
+      };
+    }
+    return {
+      nature: p.nature,
+      taux: resoudreTaux(p.cle_marge, livret_a_reference, marges),
+      spread: marge(p.cle_marge, marges),
+      cle_marge: p.cle_marge,
+      duree_ans: resoudreDuree(p.duree_ref, zone_ABC),
+      revisabilite: p.revisabilite,
+      progressivite,
+      ...(p.libelle ? { libelle: p.libelle } : {}),
+    };
+  });
+}
+
+/**
+ * R-FIN-5 - Le produit se finance-t-il sur fonds d'epargne ?
+ *
+ * Le ratio reglementaire « prets CDC / prix de revient » n'a de sens que sur les
+ * tranches qui en relevent : compter le pret bancaire d'une tranche libre parmi
+ * les prets CDC, ou son prix de revient au denominateur, ferait echouer le
+ * controle sur toute operation mixte sans qu'aucune regle soit enfreinte.
+ * @param {string} code
+ * @returns {boolean}
+ */
+export function financeParCDC(code) {
+  return PRODUITS[/** @type {CodeProduit} */ (code)]?.finance_par_cdc !== false;
 }

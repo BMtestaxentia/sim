@@ -1809,12 +1809,20 @@ function rendreStructure() {
   // Le generateur propose les produits du perimetre V1.
   const selGen = /** @type {HTMLSelectElement} */ (document.getElementById('gen-produit'));
   if (selGen && !selGen.options.length) {
-    selGen.innerHTML = produitsOrdonnes()
-      .filter((p) => p.v1)
-      .map((p) => `<option value="${p.code}">${p.libelle}</option>`)
-      .join('');
+    // Le generateur s'ouvre VIERGE. Un formulaire prerempli - six PLAI en T2 de
+    // trois cent soixante metres carres - propose un programme que personne n'a
+    // choisi : on le valide sans le lire, ou l'on efface six champs avant de
+    // saisir les siens. Une case vide, elle, ne dit rien et n'engage a rien.
+    // Le bouton refuse d'ailleurs de generer tant que le financement et le
+    // nombre manquent, plutot que de deviner.
+    selGen.innerHTML =
+      '<option value=""></option>' +
+      produitsOrdonnes()
+        .filter((p) => p.v1)
+        .map((p) => `<option value="${p.code}">${p.libelle}</option>`)
+        .join('');
     /** @type {HTMLSelectElement} */ (document.getElementById('gen-typologie')).innerHTML =
-      TYPOLOGIES.map((t) => `<option value="${t}" ${t === 'T2' ? 'selected' : ''}>${t}</option>`).join('');
+      '<option value=""></option>' + TYPOLOGIES.map((t) => `<option value="${t}">${t}</option>`).join('');
   }
 
   rendreTablePrixRevient();
@@ -10688,6 +10696,14 @@ document.addEventListener('click', async (ev) => {
   if (el.id === 'btn-generer') {
     const lire = (id) => /** @type {HTMLInputElement} */ (document.getElementById(id)).value;
     const nombre = Number(lire('gen-nombre'));
+    // Le formulaire s'ouvre vierge : il faut donc verifier ce qu'il porte
+    // avant d'en tirer des lots. Un financement vide creerait des lots sans
+    // produit - le moteur leverait plus loin, sur un « Produit inconnu » qui ne
+    // dirait pas d'ou il vient.
+    if (!lire('gen-produit')) {
+      await informerBoite('Financement manquant', 'Choisissez le financement des lots à créer.');
+      return;
+    }
     if (!(nombre > 0)) {
       await informerBoite('Nombre de lots invalide', 'Indiquez un nombre de lots supérieur à zéro.');
       return;

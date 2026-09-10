@@ -92,6 +92,12 @@
              plus d'une opération de démonstration, on ferme le dossier ou on en
              ouvre un autre depuis la bibliothèque. -->
         <div class="entete__groupe">
+          <!-- La fenetre espion garde le compte d'exploitation sous les yeux
+               pendant qu'on saisit ailleurs : c'est le resultat qu'on veut voir
+               bouger a mesure qu'on touche au montage. -->
+          <button type="button" id="btn-espion" class="bouton bouton--icone"
+            aria-pressed="false" aria-controls="espion"
+            aria-label="Ouvrir la fenêtre espion" title="Ouvrir la fenêtre espion">◱</button>
           <button type="button" id="btn-theme" class="bouton bouton--icone" aria-label="Changer de thème">☀</button>
         </div>
       </div>
@@ -941,6 +947,47 @@
          messages y passent tous. Les boîtes natives du navigateur n'ont ni la
          charte, ni plus de deux issues, ni la possibilité d'expliquer ce qu'on
          s'apprête à faire. Son contenu est construit par `ouvrirBoite`. -->
+    <!-- ================= FENETRE ESPION =================
+         Hors de tout ecran : elle flotte au-dessus d'eux et suit chaque
+         recalcul. Pas de `data-restitution` : son contenu ne se vide pas avec
+         les zones de restitution, il se rend par `rendreEspion`, qui sait dire
+         qu'il n'y a pas de compte plutot que de laisser l'ancien a l'ecran. -->
+    <aside id="espion" class="espion" hidden aria-label="Fenêtre espion : compte d'exploitation">
+      <div class="espion__barre" title="Glisser pour déplacer">
+        <span class="espion__titre">Exploitation</span>
+        <div class="bascule espion__bascule" role="group" aria-label="Vue de la fenêtre espion">
+          <button type="button" class="bascule__option" data-vue-espion="graphe" aria-pressed="true">Graphe</button>
+          <button type="button" class="bascule__option" data-vue-espion="tableau" aria-pressed="false">Tableau</button>
+        </div>
+        <button type="button" id="espion-fermer" class="bouton bouton--icone espion__fermer"
+          aria-label="Fermer la fenêtre espion" title="Fermer">×</button>
+      </div>
+      <div class="espion__corps">
+        <div class="legende-graphe espion__legende" id="espion-legende">
+          <!-- Libelles courts : la legende tient sur une ligne dans une fenetre
+               de 480 px. Repliee sur trois, elle ecrasait le graphe a 59 px. -->
+          <span class="legende__item"><span class="legende__puce puce--positif"></span>excédent</span>
+          <span class="legende__item"><span class="legende__puce puce--negatif"></span>déficit</span>
+          <span class="legende__item"><span class="legende__puce puce--cumul"></span>cumul autofi.</span>
+          <span class="legende__item"><span class="legende__puce puce--cumul-comptable"></span>cumul comptable</span>
+        </div>
+        <div class="espion__graphe" id="espion-graphe"></div>
+        <div class="espion__tableau" id="espion-tableau" hidden>
+          <table class="tableau">
+            <thead>
+              <tr>
+                <th>Année</th><th class="num">Produits</th><th class="num">Annuités</th>
+                <th class="num">Autofinancement</th><th class="num">Cumul</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+      </div>
+      <p class="espion__pied" id="espion-pied"></p>
+    </aside>
+
     <dialog id="boite-dialogue" class="boite">
       <h2 id="boite-titre"></h2>
       <p id="boite-texte"></p>

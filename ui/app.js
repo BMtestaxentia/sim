@@ -2718,6 +2718,7 @@ function rendreValeurs(r) {
   rendreFinancement(r);
   rendreTresorerie(r);
   rendreExploitation(r);
+  rendreEspion(r);
 }
 
 /**
@@ -3292,6 +3293,9 @@ function rendreCalendrier(r) {
  * `data-restitution`. Rien d'autre a faire.
  */
 function viderRestitution(message) {
+  // La fenetre espion ne porte pas `data-restitution` : elle dit qu'il n'y a
+  // pas de compte, plutot que de se vider en silence ou de garder l'ancien.
+  rendreEspion(null);
   for (const zone of document.querySelectorAll('[data-restitution]')) {
     const el = /** @type {HTMLElement} */ (zone);
     if (el.tagName === 'TABLE') {
@@ -3355,14 +3359,22 @@ function viderRestitution(message) {
  * moteur sont tracees en reperes verticaux annotes : ce sont elles qui
  * expliquent la forme de la courbe, sans quoi le lecteur ne peut que constater.
  */
-function grapheExploitation(lignes, evenements) {
+function grapheExploitation(lignes, evenements, { largeur = 1000, hauteur = 260, compact = false } = {}) {
   if (!lignes.length) return '<p class="aide">Aucune année à représenter.</p>';
 
-  const L = 1000;
-  const H = 260;
+  // Le graphe se dessine dans un repere de LARGEUR x HAUTEUR unites. A l'ecran
+  // Exploitation, 1000 x 260, qu'on laisse s'etirer sur la largeur du bloc. La
+  // fenetre espion passe au contraire sa taille REELLE en pixels : etire depuis
+  // 1000 unites dans 480 pixels, un texte de 9,5 tomberait a 4 pixels et ne se
+  // lirait plus. Dessine a la taille ou il s'affiche, il garde son corps.
+  const L = largeur;
+  const H = hauteur;
   // La marge haute loge les etiquettes de repere, sur trois rangs au plus quand
-  // des annees voisines se bousculent : 4 px de garde, puis 11 px par rang.
-  const marge = { haut: 38, bas: 34, gauche: 8, droite: 8 };
+  // des annees voisines se bousculent : 4 px de garde, puis 11 px par rang. En
+  // mode compact, les deux legendes d'echelle du pied disparaissent - la
+  // fenetre les porte en clair, la ou elles peuvent se tronquer proprement - et
+  // la marge basse ne loge plus que les annees.
+  const marge = { haut: 38, bas: compact ? 24 : 34, gauche: 8, droite: 8 };
   const largeurTrace = L - marge.gauche - marge.droite;
   const hauteurTrace = H - marge.haut - marge.bas;
 
@@ -3464,8 +3476,12 @@ function grapheExploitation(lignes, evenements) {
       <polyline class="graphe__cumul graphe__cumul--comptable" points="${traceCompta}" />
       <polyline class="graphe__cumul" points="${trace}" />
       ${reperes}${axe}
-      <text class="graphe__texte" x="${marge.gauche}" y="${H - 2}">Autofinancement de l’année, échelle ${eur(minRes)} à ${eur(maxRes)}</text>
-      <text class="graphe__texte" x="${L - marge.droite}" y="${H - 2}" text-anchor="end">Cumuls, échelle commune ${eur(minCum)} à ${eur(maxCum)}</text>
+      ${
+        compact
+          ? ''
+          : `<text class="graphe__texte" x="${marge.gauche}" y="${H - 2}">Autofinancement de l’année, échelle ${eur(minRes)} à ${eur(maxRes)}</text>
+      <text class="graphe__texte" x="${L - marge.droite}" y="${H - 2}" text-anchor="end">Cumuls, échelle commune ${eur(minCum)} à ${eur(maxCum)}</text>`
+      }
     </svg>`;
 }
 
@@ -6850,6 +6866,320 @@ function afficherEcran(cible) {
   // L'apercu est un CLONE des ecrans : il se refait a chaque arrivee sur
   // l'onglet, sinon il montrerait le dossier tel qu'il etait la fois d'avant.
   if (vise === 'exports') rendreApercuExport();
+}
+
+/**
+ * FENETRE ESPION - le compte d'exploitation sous les yeux, ou qu'on soit.
+ *
+ * On monte une operation sur six ecrans et on la juge sur un septieme : chaque
+ * retouche d'un prix de revient, d'un pret ou d'une subvention se lit sur
+ * l'autofinancement, et l'ecran Exploitation est justement celui qu'on a quitte
+ * pour la faire. La fenetre flotte au-dessus de tout, se deplace par sa barre
+ * de titre, se redimensionne par son coin, montre au choix le graphe ou un
+ * compte simplifie, et suit chaque recalcul.
+ *
+ * Elle montre TOUJOURS l'operation entiere, quel que soit le perimetre choisi a
+ * l'ecran Exploitation : elle sert a surveiller le montage pendant qu'on le
+ * modifie ailleurs, et la tranche qu'on retouche n'est jamais la seule a bouger.
+ *
+ * Position, taille, vue et ouverture sont des preferences d'ECRAN, propres a ce
+ * navigateur : elles vivent dans localStorage comme le theme, jamais dans la
+ * simulation, qui ne doit pas changer parce qu'on a deplace une fenetre.
+ */
+const CLE_ESPION = 'moteur-sim.espion';
+/** Un paysage par defaut : le graphe l'est (1000 x 260 a l'ecran Exploitation),
+ *  et le tableau, lui, defile en hauteur. */
+const ESPION_DEFAUT = { ouvert: false, vue: 'graphe', l: 480, h: 300, x: null, y: null };
+const ESPION_MIN = { l: 300, h: 190 };
+/** Garde laissee autour de la fenetre quand on la ramene dans l'ecran. */
+const ESPION_GARDE = 8;
+let etatEspion = { ...ESPION_DEFAUT };
+
+function lireEspion() {
+  try {
+    const brut = JSON.parse(localStorage.getItem(CLE_ESPION) ?? 'null');
+    if (brut && typeof brut === 'object') {
+      // Une valeur memorisee se VERIFIE avant de servir. Une taille negative ou
+      // absurde - stockage abime, version anterieure - rendrait la fenetre
+      // introuvable, et on ne la recupererait qu'en vidant le navigateur.
+      const taille = (v, min, defaut) => (Number.isFinite(v) && v >= min ? v : defaut);
+      const coord = (v) => (Number.isFinite(v) ? v : null);
+      etatEspion = {
+        ouvert: brut.ouvert === true,
+        vue: brut.vue === 'tableau' ? 'tableau' : 'graphe',
+        l: taille(brut.l, ESPION_MIN.l, ESPION_DEFAUT.l),
+        h: taille(brut.h, ESPION_MIN.h, ESPION_DEFAUT.h),
+        x: coord(brut.x),
+        y: coord(brut.y),
+      };
+    }
+  } catch {
+    // Stockage indisponible ou illisible : la fenetre repart de ses defauts.
+  }
+}
+function memoriserEspion() {
+  try {
+    localStorage.setItem(CLE_ESPION, JSON.stringify(etatEspion));
+  } catch {
+    // Sans stockage, la fenetre marche pour la session ; seule la memoire se perd.
+  }
+}
+
+/**
+ * Ecran disponible. Il peut etre NUL - onglet masque, apercu replie - et un
+ * ecran nul ne doit rien borner : y rabattre la fenetre l'ecraserait sur son
+ * minimum dans le coin, et c'est cette taille-la qui aurait ete memorisee.
+ */
+function ecranEspion() {
+  const vw = window.innerWidth || document.documentElement.clientWidth;
+  const vh = window.innerHeight || document.documentElement.clientHeight;
+  return { vw, vh, utile: vw >= ESPION_MIN.l + 2 * ESPION_GARDE && vh >= ESPION_MIN.h + 2 * ESPION_GARDE };
+}
+
+/**
+ * Geometrie AFFICHEE, bornee a l'ecran, sans toucher a la TAILLE preferee. Celle
+ * qu'on a choisie sur un grand ecran doit revenir telle quelle quand on y
+ * retourne : la rabattre pour un portable puis la memoriser l'aurait perdue.
+ * Seule la position se reecrit, parce qu'une position hors champ laisserait la
+ * fenetre introuvable - et le seul recours serait de vider le navigateur.
+ */
+function geometrieEspion() {
+  const { vw, vh, utile } = ecranEspion();
+  const l = utile ? Math.min(Math.max(etatEspion.l, ESPION_MIN.l), vw - 2 * ESPION_GARDE) : etatEspion.l;
+  const h = utile ? Math.min(Math.max(etatEspion.h, ESPION_MIN.h), vh - 2 * ESPION_GARDE) : etatEspion.h;
+  // Premiere ouverture : en bas a droite, la ou elle masque le moins de saisie.
+  const x = Math.min(Math.max(etatEspion.x ?? vw - l - 24, ESPION_GARDE), vw - l - ESPION_GARDE);
+  const y = Math.min(Math.max(etatEspion.y ?? vh - h - 24, ESPION_GARDE), vh - h - ESPION_GARDE);
+  return { utile, l, h, x, y };
+}
+
+/** Taille posee par le code : l'observateur ne doit pas la prendre pour un geste. */
+let tailleAppliqueeEspion = { l: 0, h: 0 };
+
+function placerEspion() {
+  const f = document.getElementById('espion');
+  if (!f) return;
+  const g = geometrieEspion();
+  // Sans ecran mesurable, on ne fixe aucune position : la premiere vraie mesure
+  // (l'evenement `resize` qui suit) posera la fenetre en bas a droite.
+  if (g.utile) {
+    etatEspion.x = g.x;
+    etatEspion.y = g.y;
+  }
+  tailleAppliqueeEspion = { l: g.l, h: g.h };
+  f.style.left = `${g.utile ? g.x : ESPION_GARDE}px`;
+  f.style.top = `${g.utile ? g.y : ESPION_GARDE}px`;
+  f.style.width = `${g.l}px`;
+  f.style.height = `${g.h}px`;
+}
+
+/** @param {boolean} ouvert */
+function ouvrirEspion(ouvert) {
+  etatEspion.ouvert = ouvert;
+  const f = document.getElementById('espion');
+  const b = document.getElementById('btn-espion');
+  if (f) f.hidden = !ouvert;
+  if (b) {
+    const libelle = ouvert ? 'Fermer la fenêtre espion' : 'Ouvrir la fenêtre espion';
+    b.setAttribute('aria-pressed', String(ouvert));
+    b.setAttribute('aria-label', libelle);
+    b.title = libelle;
+  }
+  if (ouvert) {
+    placerEspion();
+    rendreEspion(dernierResultat);
+  }
+  memoriserEspion();
+}
+
+/** @param {'graphe'|'tableau'} vue */
+function basculerVueEspion(vue) {
+  etatEspion.vue = vue;
+  memoriserEspion();
+  rendreEspion(dernierResultat);
+}
+
+/**
+ * Rend la fenetre depuis le DERNIER resultat du moteur, jamais depuis un
+ * recalcul : elle montre exactement ce que montrent les ecrans, a la meme
+ * frappe.
+ * @param {any} r resultat de `calculer`, ou null quand le calcul n'aboutit pas
+ */
+function rendreEspion(r) {
+  const f = document.getElementById('espion');
+  if (!f || f.hidden) return;
+  for (const o of f.querySelectorAll('[data-vue-espion]')) {
+    o.setAttribute('aria-pressed', String(o.getAttribute('data-vue-espion') === etatEspion.vue));
+  }
+  const graphe = /** @type {HTMLElement} */ (document.getElementById('espion-graphe'));
+  const tableau = /** @type {HTMLElement} */ (document.getElementById('espion-tableau'));
+  const legende = /** @type {HTMLElement} */ (document.getElementById('espion-legende'));
+  const pied = /** @type {HTMLElement} */ (document.getElementById('espion-pied'));
+  const enGraphe = etatEspion.vue === 'graphe';
+  graphe.hidden = !enGraphe;
+  legende.hidden = !enGraphe;
+  tableau.hidden = enGraphe;
+  const ecrirePied = (texte) => {
+    pied.textContent = texte;
+    // Le pied se tronque sur une fenetre etroite : l'infobulle le rend entier.
+    pied.title = texte;
+  };
+
+  const e = r?.exploitation;
+  if (!e?.lignes?.length) {
+    // Rien d'ancien a l'ecran : le compte d'une saisie precedente, laisse la
+    // pendant qu'on corrige une erreur, se lirait comme le compte en cours.
+    graphe.innerHTML = '';
+    tableau.querySelector('tbody').innerHTML = '';
+    tableau.querySelector('tfoot').innerHTML = '';
+    ecrirePied('Pas de compte : la saisie est incomplète ou le calcul a échoué.');
+    return;
+  }
+
+  const periode = `${e.lignes[0].annee} à ${e.lignes.at(-1).annee}`;
+  // Le cumul final passe en TETE du pied : c'est le chiffre qu'on surveille, et
+  // c'est la fin d'une ligne trop longue que l'ellipse mange.
+  const cumulFinal = `Cumul final ${eur(e.lignes.at(-1).cumul_autofinancement_eur)}`;
+  if (enGraphe) {
+    const res = e.lignes.map((x) => x.autofinancement_eur);
+    // Le pied s'ecrit AVANT de mesurer la zone du graphe. Vide, il est plus bas
+    // d'une ligne : le graphe dessine a cette hauteur-la se retrouvait tasse de
+    // seize pixels une fois le pied rempli, texte compris.
+    ecrirePied(
+      `${cumulFinal} · autofinancement de l’année de ${eur(Math.min(...res, 0))} à ` +
+        `${eur(Math.max(...res, 0))} · opération entière, ${periode}`,
+    );
+    // Dessine a la taille REELLE de la zone, pour que le texte garde son corps.
+    const l = Math.max(1, Math.round(graphe.clientWidth));
+    const h = Math.max(1, Math.round(graphe.clientHeight));
+    graphe.innerHTML = grapheExploitation(e.lignes, e.evenements ?? [], { largeur: l, hauteur: h, compact: true });
+    return;
+  }
+
+  const montant = (v) => `<td class="num ${v < 0 ? 'montant--negatif' : ''}">${eur(v)}</td>`;
+  tableau.querySelector('tbody').innerHTML = e.lignes
+    .map(
+      (l) => `<tr>
+        <td>${l.annee}</td>
+        ${montant(l.total_produits_eur)}${montant(l.annuites_eur)}
+        ${montant(l.autofinancement_eur)}${montant(l.cumul_autofinancement_eur)}
+      </tr>`,
+    )
+    .join('');
+  const t = e.totaux;
+  tableau.querySelector('tfoot').innerHTML = `<tr>
+      <td class="libelle">${e.lignes.length} ans</td>
+      ${montant(t.produits_eur)}${montant(t.annuites_eur)}${montant(t.autofinancement_eur)}
+      <td></td>
+    </tr>`;
+  ecrirePied(`${cumulFinal} · opération entière, ${periode}`);
+}
+
+/**
+ * Deplacement par la barre de titre, redimensionnement par le coin.
+ *
+ * La capture du pointeur garde le geste meme quand la souris sort de la barre
+ * plus vite qu'elle ne la suit : sans elle, un geste brusque laissait la
+ * fenetre en route. Les boutons de la barre restent des boutons - un clic sur
+ * eux ne demarre aucun deplacement.
+ */
+function poserGestesEspion() {
+  const f = document.getElementById('espion');
+  const barre = f?.querySelector('.espion__barre');
+  if (!f || !barre) return;
+
+  /** @type {{px: number, py: number, x: number, y: number} | null} */
+  let depart = null;
+  barre.addEventListener('pointerdown', (ev) => {
+    const pe = /** @type {PointerEvent} */ (ev);
+    if (pe.button !== 0 || /** @type {HTMLElement} */ (pe.target).closest('button')) return;
+    depart = { px: pe.clientX, py: pe.clientY, x: etatEspion.x ?? 0, y: etatEspion.y ?? 0 };
+    barre.setPointerCapture(pe.pointerId);
+    f.classList.add('espion--deplace');
+    pe.preventDefault();
+  });
+  barre.addEventListener('pointermove', (ev) => {
+    if (!depart) return;
+    const pe = /** @type {PointerEvent} */ (ev);
+    etatEspion.x = depart.x + pe.clientX - depart.px;
+    etatEspion.y = depart.y + pe.clientY - depart.py;
+    placerEspion();
+  });
+  const finir = (ev) => {
+    if (!depart) return;
+    depart = null;
+    f.classList.remove('espion--deplace');
+    if (barre.hasPointerCapture(ev.pointerId)) barre.releasePointerCapture(ev.pointerId);
+    memoriserEspion();
+  };
+  barre.addEventListener('pointerup', finir);
+  barre.addEventListener('pointercancel', finir);
+
+  // Le coin est celui du navigateur (`resize: both`). On relit la taille qu'il
+  // laisse pour la memoriser, et on REDESSINE le graphe a ses nouvelles
+  // dimensions : une image, meme vectorielle, etiree depuis une autre taille
+  // deforme son texte. Une image par trame suffit - le geste en produit des
+  // dizaines.
+  let memoire = 0;
+  /**
+   * Releve un GESTE de redimensionnement, s'il y en a un. La taille ATTENDUE est
+   * celle que le code a posee, telle que les bornes CSS de la fenetre la
+   * laissent passer : un ecran qui retrecit, ou nul le temps d'un chargement,
+   * rabat la fenetre sur ses bornes sans que personne l'ait voulu. Comparer a la
+   * taille posee sans ces bornes prenait ce rabattement pour un choix, et le
+   * memorisait.
+   */
+  const releverGeste = () => {
+    const l = Math.round(f.offsetWidth);
+    const h = Math.round(f.offsetHeight);
+    const cs = getComputedStyle(f);
+    const borne = (pose, min, max) => {
+      const haut = parseFloat(max);
+      return Math.max(parseFloat(min) || 0, Number.isFinite(haut) ? Math.min(pose, haut) : pose);
+    };
+    const attendueL = borne(tailleAppliqueeEspion.l, cs.minWidth, cs.maxWidth);
+    const attendueH = borne(tailleAppliqueeEspion.h, cs.minHeight, cs.maxHeight);
+    if (!ecranEspion().utile || (Math.abs(l - attendueL) <= 1 && Math.abs(h - attendueH) <= 1)) return;
+    etatEspion.l = l;
+    etatEspion.h = h;
+    tailleAppliqueeEspion = { l, h };
+    // Le stockage attend la fin du geste : un redimensionnement en produit des
+    // dizaines par seconde, et seule la derniere taille compte.
+    clearTimeout(memoire);
+    memoire = window.setTimeout(memoriserEspion, 250);
+  };
+
+  new ResizeObserver(() => {
+    if (f.hidden) return;
+    releverGeste();
+    // Le graphe se redessine DANS l'observateur, qui ne se declenche deja
+    // qu'une fois par image : une image, meme vectorielle, etiree depuis une
+    // autre taille deforme son texte. Pas de requestAnimationFrame ici - un
+    // onglet en arriere-plan le suspend, et la fenetre y restait etiree.
+    if (etatEspion.vue === 'graphe') rendreEspion(dernierResultat);
+  }).observe(f);
+
+  // Un navigateur qui retrecit ne doit pas emporter la fenetre hors champ. Le
+  // geste en cours se releve AVANT de replacer : l'evenement `resize` passe
+  // avant l'observateur dans une meme image, et replacer d'abord reappliquait
+  // l'ancienne taille par-dessus celle que la main venait de donner.
+  window.addEventListener('resize', () => {
+    if (f.hidden) return;
+    releverGeste();
+    placerEspion();
+    if (etatEspion.vue === 'graphe') rendreEspion(dernierResultat);
+  });
+
+  // Echap ferme la fenetre quand on travaille dedans, comme une boite.
+  f.addEventListener('keydown', (ev) => {
+    if (/** @type {KeyboardEvent} */ (ev).key === 'Escape') ouvrirEspion(false);
+  });
+}
+
+function restaurerEspion() {
+  lireEspion();
+  poserGestesEspion();
+  ouvrirEspion(etatEspion.ouvert);
 }
 
 /**
@@ -10262,6 +10592,24 @@ document.addEventListener('click', async (ev) => {
     return;
   }
 
+  // Fenetre espion : le bouton d'en-tete l'ouvre et la ferme, la croix la
+  // ferme, la bascule change de vue.
+  if (el.closest('#btn-espion')) {
+    ouvrirEspion(!etatEspion.ouvert);
+    return;
+  }
+  if (el.closest('#espion-fermer')) {
+    ouvrirEspion(false);
+    return;
+  }
+  const vueEspion = el.closest('[data-vue-espion]');
+  if (vueEspion) {
+    basculerVueEspion(
+      /** @type {HTMLElement} */ (vueEspion).dataset.vueEspion === 'tableau' ? 'tableau' : 'graphe',
+    );
+    return;
+  }
+
   if (el.closest('#btn-theme')) {
     appliquerTheme(document.documentElement.dataset.theme === 'clair' ? 'sombre' : 'clair');
     // Les barres emplois/ressources portent leurs couleurs en attribut `style`,
@@ -10852,6 +11200,7 @@ document.addEventListener('click', async (ev) => {
 // ---------------------------------------------------------------- demarrage
 
 appliquerTheme(themeInitial());
+restaurerEspion();
 /**
  * Modele d'une simulation NEUVE : les reglages par defaut, et rien d'autre.
  *

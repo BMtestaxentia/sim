@@ -1407,17 +1407,25 @@ body.sans-simulation .entete__dossier { display: none; }
   border: 1px solid transparent; border-left-width: 3px;
   background: var(--neutral-bg); margin-bottom: 12px;
 }
-/* Perimetre et verdict cote a cote. `stretch` egalise les hauteurs : le
-   selecteur est plus court que le bandeau, il se laisse etirer plutot que de
-   flotter au-dessus de lui. Le bandeau prend ce qui reste. */
+/* Perimetre et verdict cote a cote, a la MEME hauteur, et c'est le bandeau qui
+   s'y plie. Il portait deux lignes - le verdict, puis le decompte des controles
+   - et imposait 58 px a la barre : etiree a cette hauteur, la capsule des
+   pastilles laissait 18 px de vide au-dessus et au-dessous de pastilles de
+   21 px, une pilule gonflee autour de rien. Dans la barre, le bandeau tient
+   donc sur UNE ligne, et les deux partagent une hauteur minimale.
+   `align-items: center` et non `stretch` : si le bandeau doit se replier sur un
+   ecran etroit, la capsule garde sa taille et se centre, au lieu de regonfler. */
 .barre-perimetre {
-  display: flex; align-items: stretch; gap: 10px; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
 }
-/* La marge basse de la bascule doit tomber : dans une barre etiree, une marge
-   se retranche de la hauteur de l element. Elle mesurait 46,75 px contre 58,75
-   au bandeau - exactement les douze pixels de marge. */
-.barre-perimetre .bascule { align-items: center; margin-bottom: 0; }
-.barre-perimetre .bandeau { flex: 1; margin-bottom: 0; justify-content: center; }
+.barre-perimetre .bascule,
+.barre-perimetre .bandeau { box-sizing: border-box; min-height: 34px; margin-bottom: 0; }
+.barre-perimetre .bascule { align-items: center; }
+.barre-perimetre .bandeau {
+  flex: 1; flex-direction: row; flex-wrap: wrap;
+  align-items: baseline; align-content: center; column-gap: 14px; row-gap: 0;
+  padding: 6px 13px;
+}
 .barre-perimetre .bascule[hidden] { display: none; }
 
 /* --- SENSIBILITE : LE DIAGNOSTIC --------------------------------------

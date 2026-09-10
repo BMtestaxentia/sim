@@ -746,10 +746,17 @@ function libelleProduit(code) {
  * ce qui le justifiait, et c'est le bon arbitrage : un montant fantome dans un
  * plan de financement est une faute, une ressaisie n'est qu'une corvee.
  *
- * Les SUBVENTIONS font exception a la suppression : leur affectation est une
- * metadonnee facultative, pas leur nature. On efface donc l'affectation devenue
- * caduque et on garde la ligne, qui redevient non affectee - supprimer une
- * somme saisie par l'utilisateur serait autrement plus grave.
+ * Les SUBVENTIONS suivent la meme regle que les prets et les fonds propres : une
+ * subvention est rattachee a un financement, ou elle n'existe pas (arbitrage
+ * metier du 10/09/2026). Elle part donc avec sa tranche. L'ancienne exception -
+ * garder la ligne et lui retirer son affectation - la faisait repartir en
+ * silence sur toute l'operation, invisible dans les ecrans de tranche : passer
+ * ses lots PLAI en PLS faisait financer du PLS par la subvention du PLAI.
+ *
+ * Une subvention qui n'a JAMAIS eu de tranche - import, dossier ancien - n'est
+ * pas effacee pour autant, c'est une somme saisie : le moteur la tient hors
+ * plan, et le plan de financement la presente pour qu'on la rattache. Sur une
+ * operation a tranche unique, elle revient a cette tranche sans ambiguite.
  */
 function elaguerProduitsAbsents() {
   const actifs = new Set(tranchesActives());
@@ -779,8 +786,13 @@ function elaguerProduitsAbsents() {
   // n'appartient a aucune tranche et survit.
   etat.prets = (etat.prets ?? []).filter((p) => !p.produit || actifs.has(p.produit));
 
-  for (const s of etat.subventions ?? []) {
-    if (s.affectation && !actifs.has(s.affectation)) delete s.affectation;
+  // Une subvention rattachee a une tranche disparue part avec elle, comme ses
+  // prets. Celles qui n'ont jamais eu de tranche restent, hors plan, jusqu'a ce
+  // qu'on les rattache - sauf s'il n'y a qu'une tranche, qui les prend d'office.
+  etat.subventions = (etat.subventions ?? []).filter((s) => !s.affectation || actifs.has(s.affectation));
+  if (actifs.size === 1) {
+    const [seule] = actifs;
+    for (const s of etat.subventions) if (!s.affectation) s.affectation = seule;
   }
 }
 
@@ -1821,6 +1833,7 @@ function rendreStructure() {
   // --- Onglets et ecrans de tranche, un par produit present ---
   rendreStructureTranches();
   rendreStructureCharges();
+  rendreSubventionsHorsPlan();
 
   // Le generateur propose les produits du perimetre V1.
   const selGen = /** @type {HTMLSelectElement} */ (document.getElementById('gen-produit'));
@@ -1842,6 +1855,47 @@ function rendreStructure() {
   }
 
   rendreTablePrixRevient();
+}
+
+/**
+ * R-SUB-3 - Subventions HORS PLAN. Une subvention se rattache a un financement,
+ * ou elle n'existe pas : celles qui n'ont pas de tranche - import, dossier
+ * ancien - ne financent rien, et aucun ecran de tranche ne les montre, puisque
+ * chacun ne liste que les siennes. Elles ont donc leur place ici, au plan de
+ * financement, avec les deux seuls gestes qui ont un sens : les rattacher a une
+ * tranche, ou les supprimer. Rattacher relance la structure : la subvention
+ * quitte ce bloc et paraît dans l'ecran de sa tranche.
+ */
+function rendreSubventionsHorsPlan() {
+  const zone = document.getElementById('subventions-hors-plan');
+  if (!zone) return;
+  const actives = tranchesActives();
+  const orphelines = (etat.subventions ?? [])
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => !s.affectation || !actives.includes(s.affectation));
+  zone.hidden = !orphelines.length;
+  if (!orphelines.length) {
+    zone.innerHTML = '';
+    return;
+  }
+  zone.innerHTML = `
+    <p class="hors-plan__titre">Rattachées à aucune tranche : hors plan</p>
+    <p class="aide">Une subvention se rattache à un financement, comme un prêt. Tant qu’elle n’a pas de tranche, elle ne finance rien et ne compte dans aucun total.</p>
+    ${orphelines
+      .map(
+        ({ s, i }) => `<div class="hors-plan__ligne">
+        <span class="sub__libelle">${att(s.libelle ?? 'Subvention')}</span>
+        <span class="sub__montant">${eur(Number(s.montant_eur) || 0)}</span>
+        <select data-champ="subventions.${i}.affectation" data-structure="1"
+          aria-label="Tranche de la subvention ${att(s.libelle ?? '')}">
+          <option value="" selected>Rattacher à…</option>
+          ${actives.map((c) => `<option value="${att(c)}">${att(libelleProduit(c))}</option>`).join('')}
+        </select>
+        <button type="button" class="bouton--supprimer" data-supprimer="subventions" data-index="${i}"
+          title="Supprimer cette subvention">×</button>
+      </div>`,
+      )
+      .join('')}`;
 }
 
 /**
@@ -4910,12 +4964,12 @@ const MODELE_CALCULS = [
         support: {
           fonction: "agregerSubventions, surchargeFonciere",
           signature: "agregerSubventions(subventions, quotes_parts) → { total_eur, par_tranche, gratuites_eur } · surchargeFonciere(...) → droit à surcharge foncière",
-          code: "une subvention affectée va entière à sa tranche ; sans affectation elle se répartit au prorata des quotes-parts",
+          code: "une subvention va entière à sa tranche ; sans tranche, elle reste hors plan - sauf s’il n’y en a qu’une, qui la prend",
           referentiel: "subventions.ssf et ses plafonds par zone",
           alimente: "soldeAFinancer et foncierFinancable",
           tests: "tests/moteur.test.js",
           source: "src/subventions.js:30 et 82",
-          texte: "Le plafond se resserre quand les collectivités participent PEU : sous 40 % du dépassement, on retient le plus petit des deux plafonds. Une affectation « PLUS-PLAI » n’est pas reconnue comme une clé de produit et se ventile donc sur tous les produits présents, avec une alerte qui le dit : le PLUS et le PLAI sont ici deux tranches totalement distinctes, et une aide qui vise les deux se saisit en deux lignes. Le couple de LEON n’existe pas dans ce moteur."
+          texte: "Le plafond se resserre quand les collectivités participent PEU : sous 40 % du dépassement, on retient le plus petit des deux plafonds. Une affectation « PLUS-PLAI » n’est rattachée à aucune tranche : comme toute subvention sans tranche sur un programme mixte, elle reste hors plan, ne finance rien, et une alerte la nomme. Une subvention se rattache à un financement, comme un prêt, ou elle n’existe pas. Le PLUS et le PLAI sont ici deux tranches totalement distinctes, et une aide qui vise les deux se saisit en deux lignes : le couple de LEON n’existe pas dans ce moteur."
         },
         piege: "Le coefficient de 2 en neuf n’est pas un pourcentage : la subvention vaut deux fois le dépassement plafonné. Et le plafonnement joue à l’inverse de l’intuition, c’est quand les collectivités participent peu qu’il se resserre.",
         entrees: [
@@ -11188,7 +11242,7 @@ document.addEventListener('click', async (ev) => {
     if (aSupprimer !== 'lots') {
       const nom = el.dataset.nom || cible?.libelle || `élément ${i + 1}`;
       const quoi = aSupprimer === 'prets' ? 'le prêt' : 'la subvention';
-      if (!(await confirmerBoite('Supprimer', `${quoi.charAt(0).toUpperCase()}${quoi.slice(1)} « ${nom} » sera retiré.`, 'Supprimer'))) return;
+      if (!(await confirmerBoite('Supprimer', `${quoi.charAt(0).toUpperCase()}${quoi.slice(1)} « ${nom} » sera ${aSupprimer === 'prets' ? 'retiré' : 'retirée'}.`, 'Supprimer'))) return;
     }
     etat[aSupprimer].splice(i, 1);
     rafraichirTout();
@@ -11295,7 +11349,7 @@ const EXEMPLES = [
     },
     subventions: [
       { libelle: 'Etat', montant_eur: 96000, affectation: 'PLAI' },
-      { libelle: 'Agglomération', montant_eur: 60000, affectation: null },
+      { libelle: 'Agglomération', montant_eur: 60000, affectation: 'PLUS' },
     ],
   },
   {
@@ -11320,7 +11374,7 @@ const EXEMPLES = [
       hon_architecte: { montant_ht_eur: 48000, taux_tva: 0.2 },
       hon_assurances: { montant_ht_eur: 22000, taux_tva: 0.2 },
     },
-    subventions: [{ libelle: 'Département', montant_eur: 45000, affectation: null }],
+    subventions: [{ libelle: 'Département', montant_eur: 45000, affectation: 'PLUS' }],
   },
   {
     id: 'verrieres',
@@ -11355,8 +11409,8 @@ const EXEMPLES = [
     },
     subventions: [
       { libelle: 'Etat', montant_eur: 108000, affectation: 'PLAI' },
-      { libelle: 'Agglomération', montant_eur: 90000, affectation: null },
-      { libelle: 'Action logement', montant_eur: 55000, affectation: null },
+      { libelle: 'Agglomération', montant_eur: 90000, affectation: 'PLUS' },
+      { libelle: 'Action logement', montant_eur: 55000, affectation: 'LOC' },
     ],
   },
   // EHPAD : le seul montage de la serie qui ne ressemble a aucun autre, et la
@@ -11537,7 +11591,50 @@ function semerExemples() {
   return marquerSemis(faits, poses);
 }
 
+/**
+ * R-SUB-3 - Reprise des demonstrations deja semees. Jusqu'au 10/09/2026, trois
+ * d'entre elles portaient des subventions sans tranche, que le moteur
+ * repartissait au prorata des surfaces - c'est ce qui desequilibrait Ilot
+ * Verrieres d'un euro. Une subvention se rattache desormais a un financement, ou
+ * elle n'existe pas : sans cette reprise, les exemplaires deja enregistres dans
+ * un navigateur verraient ces subventions sortir du plan, et leurs prets
+ * grossir d'autant.
+ *
+ * Ne sont touchees que les lignes IDENTIQUES au semis - meme libelle, meme
+ * montant, toujours sans tranche - pour ne jamais deplacer ce qu'un
+ * utilisateur aurait saisi lui-meme. Rejouee a chaque demarrage, elle ne fait
+ * plus rien des que tout est rattache. Elle passe AVANT la reprise du dossier
+ * ouvert : celui-ci se recharge ensuite depuis le stockage deja corrige, et
+ * aucune sauvegarde ne peut remettre l'ancienne version par-dessus.
+ * @param {any} sim
+ * @returns {boolean} vrai si la simulation a change
+ */
+function rattacherSubventionsDemo(sim) {
+  const ex = EXEMPLES.find((e) => e.nom === sim?.identite?.nom && e.groupe === sim?.identite?.groupe);
+  if (!ex || !Array.isArray(sim.subventions)) return false;
+  let change = false;
+  for (const s of sim.subventions) {
+    if (s.affectation) continue;
+    const modele = (ex.subventions ?? []).find(
+      (m) => m.affectation && m.libelle === s.libelle && m.montant_eur === s.montant_eur,
+    );
+    if (modele) {
+      s.affectation = modele.affectation;
+      change = true;
+    }
+  }
+  return change;
+}
+
+function reprendreDemonstrations() {
+  for (const fiche of listerSimulations()) {
+    const sim = lireSimulation(fiche.id);
+    if (sim && rattacherSubventionsDemo(sim)) ecrireSimulation(fiche.id, sim);
+  }
+}
+
 semerExemples();
+reprendreDemonstrations();
 const dossierRouvert = restaurerSaisie();
 // L'ecran quitte se lit AVANT le premier rendu : celui-ci reaffiche l'onglet
 // marque dans le HTML, et `afficherEcran` reecrit alors la memoire - on

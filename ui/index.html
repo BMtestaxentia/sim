@@ -540,6 +540,13 @@
         <section class="bloc">
           <h2 class="bloc__titre">Subventions</h2>
           <div id="liste-subventions" data-restitution></div>
+          <!-- R-SUB-3 : une subvention sans tranche n'existe pas au plan. Elle
+               n'est pas effacee pour autant - c'est une somme saisie, venue d'un
+               import ou d'un dossier ancien - et c'est ici qu'on la rattache ou
+               qu'on la supprime : aucun ecran de tranche ne l'affiche. Pas de
+               data-restitution : c'est de la saisie, elle ne se vide pas quand le
+               calcul echoue. -->
+          <div id="subventions-hors-plan" class="hors-plan" hidden></div>
         </section>
       </div>
 

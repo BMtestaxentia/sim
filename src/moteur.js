@@ -26,7 +26,7 @@ import {
   valeurComptableTerrain,
   baseAmortissementComptable,
 } from './bilan.js';
-import { agregerSubventions, resoudreAffectation, surchargeFonciere } from './subventions.js';
+import { agregerSubventions, surchargeFonciere } from './subventions.js';
 import {
   soldeAFinancer,
   foncierFinancable,
@@ -302,6 +302,19 @@ export function calculer(entrees, referentiels) {
 
   // --- 4. Subventions (R-SUB) ---
   const subventions = agregerSubventions(entrees.subventions ?? [], quotesParts);
+  // R-SUB-3 - Une subvention sans tranche n'existe pas au plan : elle ne finance
+  // rien et ne compte dans aucun total. Elle n'est pas effacee pour autant -
+  // c'est une somme saisie - mais elle se DIT, avec son montant et sa raison.
+  for (const s of subventions.hors_plan) {
+    alertes.push(
+      `Subvention « ${s.libelle} » (${arrondiEuro(s.montant_eur)} EUR) rattachee a aucune tranche ` +
+        (s.affectation
+          ? `(« ${s.affectation} » n'est pas une tranche du programme)`
+          : '(aucune tranche indiquee, sur un programme qui en compte plusieurs)') +
+        " : elle n'entre pas au plan de financement. Une subvention se rattache a un financement, " +
+        'comme un pret ; une aide qui vise deux tranches se saisit en deux lignes.',
+    );
+  }
   // R-SUB-2 : la zone et le type d'operation viennent de l'identite ; ils
   // suffisent a lire la valeur de base au bareme, que la saisie n'a plus a
   // retaper. Une valeur de base saisie continue de primer.
@@ -555,49 +568,41 @@ export function calculer(entrees, referentiels) {
     // Besoin de financement de chaque tranche : ce que son prix de revient ne
     // couvre pas encore. Faute de ventilation (operation sans programme), on
     // retombe sur le solde global.
-    // Une subvention NON AFFECTEE profite a toute l'operation : elle se ventile
-    // au prorata de surface utile, comme le prix de revient. La rattacher a
-    // aucune tranche la ferait disparaitre du besoin, et les prets couvriraient
-    // un montant deja finance.
+    // R-SUB-3 - Chaque subvention porte SA tranche : elle arrive ici deja
+    // rattachee (`agregerSubventions`), et celles qui ne le sont pas n'entrent
+    // pas au plan. Rien ne se repartit plus au prorata des surfaces : la
+    // repartition fabriquait des centimes que chaque tranche arrondissait de son
+    // cote, et une operation a quatre tranches en sortait desequilibree d'un euro.
     // Le detail est etabli UNE fois et sert deux fois : a chiffrer le besoin de
     // chaque tranche, et a le restituer ligne par ligne. Deux parcours de la
     // meme liste finiraient par ventiler differemment.
     /** @type {Array<{libelle: string, montant_eur: number, affectation: string|null, par_tranche: Record<string, number>}>} */
     const lignesSub = [];
     const ventiler = (libelle, montant, affectation) => {
-      // R-SUB-3 - Une affectation nomme UNE tranche, et une seule. LEON connait
-      // un couple « PLUS-PLAI » parce que son moteur est duplique et qu'il tient
-      // une colonne combinee ; ici le PLUS et le PLAI sont deux tranches
-      // TOTALEMENT DISTINCTES, et une aide qui vise les deux se saisit en deux
-      // lignes. Un code composite reintroduirait la structure meme dont ce
-      // moteur s'est affranchi (lecon I-1).
-      //
-      // Ce qui passait en silence : une affectation nommee mais INTROUVABLE au
-      // programme etait ignoree sans un mot, et la subvention arrosait tout le
-      // programme, tranche libre comprise. La ventilation ne change pas - a qui
-      // d'autre la rattacher ? - mais elle se DIT desormais.
-      const { cible, introuvable } = resoudreAffectation(affectation, codesFinances);
       /** @type {Record<string, number>} */
       const parTranche = {};
-      for (const c of codesFinances) {
-        parTranche[c] = cible ? (c === cible ? montant : 0) : (quotesParts[c] ?? 0) * montant;
-      }
-      lignesSub.push({ libelle, montant_eur: montant, affectation: cible, par_tranche: parTranche });
-
-      if (introuvable) {
-        alertes.push(
-          `Subvention « ${libelle} » affectee a « ${affectation} », qui n'est pas une tranche ` +
-            `du programme (${codesFinances.join(', ')}). Elle est ventilee sur toute l'operation ` +
-            'a defaut de destinataire. Le PLUS et le PLAI sont deux tranches distinctes : une ' +
-            'aide qui vise les deux se saisit en deux lignes.',
+      if (affectation) {
+        for (const c of codesFinances) parTranche[c] = c === affectation ? montant : 0;
+      } else if (codesFinances.length) {
+        // Seule la subvention de SURCHARGE FONCIERE arrive sans tranche : elle
+        // est CALCULEE sur la charge fonciere de l'operation entiere, pas
+        // saisie. Elle se repartit donc au prorata des surfaces, mais en euros
+        // ENTIERS dont la somme vaut exactement son montant - la methode du plus
+        // grand reste, celle du prix de revient - pour ne pas recreer l'euro.
+        const entiers = arrondirEnConservantLaSomme(
+          codesFinances.map((c) => (quotesParts[c] ?? 0) * montant),
+          arrondiEuro(montant),
         );
+        codesFinances.forEach((c, i) => {
+          parTranche[c] = entiers[i];
+        });
       }
+      lignesSub.push({ libelle, montant_eur: montant, affectation: affectation ?? null, par_tranche: parTranche });
 
-      // Une subvention qui atterrit sur une tranche non eligible aux aides
-      // publiques - le logement libre - n'est pas corrigee d'office : le montant
-      // saisi fait foi, et rien ne dit qu'il s'agisse d'une aide de l'Etat
-      // plutot que d'une participation de droit commun. Mais elle est DITE :
-      // c'est le montage qui se decide, pas le calcul.
+      // Une subvention rattachee a une tranche qui n'ouvre droit a aucune aide
+      // publique - le logement libre - n'est pas refusee : le montant saisi fait
+      // foi, et une participation de collectivite de droit commun existe. Mais
+      // elle se DIT : c'est le montage qui se decide, pas le calcul.
       const versLibre = codesFinances.filter(
         (c) => parTranche[c] > 0 && produit(c).eligible_aides_publiques === false,
       );
@@ -605,15 +610,12 @@ export function calculer(entrees, referentiels) {
         alertes.push(
           `Subvention « ${libelle} » : ${arrondiEuro(
             versLibre.reduce((s, c) => s + parTranche[c], 0),
-          )} EUR ventiles sur ${versLibre.join(', ')}, tranche(s) hors aide publique. ` +
-            "L'affecter aux tranches concernees la retire du financement du libre.",
+          )} EUR sur ${versLibre.join(', ')}, tranche(s) hors aide publique. ` +
+            "A verifier : une aide de l'Etat n'a pas a financer du logement libre.",
         );
       }
     };
-    for (const s of entrees.subventions ?? []) {
-      const m = Number(s.montant_eur) || 0;
-      if (m) ventiler(s.libelle ?? 'Subvention', m, s.affectation);
-    }
+    for (const s of subventions.rattachees) ventiler(s.libelle ?? 'Subvention', s.montant_eur, s.affectation);
     if (ssf?.subvention_eur) ventiler('Surcharge foncière', ssf.subvention_eur, null);
     detailSubventions.push(...lignesSub);
 

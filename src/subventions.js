@@ -15,7 +15,7 @@ import { arrondiEuro } from './arrondis.js';
  * @property {string} libelle
  * @property {number} montant_eur
  * @property {boolean} [gratuite]      une subvention gratuite ne se rembourse pas
- * @property {string} [affectation]    code produit, ou 'PLUS-PLAI' pour une ventilation par quote-part
+ * @property {string} [affectation]    code de la tranche qui la porte (R-SUB-3)
  */
 
 /**
@@ -28,13 +28,9 @@ import { arrondiEuro } from './arrondis.js';
  * deux lignes. Introduire un code composite reintroduirait la structure meme
  * dont ce moteur s'est affranchi.
  *
- * Trois issues, et pas deux :
- *  - la tranche nommee EXISTE au programme : elle prend tout ;
- *  - aucune affectation : la subvention profite a l'operation, ventilee au
- *    prorata de surface utile ;
- *  - une affectation nommee mais INTROUVABLE au programme : meme ventilation,
- *    mais l'appelant doit le DIRE. C'est le cas qui passait en silence, et c'est
- *    par la qu'une aide destinee au PLAI finançait du logement libre.
+ * Ce que devient une subvention qu'aucune tranche ne porte se decide dans
+ * `rattacherSubventions` : elle est rattachee a un financement, ou elle n'existe
+ * pas au plan.
  *
  * @param {string|null|undefined} affectation
  * @param {string[]} codes_presents
@@ -48,40 +44,68 @@ export function resoudreAffectation(affectation, codes_presents) {
 }
 
 /**
- * R-SUB-3 - Agregation des subventions saisies, ventilees par produit.
- * Une subvention affectee vise UNE tranche, qui prend tout. Sans affectation
- * exploitable, elle profite a l'operation au prorata de surface utile.
+ * R-SUB-3 - Rattachement des subventions a leur tranche.
+ *
+ * Une subvention est rattachee a un FINANCEMENT, comme un pret ou des fonds
+ * propres, ou elle n'existe pas (arbitrage metier du 10/09/2026). LEON repartit
+ * une subvention sans affectation au prorata des surfaces utiles ; ce moteur ne
+ * le fait plus (ecart E-14). La repartition fabriquait des centimes que chaque
+ * tranche arrondissait de son cote : une operation a quatre tranches en sortait
+ * desequilibree d'un euro. Et elle faisait financer par une aide ce qu'elle ne
+ * visait pas, logement libre compris, sans que l'ecran le montre - les ecrans
+ * de tranche ne listent que les subventions qui leur sont rattachees.
+ *
+ * Trois cas :
+ *  - la tranche nommee existe au programme : elle porte la subvention ;
+ *  - aucune tranche nommee, mais une seule au programme : c'est elle, sans
+ *    ambiguite possible - le moteur rattache de meme un pret sans tranche ;
+ *  - sinon - aucune tranche nommee sur un programme mixte, ou une tranche qui
+ *    n'y figure plus - la subvention reste HORS PLAN : elle ne finance rien, ne
+ *    compte dans aucun total, et l'appelant la signale pour qu'on la rattache.
+ *
  * @param {Subvention[]} subventions
- * @param {Record<string, number>} quotes_parts
+ * @param {string[]} codes tranches presentes au programme
+ * @returns {{rattachees: Array<Subvention & {affectation: string}>,
+ *            hors_plan: Array<{libelle: string, montant_eur: number, affectation: string|null}>}}
+ */
+export function rattacherSubventions(subventions, codes) {
+  const rattachees = [];
+  const horsPlan = [];
+  for (const sub of subventions ?? []) {
+    const montant = Number(sub.montant_eur) || 0;
+    if (!montant) continue;
+    const { cible, introuvable } = resoudreAffectation(sub.affectation, codes);
+    const tranche = cible ?? (!introuvable && codes.length === 1 ? codes[0] : null);
+    if (tranche) {
+      rattachees.push({ ...sub, montant_eur: montant, affectation: tranche });
+    } else {
+      horsPlan.push({ libelle: sub.libelle ?? 'Subvention', montant_eur: montant, affectation: sub.affectation ?? null });
+    }
+  }
+  return { rattachees, hors_plan: horsPlan };
+}
+
+/**
+ * R-SUB-3 - Agregation des subventions saisies, par tranche.
+ * Seules les subventions RATTACHEES entrent aux totaux ; les autres sont rendues
+ * a part, pour etre signalees (voir `rattacherSubventions`).
+ * @param {Subvention[]} subventions
+ * @param {Record<string, number>} quotes_parts ses cles sont les tranches du programme
  * @returns {{par_produit: Record<string, number>, gratuites_eur: number,
- *            non_gratuites_eur: number, total_eur: number, affectations_introuvables: string[]}}
+ *            non_gratuites_eur: number, total_eur: number,
+ *            rattachees: Array<any>, hors_plan: Array<any>}}
  */
 export function agregerSubventions(subventions, quotes_parts) {
+  const { rattachees, hors_plan } = rattacherSubventions(subventions, Object.keys(quotes_parts));
   /** @type {Record<string, number>} */
   const parProduit = {};
   let gratuites = 0;
   let nonGratuites = 0;
-  const codes = Object.keys(quotes_parts);
-  /** Affectations nommees qui ne correspondent a aucune tranche du programme. */
-  const introuvables = [];
-
-  for (const sub of subventions) {
-    if (!sub.montant_eur) continue;
+  for (const sub of rattachees) {
     if (sub.gratuite) gratuites += sub.montant_eur;
     else nonGratuites += sub.montant_eur;
-
-    const { cible, introuvable } = resoudreAffectation(sub.affectation, codes);
-    if (introuvable) introuvables.push(String(sub.affectation));
-    if (cible) {
-      parProduit[cible] = (parProduit[cible] ?? 0) + sub.montant_eur;
-    } else {
-      // Aucune affectation exploitable : la subvention profite a l'operation.
-      for (const [code, qp] of Object.entries(quotes_parts)) {
-        parProduit[code] = (parProduit[code] ?? 0) + sub.montant_eur * qp;
-      }
-    }
+    parProduit[sub.affectation] = (parProduit[sub.affectation] ?? 0) + sub.montant_eur;
   }
-
   for (const code of Object.keys(parProduit)) parProduit[code] = arrondiEuro(parProduit[code]);
 
   return {
@@ -89,7 +113,8 @@ export function agregerSubventions(subventions, quotes_parts) {
     gratuites_eur: arrondiEuro(gratuites),
     non_gratuites_eur: arrondiEuro(nonGratuites),
     total_eur: arrondiEuro(gratuites + nonGratuites),
-    affectations_introuvables: introuvables,
+    rattachees,
+    hors_plan,
   };
 }
 

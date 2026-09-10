@@ -1796,6 +1796,27 @@ details[open].bloc > summary.bloc__titre { margin-bottom: 12px; }
 .entete__groupe > .bouton[aria-pressed='true'] { background: var(--info-bg); color: var(--info-text); }
 @media print { .espion { display: none !important; } }
 
+/* --- SUBVENTIONS HORS PLAN --------------------------------------------
+   R-SUB-3 : une subvention rattachee a aucune tranche ne finance rien. Un
+   encart d'alerte et non une liste ordinaire : ce qu'il contient attend un
+   geste - un rattachement ou une suppression. */
+.hors-plan {
+  margin-top: 12px; padding: 10px 12px;
+  border: 1px solid var(--warning-accent); border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+}
+.hors-plan[hidden] { display: none; }
+.hors-plan__titre {
+  margin: 0 0 4px; font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--warning-text);
+}
+.hors-plan .aide { margin: 0 0 8px; }
+.hors-plan__ligne { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+.hors-plan__ligne + .hors-plan__ligne { border-top: 1px solid var(--border-color); }
+.hors-plan__ligne .sub__libelle { flex: 1; min-width: 0; }
+.hors-plan__ligne .sub__montant { font-variant-numeric: tabular-nums; font-weight: 650; }
+.hors-plan__ligne select { width: auto; }
+
 /* ============================================================ DIVERS */
 
 .generateur {

@@ -710,14 +710,20 @@ describe('R-FIN-3 - prets CDC par tranche, ajustes au besoin de financement', ()
     expect(dPLAI).toBe(50000);
   });
 
-  it('ventile une subvention NON affectee, au lieu de la perdre', () => {
-    // Une subvention sans tranche profite a l'operation entiere. L'oublier
-    // ferait emprunter un montant deja finance.
+  it('une subvention SANS tranche n entre pas au plan, et le dit', () => {
+    // Arbitrage metier du 10/09/2026 : une subvention est rattachee a un
+    // financement, comme un pret, ou elle n'existe pas. Ce test affirmait
+    // l'inverse - « ventile une subvention NON affectee, au lieu de la perdre ».
+    // Sur une operation mixte, elle ne se repartit plus au prorata des surfaces :
+    // la repartition fabriquait des centimes, et un euro d'ecart au plan. Elle
+    // ne finance rien, ne compte dans aucun total, et une alerte la nomme.
     const sans = calc({ subventions: [] });
     const avec = calc({ subventions: [{ libelle: 'Agglo', montant_eur: 100000 }] });
     const total = (r) => r.amortissements.reduce((s, a) => s + a.montant_eur, 0);
-    expect(total(sans) - total(avec)).toBe(100000);
+    expect(total(avec)).toBe(total(sans));
+    expect(avec.indicateurs.subventions_eur).toBe(0);
     expect(avec.financement.equilibre.ecart_eur).toBe(0);
+    expect(avec.alertes.some((a) => /« Agglo ».*rattachee a aucune tranche/.test(a))).toBe(true);
   });
 
   it('un montant saisi FIGE le pret et sort du calcul automatique', () => {
@@ -776,22 +782,26 @@ describe('R-FIN-2 - assiette CDC du droit a pret foncier (Q-30, arbitrage 06/08/
     // Sous la regle LEON, seules les subventions gratuites comptaient : le
     // foncier n'aurait pas bouge. La CDC ne fait pas cette distinction.
     const sans = calc([]);
-    const avec = calc([{ libelle: 'Département', montant_eur: 200000, gratuite: false }]);
+    const avec = calc([{ libelle: 'Département', montant_eur: 200000, gratuite: false, affectation: 'PLUS' }]);
     expect(foncier(avec)).toBeLessThan(foncier(sans));
   });
 
   it('gratuite ou non, une subvention du meme montant a le meme effet', () => {
-    const g = calc([{ libelle: 'A', montant_eur: 200000, gratuite: true }]);
-    const ng = calc([{ libelle: 'A', montant_eur: 200000, gratuite: false }]);
+    const g = calc([{ libelle: 'A', montant_eur: 200000, gratuite: true, affectation: 'PLUS' }]);
+    const ng = calc([{ libelle: 'A', montant_eur: 200000, gratuite: false, affectation: 'PLUS' }]);
     expect(foncier(ng)).toBe(foncier(g));
   });
 
   it('une subvention flechee sur UNE tranche reduit le droit de TOUTE l operation', () => {
     // Le droit a pret foncier se calcule globalement puis se repartit au prorata
-    // SU (calculette CDC, AT37 puis M49) : flecher ne concentre pas l effet.
-    const flechee = calc([{ libelle: 'A', montant_eur: 200000, affectation: 'PLAI' }]);
-    const globale = calc([{ libelle: 'A', montant_eur: 200000 }]);
-    expect(foncier(flechee)).toBe(foncier(globale));
+    // SU (calculette CDC, AT37 puis M49) : la tranche qui porte la subvention ne
+    // concentre pas l effet. Le meme montant sur le PLAI ou sur le PLUS donne le
+    // meme foncier. La comparaison se faisait avec une subvention sans tranche,
+    // qui n'existe plus au plan depuis l'arbitrage metier du 10/09/2026.
+    const surPLAI = calc([{ libelle: 'A', montant_eur: 200000, affectation: 'PLAI' }]);
+    const surPLUS = calc([{ libelle: 'A', montant_eur: 200000, affectation: 'PLUS' }]);
+    expect(foncier(surPLAI)).toBe(foncier(surPLUS));
+    expect(foncier(surPLAI)).toBeLessThan(foncier(calc([])));
   });
 
   it('foncier et construction d une tranche somment exactement au besoin', () => {
@@ -1165,7 +1175,7 @@ describe('R-FIN - plan de financement PAR TRANCHE', () => {
     ],
     subventions: [
       { libelle: 'Ville', montant_eur: 50000, affectation: 'PLAI' },
-      { libelle: 'Agglo', montant_eur: 30000 },
+      { libelle: 'Agglo', montant_eur: 30000, affectation: 'PLS' },
     ],
     prets: [],
   };
@@ -1186,38 +1196,33 @@ describe('R-FIN - plan de financement PAR TRANCHE', () => {
     expect(somme).toBe(r.bilan.total_ttc_module_eur);
   });
 
-  it('affecte la subvention flechee a SA tranche et ventile l autre', () => {
-    // Ville (50 000) est flechee PLAI ; Agglo (30 000) profite a tous, au
-    // prorata de surface utile - c'est la meme regle que le calcul des besoins,
-    // et non une seconde ventilation qui pourrait en diverger.
+  it('porte chaque subvention sur SA tranche, a l euro pres', () => {
+    // Ville (50 000) va au PLAI, Agglo (30 000) au PLS. Rien ne se repartit au
+    // prorata des surfaces : la somme des tranches vaut EXACTEMENT le total, la
+    // ou la repartition laissait jusqu'a un euro d'ecart au plan.
     const p = r.financement.par_tranche;
-    const qp = r.surfaces.quotes_parts;
-    expect(p.PLAI.subventions_eur).toBe(Math.round(50000 + 30000 * qp.PLAI));
-    expect(p.PLS.subventions_eur).toBe(Math.round(30000 * qp.PLS));
-    const somme = p.PLAI.subventions_eur + p.PLS.subventions_eur;
-    expect(Math.abs(somme - 80000)).toBeLessThanOrEqual(1);
+    expect(p.PLAI.subventions_eur).toBe(50000);
+    expect(p.PLS.subventions_eur).toBe(30000);
+    expect(r.financement.equilibre.ecart_eur).toBe(0);
   });
 
-  it('restitue les subventions ligne par ligne, ventilation comprise', () => {
+  it('restitue les subventions ligne par ligne, chacune sur sa tranche', () => {
     const d = r.financement.subventions_detail;
     expect(d.map((l) => l.libelle)).toEqual(['Ville', 'Agglo']);
-    // Flechee : tout pour sa tranche, rien pour l'autre.
+    // Tout pour sa tranche, rien pour l'autre.
     expect(d[0].affectation).toBe('PLAI');
     expect(d[0].par_tranche).toEqual({ PLS: 0, PLAI: 50000 });
-    // Libre : repartie a la surface utile, et la somme reste le montant d'origine.
-    expect(d[1].affectation).toBe(null);
-    expect(d[1].par_tranche.PLS + d[1].par_tranche.PLAI).toBeCloseTo(30000, 6);
+    expect(d[1].affectation).toBe('PLS');
+    expect(d[1].par_tranche).toEqual({ PLS: 30000, PLAI: 0 });
 
     // Le detail d'une tranche ne retient que ce qui lui revient, et somme a son
-    // total : une ligne de restitution qui ne recolle pas au besoin de
-    // financement signalerait deux ventilations divergentes.
+    // total EXACTEMENT : il n'y a plus de centimes a arrondir.
     for (const [c, t] of Object.entries(r.financement.par_tranche)) {
       const somme = t.subventions.reduce((s, l) => s + l.montant_eur, 0);
-      expect(Math.abs(somme - t.subventions_eur), `tranche ${c}`).toBeLessThanOrEqual(1);
+      expect(somme, `tranche ${c}`).toBe(t.subventions_eur);
     }
     expect(r.financement.par_tranche.PLS.subventions.map((l) => l.libelle)).toEqual(['Agglo']);
-    expect(r.financement.par_tranche.PLS.subventions[0].ventilee).toBe(true);
-    expect(r.financement.par_tranche.PLS.subventions[0].montant_total_eur).toBe(30000);
+    expect(r.financement.par_tranche.PLS.subventions[0].ventilee).toBe(false);
   });
 
   it('n attribue a une tranche que SES prets', () => {
@@ -1658,28 +1663,32 @@ describe('audit 03/09/2026 - regles declarees qui ne s appliquaient pas', () => 
     expect(r.alertes.filter((a) => /n'est pas une tranche/i.test(a))).toEqual([]);
   });
 
-  it('R-SUB-3 : une affectation qui ne nomme aucune tranche ne passe plus en silence', () => {
+  it('R-SUB-3 : une affectation qui ne nomme aucune tranche reste HORS PLAN, et le dit', () => {
     // Le defaut constate a l'audit : une affectation introuvable au programme
     // etait ignoree sans un mot, et la subvention arrosait toute l'operation,
-    // tranche libre comprise. La ventilation reste celle d'une subvention non
-    // affectee - a qui d'autre la rattacher ? - mais elle se DIT, et le code
-    // composite de LEON n'est PAS interprete : il n'existe pas ici.
+    // tranche libre comprise. Depuis l'arbitrage du 10/09/2026 elle ne finance
+    // plus rien : une subvention est rattachee a un financement, ou elle n'existe
+    // pas. Le code composite de LEON n'est pas interprete, il n'existe pas ici.
     const r = calculer(
       op({ subventions: [{ libelle: 'Etat', montant_eur: 90000, affectation: 'PLUS-PLAI' }] }),
       REFERENTIELS,
     );
-    expect(sub(r, 'PLAI')).toBe(30000);
-    expect(sub(r, 'PLUS')).toBe(30000);
-    expect(sub(r, 'LIBRE')).toBe(30000);
-    expect(r.alertes.some((a) => /« PLUS-PLAI », qui n'est pas une tranche/.test(a))).toBe(true);
+    expect(sub(r, 'PLAI')).toBe(0);
+    expect(sub(r, 'PLUS')).toBe(0);
+    expect(sub(r, 'LIBRE')).toBe(0);
+    expect(r.financement.equilibre.ecart_eur).toBe(0);
+    expect(r.alertes.some((a) => /« PLUS-PLAI » n'est pas une tranche du programme/.test(a))).toBe(true);
   });
 
-  it('R-SUB-3 : une subvention qui ruisselle sur du libre est DITE', () => {
-    // Elle n'est pas corrigee d'office - une participation de collectivite de
-    // droit commun existe - mais elle ne passe plus sans un mot.
-    const r = calculer(op({ subventions: [{ libelle: 'Etat', montant_eur: 90000 }] }), REFERENTIELS);
+  it('R-SUB-3 : une subvention rattachee au libre est DITE', () => {
+    // Elle n'est pas refusee - une participation de collectivite de droit commun
+    // existe - mais une aide publique sur du logement libre ne passe pas sans un mot.
+    const r = calculer(
+      op({ subventions: [{ libelle: 'Etat', montant_eur: 90000, affectation: 'LIBRE' }] }),
+      REFERENTIELS,
+    );
+    expect(sub(r, 'LIBRE')).toBe(90000);
     expect(r.alertes.some((a) => /hors aide publique/i.test(a))).toBe(true);
-    expect(sub(r, 'LIBRE')).toBeGreaterThan(0);
   });
 
   it('R-LOYER-3 : la marge de majoration est PLAFONNEE, et le dit', () => {

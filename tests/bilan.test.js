@@ -97,10 +97,22 @@ describe('R-SUB - subventions', () => {
     expect(r.par_produit.PLAI).toBe(50000);
   });
 
-  it('une subvention sans affectation propre est ventilee par quote-part', () => {
+  it('R-SUB-3 : une subvention sans tranche reste HORS PLAN sur un programme mixte', () => {
+    // Arbitrage metier du 10/09/2026 : rattachee a un financement, ou rien. Elle
+    // se repartissait au prorata des surfaces (600 / 400), et ces parts
+    // arrondies une a une finissaient par creer un euro.
     const r = agregerSubventions([{ libelle: 'Ville', montant_eur: 1000 }], { PLUS: 0.6, PLAI: 0.4 });
-    expect(r.par_produit.PLUS).toBe(600);
-    expect(r.par_produit.PLAI).toBe(400);
+    expect(r.par_produit).toEqual({});
+    expect(r.total_eur).toBe(0);
+    expect(r.hors_plan).toEqual([{ libelle: 'Ville', montant_eur: 1000, affectation: null }]);
+  });
+
+  it('R-SUB-3 : sur une tranche unique, une subvention sans tranche lui revient', () => {
+    // Aucune ambiguite possible : le moteur rattache de meme un pret sans tranche.
+    const r = agregerSubventions([{ libelle: 'Ville', montant_eur: 1000 }], { PLS: 1 });
+    expect(r.par_produit.PLS).toBe(1000);
+    expect(r.total_eur).toBe(1000);
+    expect(r.hors_plan).toEqual([]);
   });
 
   it('R-SUB-2 : pas de SSF sans depassement', () => {

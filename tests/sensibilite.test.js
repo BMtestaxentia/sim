@@ -54,7 +54,7 @@ const ENTREES = {
     { id: 'bat_travaux', chapitre: 'batiment', numero: 20, libelle: 'Travaux', montant_ht_eur: 1180000 },
     { id: 'hon_architecte', chapitre: 'honoraires', numero: 30, libelle: 'Architecte', montant_ht_eur: 118000 },
   ],
-  subventions: [{ libelle: 'État', montant_eur: 60000, affectation: null }],
+  subventions: [{ libelle: 'État', montant_eur: 60000, affectation: 'PLAI' }],
   prets: [],
   exploitation: { taux_vacance_impayes: 0.02, frais_gestion_pct_loyers: 0.07, gros_entretien_eur_m2: 5 },
 };

@@ -48,7 +48,7 @@ function operation(surcharges = {}) {
     ],
     subventions: [
       { libelle: 'État', montant_eur: 180000, gratuite: true, affectation: 'PLAI' },
-      { libelle: 'Agglomération', montant_eur: 90000, gratuite: true },
+      { libelle: 'Agglomération', montant_eur: 90000, gratuite: true, affectation: 'PLUS' },
     ],
     fonds_propres_eur: 400000,
     prets: [],
@@ -133,10 +133,12 @@ describe('PLUS / PLAI - la chaine complete traverse le perimetre V1', () => {
       .find((p) => p.nature === 'foncier').duree_ans).toBe(50);
   });
 
-  it('ventile les subventions selon leur affectation', () => {
-    // La subvention Etat est affectee au PLAI, celle de l agglomeration est
-    // repartie au prorata des surfaces utiles.
-    expect(r.subventions.par_produit.PLAI).toBeGreaterThan(180000);
+  it('rattache chaque subvention a SA tranche', () => {
+    // La subvention Etat va au PLAI, celle de l agglomeration au PLUS. Aucune ne
+    // se repartit au prorata des surfaces : une subvention est rattachee a un
+    // financement, ou elle n'existe pas (arbitrage metier du 10/09/2026).
+    expect(r.subventions.par_produit.PLAI).toBe(180000);
+    expect(r.subventions.par_produit.PLUS).toBe(90000);
     expect(r.subventions.gratuites_eur).toBe(270000);
     expect(r.indicateurs.subventions_eur).toBe(270000);
   });

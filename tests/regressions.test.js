@@ -1638,37 +1638,40 @@ describe('audit 03/09/2026 - regles declarees qui ne s appliquaient pas', () => 
   });
   const sub = (r, code) => r.financement.par_tranche?.[code]?.subventions_eur ?? 0;
 
-  it('R-SUB-3 : une affectation PLUS-PLAI ne finance QUE le PLUS et le PLAI', () => {
-    // Le defaut : toute affectation qui n'etait pas exactement un code de
-    // tranche etait ignoree en silence, et la subvention arrosait le programme
-    // entier. Sur cette operation, 90 000 EUR affectes « PLUS-PLAI » partaient
-    // en trois parts de 30 000, dont une financait du logement libre.
+  it('R-SUB-3 : le PLUS et le PLAI sont deux tranches distinctes, sans couple PLUS-PLAI', () => {
+    // LEON connait un code composite « PLUS-PLAI » parce que son moteur est
+    // duplique ; ici les deux tranches sont TOTALEMENT DISTINCTES (arbitrage
+    // metier du 03/09/2026). Une aide qui vise les deux se saisit en deux lignes,
+    // chacune allant a sa tranche et a elle seule.
+    const r = calculer(
+      op({
+        subventions: [
+          { libelle: 'Etat PLAI', montant_eur: 60000, affectation: 'PLAI' },
+          { libelle: 'Etat PLUS', montant_eur: 30000, affectation: 'PLUS' },
+        ],
+      }),
+      REFERENTIELS,
+    );
+    expect(sub(r, 'PLAI')).toBe(60000);
+    expect(sub(r, 'PLUS')).toBe(30000);
+    expect(sub(r, 'LIBRE')).toBe(0);
+    expect(r.alertes.filter((a) => /n'est pas une tranche/i.test(a))).toEqual([]);
+  });
+
+  it('R-SUB-3 : une affectation qui ne nomme aucune tranche ne passe plus en silence', () => {
+    // Le defaut constate a l'audit : une affectation introuvable au programme
+    // etait ignoree sans un mot, et la subvention arrosait toute l'operation,
+    // tranche libre comprise. La ventilation reste celle d'une subvention non
+    // affectee - a qui d'autre la rattacher ? - mais elle se DIT, et le code
+    // composite de LEON n'est PAS interprete : il n'existe pas ici.
     const r = calculer(
       op({ subventions: [{ libelle: 'Etat', montant_eur: 90000, affectation: 'PLUS-PLAI' }] }),
       REFERENTIELS,
     );
-    expect(sub(r, 'PLAI')).toBe(45000);
-    expect(sub(r, 'PLUS')).toBe(45000);
-    expect(sub(r, 'LIBRE')).toBe(0);
-  });
-
-  it('R-SUB-3 : le prorata SU des tranches visees est RENORMALISE', () => {
-    // Deux tranches sociales sur trois : elles se partagent la TOTALITE de
-    // l'aide, pas les deux tiers que donnerait leur quote-part brute.
-    const r = calculer(
-      op({
-        lots: [
-          { code_produit: 'PLAI', nb_logements: 4, shab_m2: 200 },
-          { code_produit: 'PLUS', nb_logements: 4, shab_m2: 600 },
-          { code_produit: 'LIBRE', nb_logements: 4, shab_m2: 200 },
-        ],
-        subventions: [{ libelle: 'Etat', montant_eur: 80000, affectation: 'PLAI+PLUS' }],
-      }),
-      REFERENTIELS,
-    );
-    expect(sub(r, 'PLAI')).toBe(20000); // 200 / 800
-    expect(sub(r, 'PLUS')).toBe(60000); // 600 / 800
-    expect(sub(r, 'LIBRE')).toBe(0);
+    expect(sub(r, 'PLAI')).toBe(30000);
+    expect(sub(r, 'PLUS')).toBe(30000);
+    expect(sub(r, 'LIBRE')).toBe(30000);
+    expect(r.alertes.some((a) => /« PLUS-PLAI », qui n'est pas une tranche/.test(a))).toBe(true);
   });
 
   it('R-SUB-3 : une subvention qui ruisselle sur du libre est DITE', () => {

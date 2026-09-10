@@ -4899,7 +4899,7 @@ const MODELE_CALCULS = [
           alimente: "soldeAFinancer et foncierFinancable",
           tests: "tests/moteur.test.js",
           source: "src/subventions.js:30 et 82",
-          texte: "Le plafond se resserre quand les collectivités participent PEU : sous 40 % du dépassement, on retient le plus petit des deux plafonds. Une affectation « PLUS-PLAI » n’est pas reconnue comme une clé de produit et se ventile donc sur TOUS les produits présents, contrairement à ce que laisse entendre la JSDoc."
+          texte: "Le plafond se resserre quand les collectivités participent PEU : sous 40 % du dépassement, on retient le plus petit des deux plafonds. Une affectation « PLUS-PLAI » n’est pas reconnue comme une clé de produit et se ventile donc sur tous les produits présents, avec une alerte qui le dit : le PLUS et le PLAI sont ici deux tranches totalement distinctes, et une aide qui vise les deux se saisit en deux lignes. Le couple de LEON n’existe pas dans ce moteur."
         },
         piege: "Le coefficient de 2 en neuf n’est pas un pourcentage : la subvention vaut deux fois le dépassement plafonné. Et le plafonnement joue à l’inverse de l’intuition, c’est quand les collectivités participent peu qu’il se resserre.",
         entrees: [

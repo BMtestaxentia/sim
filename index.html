@@ -6340,45 +6340,42 @@ function ventilerParQuotePart(montant_eur, quotes_parts) {
  */
 
 /**
- * R-SUB-3 - Tranches visees par une affectation de subvention.
+ * R-SUB-3 - Tranche visee par une affectation de subvention.
  *
- * Une affectation nomme UN produit ('PLAI') ou PLUSIEURS ('PLUS-PLAI', le cas
- * courant d'une aide qui vise les deux tranches sociales d'un programme mixte).
- * Les separateurs admis sont le tiret, la virgule, le plus et l'espace : ce sont
- * ceux qu'on rencontre dans les annexes LEON et dans les saisies.
+ * Une affectation nomme UNE tranche, et une seule. LEON connait un couple
+ * « PLUS-PLAI » parce que son moteur est duplique et qu'il tient une colonne
+ * combinee ; ici le PLUS et le PLAI sont deux tranches TOTALEMENT DISTINCTES
+ * (arbitrage metier du 03/09/2026), et une aide qui vise les deux se saisit en
+ * deux lignes. Introduire un code composite reintroduirait la structure meme
+ * dont ce moteur s'est affranchi.
  *
- * Seuls les produits REELLEMENT presents au programme sont retenus. Une
- * affectation qui ne designe aucune tranche presente rend une liste vide, ce que
- * l'appelant traite comme une absence d'affectation : la subvention profite alors
- * a l'operation entiere, faute de savoir a qui la rattacher.
- *
- * Sans cette resolution, toute affectation qui n'etait pas exactement un code de
- * tranche etait ignoree en silence : la regle etait declaree, pas appliquee.
+ * Trois issues, et pas deux :
+ *  - la tranche nommee EXISTE au programme : elle prend tout ;
+ *  - aucune affectation : la subvention profite a l'operation, ventilee au
+ *    prorata de surface utile ;
+ *  - une affectation nommee mais INTROUVABLE au programme : meme ventilation,
+ *    mais l'appelant doit le DIRE. C'est le cas qui passait en silence, et c'est
+ *    par la qu'une aide destinee au PLAI finançait du logement libre.
  *
  * @param {string|null|undefined} affectation
  * @param {string[]} codes_presents
- * @returns {string[]} codes de tranche vises, dans l'ordre du programme
+ * @returns {{cible: string|null, introuvable: boolean}}
  */
 function resoudreAffectation(affectation, codes_presents) {
-  if (!affectation) return [];
-  const nommes = new Set(
-    String(affectation)
-      .split(/[-,+\s]+/)
-      .map((m) => m.trim().toUpperCase())
-      .filter(Boolean),
-  );
-  return codes_presents.filter((c) => nommes.has(c.toUpperCase()));
+  const nom = String(affectation ?? '').trim();
+  if (!nom) return { cible: null, introuvable: false };
+  const cible = codes_presents.find((c) => c.toUpperCase() === nom.toUpperCase()) ?? null;
+  return { cible, introuvable: cible === null };
 }
 
 /**
  * R-SUB-3 - Agregation des subventions saisies, ventilees par produit.
- * Une subvention affectee a un couple de produits ('PLUS-PLAI') est repartie
- * entre CES produits, au prorata de leurs quotes-parts de surface utile
- * renormalisees - et non sur l'operation entiere.
+ * Une subvention affectee vise UNE tranche, qui prend tout. Sans affectation
+ * exploitable, elle profite a l'operation au prorata de surface utile.
  * @param {Subvention[]} subventions
  * @param {Record<string, number>} quotes_parts
  * @returns {{par_produit: Record<string, number>, gratuites_eur: number,
- *            non_gratuites_eur: number, total_eur: number}}
+ *            non_gratuites_eur: number, total_eur: number, affectations_introuvables: string[]}}
  */
 function agregerSubventions(subventions, quotes_parts) {
   /** @type {Record<string, number>} */
@@ -6386,21 +6383,18 @@ function agregerSubventions(subventions, quotes_parts) {
   let gratuites = 0;
   let nonGratuites = 0;
   const codes = Object.keys(quotes_parts);
+  /** Affectations nommees qui ne correspondent a aucune tranche du programme. */
+  const introuvables = [];
 
   for (const sub of subventions) {
     if (!sub.montant_eur) continue;
     if (sub.gratuite) gratuites += sub.montant_eur;
     else nonGratuites += sub.montant_eur;
 
-    const cibles = resoudreAffectation(sub.affectation, codes);
-    if (cibles.length) {
-      // Prorata SU RENORMALISE sur les seules tranches visees : une aide
-      // PLUS-PLAI se partage entre le PLUS et le PLAI, pas avec le reste.
-      const total = cibles.reduce((s, c) => s + (quotes_parts[c] ?? 0), 0);
-      for (const code of cibles) {
-        const part = total > 0 ? (quotes_parts[code] ?? 0) / total : 1 / cibles.length;
-        parProduit[code] = (parProduit[code] ?? 0) + sub.montant_eur * part;
-      }
+    const { cible, introuvable } = resoudreAffectation(sub.affectation, codes);
+    if (introuvable) introuvables.push(String(sub.affectation));
+    if (cible) {
+      parProduit[cible] = (parProduit[cible] ?? 0) + sub.montant_eur;
     } else {
       // Aucune affectation exploitable : la subvention profite a l'operation.
       for (const [code, qp] of Object.entries(quotes_parts)) {
@@ -6416,6 +6410,7 @@ function agregerSubventions(subventions, quotes_parts) {
     gratuites_eur: arrondiEuro(gratuites),
     non_gratuites_eur: arrondiEuro(nonGratuites),
     total_eur: arrondiEuro(gratuites + nonGratuites),
+    affectations_introuvables: introuvables,
   };
 }
 
@@ -8590,41 +8585,33 @@ function calculer(entrees, referentiels) {
     /** @type {Array<{libelle: string, montant_eur: number, affectation: string|null, par_tranche: Record<string, number>}>} */
     const lignesSub = [];
     const ventiler = (libelle, montant, affectation) => {
-      // R-SUB-3 - Une affectation peut nommer PLUSIEURS produits : « PLUS-PLAI »
-      // est le cas courant, une aide de l'Etat qui vise les deux tranches
-      // sociales d'une operation mixte. Elle se repartit alors sur ces
-      // tranches-la, au prorata de LEURS surfaces utiles renormalisees, et non
-      // sur l'operation entiere. Avant cette resolution, une affectation qui
-      // n'etait pas exactement un code de tranche etait silencieusement ignoree
-      // et la subvention arrosait tout le programme, tranche libre comprise :
-      // 90 000 EUR affectes « PLUS-PLAI » sur PLAI + PLUS + LIBRE partaient en
-      // trois parts egales, dont une finançait du logement libre.
-      const cibles = resoudreAffectation(affectation, codesFinances);
+      // R-SUB-3 - Une affectation nomme UNE tranche, et une seule. LEON connait
+      // un couple « PLUS-PLAI » parce que son moteur est duplique et qu'il tient
+      // une colonne combinee ; ici le PLUS et le PLAI sont deux tranches
+      // TOTALEMENT DISTINCTES, et une aide qui vise les deux se saisit en deux
+      // lignes. Un code composite reintroduirait la structure meme dont ce
+      // moteur s'est affranchi (lecon I-1).
+      //
+      // Ce qui passait en silence : une affectation nommee mais INTROUVABLE au
+      // programme etait ignoree sans un mot, et la subvention arrosait tout le
+      // programme, tranche libre comprise. La ventilation ne change pas - a qui
+      // d'autre la rattacher ? - mais elle se DIT desormais.
+      const { cible, introuvable } = resoudreAffectation(affectation, codesFinances);
       /** @type {Record<string, number>} */
       const parTranche = {};
-      if (cibles.length) {
-        const total = cibles.reduce((s, c) => s + (quotesParts[c] ?? 0), 0);
-        for (const c of codesFinances) {
-          if (!cibles.includes(c)) {
-            parTranche[c] = 0;
-          } else if (total > 0) {
-            parTranche[c] = ((quotesParts[c] ?? 0) / total) * montant;
-          } else {
-            // Des tranches nommees mais sans surface : a defaut de cle, parts egales.
-            parTranche[c] = montant / cibles.length;
-          }
-        }
-      } else {
-        for (const c of codesFinances) parTranche[c] = (quotesParts[c] ?? 0) * montant;
+      for (const c of codesFinances) {
+        parTranche[c] = cible ? (c === cible ? montant : 0) : (quotesParts[c] ?? 0) * montant;
       }
-      lignesSub.push({
-        libelle,
-        montant_eur: montant,
-        // L'affectation RESTITUEE est celle qui a servi : une seule cible garde
-        // son code, plusieurs se rejoignent sous la forme saisie.
-        affectation: cibles.length === 1 ? cibles[0] : cibles.length ? (affectation ?? null) : null,
-        par_tranche: parTranche,
-      });
+      lignesSub.push({ libelle, montant_eur: montant, affectation: cible, par_tranche: parTranche });
+
+      if (introuvable) {
+        alertes.push(
+          `Subvention « ${libelle} » affectee a « ${affectation} », qui n'est pas une tranche ` +
+            `du programme (${codesFinances.join(', ')}). Elle est ventilee sur toute l'operation ` +
+            'a defaut de destinataire. Le PLUS et le PLAI sont deux tranches distinctes : une ' +
+            'aide qui vise les deux se saisit en deux lignes.',
+        );
+      }
 
       // Une subvention qui atterrit sur une tranche non eligible aux aides
       // publiques - le logement libre - n'est pas corrigee d'office : le montant
@@ -15845,7 +15832,7 @@ const MODELE_CALCULS = [
           alimente: "soldeAFinancer et foncierFinancable",
           tests: "tests/moteur.test.js",
           source: "src/subventions.js:30 et 82",
-          texte: "Le plafond se resserre quand les collectivités participent PEU : sous 40 % du dépassement, on retient le plus petit des deux plafonds. Une affectation « PLUS-PLAI » n’est pas reconnue comme une clé de produit et se ventile donc sur TOUS les produits présents, contrairement à ce que laisse entendre la JSDoc."
+          texte: "Le plafond se resserre quand les collectivités participent PEU : sous 40 % du dépassement, on retient le plus petit des deux plafonds. Une affectation « PLUS-PLAI » n’est pas reconnue comme une clé de produit et se ventile donc sur tous les produits présents, avec une alerte qui le dit : le PLUS et le PLAI sont ici deux tranches totalement distinctes, et une aide qui vise les deux se saisit en deux lignes. Le couple de LEON n’existe pas dans ce moteur."
         },
         piege: "Le coefficient de 2 en neuf n’est pas un pourcentage : la subvention vaut deux fois le dépassement plafonné. Et le plafonnement joue à l’inverse de l’intuition, c’est quand les collectivités participent peu qu’il se resserre.",
         entrees: [

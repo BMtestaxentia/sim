@@ -19,45 +19,42 @@ import { arrondiEuro } from './arrondis.js';
  */
 
 /**
- * R-SUB-3 - Tranches visees par une affectation de subvention.
+ * R-SUB-3 - Tranche visee par une affectation de subvention.
  *
- * Une affectation nomme UN produit ('PLAI') ou PLUSIEURS ('PLUS-PLAI', le cas
- * courant d'une aide qui vise les deux tranches sociales d'un programme mixte).
- * Les separateurs admis sont le tiret, la virgule, le plus et l'espace : ce sont
- * ceux qu'on rencontre dans les annexes LEON et dans les saisies.
+ * Une affectation nomme UNE tranche, et une seule. LEON connait un couple
+ * « PLUS-PLAI » parce que son moteur est duplique et qu'il tient une colonne
+ * combinee ; ici le PLUS et le PLAI sont deux tranches TOTALEMENT DISTINCTES
+ * (arbitrage metier du 03/09/2026), et une aide qui vise les deux se saisit en
+ * deux lignes. Introduire un code composite reintroduirait la structure meme
+ * dont ce moteur s'est affranchi.
  *
- * Seuls les produits REELLEMENT presents au programme sont retenus. Une
- * affectation qui ne designe aucune tranche presente rend une liste vide, ce que
- * l'appelant traite comme une absence d'affectation : la subvention profite alors
- * a l'operation entiere, faute de savoir a qui la rattacher.
- *
- * Sans cette resolution, toute affectation qui n'etait pas exactement un code de
- * tranche etait ignoree en silence : la regle etait declaree, pas appliquee.
+ * Trois issues, et pas deux :
+ *  - la tranche nommee EXISTE au programme : elle prend tout ;
+ *  - aucune affectation : la subvention profite a l'operation, ventilee au
+ *    prorata de surface utile ;
+ *  - une affectation nommee mais INTROUVABLE au programme : meme ventilation,
+ *    mais l'appelant doit le DIRE. C'est le cas qui passait en silence, et c'est
+ *    par la qu'une aide destinee au PLAI finançait du logement libre.
  *
  * @param {string|null|undefined} affectation
  * @param {string[]} codes_presents
- * @returns {string[]} codes de tranche vises, dans l'ordre du programme
+ * @returns {{cible: string|null, introuvable: boolean}}
  */
 export function resoudreAffectation(affectation, codes_presents) {
-  if (!affectation) return [];
-  const nommes = new Set(
-    String(affectation)
-      .split(/[-,+\s]+/)
-      .map((m) => m.trim().toUpperCase())
-      .filter(Boolean),
-  );
-  return codes_presents.filter((c) => nommes.has(c.toUpperCase()));
+  const nom = String(affectation ?? '').trim();
+  if (!nom) return { cible: null, introuvable: false };
+  const cible = codes_presents.find((c) => c.toUpperCase() === nom.toUpperCase()) ?? null;
+  return { cible, introuvable: cible === null };
 }
 
 /**
  * R-SUB-3 - Agregation des subventions saisies, ventilees par produit.
- * Une subvention affectee a un couple de produits ('PLUS-PLAI') est repartie
- * entre CES produits, au prorata de leurs quotes-parts de surface utile
- * renormalisees - et non sur l'operation entiere.
+ * Une subvention affectee vise UNE tranche, qui prend tout. Sans affectation
+ * exploitable, elle profite a l'operation au prorata de surface utile.
  * @param {Subvention[]} subventions
  * @param {Record<string, number>} quotes_parts
  * @returns {{par_produit: Record<string, number>, gratuites_eur: number,
- *            non_gratuites_eur: number, total_eur: number}}
+ *            non_gratuites_eur: number, total_eur: number, affectations_introuvables: string[]}}
  */
 export function agregerSubventions(subventions, quotes_parts) {
   /** @type {Record<string, number>} */
@@ -65,21 +62,18 @@ export function agregerSubventions(subventions, quotes_parts) {
   let gratuites = 0;
   let nonGratuites = 0;
   const codes = Object.keys(quotes_parts);
+  /** Affectations nommees qui ne correspondent a aucune tranche du programme. */
+  const introuvables = [];
 
   for (const sub of subventions) {
     if (!sub.montant_eur) continue;
     if (sub.gratuite) gratuites += sub.montant_eur;
     else nonGratuites += sub.montant_eur;
 
-    const cibles = resoudreAffectation(sub.affectation, codes);
-    if (cibles.length) {
-      // Prorata SU RENORMALISE sur les seules tranches visees : une aide
-      // PLUS-PLAI se partage entre le PLUS et le PLAI, pas avec le reste.
-      const total = cibles.reduce((s, c) => s + (quotes_parts[c] ?? 0), 0);
-      for (const code of cibles) {
-        const part = total > 0 ? (quotes_parts[code] ?? 0) / total : 1 / cibles.length;
-        parProduit[code] = (parProduit[code] ?? 0) + sub.montant_eur * part;
-      }
+    const { cible, introuvable } = resoudreAffectation(sub.affectation, codes);
+    if (introuvable) introuvables.push(String(sub.affectation));
+    if (cible) {
+      parProduit[cible] = (parProduit[cible] ?? 0) + sub.montant_eur;
     } else {
       // Aucune affectation exploitable : la subvention profite a l'operation.
       for (const [code, qp] of Object.entries(quotes_parts)) {
@@ -95,6 +89,7 @@ export function agregerSubventions(subventions, quotes_parts) {
     gratuites_eur: arrondiEuro(gratuites),
     non_gratuites_eur: arrondiEuro(nonGratuites),
     total_eur: arrondiEuro(gratuites + nonGratuites),
+    affectations_introuvables: introuvables,
   };
 }
 

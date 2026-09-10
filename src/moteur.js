@@ -565,41 +565,33 @@ export function calculer(entrees, referentiels) {
     /** @type {Array<{libelle: string, montant_eur: number, affectation: string|null, par_tranche: Record<string, number>}>} */
     const lignesSub = [];
     const ventiler = (libelle, montant, affectation) => {
-      // R-SUB-3 - Une affectation peut nommer PLUSIEURS produits : « PLUS-PLAI »
-      // est le cas courant, une aide de l'Etat qui vise les deux tranches
-      // sociales d'une operation mixte. Elle se repartit alors sur ces
-      // tranches-la, au prorata de LEURS surfaces utiles renormalisees, et non
-      // sur l'operation entiere. Avant cette resolution, une affectation qui
-      // n'etait pas exactement un code de tranche etait silencieusement ignoree
-      // et la subvention arrosait tout le programme, tranche libre comprise :
-      // 90 000 EUR affectes « PLUS-PLAI » sur PLAI + PLUS + LIBRE partaient en
-      // trois parts egales, dont une finançait du logement libre.
-      const cibles = resoudreAffectation(affectation, codesFinances);
+      // R-SUB-3 - Une affectation nomme UNE tranche, et une seule. LEON connait
+      // un couple « PLUS-PLAI » parce que son moteur est duplique et qu'il tient
+      // une colonne combinee ; ici le PLUS et le PLAI sont deux tranches
+      // TOTALEMENT DISTINCTES, et une aide qui vise les deux se saisit en deux
+      // lignes. Un code composite reintroduirait la structure meme dont ce
+      // moteur s'est affranchi (lecon I-1).
+      //
+      // Ce qui passait en silence : une affectation nommee mais INTROUVABLE au
+      // programme etait ignoree sans un mot, et la subvention arrosait tout le
+      // programme, tranche libre comprise. La ventilation ne change pas - a qui
+      // d'autre la rattacher ? - mais elle se DIT desormais.
+      const { cible, introuvable } = resoudreAffectation(affectation, codesFinances);
       /** @type {Record<string, number>} */
       const parTranche = {};
-      if (cibles.length) {
-        const total = cibles.reduce((s, c) => s + (quotesParts[c] ?? 0), 0);
-        for (const c of codesFinances) {
-          if (!cibles.includes(c)) {
-            parTranche[c] = 0;
-          } else if (total > 0) {
-            parTranche[c] = ((quotesParts[c] ?? 0) / total) * montant;
-          } else {
-            // Des tranches nommees mais sans surface : a defaut de cle, parts egales.
-            parTranche[c] = montant / cibles.length;
-          }
-        }
-      } else {
-        for (const c of codesFinances) parTranche[c] = (quotesParts[c] ?? 0) * montant;
+      for (const c of codesFinances) {
+        parTranche[c] = cible ? (c === cible ? montant : 0) : (quotesParts[c] ?? 0) * montant;
       }
-      lignesSub.push({
-        libelle,
-        montant_eur: montant,
-        // L'affectation RESTITUEE est celle qui a servi : une seule cible garde
-        // son code, plusieurs se rejoignent sous la forme saisie.
-        affectation: cibles.length === 1 ? cibles[0] : cibles.length ? (affectation ?? null) : null,
-        par_tranche: parTranche,
-      });
+      lignesSub.push({ libelle, montant_eur: montant, affectation: cible, par_tranche: parTranche });
+
+      if (introuvable) {
+        alertes.push(
+          `Subvention « ${libelle} » affectee a « ${affectation} », qui n'est pas une tranche ` +
+            `du programme (${codesFinances.join(', ')}). Elle est ventilee sur toute l'operation ` +
+            'a defaut de destinataire. Le PLUS et le PLAI sont deux tranches distinctes : une ' +
+            'aide qui vise les deux se saisit en deux lignes.',
+        );
+      }
 
       // Une subvention qui atterrit sur une tranche non eligible aux aides
       // publiques - le logement libre - n'est pas corrigee d'office : le montant

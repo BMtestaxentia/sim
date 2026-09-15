@@ -475,6 +475,45 @@ function attrFormule(id, indices = {}) {
   return ` data-formule="${id}" data-indices="${att(JSON.stringify(indices))}"`;
 }
 
+/**
+ * Pose sur un element deja en place - cellule remplie par `textContent`,
+ * total statique de la page - les attributs de sa formule, ou les retire
+ * quand le chiffre n'en a pas.
+ * @param {Element|null} el
+ * @param {string|null} id
+ * @param {Record<string, any>} [indices]
+ */
+function marquerFormule(el, id, indices = {}) {
+  if (!el) return;
+  if (!id) {
+    el.removeAttribute('data-formule');
+    el.removeAttribute('data-indices');
+    return;
+  }
+  el.setAttribute('data-formule', id);
+  el.setAttribute('data-indices', JSON.stringify(indices));
+}
+
+/** Rang de chaque poste dans le classeur, par identifiant : les postes vides ne lui sont pas transmis. */
+function rangsDesPostes() {
+  /** @type {Map<string, number>} */
+  const rangs = new Map();
+  if (!dernierClasseur) return rangs;
+  for (const k of dernierClasseur.valeursDimension('poste')) {
+    const id = dernierClasseur.valeur('id_poste', { poste: k });
+    if (id) rangs.set(id, k);
+  }
+  return rangs;
+}
+
+/** Cle de chaque pret amorti dans le classeur, dans l'ordre de `r.amortissements`. */
+function clesDesPretsAmortis() {
+  if (!dernierClasseur) return [];
+  return dernierClasseur
+    .valeursDimension('pret')
+    .filter((cle) => dernierClasseur.valeur('montant_pret', { pret: cle }) > 0);
+}
+
 const valNum = (v) => (nul(v) ? '' : v);
 
 /**
@@ -2646,27 +2685,34 @@ function rendreValeurs(r) {
   const ventileParId = Object.fromEntries(
     (b.ventilation?.postes ?? []).filter((d) => d.id).map((d) => [d.id, d]),
   );
+  const rangs = rangsDesPostes();
   for (const tr of document.querySelectorAll('#table-postes tbody tr[data-poste]')) {
     const i = Number(/** @type {HTMLElement} */ (tr).dataset.poste);
     const idPoste = etat.postes_bilan[i]?.id;
     const d = detailParId[idPoste];
     const v = ventileParId[idPoste];
-    const set = (cle, v) => {
+    // Rang du poste dans le classeur : chaque cellule calculee ouvre sa formule.
+    const k = rangs.get(idPoste);
+    const set = (cle, v, id) => {
       const td = tr.querySelector(`[data-calc="${cle}"]`);
-      if (td) td.textContent = v;
+      if (!td) return;
+      td.textContent = v;
+      marquerFormule(td, k === undefined || !v ? null : id, { poste: k });
     };
     // La ventilation fait foi des qu'elle existe : elle seule additionne les
     // TVA reellement dues tranche par tranche. Le detail global n'applique
     // qu'un taux unique, et divergerait du total affiche en pied de table.
-    set('tva', v ? eur(v.tva_eur) : d ? eur(d.tva_eur) : '');
-    set('ttc', v ? eur(v.ttc_eur) : d ? eur(d.ttc_eur) : '');
+    set('tva', v ? eur(v.tva_eur) : d ? eur(d.tva_eur) : '', v ? 'tva_poste_ventile' : 'tva_saisie_poste_arrondie');
+    set('ttc', v ? eur(v.ttc_eur) : d ? eur(d.ttc_eur) : '', v ? 'ttc_poste_ventile' : 'ttc_saisie_poste_arrondi');
     // Total d'une ligne ventilee : il vient du moteur et se met a jour a chaque
     // frappe dans une cellule de tranche, sans rendu de structure.
-    set('total', v ? eur(v.ht_eur) : d ? eur(d.ht_eur) : '');
+    set('total', v ? eur(v.ht_eur) : d ? eur(d.ht_eur) : '', 'ht_poste_arrondi');
     // Apercu de ce que la cle SU donnerait sur une ligne encore globale.
     for (const td of tr.querySelectorAll('[data-apercu]')) {
-      const t = v?.par_tranche?.[/** @type {HTMLElement} */ (td).dataset.apercu];
+      const tranche = /** @type {HTMLElement} */ (td).dataset.apercu;
+      const t = v?.par_tranche?.[tranche];
       td.textContent = t ? eur(t.ht_eur) : '';
+      marquerFormule(td, t && k !== undefined ? 'ht_poste_tranche' : null, { poste: k, tranche });
     }
     // Une ligne cesse d'etre grisee des qu'elle porte un montant, sans attendre
     // un rendu de structure : sinon elle reste visuellement « non renseignee ».
@@ -2677,19 +2723,23 @@ function rendreValeurs(r) {
   for (const tr of document.querySelectorAll('#table-postes [data-chapitre-total]')) {
     const code = /** @type {HTMLElement} */ (tr).dataset.chapitreTotal;
     const c = b.chapitres[code];
-    const set = (cle, v) => {
+    const set = (cle, v, id) => {
       const td = tr.querySelector(`[data-total="${cle}"]`);
-      if (td) td.textContent = v;
+      if (!td) return;
+      td.textContent = v;
+      marquerFormule(td, c ? id : null, { chapitre: code });
     };
-    set('ht', c ? eur(c.ht_eur) : eur(0));
-    set('tva', c ? eur(c.tva_eur) : eur(0));
-    set('ttc', c ? eur(c.ttc_eur) : eur(0));
+    set('ht', c ? eur(c.ht_eur) : eur(0), 'ht_chapitre');
+    set('tva', c ? eur(c.tva_eur) : eur(0), 'tva_chapitre');
+    set('ttc', c ? eur(c.ttc_eur) : eur(0), 'ttc_chapitre');
     // Declinaison par tranche : la somme des cellules vaut le sous-total, le
     // moteur s'en charge (total impose a `arrondirEnConservantLaSomme`).
     for (const td of tr.querySelectorAll('[data-sous-total]')) {
       const e = /** @type {HTMLElement} */ (td);
       const t = c?.par_tranche?.[e.dataset.sousTotal];
       td.textContent = t ? eur(t[e.dataset.cle]) : '';
+      const id = e.dataset.cle === 'tva_eur' ? 'tva_chapitre_tranche' : 'ht_chapitre_tranche';
+      marquerFormule(td, t ? id : null, { chapitre: code, tranche: e.dataset.sousTotal });
     }
   }
   const renseignes = etat.postes_bilan.filter((p) => !nul(totalPoste(p))).length;
@@ -2924,9 +2974,15 @@ function perimetreFinancement(r) {
       montant: v.ttc_lasm_eur,
       ht: v.ht_eur,
       couleur: COULEURS[c] ?? COULEURS.frais_divers,
+      // Formules du chapitre, pour la legende : TTC apres LASM, et HT.
+      f: attrFormule('ttc_lasm_chapitre', { chapitre: c }),
+      fht: attrFormule('ht_chapitre', { chapitre: c }),
     }));
     if (r.bilan.modulation_ttc_eur) {
-      emplois.push({ libelle: 'Modulation', montant: r.bilan.modulation_ttc_eur, ht: null, couleur: COULEURS.modulation });
+      emplois.push({
+        libelle: 'Modulation', montant: r.bilan.modulation_ttc_eur, ht: null, couleur: COULEURS.modulation,
+        f: attrFormule('modulation_ttc'),
+      });
     }
     return {
       code: null,
@@ -3030,7 +3086,15 @@ function rendreFinancement(r) {
   // qu'ils bouchent ce qui reste. C'est aussi l'ordre dans lequel on les
   // decide, et le solde se lit alors au bout de la barre.
   const ressources = [];
-  if (p.subventions_eur) ressources.push({ libelle: 'Subventions', montant: p.subventions_eur, couleur: COULEURS.subventions });
+  // Les montants du CONSOLIDE sont des grandeurs du modele et ouvrent leur
+  // formule ; ceux d'une tranche sont des sommes faites ici, sans fiche.
+  const formuleConsolide = (/** @type {string} */ id, indices = {}) => (p.code ? '' : attrFormule(id, indices));
+  if (p.subventions_eur) {
+    ressources.push({
+      libelle: 'Subventions', montant: p.subventions_eur, couleur: COULEURS.subventions,
+      f: formuleConsolide('subventions_total'),
+    });
+  }
   // Les prets se lisent en DEUX postes et non un par ligne. Sept lignes de prets
   // pour deux subventions donnaient a la legende le detail d'un tableau
   // d'emprunts, alors qu'elle repond a une seule question : d'ou vient l'argent.
@@ -3059,6 +3123,7 @@ function rendreFinancement(r) {
       libelle: 'Fonds propres',
       montant: p.fonds_propres_eur,
       couleur: COULEURS.fonds_propres,
+      f: formuleConsolide('fonds_propres_total'),
     });
   }
 
@@ -3070,6 +3135,8 @@ function rendreFinancement(r) {
   rendreBarre($('#barre-ressources'), ressources, echelle);
   $('#total-emplois').textContent = eur(p.total_emplois);
   $('#total-ressources').textContent = eur(p.total_ressources);
+  marquerFormule($('#total-emplois'), p.code ? null : 'total_ttc_module');
+  marquerFormule($('#total-ressources'), p.code ? null : 'ressources_plan_arrondies');
   // Une legende PAR COTE, et le poids de chaque poste dans SON total : la part
   // d'un pret se lit dans les ressources, pas dans le prix de revient.
   //
@@ -3090,8 +3157,8 @@ function rendreFinancement(r) {
         .map(
           (s) => `<div class="legende__item"><span class="legende__puce" style="background:${s.couleur}"></span>
         <span class="legende__libelle">${att(s.libelle)}</span>
-        ${avecHT ? `<span class="legende__ht">${nul(s.ht) ? '-' : eur(s.ht)}</span>` : ''}
-        <span class="legende__montant">${eur(s.montant)}</span>
+        ${avecHT ? `<span class="legende__ht"${p.code ? '' : (s.fht ?? '')}>${nul(s.ht) ? '-' : eur(s.ht)}</span>` : ''}
+        <span class="legende__montant"${p.code ? '' : (s.f ?? '')}>${eur(s.montant)}</span>
         <span class="legende__part">${total ? pct(s.montant / total, 1) : '-'}</span></div>`,
         )
         .join('')
@@ -3103,14 +3170,15 @@ function rendreFinancement(r) {
   // Sous chaque total, ce que la barre ne peut pas montrer : le total HT et les
   // ratios d'un cote, l'equilibre de l'autre.
   $('#precision-emplois').innerHTML =
-    `${eur(p.ht_eur)} HT · ${eur(p.prix_revient_par_logement_eur)} / logement · ` +
-    `${eur(p.prix_revient_par_m2_shab_eur)} / m² SHAB`;
+    `<span${formuleConsolide('total_ht')}>${eur(p.ht_eur)}</span> HT · ` +
+    `<span${formuleConsolide('prix_revient_par_logement')}>${eur(p.prix_revient_par_logement_eur)}</span> / logement · ` +
+    `<span${formuleConsolide('prix_revient_par_m2_shab')}>${eur(p.prix_revient_par_m2_shab_eur)}</span> / m² SHAB`;
   // Le besoin en prets CDC est deja une tuile d'indicateur : le redire ici
   // n'apprendrait rien. Ce que les deux totaux ne disent pas, c'est s'ils sont
   // egaux - a sept chiffres, l'oeil ne le voit pas. C'est donc le controle
   // d'equilibre qui prend la place.
   $('#precision-ressources').innerHTML = p.ecart_eur
-    ? `<span class="precision--alerte">Écart de ${eur(p.ecart_eur)} avec les emplois</span>`
+    ? `<span class="precision--alerte">Écart de <span${formuleConsolide('ecart_plan')}>${eur(p.ecart_eur)}</span> avec les emplois</span>`
     : `<span class="discret">Plan équilibré</span>`;
 
   const corps = $('#table-prets').querySelector('tbody');
@@ -3119,21 +3187,27 @@ function rendreFinancement(r) {
     corps.innerHTML = '<tr><td colspan="9" class="vide">Aucun prêt mobilisé</td></tr>';
     pied.innerHTML = '';
   } else {
+    // Cle de chaque pret dans le classeur : ses cellules ouvrent ses formules.
+    const cles = clesDesPretsAmortis();
     corps.innerHTML = p.amortissements
       .map((a) => {
         const t = a.tableau;
         const total = t.reduce((s, l) => s + l.annuite_eur, 0);
+        const cle = cles[r.amortissements.indexOf(a)];
+        const f = (/** @type {string} */ id, indices = {}) =>
+          cle === undefined ? '' : attrFormule(id, { pret: cle, ...indices });
         return `<tr>
-          <td>${att(a.libelle)}</td><td class="num">${eur(a.montant_eur)}</td>
-          <td class="num">${nul(a.taux_saisi) ? '-' : pct(a.taux_saisi)}</td>
-          <td class="num">${pct(t[0].taux)}</td><td class="num">${t.length} ans</td>
-          <td class="num">${t[0].annee}</td><td class="num">${eur(t[0].annuite_eur)}</td>
-          <td class="num">${eur(t.at(-1).annuite_eur)}</td><td class="num">${eur(total)}</td>
+          <td>${att(a.libelle)}</td><td class="num"${f('montant_pret')}>${eur(a.montant_eur)}</td>
+          <td class="num"${f('taux_pret')}>${nul(a.taux_saisi) ? '-' : pct(a.taux_saisi)}</td>
+          <td class="num"${f('taux_annee', { annee_pret: t[0].annee })}>${pct(t[0].taux)}</td><td class="num">${t.length} ans</td>
+          <td class="num"${f('annee_premiere_echeance_pret')}>${t[0].annee}</td>
+          <td class="num"${f('annuite_pret', { annee_pret: t[0].annee })}>${eur(t[0].annuite_eur)}</td>
+          <td class="num"${f('annuite_pret', { annee_pret: t.at(-1).annee })}>${eur(t.at(-1).annuite_eur)}</td><td class="num">${eur(total)}</td>
         </tr>`;
       })
       .join('');
     pied.innerHTML = `<tr><td class="libelle">Total</td>
-      <td class="num">${eur(p.total_prets_eur)}</td><td colspan="7"></td></tr>`;
+      <td class="num"${formuleConsolide('total_prets')}>${eur(p.total_prets_eur)}</td><td colspan="7"></td></tr>`;
   }
 
   // Subventions ligne par ligne, avec leur poids dans le prix de revient du
@@ -3175,11 +3249,11 @@ function rendreFinancement(r) {
   // de l'OPERATION. Les repeter sous une tranche leur ferait dire ce qu'elles ne
   // disent pas.
   const tuiles = [
-    { l: 'Coût au m² SHAB', v: eur(p.prix_revient_par_m2_shab_eur), d: `${nb(p.shab_m2)} m² SHAB` },
-    { l: 'Surface utile', v: `${nb(p.su_m2)} m²`, d: `${nb(p.nb_logements)} logements` },
-    { l: 'Loyers annuels', v: eur(p.loyers_annuels_eur), d: `${nb(p.nb_logements)} logements loués` },
-    { l: 'Fonds propres', v: pct(p.taux_fonds_propres), d: eur(p.fonds_propres_eur) },
-    { l: 'Prêts CDC', v: pct(p.ratio_prets_cdc), d: eur(p.total_prets_cdc_eur) },
+    { l: 'Coût au m² SHAB', v: eur(p.prix_revient_par_m2_shab_eur), d: `${nb(p.shab_m2)} m² SHAB`, f: formuleConsolide('prix_revient_par_m2_shab') },
+    { l: 'Surface utile', v: `${nb(p.su_m2)} m²`, d: `${nb(p.nb_logements)} logements`, f: formuleConsolide('su_totale_tranches') },
+    { l: 'Loyers annuels', v: eur(p.loyers_annuels_eur), d: `${nb(p.nb_logements)} logements loués`, f: formuleConsolide('loyers_annuels_operation') },
+    { l: 'Fonds propres', v: pct(p.taux_fonds_propres), d: eur(p.fonds_propres_eur), f: formuleConsolide('taux_fonds_propres') },
+    { l: 'Prêts CDC', v: pct(p.ratio_prets_cdc), d: eur(p.total_prets_cdc_eur), f: formuleConsolide('ratio_prets_cdc') },
   ];
   if (!p.code) {
     tuiles.push(
@@ -3187,13 +3261,14 @@ function rendreFinancement(r) {
         l: 'Reconstitution FP',
         v: r.indicateurs.annee_reconstitution_fonds_propres ?? 'non atteinte',
         d: 'cumul d’autofinancement ≥ fonds propres',
+        f: attrFormule('annee_reconstitution_fonds_propres', { perimetre: 'operation' }),
       },
-      { l: 'Début TFPB', v: r.indicateurs.annee_debut_tfpb, d: 'fin d’exonération' },
+      { l: 'Début TFPB', v: r.indicateurs.annee_debut_tfpb, d: 'fin d’exonération', f: attrFormule('annee_debut_tfpb') },
     );
   }
   $('#indicateurs').innerHTML = tuiles
     .map((i) => `<div class="indicateur"><div class="indicateur__libelle">${i.l}</div>
-      <div class="indicateur__valeur">${i.v}</div><div class="indicateur__detail">${i.d}</div></div>`)
+      <div class="indicateur__valeur"${i.f ?? ''}>${i.v}</div><div class="indicateur__detail">${i.d}</div></div>`)
     .join('');
 
   rendreControles(r);
@@ -3704,23 +3779,25 @@ function rendreTresorerie(r) {
   }
 
   const i = t.indicateurs;
-  const tuile = (l, v, d) =>
+  const tuile = (l, v, d, f = '') =>
     `<div class="indicateur"><div class="indicateur__libelle">${l}</div>` +
-    `<div class="indicateur__valeur">${v}</div><div class="indicateur__detail">${d}</div></div>`;
+    `<div class="indicateur__valeur"${f}>${v}</div><div class="indicateur__detail">${d}</div></div>`;
   bloc.innerHTML = [
-    tuile('Durée', `${t.lignes.length} mois`, `de ${t.lignes[0].date.slice(0, 7)} à ${t.lignes.at(-1).date.slice(0, 7)}`),
-    tuile('Échéance mensuelle', eur(i.echeance_nominale_eur), 'nominale, avant indexation'),
+    tuile('Durée', `${t.lignes.length} mois`, `de ${t.lignes[0].date.slice(0, 7)} à ${t.lignes.at(-1).date.slice(0, 7)}`,
+      attrFormule('nb_mois_chantier')),
+    tuile('Échéance mensuelle', eur(i.echeance_nominale_eur), 'nominale, avant indexation', attrFormule('echeance_nominale')),
     tuile(
       'Dépensé',
       eur(i.total_depenses_eur),
       i.surcout_indexation_eur
         ? `dont ${eur(i.surcout_indexation_eur)} d’indexation à ${pct(i.taux_indexation, 2)}`
         : 'sans indexation',
+      attrFormule('total_depenses_final'),
     ),
     tuile('Mobilisé à l’OS', eur(i.total_subventions_eur + i.total_fonds_propres_eur),
       `${eur(i.total_subventions_eur)} de subventions · ${eur(i.total_fonds_propres_eur)} de fonds propres`),
-    tuile('Besoin maximal', eur(i.besoin_maximal_eur), `atteint au mois ${i.mois_pic}`),
-    tuile('Tiré sur les prêts', eur(i.total_tirages_eur), 'au fil de l’eau, jamais d’avance'),
+    tuile('Besoin maximal', eur(i.besoin_maximal_eur), `atteint au mois ${i.mois_pic}`, attrFormule('besoin_maximal')),
+    tuile('Tiré sur les prêts', eur(i.total_tirages_eur), 'au fil de l’eau, jamais d’avance', attrFormule('total_tirages')),
   ].join('');
 
   $('#aide-tresorerie').textContent =
@@ -3738,30 +3815,34 @@ function rendreTresorerie(r) {
 
   $('#table-tresorerie').querySelector('tbody').innerHTML = t.lignes
     .map(
-      (l) => `<tr class="${l.mois === i.mois_pic ? 'ligne--rupture' : ''}">
+      (l) => {
+        // Chaque cellule ouvre sa formule, au mois de la ligne.
+        const m = (/** @type {string} */ id) => attrFormule(id, { mois_chantier: l.mois });
+        return `<tr class="${l.mois === i.mois_pic ? 'ligne--rupture' : ''}">
       <td>M+${l.mois}<span class="treso__date">${l.date.slice(0, 7)}</span></td>
-      <td class="num">${eur(l.nominal_eur)}</td>
+      <td class="num"${m('nominal_mois')}>${eur(l.nominal_eur)}</td>
       <!-- Quatre decimales : a deux, le coefficient du premier mois s'affichait
            « 1,00 » et celui du deuxieme aussi, alors que c'est justement leur
            progression qui explique le surcout. -->
-      <td class="num">${l.coefficient === 1 ? '-' : l.coefficient.toFixed(4).replace('.', ',')}</td>
-      <td class="num">${eur(l.depenses_eur)}</td>
-      <td class="num">${eur(l.cumul_depenses_eur)}</td>
-      <td class="num">${l.subventions_eur ? eur(l.subventions_eur) : '-'}</td>
-      <td class="num">${l.fonds_propres_eur ? eur(l.fonds_propres_eur) : '-'}</td>
-      <td class="num">${l.tirage_eur ? eur(l.tirage_eur) : '-'}</td>
-      <td class="num">${eur(l.cumul_tirages_eur)}</td>
-      <td class="num">${eur(l.besoin_eur)}</td>
-    </tr>`,
+      <td class="num"${m('coefficient_mois')}>${l.coefficient === 1 ? '-' : l.coefficient.toFixed(4).replace('.', ',')}</td>
+      <td class="num"${m('depense_mois')}>${eur(l.depenses_eur)}</td>
+      <td class="num"${m('cumul_depenses_chantier')}>${eur(l.cumul_depenses_eur)}</td>
+      <td class="num"${m('encaissement_subventions')}>${l.subventions_eur ? eur(l.subventions_eur) : '-'}</td>
+      <td class="num"${m('encaissement_fonds_propres')}>${l.fonds_propres_eur ? eur(l.fonds_propres_eur) : '-'}</td>
+      <td class="num"${m('tirage_mois')}>${l.tirage_eur ? eur(l.tirage_eur) : '-'}</td>
+      <td class="num"${m('cumul_tirages')}>${eur(l.cumul_tirages_eur)}</td>
+      <td class="num"${m('besoin_mois')}>${eur(l.besoin_eur)}</td>
+    </tr>`;
+      },
     )
     .join('');
   $('#table-tresorerie').querySelector('tfoot').innerHTML = `<tr>
     <td class="libelle">Total</td>
     <td></td><td></td>
-    <td class="num">${eur(i.total_depenses_eur)}</td><td></td>
-    <td class="num">${eur(i.total_subventions_eur)}</td>
-    <td class="num">${eur(i.total_fonds_propres_eur)}</td>
-    <td class="num">${eur(i.total_tirages_eur)}</td><td></td><td></td>
+    <td class="num"${attrFormule('total_depenses_final')}>${eur(i.total_depenses_eur)}</td><td></td>
+    <td class="num"${attrFormule('subventions_chantier')}>${eur(i.total_subventions_eur)}</td>
+    <td class="num"${attrFormule('fonds_propres_chantier')}>${eur(i.total_fonds_propres_eur)}</td>
+    <td class="num"${attrFormule('total_tirages')}>${eur(i.total_tirages_eur)}</td><td></td><td></td>
   </tr>`;
 }
 

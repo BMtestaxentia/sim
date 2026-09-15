@@ -24,6 +24,7 @@ import { AMORTISSEMENT } from './domaines/amortissement.js';
 import { FISCALITE } from './domaines/fiscalite.js';
 import { TRESORERIE } from './domaines/tresorerie.js';
 import { EXPLOITATION } from './domaines/exploitation.js';
+import { SYNTHESE } from './domaines/synthese.js';
 
 export const MODELE = creerModele([
   OPERATION,
@@ -38,6 +39,7 @@ export const MODELE = creerModele([
   FISCALITE,
   TRESORERIE,
   EXPLOITATION,
+  SYNTHESE,
 ]);
 
 /**

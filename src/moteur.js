@@ -20,7 +20,7 @@ import { restituerCalendrier } from './calendrier.js';
 import { nouveauClasseur } from './formules/modele.js';
 import { restituerTresorerie } from './tresorerie.js';
 import { fusionner, surchargerTrajectoires, ecartsParametrage } from './parametrage.js';
-import { restituerPrixDeRevient, valeurComptableTerrain, baseAmortissementComptable } from './bilan.js';
+import { restituerPrixDeRevient } from './bilan.js';
 import { restituerSubventions, restituerSurchargeFonciere } from './subventions.js';
 import { restituerEquilibre } from './financement.js';
 import { restituerTableau } from './amortissement.js';
@@ -142,7 +142,6 @@ export function calculer(entrees, referentiels) {
   const revaloriser = lire('revaloriser_loyers');
   if (anneesARattraper > 0 && loyers.length) {
     const ecartPct = ((cumulIRL - 1) * 100).toFixed(1);
-    const total = loyers.reduce((s, l) => s + l.loyer_annuel_eur, 0);
     alertes.push(
       revaloriser
         ? `Loyers plafonds revalorises du millesime ${millesimeBareme} a la mise en location ` +
@@ -151,14 +150,12 @@ export function calculer(entrees, referentiels) {
         : `Bareme de loyers ${millesimeBareme} applique a une mise en location ${anneeMEL}, ` +
             `soit ${anneesARattraper} an${anneesARattraper > 1 ? 's' : ''} de revalorisation non ` +
             `pris en compte. Aux trajectoires du profil, les plafonds vaudraient ${ecartPct} % de ` +
-            `plus, soit ${arrondiEuro(total * (cumulIRL - 1))} EUR de loyers annuels. Activer la ` +
+            `plus, soit ${lire('ecart_loyers_millesime')} EUR de loyers annuels. Activer la ` +
             "revalorisation a l'ecran Parametres, saisir le bareme du millesime attendu, ou " +
             "assumer l'ecart.",
     );
   }
 
-  const loyersLogementsAnnuels = lire('loyers_logements_annuels');
-  const loyersAnnexesAnnuels = lire('loyers_annexes_annuels');
 
   // La saisie lot par lot est le mode normal : plusieurs lignes d'un meme
   // produit forment une tranche, sans avertissement. On ne signale que le cas
@@ -530,16 +527,15 @@ export function calculer(entrees, referentiels) {
   // Un pret dont les echeances depassent l'horizon de simulation voit ses
   // annuites disparaitre des totaux d'exploitation SANS AUCUN SIGNAL : le compte
   // boucle sur la duree de simulation. On le signale explicitement.
-  const anneeFinSimulation = anneeMEL + (dates.duree_simulation_ans ?? 50) - 1;
-  for (const a of amortissements) {
-    const derniere = a.tableau.at(-1)?.annee;
+  const anneeFinSimulation = lire('annee_fin_simulation');
+  for (const p of prets) {
+    if (!(p.montant_eur > 0)) continue;
+    const P = { pret: p.cle };
+    const derniere = lire('derniere_annee_pret', P);
     if (derniere > anneeFinSimulation) {
-      const horsHorizon = a.tableau
-        .filter((l) => l.annee > anneeFinSimulation)
-        .reduce((s, l) => s + l.annuite_eur, 0);
       alertes.push(
-        `${a.libelle} court jusqu'en ${derniere}, au-dela de l'horizon de simulation ` +
-          `(${anneeFinSimulation}) : ${arrondiEuro(horsHorizon)} EUR d'annuites ne sont pas ` +
+        `${p.libelle ?? p.code} court jusqu'en ${derniere}, au-dela de l'horizon de simulation ` +
+          `(${anneeFinSimulation}) : ${arrondiEuro(lire('annuites_hors_horizon', P))} EUR d'annuites ne sont pas ` +
           "comptes au compte d'exploitation.",
       );
     }
@@ -613,7 +609,7 @@ export function calculer(entrees, referentiels) {
   // calculees ici, sinon l'interface les redecouvrirait par difference, ce qui
   // serait du calcul metier dans l'ecran.
   const evenements = [];
-  const anneeDebutTFPB = exp.annee_debut_tfpb ?? tfpb.annee_debut_tfpb;
+  const anneeDebutTFPB = lire('annee_debut_tfpb_exploitation');
   if (anneeDebutTFPB > anneeMEL && anneeDebutTFPB <= anneeFinSimulation) {
     evenements.push({
       annee: anneeDebutTFPB,
@@ -694,21 +690,14 @@ export function calculer(entrees, referentiels) {
   // l'appelant fournit le montant de terrain et la quotite non amortissable :
   // la quotite n'a pas de valeur par defaut tant que Q-26 n'est pas tranchee
   // (25 % dans les annexes contre 13 % en zone B1 au referentiel).
-  let amortissementComptable = null;
-  if (entrees.amortissement_comptable?.montant_terrain_eur !== undefined) {
-    const valeurTerrain = valeurComptableTerrain({
-      montant_terrain_eur: entrees.amortissement_comptable.montant_terrain_eur,
-      quotite: entrees.amortissement_comptable.quotite_terrain,
-    });
-    amortissementComptable = {
-      valeur_comptable_terrain_eur: valeurTerrain,
-      quotite_terrain: entrees.amortissement_comptable.quotite_terrain,
-      ...baseAmortissementComptable({
-        prix_revient_ttc_eur: bilan.total_ttc_module_eur,
-        valeur_comptable_terrain_eur: valeurTerrain,
-      }),
-    };
-  }
+  const amortissementComptable = lire('amortissement_comptable_demande')
+    ? {
+        valeur_comptable_terrain_eur: lire('valeur_comptable_terrain'),
+        quotite_terrain: lire('quotite_terrain_comptable_saisie'),
+        base_eur: lire('base_amortissement_comptable'),
+        part_du_prix_revient: lire('part_amortissable'),
+      }
+    : null;
 
   // --- 9. Indicateurs de synthese ---
   const indicateurs = {
@@ -716,22 +705,16 @@ export function calculer(entrees, referentiels) {
     shab_m2: shabTotal,
     su_m2: lire('su_totale_tranches'),
     prix_revient_ttc_eur: bilan.total_ttc_module_eur,
-    prix_revient_par_logement_eur:
-      nbLogements > 0 ? arrondiEuro(bilan.total_ttc_module_eur / nbLogements) : null,
-    prix_revient_par_m2_shab_eur:
-      shabTotal > 0 ? arrondiEuro(bilan.total_ttc_module_eur / shabTotal) : null,
-    loyers_annuels_eur: arrondiEuro(loyersLogementsAnnuels + loyersAnnexesAnnuels),
+    prix_revient_par_logement_eur: lire('prix_revient_par_logement'),
+    prix_revient_par_m2_shab_eur: lire('prix_revient_par_m2_shab'),
+    loyers_annuels_eur: lire('loyers_annuels_operation'),
     surfaces_annexes_m2: lire('annexes_totales'),
     subventions_eur: subventionsTotal,
     fonds_propres_eur: fondsPropres,
     ressources_eur: equilibre.ressources_eur,
     // RMO : rendement des loyers de l'annee 1 sur le prix de revient TTC.
-    rmo:
-      bilan.total_ttc_module_eur > 0
-        ? (loyersLogementsAnnuels + loyersAnnexesAnnuels) / bilan.total_ttc_module_eur
-        : null,
-    taux_fonds_propres:
-      bilan.total_ttc_module_eur > 0 ? fondsPropres / bilan.total_ttc_module_eur : null,
+    rmo: lire('rmo'),
+    taux_fonds_propres: lire('taux_fonds_propres'),
     annee_reconstitution_fonds_propres: exploitation.indicateurs.annee_reconstitution_fonds_propres,
     annee_debut_tfpb: tfpb.annee_debut_tfpb,
     amortissement_comptable: amortissementComptable,

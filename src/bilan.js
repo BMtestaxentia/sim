@@ -345,10 +345,9 @@ export function restituerPrixDeRevient(c) {
  * @returns {number}
  */
 export function valeurComptableTerrain({ montant_terrain_eur, quotite }) {
-  if (!Number.isFinite(quotite)) {
-    throw new Error('Quotite de terrain requise : elle n a pas de valeur par defaut (Q-26)');
-  }
-  return arrondiEuro(montant_terrain_eur * quotite);
+  return nouveauClasseur({
+    entrees: { amortissement_comptable: { montant_terrain_eur, quotite_terrain: quotite } },
+  }).valeur('valeur_comptable_terrain');
 }
 
 /**
@@ -363,10 +362,12 @@ export function valeurComptableTerrain({ montant_terrain_eur, quotite }) {
  * @returns {{base_eur: number, part_du_prix_revient: number|null}}
  */
 export function baseAmortissementComptable({ prix_revient_ttc_eur, valeur_comptable_terrain_eur }) {
-  const base = prix_revient_ttc_eur - valeur_comptable_terrain_eur;
+  const c = nouveauClasseur({})
+    .fixer('total_ttc_module', {}, prix_revient_ttc_eur)
+    .fixer('valeur_comptable_terrain', {}, valeur_comptable_terrain_eur);
   return {
-    base_eur: arrondiEuro(base),
-    part_du_prix_revient: prix_revient_ttc_eur > 0 ? base / prix_revient_ttc_eur : null,
+    base_eur: c.valeur('base_amortissement_comptable'),
+    part_du_prix_revient: c.valeur('part_amortissable'),
   };
 }
 

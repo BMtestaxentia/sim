@@ -22,7 +22,7 @@ import { tresorerieChantier } from './tresorerie.js';
 import { pretsDefautResolus, produit, marge, financeParCDC } from './produits.js';
 import { fusionner, surchargerTrajectoires, ecartsParametrage } from './parametrage.js';
 import { restituerPrixDeRevient, valeurComptableTerrain, baseAmortissementComptable } from './bilan.js';
-import { agregerSubventions, surchargeFonciere } from './subventions.js';
+import { restituerSubventions, restituerSurchargeFonciere } from './subventions.js';
 import {
   soldeAFinancer,
   foncierFinancable,
@@ -214,7 +214,7 @@ export function calculer(entrees, referentiels) {
   const bilan = restituerPrixDeRevient(classeur);
 
   // --- 4. Subventions (R-SUB) ---
-  const subventions = agregerSubventions(entrees.subventions ?? [], quotesParts);
+  const subventions = restituerSubventions(classeur);
   // R-SUB-3 - Une subvention sans tranche n'existe pas au plan : elle ne finance
   // rien et ne compte dans aucun total. Elle n'est pas effacee pour autant -
   // c'est une somme saisie - mais elle se DIT, avec son montant et sa raison.
@@ -229,19 +229,10 @@ export function calculer(entrees, referentiels) {
     );
   }
   // R-SUB-2 : la zone et le type d'operation viennent de l'identite ; ils
-  // suffisent a lire la valeur de base au bareme, que la saisie n'a plus a
-  // retaper. Une valeur de base saisie continue de primer.
-  const ssf = entrees.surcharge_fonciere
-    ? surchargeFonciere(
-        {
-          zone_123: identite.zone_123,
-          type: /acq/i.test(String(identite.type_operation ?? '')) ? 'acq_amelioration' : 'neuf',
-          ...entrees.surcharge_fonciere,
-        },
-        baremes,
-      )
-    : null;
-  const subventionsTotal = arrondiEuro(subventions.total_eur + (ssf?.subvention_eur ?? 0));
+  // suffisent a lire la valeur de base au bareme. Une valeur de base saisie
+  // continue de primer.
+  const ssf = restituerSurchargeFonciere(classeur);
+  const subventionsTotal = lire('subventions_total');
 
   // --- 5. Financement (R-FIN) ---
   // Les fonds propres se saisissent par tranche (onglets Tranches de l'UI). Le

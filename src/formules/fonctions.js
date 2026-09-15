@@ -311,6 +311,38 @@ export const FONCTIONS = {
     arite: [2, 2],
     calc: (x, motif) => String(x ?? '').toLowerCase().includes(String(motif).toLowerCase()),
   },
+  SUPPRESPACE: {
+    libelle: 'Sans espaces autour',
+    aide: 'Le texte sans ses espaces de début et de fin ; une valeur absente devient un texte vide.',
+    arite: [1, 1],
+    calc: (x) => String(x ?? '').trim(),
+  },
+  'TEXTE.JOINDRE': {
+    libelle: 'Texte assemblé',
+    aide: 'Les morceaux mis bout à bout en un seul texte.',
+    arite: [2, 8],
+    calc: (...morceaux) => morceaux.map(String).join(''),
+  },
+  PARTIE: {
+    libelle: 'Partie du texte',
+    aide: 'Le morceau du texte au rang indiqué, une fois coupé au séparateur (le premier au rang 0).',
+    arite: [3, 3],
+    calc: (x, separateur, rang) => String(x).split(String(separateur))[rang],
+  },
+
+  // --- Tables ------------------------------------------------------------------
+  CHAMP: {
+    libelle: 'Valeur de la table',
+    aide: 'La valeur d’une table de paramètres pour la clé indiquée.',
+    arite: [2, 2],
+    calc: (objet, cle) => (objet === undefined || objet === null ? undefined : objet[cle]),
+  },
+  POSITION: {
+    libelle: 'Rang dans la liste',
+    aide: 'Le rang de la valeur dans la liste, le premier étant au rang 0 ; -1 si elle n’y figure pas.',
+    arite: [2, 2],
+    calc: (l, x) => (Array.isArray(l) ? l.indexOf(x) : -1),
+  },
 
   // --- Listes ----------------------------------------------------------------
   SUITE: {

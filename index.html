@@ -4698,6 +4698,38 @@ const FONCTIONS = {
     arite: [2, 2],
     calc: (x, motif) => String(x ?? '').toLowerCase().includes(String(motif).toLowerCase()),
   },
+  SUPPRESPACE: {
+    libelle: 'Sans espaces autour',
+    aide: 'Le texte sans ses espaces de début et de fin ; une valeur absente devient un texte vide.',
+    arite: [1, 1],
+    calc: (x) => String(x ?? '').trim(),
+  },
+  'TEXTE.JOINDRE': {
+    libelle: 'Texte assemblé',
+    aide: 'Les morceaux mis bout à bout en un seul texte.',
+    arite: [2, 8],
+    calc: (...morceaux) => morceaux.map(String).join(''),
+  },
+  PARTIE: {
+    libelle: 'Partie du texte',
+    aide: 'Le morceau du texte au rang indiqué, une fois coupé au séparateur (le premier au rang 0).',
+    arite: [3, 3],
+    calc: (x, separateur, rang) => String(x).split(String(separateur))[rang],
+  },
+
+  // --- Tables ------------------------------------------------------------------
+  CHAMP: {
+    libelle: 'Valeur de la table',
+    aide: 'La valeur d’une table de paramètres pour la clé indiquée.',
+    arite: [2, 2],
+    calc: (objet, cle) => (objet === undefined || objet === null ? undefined : objet[cle]),
+  },
+  POSITION: {
+    libelle: 'Rang dans la liste',
+    aide: 'Le rang de la valeur dans la liste, le premier étant au rang 0 ; -1 si elle n’y figure pas.',
+    arite: [2, 2],
+    calc: (l, x) => (Array.isArray(l) ? l.indexOf(x) : -1),
+  },
 
   // --- Listes ----------------------------------------------------------------
   SUITE: {
@@ -7976,6 +8008,402 @@ const PRIX_REVIENT = {
   },
 };
 
+/* ===== src/formules/domaines/subventions.js ===== */
+// @ts-check
+/**
+ * DOMAINE « SUBVENTIONS » - R-SUB : rattachement de chaque subvention a sa
+ * tranche, totaux, et subvention de surcharge fonciere.
+ *
+ * Une subvention est rattachee a un FINANCEMENT, comme un pret ou des fonds
+ * propres, ou elle n'existe pas au plan (arbitrage metier du 10/09/2026). Trois
+ * cas : la tranche nommee figure au programme et la porte ; aucune n'est nommee
+ * mais le programme n'en compte qu'une, et c'est elle ; sinon la subvention
+ * reste HORS PLAN - elle ne finance rien et ne compte dans aucun total.
+ *
+ * Sources : `calculs!B254:B264` (SLA), `calculs!D274:B292` (surcharge
+ * fonciere), referentiel `ssf` et `valeurs_de_base`.
+ */
+
+/** @type {import('../classeur.js').Domaine} */
+const SUBVENTIONS = {
+  domaine: 'subventions',
+  titre: 'Subventions',
+  dimensions: {
+    subvention: {
+      libelle: 'Subvention',
+      valeurs: 'INDICES(subventions_saisies)',
+      etiquette: 'libelle_subvention',
+    },
+  },
+  grandeurs: {
+    // --- Saisie ---------------------------------------------------------------
+    subventions_saisies: {
+      libelle: 'Subventions saisies',
+      unite: 'liste',
+      saisie: 'subventions',
+      ecran: 'Plan de financement',
+    },
+    libelle_subvention: {
+      libelle: 'Libellé de la subvention',
+      unite: 'texte',
+      sur: ['subvention'],
+      saisie: 'subventions[subvention].libelle',
+      ecran: 'Plan de financement',
+    },
+    montant_subvention_saisi: {
+      libelle: 'Montant saisi',
+      unite: 'eur',
+      sur: ['subvention'],
+      saisie: 'subventions[subvention].montant_eur',
+      ecran: 'Plan de financement',
+    },
+    gratuite_subvention: {
+      libelle: 'Subvention gratuite',
+      unite: 'booleen',
+      sur: ['subvention'],
+      saisie: 'subventions[subvention].gratuite',
+      ecran: 'Plan de financement',
+    },
+    affectation_subvention: {
+      libelle: 'Tranche indiquée',
+      unite: 'texte',
+      sur: ['subvention'],
+      saisie: 'subventions[subvention].affectation',
+      ecran: 'Plan de financement',
+    },
+
+    // --- R-SUB-3 : rattachement -------------------------------------------------
+    montant_subvention: {
+      libelle: 'Montant de la subvention',
+      unite: 'eur',
+      sur: ['subvention'],
+      formule: 'NOMBRE(montant_subvention_saisi)',
+    },
+    subvention_retenue: {
+      libelle: 'Subvention à montant non nul',
+      unite: 'booleen',
+      sur: ['subvention'],
+      formule: 'montant_subvention <> 0',
+    },
+    affectation_nettoyee: {
+      libelle: 'Tranche indiquée, sans espaces',
+      unite: 'texte',
+      sur: ['subvention'],
+      formule: 'SUPPRESPACE(affectation_subvention)',
+    },
+    tranche_designee: {
+      libelle: 'Tranche désignée',
+      unite: 'texte',
+      regle: 'R-SUB-3',
+      sur: ['subvention'],
+      formule:
+        "SI(affectation_nettoyee = ''; VIDE; " +
+        'PREMIER(t POUR t DANS tranches_ordre_saisie QUAND MAJUSCULE(t) = MAJUSCULE(affectation_nettoyee)))',
+      note: 'Une affectation nomme UNE tranche du programme, sans tenir compte de la casse. Le PLUS et le PLAI sont deux tranches distinctes.',
+    },
+    affectation_introuvable: {
+      libelle: 'Tranche indiquée absente du programme',
+      unite: 'booleen',
+      regle: 'R-SUB-3',
+      sur: ['subvention'],
+      formule: "ET(affectation_nettoyee <> ''; tranche_designee = VIDE)",
+    },
+    tranche_subvention: {
+      libelle: 'Tranche de la subvention',
+      unite: 'texte',
+      regle: 'R-SUB-3',
+      sur: ['subvention'],
+      formule:
+        'DEFAUT(tranche_designee; SI(ET(NON(affectation_introuvable); LONGUEUR(tranches_ordre_saisie) = 1); ' +
+        'ELEMENT(tranches_ordre_saisie; 0); VIDE))',
+      note: 'Sans tranche indiquée, la tranche unique du programme ; sur un programme mixte, aucune.',
+    },
+    subvention_rattachee: {
+      libelle: 'Subvention au plan',
+      unite: 'booleen',
+      regle: 'R-SUB-3',
+      sur: ['subvention'],
+      formule: 'ET(subvention_retenue; RENSEIGNE(tranche_subvention))',
+    },
+    subvention_hors_plan: {
+      libelle: 'Subvention hors plan',
+      unite: 'booleen',
+      regle: 'R-SUB-3',
+      sur: ['subvention'],
+      formule: 'ET(subvention_retenue; NON(RENSEIGNE(tranche_subvention)))',
+    },
+
+    // --- Totaux -----------------------------------------------------------------
+    subventions_gratuites_exactes: {
+      libelle: 'Subventions gratuites, non arrondies',
+      unite: 'eur',
+      formule: 'SOMME(montant_subvention POUR subvention QUAND ET(subvention_rattachee; gratuite_subvention))',
+    },
+    subventions_non_gratuites_exactes: {
+      libelle: 'Subventions non gratuites, non arrondies',
+      unite: 'eur',
+      formule:
+        'SOMME(montant_subvention POUR subvention QUAND ET(subvention_rattachee; NON(gratuite_subvention)))',
+    },
+    subventions_gratuites: {
+      libelle: 'Subventions gratuites',
+      unite: 'eur',
+      formule: 'ARRONDI.EURO(subventions_gratuites_exactes)',
+    },
+    subventions_non_gratuites: {
+      libelle: 'Subventions non gratuites',
+      unite: 'eur',
+      formule: 'ARRONDI.EURO(subventions_non_gratuites_exactes)',
+    },
+    subventions_saisies_total: {
+      libelle: 'Subventions au plan',
+      unite: 'eur',
+      formule: 'ARRONDI.EURO(subventions_gratuites_exactes + subventions_non_gratuites_exactes)',
+    },
+    subventions_tranche: {
+      libelle: 'Subventions rattachées à la tranche',
+      unite: 'eur',
+      regle: 'R-SUB-3',
+      sur: ['tranche'],
+      formule:
+        'ARRONDI.EURO(SOMME(montant_subvention POUR subvention QUAND ET(subvention_rattachee; tranche_subvention = tranche)))',
+    },
+
+    // --- R-SUB-2 : surcharge fonciere -----------------------------------------
+    ssf_saisie: {
+      libelle: 'Surcharge foncière saisie',
+      unite: 'liste',
+      saisie: 'surcharge_fonciere',
+      ecran: 'Plan de financement',
+    },
+    ssf_active: {
+      libelle: 'Surcharge foncière demandée',
+      unite: 'booleen',
+      regle: 'R-SUB-2',
+      formule: 'SI(ssf_saisie; VRAI; FAUX)',
+    },
+    ssf_zone_saisie: {
+      libelle: 'Zone 1/2/3 saisie pour la surcharge foncière',
+      unite: 'texte',
+      saisie: 'surcharge_fonciere.zone_123',
+      ecran: 'Plan de financement',
+    },
+    ssf_type_saisi: {
+      libelle: 'Type d’opération saisi pour la surcharge foncière',
+      unite: 'texte',
+      saisie: 'surcharge_fonciere.type',
+      ecran: 'Plan de financement',
+    },
+    ssf_habitat_saisi: {
+      libelle: 'Forme d’habitat saisie',
+      unite: 'texte',
+      saisie: 'surcharge_fonciere.habitat',
+      ecran: 'Plan de financement',
+    },
+    ssf_eligible_saisi: {
+      libelle: 'Éligibilité saisie',
+      unite: 'booleen',
+      saisie: 'surcharge_fonciere.eligible',
+      ecran: 'Plan de financement',
+    },
+    ssf_valeur_fonciere: {
+      libelle: 'Valeur foncière réelle',
+      unite: 'eur',
+      saisie: 'surcharge_fonciere.valeur_fonciere_eur',
+      ecran: 'Plan de financement',
+    },
+    ssf_valeur_de_base_saisie: {
+      libelle: 'Valeur de base saisie',
+      unite: 'eur_m2',
+      saisie: 'surcharge_fonciere.valeur_de_base_eur_m2',
+      ecran: 'Plan de financement',
+    },
+    ssf_su: {
+      libelle: 'Surface utile de la surcharge foncière',
+      unite: 'm2',
+      saisie: 'surcharge_fonciere.su_ssf_m2',
+      ecran: 'Plan de financement',
+    },
+    ssf_participations_saisies: {
+      libelle: 'Participations des collectivités saisies',
+      unite: 'eur',
+      saisie: 'surcharge_fonciere.participations_collectivites_eur',
+      ecran: 'Plan de financement',
+    },
+    ssf_zone_123: {
+      libelle: 'Zone 1/2/3 de la surcharge foncière',
+      unite: 'texte',
+      formule: 'SI(DEFINI(ssf_zone_saisie); ssf_zone_saisie; zone_123)',
+    },
+    ssf_type: {
+      libelle: 'Type d’opération de la surcharge foncière',
+      unite: 'texte',
+      regle: 'R-SUB-2',
+      formule:
+        "SI(DEFINI(ssf_type_saisi); ssf_type_saisi; SI(TEXTE.CONTIENT(type_operation; 'acq'); 'acq_amelioration'; 'neuf'))",
+      note: 'Neuf ou acquisition-amélioration, déduit du type d’opération : les taux diffèrent.',
+    },
+    ssf_habitat: {
+      libelle: 'Forme d’habitat',
+      unite: 'texte',
+      formule: "SI.ABSENT(ssf_habitat_saisi; 'collectif')",
+    },
+    ssf_eligible_demande: {
+      libelle: 'Opération déclarée éligible',
+      unite: 'booleen',
+      formule: 'SI.ABSENT(ssf_eligible_saisi; VRAI)',
+    },
+    ssf_participations: {
+      libelle: 'Participations des collectivités',
+      unite: 'eur',
+      formule: 'SI.ABSENT(ssf_participations_saisies; 0)',
+    },
+    table_valeurs_de_base: {
+      libelle: 'Barème des valeurs de base',
+      unite: 'liste',
+      regle: 'R-SUB-2',
+      parametre: 'valeurs_de_base',
+      ecran: 'Paramètres > Foncier et fiscalité',
+    },
+    vb_colonne: {
+      libelle: 'Colonne du barème des valeurs de base',
+      unite: 'liste',
+      formule:
+        "CHAMP(CHAMP(table_valeurs_de_base; SI(ssf_type = 'neuf'; 'neuf'; 'acquisition')); ssf_habitat)",
+    },
+    vb_rang_zone: {
+      libelle: 'Rang de la zone dans le barème',
+      unite: 'nombre',
+      formule: "POSITION(CHAMP(table_valeurs_de_base; 'zones'); TEXTE.JOINDRE('zone_'; ssf_zone_123))",
+    },
+    valeur_de_base_bareme: {
+      libelle: 'Valeur de base au barème',
+      unite: 'eur_m2',
+      regle: 'R-SUB-2',
+      formule:
+        'SI(NON(table_valeurs_de_base); 0; SI(NON(vb_colonne); 0; SI(vb_rang_zone < 0; 0; ELEMENT(vb_colonne; vb_rang_zone))))',
+      note: 'Lue par zone, par type d’opération et par forme d’habitat (ParaGEN!D36:G41).',
+    },
+    ssf_valeur_de_base: {
+      libelle: 'Valeur de base',
+      unite: 'eur_m2',
+      regle: 'R-SUB-2',
+      formule: 'DEFAUT(ssf_valeur_de_base_saisie; valeur_de_base_bareme)',
+      note: 'Une valeur saisie prime : c’est le recours quand un arrêté local s’écarte du barème.',
+    },
+    ssf_reference: {
+      libelle: 'Charge foncière de référence',
+      unite: 'eur',
+      regle: 'R-SUB-2',
+      formule: 'ssf_valeur_de_base * ssf_su',
+    },
+    ssf_depassement: {
+      libelle: 'Dépassement de la charge foncière',
+      unite: 'eur',
+      regle: 'R-SUB-2',
+      formule: 'ssf_valeur_fonciere - ssf_reference',
+    },
+    ssf_eligible: {
+      libelle: 'Surcharge foncière subventionnable',
+      unite: 'booleen',
+      regle: 'R-SUB-2',
+      formule: 'ET(ssf_eligible_demande; NON(ssf_depassement <= 0))',
+    },
+    ssf_table_taux_depassement: {
+      libelle: 'Taux de dépassement plafonné, par type',
+      unite: 'liste',
+      parametre: 'constantes_reglementaires.ssf.taux_depassement_plafonne',
+      ecran: 'Paramètres > Constantes réglementaires',
+    },
+    ssf_table_taux_subvention: {
+      libelle: 'Taux de subvention, par type',
+      unite: 'liste',
+      parametre: 'constantes_reglementaires.ssf.taux_subvention',
+      ecran: 'Paramètres > Constantes réglementaires',
+    },
+    ssf_taux_depassement: {
+      libelle: 'Taux de dépassement plafonné',
+      unite: 'taux',
+      regle: 'R-SUB-2',
+      formule: 'CHAMP(ssf_table_taux_depassement; ssf_type)',
+    },
+    ssf_taux_subvention: {
+      libelle: 'Taux de subvention',
+      unite: 'taux',
+      regle: 'R-SUB-2',
+      formule: 'CHAMP(ssf_table_taux_subvention; ssf_type)',
+    },
+    ssf_seuil_participation: {
+      libelle: 'Seuil de participation des collectivités',
+      unite: 'taux',
+      regle: 'R-SUB-2',
+      parametre: 'constantes_reglementaires.ssf.seuil_participation_collectivites',
+      ecran: 'Paramètres > Constantes réglementaires',
+    },
+    ssf_part_max_depassement: {
+      libelle: 'Part maximale du dépassement',
+      unite: 'taux',
+      regle: 'R-SUB-2',
+      parametre: 'constantes_reglementaires.ssf.part_max_depassement',
+      ecran: 'Paramètres > Constantes réglementaires',
+    },
+    ssf_sous_seuil: {
+      libelle: 'Collectivités sous le seuil de participation',
+      unite: 'booleen',
+      regle: 'R-SUB-2',
+      formule: 'ssf_participations < ssf_seuil_participation * ssf_depassement',
+    },
+    ssf_plafond: {
+      libelle: 'Plafond du dépassement',
+      unite: 'eur',
+      regle: 'R-SUB-2',
+      formule:
+        'SI(ssf_sous_seuil; MIN(ssf_taux_depassement * ssf_reference; ssf_part_max_depassement * ssf_depassement); ' +
+        'ssf_taux_depassement * ssf_reference)',
+      note: 'Le plafond conditionnel ne joue que si les collectivités participent sous le seuil réglementaire.',
+    },
+    ssf_depassement_plafonne: {
+      libelle: 'Dépassement plafonné',
+      unite: 'eur',
+      regle: 'R-SUB-2',
+      formule: 'MIN(ssf_depassement; ssf_plafond)',
+    },
+    ssf_reference_arrondie: {
+      libelle: 'Charge foncière de référence, arrondie',
+      unite: 'eur',
+      formule: 'ARRONDI.EURO(ssf_reference)',
+    },
+    ssf_depassement_arrondi: {
+      libelle: 'Dépassement, arrondi',
+      unite: 'eur',
+      formule: 'SI(ssf_eligible; ARRONDI.EURO(ssf_depassement); ARRONDI.EURO(MAX(ssf_depassement; 0)))',
+    },
+    ssf_depassement_plafonne_arrondi: {
+      libelle: 'Dépassement plafonné, arrondi',
+      unite: 'eur',
+      formule: 'SI(ssf_eligible; ARRONDI.EURO(ssf_depassement_plafonne); 0)',
+    },
+    ssf_subvention_calculee: {
+      libelle: 'Subvention de surcharge foncière calculée',
+      unite: 'eur',
+      regle: 'R-SUB-2',
+      formule: 'SI(ssf_eligible; ARRONDI.EURO(ssf_taux_subvention * ssf_depassement_plafonne); 0)',
+    },
+    subvention_surcharge_fonciere: {
+      libelle: 'Subvention de surcharge foncière',
+      unite: 'eur',
+      regle: 'R-SUB-2',
+      formule: 'SI(ssf_active; ssf_subvention_calculee; 0)',
+    },
+    subventions_total: {
+      libelle: 'Subventions du plan de financement',
+      unite: 'eur',
+      regle: 'R-SUB-3',
+      formule: 'ARRONDI.EURO(subventions_saisies_total + subvention_surcharge_fonciere)',
+    },
+  },
+};
+
 /* ===== src/formules/modele.js ===== */
 // @ts-check
 /**
@@ -7996,7 +8424,8 @@ const PRIX_REVIENT = {
 
 
 
-const MODELE = creerModele([OPERATION, CALENDRIER, SURFACES, LOYERS, PRIX_REVIENT]);
+
+const MODELE = creerModele([OPERATION, CALENDRIER, SURFACES, LOYERS, PRIX_REVIENT, SUBVENTIONS]);
 
 /**
  * Un classeur neuf sur le modele du moteur.
@@ -9595,14 +10024,17 @@ function ventilerParQuotePart(montant_eur, quotes_parts) {
 /* ===== src/subventions.js ===== */
 // @ts-check
 /**
- * R-SUB - Subventions : subvention de l'Etat (SLA), surcharge fonciere (SSF),
- * gratuite et affectation.
+ * R-SUB - Subventions : rattachement a la tranche, totaux, surcharge fonciere.
  *
- * Sources : `calculs!B254:B264` (SLA), `calculs!D274:B292` (SSF),
- * `calculs!D295:D314` (gratuite / affectation), baremes_her_2027.json/ssf.
+ * LES FORMULES VIVENT DANS `formules/domaines/subventions.js`, ecrites une fois
+ * en blocs. Ce module restitue les subventions sous la forme que l'ecran et les
+ * exports consomment, et garde les fonctions historiques (`agregerSubventions`,
+ * `surchargeFonciere`, `valeurDeBase`), qui evaluent ces memes formules sur les
+ * valeurs qu'on leur donne.
  *
  * Unites : montants en euros, taux en fraction.
  */
+
 
 /**
  * @typedef {Object} Subvention
@@ -9613,207 +10045,125 @@ function ventilerParQuotePart(montant_eur, quotes_parts) {
  */
 
 /**
- * R-SUB-3 - Tranche visee par une affectation de subvention.
- *
- * Une affectation nomme UNE tranche, et une seule. LEON connait un couple
- * « PLUS-PLAI » parce que son moteur est duplique et qu'il tient une colonne
- * combinee ; ici le PLUS et le PLAI sont deux tranches TOTALEMENT DISTINCTES
- * (arbitrage metier du 03/09/2026), et une aide qui vise les deux se saisit en
- * deux lignes. Introduire un code composite reintroduirait la structure meme
- * dont ce moteur s'est affranchi.
- *
- * Ce que devient une subvention qu'aucune tranche ne porte se decide dans
- * `rattacherSubventions` : elle est rattachee a un financement, ou elle n'existe
- * pas au plan.
- *
- * @param {string|null|undefined} affectation
- * @param {string[]} codes_presents
- * @returns {{cible: string|null, introuvable: boolean}}
+ * Subventions d'un classeur : celles qui entrent au plan, rattachees a leur
+ * tranche, et celles qui restent hors plan, pour que l'appelant les signale.
+ * @param {import('./formules/classeur.js').Classeur} c
+ * @returns {{par_produit: Record<string, number>, gratuites_eur: number,
+ *            non_gratuites_eur: number, total_eur: number,
+ *            rattachees: Array<any>, hors_plan: Array<{libelle: string, montant_eur: number, affectation: string|null}>}}
  */
-function resoudreAffectation(affectation, codes_presents) {
-  const nom = String(affectation ?? '').trim();
-  if (!nom) return { cible: null, introuvable: false };
-  const cible = codes_presents.find((c) => c.toUpperCase() === nom.toUpperCase()) ?? null;
-  return { cible, introuvable: cible === null };
+function restituerSubventions(c) {
+  const saisies = c.valeur('subventions_saisies') ?? [];
+  const rattachees = [];
+  const horsPlan = [];
+  /** @type {Record<string, number>} */
+  const parProduit = {};
+  for (const i of c.valeursDimension('subvention')) {
+    const S = { subvention: i };
+    if (!c.valeur('subvention_retenue', S)) continue;
+    const montant = c.valeur('montant_subvention', S);
+    const tranche = c.valeur('tranche_subvention', S);
+    if (tranche) {
+      rattachees.push({ ...saisies[i], montant_eur: montant, affectation: tranche });
+      if (!(tranche in parProduit)) parProduit[tranche] = c.valeur('subventions_tranche', { tranche });
+    } else {
+      horsPlan.push({
+        libelle: saisies[i].libelle ?? 'Subvention',
+        montant_eur: montant,
+        affectation: saisies[i].affectation ?? null,
+      });
+    }
+  }
+  return {
+    par_produit: parProduit,
+    gratuites_eur: c.valeur('subventions_gratuites'),
+    non_gratuites_eur: c.valeur('subventions_non_gratuites'),
+    total_eur: c.valeur('subventions_saisies_total'),
+    rattachees,
+    hors_plan: horsPlan,
+  };
+}
+
+/**
+ * Classeur reduit a des subventions et a des tranches donnees.
+ * @param {Subvention[]} subventions
+ * @param {string[]} codes
+ */
+function classeurDeSubventions(subventions, codes) {
+  const c = nouveauClasseur({ entrees: { subventions } });
+  c.fixerDimension('tranche', codes).fixer('tranches_ordre_saisie', {}, codes);
+  return c;
 }
 
 /**
  * R-SUB-3 - Rattachement des subventions a leur tranche.
- *
- * Une subvention est rattachee a un FINANCEMENT, comme un pret ou des fonds
- * propres, ou elle n'existe pas (arbitrage metier du 10/09/2026). LEON repartit
- * une subvention sans affectation au prorata des surfaces utiles ; ce moteur ne
- * le fait plus (ecart E-14). La repartition fabriquait des centimes que chaque
- * tranche arrondissait de son cote : une operation a quatre tranches en sortait
- * desequilibree d'un euro. Et elle faisait financer par une aide ce qu'elle ne
- * visait pas, logement libre compris, sans que l'ecran le montre - les ecrans
- * de tranche ne listent que les subventions qui leur sont rattachees.
- *
- * Trois cas :
- *  - la tranche nommee existe au programme : elle porte la subvention ;
- *  - aucune tranche nommee, mais une seule au programme : c'est elle, sans
- *    ambiguite possible - le moteur rattache de meme un pret sans tranche ;
- *  - sinon - aucune tranche nommee sur un programme mixte, ou une tranche qui
- *    n'y figure plus - la subvention reste HORS PLAN : elle ne finance rien, ne
- *    compte dans aucun total, et l'appelant la signale pour qu'on la rattache.
- *
  * @param {Subvention[]} subventions
  * @param {string[]} codes tranches presentes au programme
- * @returns {{rattachees: Array<Subvention & {affectation: string}>,
- *            hors_plan: Array<{libelle: string, montant_eur: number, affectation: string|null}>}}
  */
 function rattacherSubventions(subventions, codes) {
-  const rattachees = [];
-  const horsPlan = [];
-  for (const sub of subventions ?? []) {
-    const montant = Number(sub.montant_eur) || 0;
-    if (!montant) continue;
-    const { cible, introuvable } = resoudreAffectation(sub.affectation, codes);
-    const tranche = cible ?? (!introuvable && codes.length === 1 ? codes[0] : null);
-    if (tranche) {
-      rattachees.push({ ...sub, montant_eur: montant, affectation: tranche });
-    } else {
-      horsPlan.push({ libelle: sub.libelle ?? 'Subvention', montant_eur: montant, affectation: sub.affectation ?? null });
-    }
-  }
-  return { rattachees, hors_plan: horsPlan };
+  const { rattachees, hors_plan } = restituerSubventions(classeurDeSubventions(subventions ?? [], codes));
+  return { rattachees, hors_plan };
 }
 
 /**
- * R-SUB-3 - Agregation des subventions saisies, par tranche.
- * Seules les subventions RATTACHEES entrent aux totaux ; les autres sont rendues
- * a part, pour etre signalees (voir `rattacherSubventions`).
+ * R-SUB-3 - Agregation des subventions saisies, par tranche. Seules les
+ * subventions RATTACHEES entrent aux totaux.
  * @param {Subvention[]} subventions
  * @param {Record<string, number>} quotes_parts ses cles sont les tranches du programme
- * @returns {{par_produit: Record<string, number>, gratuites_eur: number,
- *            non_gratuites_eur: number, total_eur: number,
- *            rattachees: Array<any>, hors_plan: Array<any>}}
  */
 function agregerSubventions(subventions, quotes_parts) {
-  const { rattachees, hors_plan } = rattacherSubventions(subventions, Object.keys(quotes_parts));
-  /** @type {Record<string, number>} */
-  const parProduit = {};
-  let gratuites = 0;
-  let nonGratuites = 0;
-  for (const sub of rattachees) {
-    if (sub.gratuite) gratuites += sub.montant_eur;
-    else nonGratuites += sub.montant_eur;
-    parProduit[sub.affectation] = (parProduit[sub.affectation] ?? 0) + sub.montant_eur;
-  }
-  for (const code of Object.keys(parProduit)) parProduit[code] = arrondiEuro(parProduit[code]);
+  return restituerSubventions(classeurDeSubventions(subventions ?? [], Object.keys(quotes_parts)));
+}
 
+/**
+ * Subvention de surcharge fonciere d'un classeur, ou `null` si elle n'est pas
+ * demandee. Formules : `ssf_*` du domaine « subventions ».
+ * @param {import('./formules/classeur.js').Classeur} c
+ */
+function restituerSurchargeFonciere(c) {
+  if (!c.valeur('ssf_active')) return null;
   return {
-    par_produit: parProduit,
-    gratuites_eur: arrondiEuro(gratuites),
-    non_gratuites_eur: arrondiEuro(nonGratuites),
-    total_eur: arrondiEuro(gratuites + nonGratuites),
-    rattachees,
-    hors_plan,
+    reference_eur: c.valeur('ssf_reference_arrondie'),
+    depassement_eur: c.valeur('ssf_depassement_arrondi'),
+    depassement_plafonne_eur: c.valeur('ssf_depassement_plafonne_arrondi'),
+    subvention_eur: c.valeur('ssf_subvention_calculee'),
+    eligible: c.valeur('ssf_eligible'),
   };
 }
 
 /**
- * R-SUB-2 - Valeur de base (VB) au metre carre, assiette de reference de la
- * surcharge fonciere. Lue au bareme `valeurs_de_base` : une table par zone
- * 1/2/3/1bis, croisee neuf / acquisition et collectif / individuel.
- *
- * @param {Object} p
- * @param {string|number} [p.zone_123]
- * @param {'neuf'|'acq_amelioration'} [p.type]
- * @param {'collectif'|'individuel'} [p.habitat]
+ * R-SUB-2 - Valeur de base (VB) au metre carre, lue au bareme `valeurs_de_base`.
+ * Formule : `valeur_de_base_bareme`.
+ * @param {{zone_123?: string|number, type?: 'neuf'|'acq_amelioration', habitat?: 'collectif'|'individuel'}} p
  * @param {any} referentiels
  * @returns {number} EUR/m2
  */
 function valeurDeBase({ zone_123, type = 'neuf', habitat = 'collectif' }, referentiels) {
-  const table = referentiels.valeurs_de_base;
-  if (!table) return 0;
-  // Le bareme distingue le NEUF de l'ACQUISITION ; le type d'operation du moteur
-  // parle d'acquisition-amelioration, c'est la meme colonne.
-  const colonne = table[type === 'neuf' ? 'neuf' : 'acquisition']?.[habitat];
-  if (!colonne) return 0;
-  const i = table.zones.indexOf(`zone_${zone_123}`);
-  return i < 0 ? 0 : colonne[i];
+  const c = nouveauClasseur({ entrees: { surcharge_fonciere: { zone_123, type, habitat } }, baremes: referentiels });
+  return c.valeur('valeur_de_base_bareme');
 }
 
 /**
- * R-SUB-2 - Subvention de surcharge fonciere.
- *
- *   depassement = valeur_fonciere_reelle - reference,  reference = VB x SU_SSF
- *   Si les participations des collectivites couvrent moins du seuil reglementaire
- *   du depassement, le plafond de l'Etat est
- *     MIN(taux_depassement_plafonne x reference, part_max x depassement).
- *   La subvention vaut taux_subvention x depassement plafonne.
- *
- * Les taux different entre neuf et acquisition-amelioration : ils sont lus au
- * referentiel, jamais ecrits en dur.
+ * R-SUB-2 - Subvention de surcharge fonciere, a partir de valeurs donnees.
  * @param {Object} p
  * @param {number} p.valeur_fonciere_eur
- * @param {number} p.valeur_de_base_eur_m2
+ * @param {number} [p.valeur_de_base_eur_m2]  a defaut, lue au bareme
  * @param {number} p.su_ssf_m2
  * @param {number} [p.participations_collectivites_eur]
  * @param {'neuf'|'acq_amelioration'} [p.type]
  * @param {boolean} [p.eligible]  flag ParaPLUS!DE76 = OK
+ * @param {string|number} [p.zone_123]
+ * @param {'collectif'|'individuel'} [p.habitat]
  * @param {any} referentiels
  */
-function surchargeFonciere(
-  {
-    valeur_fonciere_eur,
-    valeur_de_base_eur_m2,
-    su_ssf_m2,
-    participations_collectivites_eur = 0,
-    type = 'neuf',
-    eligible = true,
-    zone_123,
-    habitat = 'collectif',
-  },
-  referentiels,
-) {
-  const cfg = referentiels.constantes_reglementaires.ssf;
-  // La VALEUR DE BASE est un bareme, pas une saisie : elle se lit par zone, par
-  // type d'operation et par forme d'habitat (ParaGEN!D36:G41). La table etait au
-  // referentiel depuis le debut, editable a l'ecran, et personne ne la lisait :
-  // la reference de surcharge fonciere devait etre retapee a la main a chaque
-  // simulation, avec le risque de la prendre dans la mauvaise colonne. Une
-  // valeur saisie continue de primer - c'est le recours quand un arrete local
-  // s'ecarte du bareme.
-  const vb = valeur_de_base_eur_m2 ?? valeurDeBase({ zone_123, type, habitat }, referentiels);
-  const reference = vb * su_ssf_m2;
-  const depassement = valeur_fonciere_eur - reference;
-
-  if (!eligible || depassement <= 0) {
-    return {
-      reference_eur: arrondiEuro(reference),
-      depassement_eur: arrondiEuro(Math.max(depassement, 0)),
-      depassement_plafonne_eur: 0,
-      subvention_eur: 0,
-      eligible: false,
-    };
-  }
-
-  const tauxDep = cfg.taux_depassement_plafonne[type];
-  const tauxSub = cfg.taux_subvention[type];
-
-  // Plafond conditionnel : il ne s'applique que si les collectivites participent
-  // en dessous du seuil reglementaire du depassement.
-  const sousSeuil =
-    participations_collectivites_eur < cfg.seuil_participation_collectivites * depassement;
-  const plafond = sousSeuil
-    ? Math.min(tauxDep * reference, cfg.part_max_depassement * depassement)
-    : tauxDep * reference;
-
-  const depassementPlafonne = Math.min(depassement, plafond);
-
-  return {
-    reference_eur: arrondiEuro(reference),
-    depassement_eur: arrondiEuro(depassement),
-    depassement_plafonne_eur: arrondiEuro(depassementPlafonne),
-    subvention_eur: arrondiEuro(tauxSub * depassementPlafonne),
-    eligible: true,
-  };
+function surchargeFonciere(p, referentiels) {
+  const c = nouveauClasseur({ entrees: { surcharge_fonciere: { ...p } }, baremes: referentiels });
+  return /** @type {NonNullable<ReturnType<typeof restituerSurchargeFonciere>>} */ (restituerSurchargeFonciere(c));
 }
 
 /**
- * R-SUB-1 🔶 Subvention de l'Etat (SLA).
+ * R-SUB-1 🔶 Subvention de l'Etat (SLA). REGLE NON BRANCHEE : aucune grandeur du
+ * moteur ne l'emploie (dictionnaire, §12 bis).
  * En metropole l'assiette reglementaire est nulle : la subvention vient d'un
  * forfait saisi (par logement, par m2 de SHAB ou de SU selon le mode). Le calcul
  * DOM et la MQECO en acquisition-amelioration ne sont pas couverts en V1.
@@ -11481,7 +11831,7 @@ function calculer(entrees, referentiels) {
   const bilan = restituerPrixDeRevient(classeur);
 
   // --- 4. Subventions (R-SUB) ---
-  const subventions = agregerSubventions(entrees.subventions ?? [], quotesParts);
+  const subventions = restituerSubventions(classeur);
   // R-SUB-3 - Une subvention sans tranche n'existe pas au plan : elle ne finance
   // rien et ne compte dans aucun total. Elle n'est pas effacee pour autant -
   // c'est une somme saisie - mais elle se DIT, avec son montant et sa raison.
@@ -11496,19 +11846,10 @@ function calculer(entrees, referentiels) {
     );
   }
   // R-SUB-2 : la zone et le type d'operation viennent de l'identite ; ils
-  // suffisent a lire la valeur de base au bareme, que la saisie n'a plus a
-  // retaper. Une valeur de base saisie continue de primer.
-  const ssf = entrees.surcharge_fonciere
-    ? surchargeFonciere(
-        {
-          zone_123: identite.zone_123,
-          type: /acq/i.test(String(identite.type_operation ?? '')) ? 'acq_amelioration' : 'neuf',
-          ...entrees.surcharge_fonciere,
-        },
-        baremes,
-      )
-    : null;
-  const subventionsTotal = arrondiEuro(subventions.total_eur + (ssf?.subvention_eur ?? 0));
+  // suffisent a lire la valeur de base au bareme. Une valeur de base saisie
+  // continue de primer.
+  const ssf = restituerSurchargeFonciere(classeur);
+  const subventionsTotal = lire('subventions_total');
 
   // --- 5. Financement (R-FIN) ---
   // Les fonds propres se saisissent par tranche (onglets Tranches de l'UI). Le

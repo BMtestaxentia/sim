@@ -2785,3 +2785,125 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
   letter-spacing: 0.04em; color: var(--text-tertiary);
 }
 .boite__actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* ---------- Formules ----------
+   Le catalogue des grandeurs a gauche, la fiche de celle qu'on regarde a
+   droite. La fiche montre la formule en BLOCS : chaque grandeur citee est une
+   etiquette qui porte sa valeur, et qui s'ouvre d'un clic. */
+.fx { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 14px; align-items: start; }
+.fx-liste {
+  display: flex; flex-direction: column; gap: 8px;
+  position: sticky; top: 128px; max-height: calc(100vh - 150px);
+}
+.fx-recherche { width: 100%; }
+.fx-domaines { overflow: auto; min-height: 0; padding-right: 4px; }
+.fx-domaine { border-bottom: 1px solid var(--border-color); }
+.fx-domaine summary {
+  cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-secondary);
+}
+.fx-compte { font-weight: 600; color: var(--text-tertiary); }
+.fx-domaine ul { list-style: none; margin: 0 0 6px; padding: 0; }
+.fx-item {
+  display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left;
+  padding: 5px 8px; border: 1px solid transparent; border-radius: var(--radius-sm);
+  background: transparent; cursor: pointer; font: inherit; font-size: 12px; color: var(--text-primary);
+}
+.fx-item:hover { background: var(--bg-secondary); }
+.fx-item--actif { background: var(--info-bg); border-color: var(--info-accent); color: var(--info-text); }
+.fx-item__id { font-family: ui-monospace, Consolas, monospace; font-size: 10px; color: var(--text-tertiary); }
+.fx-detail { min-width: 0; }
+.fx-vide { color: var(--text-tertiary); font-size: 12px; line-height: 1.5; }
+.fx-fiche { display: flex; flex-direction: column; gap: 9px; }
+.fx-fil {
+  display: flex; align-items: center; gap: 8px; min-height: 22px;
+  font-size: 10.5px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em;
+}
+.fx-retour { text-transform: none; letter-spacing: 0; font-size: 11px; padding: 2px 8px; }
+.fx-titre { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
+.fx-meta { margin: 0; font-size: 11px; color: var(--text-tertiary); }
+.fx-meta code, .fx-origine code { font-size: 11px; }
+.fx-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); font-style: italic; }
+.fx-indices { display: flex; flex-wrap: wrap; gap: 8px; }
+.fx-indice {
+  display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: var(--text-tertiary);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.fx-indice select, .fx-indice input { width: auto; min-width: 120px; text-transform: none; letter-spacing: 0; }
+.fx-indice--vide { align-self: flex-end; text-transform: none; letter-spacing: 0; font-size: 11px; }
+.fx-resultat { margin: 0; font-size: 12px; color: var(--text-secondary); }
+.fx-valeur {
+  margin-left: 6px; font-size: 18px; font-weight: 800; color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.fx-valeur--absente { font-size: 12px; font-weight: 600; color: var(--text-tertiary); }
+.fx-valeur--erreur { font-size: 12px; font-weight: 600; color: var(--coral-text); }
+.fx-blocs {
+  padding: 12px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-sm);
+  background: var(--bg-secondary); font-size: 12.5px; line-height: 2.2;
+}
+.fx-texte summary { cursor: pointer; font-size: 11px; color: var(--text-tertiary); }
+.fx-texte pre {
+  margin: 6px 0 0; padding: 8px 10px; white-space: pre-wrap; word-break: break-word;
+  font-size: 11px; background: var(--bg-tertiary); border-radius: var(--radius-sm);
+}
+.fx-origine { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
+.fx-usages { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.fx-usages__titre {
+  margin-right: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-tertiary);
+}
+
+/* Les blocs d'une formule. */
+.fb-op { margin: 0 5px; font-weight: 700; color: var(--text-secondary); }
+.fb-paren { color: var(--text-tertiary); font-weight: 600; }
+.fb-nb { font-variant-numeric: tabular-nums; font-weight: 600; }
+.fb-txt { color: var(--text-secondary); }
+.fb-cst { font-size: 11px; font-weight: 700; color: var(--text-secondary); }
+.fb-mot {
+  margin: 0 3px; font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--info-text);
+}
+.fb-ref {
+  display: inline-flex; align-items: baseline; gap: 5px; padding: 1px 8px; margin: 1px 0;
+  border: 1px solid var(--border-color); border-radius: var(--radius-pill); background: var(--bg-primary);
+  cursor: pointer; font: inherit; font-size: 12px; line-height: 1.5; color: var(--text-primary);
+}
+.fb-ref:hover { border-color: var(--info-accent); background: var(--info-bg); }
+.fb-ref__libelle { font-weight: 600; }
+.fb-ref__indices { font-size: 10.5px; color: var(--text-tertiary); }
+.fb-ref__valeur { font-size: 11.5px; font-weight: 700; color: var(--info-text); font-variant-numeric: tabular-nums; }
+.fb-ref--sans-valeur { background: transparent; }
+.fb-var { font-style: italic; color: var(--text-secondary); }
+.fb-var__v { margin-left: 4px; font-style: normal; font-size: 10.5px; color: var(--text-tertiary); }
+.fb-fn, .fb-agr {
+  display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px; padding: 1px 8px; margin: 1px 0;
+  border: 1px dashed var(--border-color); border-radius: var(--radius-sm); line-height: 2;
+}
+.fb-fn__nom {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+.fb-sep { margin: 0 4px; color: var(--text-tertiary); }
+.fb-pour { font-size: 11.5px; color: var(--text-secondary); }
+.fb-egal { font-size: 11.5px; font-weight: 700; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.fb-ecarte { opacity: 0.45; }
+.fb-index { font-size: 10.5px; color: var(--text-tertiary); }
+.fb-termes { flex-basis: 100%; font-size: 11px; line-height: 1.6; }
+.fb-termes summary { cursor: pointer; color: var(--text-tertiary); }
+.fb-termes table { border-collapse: collapse; margin: 4px 0 2px; }
+.fb-termes th { text-align: left; font-weight: 600; padding: 1px 12px 1px 0; color: var(--text-secondary); }
+.fb-termes td { padding: 1px 0; }
+.fb-terme__v { font-variant-numeric: tabular-nums; }
+
+/* La meme fiche dans une boite, ouverte d'un clic sur un chiffre. */
+.boite--formule { width: min(900px, 94vw); max-width: min(900px, 94vw); max-height: 88vh; overflow: auto; }
+.boite-formule__fermer { float: right; width: 28px; height: 28px; border: none; font-size: 18px; }
+/* Un chiffre qui sait se justifier se souligne au survol. */
+[data-formule]:not(.fb-ref):not(.fx-item) { cursor: help; }
+[data-formule]:not(.fb-ref):not(.fx-item):hover { text-decoration: underline dotted; text-underline-offset: 3px; }
+@media (max-width: 900px) {
+  .fx { grid-template-columns: 1fr; }
+  .fx-liste { position: static; max-height: 340px; }
+}

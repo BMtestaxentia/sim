@@ -18,12 +18,13 @@
  * Un seul fichier a dessein : le generateur de la version autonome concatene tout
  * dans une portee unique et refuse les collisions de noms racine.
  */
-import { calculer } from '../src/moteur.js';
+import { calculerAvecClasseur } from '../src/moteur.js';
+import { installerFormules, sectionFormules, rendreFormules } from './formules.js';
 import { produitsOrdonnes, produit, ORDRE_PRODUITS } from '../src/produits.js';
 import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
 import { ecartsParametrage, fusionner } from '../src/parametrage.js';
 import { tauxLASM } from '../src/bilan.js';
-import { sommerComptes, indicateursExploitation } from '../src/exploitation.js';
+import { restituerPerimetre, restituerIndicateurs } from '../src/exploitation.js';
 import {
   LEVIERS,
   INDICATEURS,
@@ -462,6 +463,16 @@ function lireChemin(cible, chemin) {
 /** Echappe le texte destine a un attribut HTML (les libelles sont libres). */
 function att(v) {
   return String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+/**
+ * Attributs d'un chiffre qui sait se justifier : un clic l'ouvre dans la fiche
+ * de sa formule (`formules.js`), aux indices de la cellule affichee.
+ * @param {string} id  grandeur du modele
+ * @param {Record<string, any>} [indices]
+ */
+function attrFormule(id, indices = {}) {
+  return ` data-formule="${id}" data-indices="${att(JSON.stringify(indices))}"`;
 }
 
 const valNum = (v) => (nul(v) ? '' : v);
@@ -2180,14 +2191,19 @@ function rendreValeurs(r) {
       if (td) td.textContent = v;
     };
     set('su', lot ? nb(lot.su_m2) : '-');
+    const celluleSU = tr.querySelector('[data-calc="su"]');
+    if (celluleSU && lot) {
+      celluleSU.setAttribute('data-formule', 'su_lot');
+      celluleSU.setAttribute('data-indices', JSON.stringify({ lot: i }));
+    }
     set('loyer', lot && c ? eur(lot.su_m2 * c.loyer_pratique_eur_m2) : '-');
   }
   $('#table-lots').querySelector('tfoot').innerHTML = etat.lots.length
     ? `<tr>
-        <td colspan="6" class="libelle">Total - ${nb(ind.nb_logements)} logements</td>
-        <td class="num">${nb(ind.shab_m2)}</td>
-        <td class="num">${nb(ind.surfaces_annexes_m2)}</td>
-        <td class="num">${nb(ind.su_m2)}</td>
+        <td colspan="6" class="libelle">Total - <span${attrFormule('nb_logements_total')}>${nb(ind.nb_logements)}</span> logements</td>
+        <td class="num"${attrFormule('shab_totale')}>${nb(ind.shab_m2)}</td>
+        <td class="num"${attrFormule('annexes_totales')}>${nb(ind.surfaces_annexes_m2)}</td>
+        <td class="num"${attrFormule('su_totale_tranches')}>${nb(ind.su_m2)}</td>
         <td class="num">${eur(ind.loyers_annuels_eur ? ind.loyers_annuels_eur / 12 : 0)}</td>
         <td></td>
       </tr>`
@@ -2199,39 +2215,40 @@ function rendreValeurs(r) {
     ? r.loyers
         .map((l) => {
           const t = recap[l.code_produit] ?? {};
+          const T = { tranche: l.code_produit };
           return `<tr data-tranche="${l.code_produit}">
             <td>${att(libelleProduit(l.code_produit))}</td>
-            <td class="num">${nb(t.nb_lots)}</td>
-            <td class="num">${nb(l.shab_m2)}</td>
-            <td class="num">${nb(l.su_m2)}</td>
-            <td class="num">${pct(t.quote_part_su, 1)}</td>
-            <td class="num">${nb(l.cs)}</td>
-            <td class="num">${nb(l.loyer_pratique_eur_m2)}</td>
-            <td class="num">${eur(l.loyer_annuel_eur)}</td>
+            <td class="num"${attrFormule('nb_lots_tranche', T)}>${nb(t.nb_lots)}</td>
+            <td class="num"${attrFormule('shab_tranche', T)}>${nb(l.shab_m2)}</td>
+            <td class="num"${attrFormule('su_tranche', T)}>${nb(l.su_m2)}</td>
+            <td class="num"${attrFormule('quote_part_su', T)}>${pct(t.quote_part_su, 1)}</td>
+            <td class="num"${attrFormule('cs_tranche', T)}>${nb(l.cs)}</td>
+            <td class="num"${attrFormule('loyer_pratique_tranche', T)}>${nb(l.loyer_pratique_eur_m2)}</td>
+            <td class="num"${attrFormule('loyer_annuel_tranche', T)}>${eur(l.loyer_annuel_eur)}</td>
           </tr>`;
         })
         .join('')
     : '<tr><td colspan="8" class="vide">Aucune tranche</td></tr>';
   $('#table-synthese-tranches').querySelector('tfoot').innerHTML = r.loyers.length
     ? `<tr><td class="libelle">Total</td><td class="num">${nb(etat.lots.length)}</td>
-        <td class="num">${nb(ind.shab_m2)}</td><td class="num">${nb(ind.su_m2)}</td>
+        <td class="num"${attrFormule('shab_totale')}>${nb(ind.shab_m2)}</td><td class="num"${attrFormule('su_totale_tranches')}>${nb(ind.su_m2)}</td>
         <td class="num">100 %</td><td colspan="2"></td>
-        <td class="num">${eur(ind.loyers_annuels_eur)}</td></tr>`
+        <td class="num"${attrFormule('loyers_annuels_operation')}>${eur(ind.loyers_annuels_eur)}</td></tr>`
     : '';
 
   // --- Recapitulatif de l'ecran Operation ---
   $('#recap-operation').innerHTML = [
-    { l: 'Logements', v: nb(ind.nb_logements), d: `${etat.lots.length} lot${etat.lots.length > 1 ? 's' : ''} saisi${etat.lots.length > 1 ? 's' : ''}` },
+    { l: 'Logements', v: nb(ind.nb_logements), d: `${etat.lots.length} lot${etat.lots.length > 1 ? 's' : ''} saisi${etat.lots.length > 1 ? 's' : ''}`, f: attrFormule('nb_logements_total') },
     { l: 'Tranches', v: r.surfaces.tranches.length, d: r.surfaces.tranches.map(libelleProduit).join(', ') || '-' },
-    { l: 'Surface utile', v: `${nb(ind.su_m2)} m²`, d: `${nb(ind.shab_m2)} m² SHAB` },
-    { l: 'Prix de revient', v: eur(ind.prix_revient_ttc_eur), d: `${eur(ind.prix_revient_par_logement_eur)} / logement` },
+    { l: 'Surface utile', v: `${nb(ind.su_m2)} m²`, d: `${nb(ind.shab_m2)} m² SHAB`, f: attrFormule('su_totale_tranches') },
+    { l: 'Prix de revient', v: eur(ind.prix_revient_ttc_eur), d: `${eur(ind.prix_revient_par_logement_eur)} / logement`, f: attrFormule('total_ttc_module') },
     // Sans le RMO : retire du recapitulatif a la demande du metier, comme il
     // l'avait deja ete de l'indicateur du plan de financement.
-    { l: 'Loyers annuels', v: eur(ind.loyers_annuels_eur), d: '' },
-    { l: 'Mise en location', v: r.calendrier.annee_mise_en_location, d: `${etat.dates.duree_simulation_ans} ans simulés` },
+    { l: 'Loyers annuels', v: eur(ind.loyers_annuels_eur), d: '', f: attrFormule('loyers_annuels_operation') },
+    { l: 'Mise en location', v: r.calendrier.annee_mise_en_location, d: `${etat.dates.duree_simulation_ans} ans simulés`, f: attrFormule('annee_mise_en_location') },
   ]
     .map((i) => `<div class="indicateur"><div class="indicateur__libelle">${i.l}</div>
-      <div class="indicateur__valeur">${i.v}</div><div class="indicateur__detail">${i.d}</div></div>`)
+      <div class="indicateur__valeur"${i.f ?? ''}>${i.v}</div><div class="indicateur__detail">${i.d}</div></div>`)
     .join('');
 
   // --- Ecrans de tranche : bandeau et detail du loyer ---
@@ -3781,20 +3798,27 @@ function tranchesAuCompte(r) {
  * et ne changent pas avec le perimetre.
  */
 function perimetreExploitation(r) {
-  const toutes = Object.keys(r.exploitation?.par_tranche ?? {});
-  const retenues = tranchesAuCompte(r);
-  if (!toutes.length || retenues.length === toutes.length) return r.exploitation;
-  const compte = sommerComptes(retenues.map((c) => r.exploitation.par_tranche[c]));
-  if (!compte) return r.exploitation;
-  const prixRevient = retenues.reduce(
-    (s, c) => s + (r.bilan?.par_tranche?.[c]?.total_ttc_module_eur ?? 0),
-    0,
-  );
-  compte.indicateurs = indicateursExploitation(compte.lignes, {
-    prix_revient_ttc_eur: prixRevient,
-  });
+  const cle = clePerimetre(r);
+  if (cle === 'operation' || !dernierClasseur) return r.exploitation;
+  // Le compte d'un perimetre se lit dans le classeur du calcul : les memes
+  // formules que le consolide, sommees sur les seules tranches retenues.
+  const compte = restituerPerimetre(dernierClasseur, cle);
+  compte.indicateurs = restituerIndicateurs(dernierClasseur, cle);
+  compte.fonds_propres_eur = dernierClasseur.valeur('fonds_propres_perimetre', { perimetre: cle });
   compte.jalons = r.exploitation.jalons;
   return { ...r.exploitation, ...compte };
+}
+
+/**
+ * Cle du perimetre affiche, telle que le classeur la lit : « operation » pour
+ * toutes les tranches, sinon leurs codes, « PLAI+PLUS ».
+ */
+function clePerimetre(r) {
+  const toutes = Object.keys(r.exploitation?.par_tranche ?? {});
+  const retenues = tranchesAuCompte(r);
+  return !toutes.length || !retenues.length || retenues.length === toutes.length
+    ? 'operation'
+    : retenues.join('+');
 }
 
 /**
@@ -3836,6 +3860,8 @@ function rendreExploitation(r) {
   rendrePerimetreExploitation(r);
   const e = perimetreExploitation(r);
   const ind = e.indicateurs;
+  // Chaque chiffre du compte ouvre sa formule, lue sur le perimetre affiche.
+  const P = { perimetre: clePerimetre(r) };
 
   // Le bandeau de tete de l'ecran a ete retire. Il melait trois choses de
   // natures differentes - un verdict sur l'operation, les bornes de la
@@ -3881,6 +3907,7 @@ function rendreExploitation(r) {
       l: 'Autofinancement cumulé',
       v: eur(ind.resultat_cumule_final_eur),
       d: `sur ${e.lignes.length} ans, annuités payées`,
+      f: attrFormule('resultat_cumule_final', P),
     },
     {
       // Le TRI mesure ce que rapporte l'argent immobilise : mise de depart
@@ -3890,35 +3917,41 @@ function rendreExploitation(r) {
       d: nul(ind.tri)
         ? 'les flux ne remboursent jamais la mise'
         : 'prix de revient, puis autofinancements',
+      f: attrFormule('tri', P),
     },
     {
       l: 'Creux du cumul',
       v: eur(ind.creux_cumul_eur),
       d: `atteint en ${ind.annee_creux_cumul}`,
+      f: attrFormule('creux_cumul', P),
     },
     {
       l: 'Exercices déficitaires',
       v: ind.exercices_deficitaires,
       d: deficit ? `de ${ind.premiere_annee_deficitaire} à ${ind.derniere_annee_deficitaire}` : 'aucun sur l’horizon',
+      f: attrFormule('exercices_deficitaires', P),
     },
     {
       l: 'Taux de marge année 1',
       v: pct(ind.taux_marge_annee_1, 1),
       d: `moyenne ${pct(ind.taux_marge_moyen, 1)} sur ${ind.annees_moyenne_marge} ans`,
+      f: attrFormule('taux_marge_annee_1', P),
     },
     {
       l: 'Reconstitution des fonds propres',
       v: ind.annee_reconstitution_fonds_propres ?? 'non atteinte',
       d: `cumul ≥ ${eur(e.fonds_propres_eur)}`,
+      f: attrFormule('annee_reconstitution_fonds_propres', P),
     },
     {
       l: 'Début de la taxe foncière',
       v: r.indicateurs.annee_debut_tfpb,
       d: 'fin d’exonération',
+      f: attrFormule('annee_debut_tfpb'),
     },
   ]
     .map((t) => `<div class="indicateur"><div class="indicateur__libelle">${t.l}</div>
-      <div class="indicateur__valeur">${t.v}</div><div class="indicateur__detail">${t.d}</div></div>`)
+      <div class="indicateur__valeur"${t.f ?? ''}>${t.v}</div><div class="indicateur__detail">${t.d}</div></div>`)
     .join('');
 
   // --- Graphe ---
@@ -3950,7 +3983,11 @@ function rendreExploitation(r) {
           evenements: e.evenements.filter((x) => x.annee === l.annee),
         }));
 
-  const montant = (v) => `<td class="num ${v < 0 ? 'montant--negatif' : ''}">${eur(v)}</td>`;
+  // `g` : la ligne du compte dont la cellule est l'arrondi, lue au perimetre.
+  const montant = (v, g, exercice) =>
+    `<td class="num ${v < 0 ? 'montant--negatif' : ''}"${
+      g ? attrFormule(`${g}_perimetre`, { ...P, exercice }) : ''
+    }>${eur(v)}</td>`;
   $('#table-exploitation').querySelector('tbody').innerHTML = rangs
     .map((j) => {
       const autresCharges = j.total_charges_eur - j.annuites_eur;
@@ -3962,17 +3999,21 @@ function rendreExploitation(r) {
       const marques = badgesEvenements(j.evenements);
       const classe = j.type === 'moyenne' ? 'ligne--moyenne' : marques ? 'ligne--rupture' : '';
       // Vue TRESORERIE a gauche, vue COMPTABLE dans son bloc a droite.
+      const X = { ...P, exercice: j.annee };
       const comptable = (v) =>
         nul(v)
           ? '<td class="num col-comptable">-</td>'
-          : `<td class="num col-comptable ${v < 0 ? 'montant--negatif' : ''}">${eur(v)}</td>`;
+          : `<td class="num col-comptable ${v < 0 ? 'montant--negatif' : ''}"${attrFormule(
+              'resultat_comptable_perimetre',
+              X,
+            )}>${eur(v)}</td>`;
       return `<tr class="${classe}">
         <td>${att(j.libelle)}${marques}</td>
-        ${montant(j.total_produits_eur)}${montant(j.annuites_eur)}${montant(autresCharges)}
-        ${montant(j.autofinancement_eur)}${montant(j.cumul_autofinancement_eur)}
-        <td class="num">${pct(j.taux_marge, 1)}</td>
-        <td class="num col-comptable col-comptable--debut">${nul(j.interets_eur) ? '-' : eur(j.interets_eur)}</td>
-        <td class="num col-comptable">${nul(j.dotation_amortissements_eur) ? '-' : eur(j.dotation_amortissements_eur)}</td>
+        ${montant(j.total_produits_eur, 'total_produits', j.annee)}${montant(j.annuites_eur, 'annuites', j.annee)}${montant(autresCharges)}
+        ${montant(j.autofinancement_eur, 'autofinancement', j.annee)}${montant(j.cumul_autofinancement_eur, 'cumul_autofinancement', j.annee)}
+        <td class="num"${attrFormule('taux_marge_perimetre', X)}>${pct(j.taux_marge, 1)}</td>
+        <td class="num col-comptable col-comptable--debut"${attrFormule('interets_perimetre', X)}>${nul(j.interets_eur) ? '-' : eur(j.interets_eur)}</td>
+        <td class="num col-comptable"${attrFormule('dotation_amortissements_perimetre', X)}>${nul(j.dotation_amortissements_eur) ? '-' : eur(j.dotation_amortissements_eur)}</td>
         ${comptable(j.resultat_comptable_eur)}
       </tr>`;
     })
@@ -3981,10 +4022,13 @@ function rendreExploitation(r) {
   const t = e.totaux;
   $('#table-exploitation').querySelector('tfoot').innerHTML = `<tr>
       <td class="libelle">Cumul sur ${e.lignes.length} ans</td>
-      ${montant(t.produits_eur)}${montant(t.annuites_eur)}
-      ${montant(t.charges_eur - t.annuites_eur)}${montant(t.autofinancement_eur)}
+      <td class="num"${attrFormule('produits_perimetre_horizon', P)}>${eur(t.produits_eur)}</td>${montant(t.annuites_eur)}
+      ${montant(t.charges_eur - t.annuites_eur)}<td class="num ${t.autofinancement_eur < 0 ? 'montant--negatif' : ''}"${attrFormule(
+        'autofinancement_perimetre_horizon',
+        P,
+      )}>${eur(t.autofinancement_eur)}</td>
       <td></td><td></td>
-      <td class="num col-comptable col-comptable--debut">${eur(t.interets_eur)}</td>
+      <td class="num col-comptable col-comptable--debut"${attrFormule('interets_perimetre_horizon', P)}>${eur(t.interets_eur)}</td>
       <td class="num col-comptable">${nul(t.dotation_amortissements_eur) ? '-' : eur(t.dotation_amortissements_eur)}</td>
       ${
         nul(t.resultat_comptable_eur)
@@ -4351,6 +4395,16 @@ function modeleParametres() {
           'pourcentage',
         ),
       ],
+    },
+    {
+      // Le catalogue des formules : rien a regler, tout a comprendre. Son
+      // contenu est produit par `formules.js`, depuis le modele du moteur.
+      id: 'formules',
+      rubrique: 'formules',
+      titre: 'Formules',
+      resume: 'Comment chaque chiffre se calcule',
+      aide: '',
+      formules: true,
     },
   ];
 }
@@ -4990,10 +5044,15 @@ function rendreParametres() {
     ) +
     rubrique(
       'Admin',
-      sections.filter((s) => s.rubrique !== 'exploitation'),
+      sections.filter((s) => s.rubrique !== 'exploitation' && s.rubrique !== 'formules'),
+    ) +
+    rubrique(
+      'Comprendre les calculs',
+      sections.filter((s) => s.rubrique === 'formules'),
     );
 
   const bloc = (s) => {
+    if (s.formules) return sectionFormules();
     const champs = (s.champs ?? []).filter(correspond);
     const matrices = (s.matrices ?? []).map(tableMatrice).filter(Boolean);
     const traj = s.trajectoires && !enRecherche ? sectionTrajectoires() : '';
@@ -5165,6 +5224,8 @@ function rendreParametres() {
 // ---------------------------------------------------------------- boucle de calcul
 
 let dernierResultat = null;
+/** Classeur qui a produit ce resultat : l'ecran des formules y lit chaque valeur. */
+let dernierClasseur = null;
 
 /** Saisies obligatoires : on refuse de calculer avec un zero implicite. */
 function champsManquants() {
@@ -5237,16 +5298,19 @@ function recalculer() {
     // Un poste sans montant vaut « non utilise » : il ne doit pas entrer dans le
     // bilan, sinon la nomenclature entiere y figurerait a zero.
     entrees.postes_bilan = entrees.postes_bilan.filter((p) => !nul(p.montant_ht_eur));
-    const r = calculer(entrees, referentiels);
+    const { resultats: r, classeur } = calculerAvecClasseur(entrees, referentiels);
     dernierResultat = r;
+    dernierClasseur = classeur;
     erreur.hidden = true;
     rendreCalendrier(r);
     rendreFiligraneTFPB(r);
     rendreValeurs(r);
+    rendreFormules();
     pastille.textContent = 'à jour';
     pastille.className = 'pastille pastille--ok';
   } catch (e) {
     dernierResultat = null;
+    dernierClasseur = null;
     erreur.hidden = false;
     erreur.textContent = `Calcul impossible : ${/** @type {Error} */ (e).message}`;
     pastille.textContent = 'erreur';
@@ -8466,6 +8530,10 @@ function informerBoite(titre, texte) {
 }
 
 // ---------------------------------------------------------------- evenements
+
+// Ecran des formules : la page du parametrage et la boite ouverte d'un clic sur
+// un chiffre lisent toutes deux le classeur du dernier calcul.
+installerFormules(() => dernierClasseur);
 
 document.addEventListener('input', (ev) => {
   const el = /** @type {HTMLInputElement} */ (ev.target);

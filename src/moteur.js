@@ -56,6 +56,18 @@ export const VERSION_MOTEUR = '0.4.0';
  * @returns {Object} resultats structures
  */
 export function calculer(entrees, referentiels) {
+  return calculerAvecClasseur(entrees, referentiels).resultats;
+}
+
+/**
+ * Calcule une simulation complete, et rend avec ses resultats le CLASSEUR qui
+ * les a produits : l'ecran s'en sert pour expliquer chaque chiffre par sa
+ * formule, sans rien recalculer.
+ * @param {Entrees} entrees
+ * @param {any} referentiels  { baremes, trajectoires }
+ * @returns {{resultats: any, classeur: import('./formules/classeur.js').Classeur}}
+ */
+export function calculerAvecClasseur(entrees, referentiels) {
   // R-PARAM - Les referentiels du depot font foi, la simulation peut les
   // surcharger. La fusion a lieu ICI, une fois, et tous les modules travaillent
   // ensuite sur le bareme effectif : un module qui irait rechercher la valeur
@@ -720,7 +732,7 @@ export function calculer(entrees, referentiels) {
     amortissement_comptable: amortissementComptable,
   };
 
-  return {
+  const resultats = {
     version_moteur: VERSION_MOTEUR,
     identite,
     calendrier,
@@ -789,4 +801,5 @@ export function calculer(entrees, referentiels) {
     indicateurs,
     alertes,
   };
+  return { resultats, classeur };
 }

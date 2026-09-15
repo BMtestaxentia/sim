@@ -160,7 +160,7 @@ for (const m of lire('ui', 'app.js').matchAll(/referentiels\/([\w.]+)\.json/g)) 
 // et pas seulement les modules entre eux.
 // Les modules d'UI sont concatenes dans l'ordre de dependance, comme ceux du
 // moteur : `depot.js` avant `app.js`, qui l'importe.
-const UI_MODULES = ['depot.js', 'app.js'];
+const UI_MODULES = ['depot.js', 'formules.js', 'app.js'];
 const app = aplatir(UI_MODULES.map((n) => lire('ui', n)).join('\n')).replace(
   /\/\/ __REFERENTIELS_DEBUT__[\s\S]*?\/\/ __REFERENTIELS_FIN__/,
   `const referentiels = ${JSON.stringify(referentiels)};`,

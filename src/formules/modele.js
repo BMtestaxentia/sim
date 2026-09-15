@@ -12,6 +12,7 @@
  * l'ecran les presente.
  */
 import { creerModele, Classeur } from './classeur.js';
+import { sansSurcharge, domainesModifies } from './surcharges.js';
 import { OPERATION } from './domaines/operation.js';
 import { CALENDRIER } from './domaines/calendrier.js';
 import { SURFACES } from './domaines/surfaces.js';
@@ -26,7 +27,7 @@ import { TRESORERIE } from './domaines/tresorerie.js';
 import { EXPLOITATION } from './domaines/exploitation.js';
 import { SYNTHESE } from './domaines/synthese.js';
 
-export const MODELE = creerModele([
+export const DOMAINES = [
   OPERATION,
   CALENDRIER,
   SURFACES,
@@ -40,12 +41,40 @@ export const MODELE = creerModele([
   TRESORERIE,
   EXPLOITATION,
   SYNTHESE,
-]);
+];
+
+export const MODELE = creerModele(DOMAINES);
+
+/** Modeles modifies deja assembles, par texte de leurs modifications. */
+const MODELES_MODIFIES = new Map();
 
 /**
- * Un classeur neuf sur le modele du moteur.
- * @param {{entrees?: any, baremes?: any, trajectoires?: any}} contexte
+ * Le modele du moteur avec les modifications d'un administrateur
+ * (`surcharges.js`), ou le modele du depot s'il n'y en a pas.
+ *
+ * Memes modifications, meme modele : il est garde en memoire, comme une
+ * formule compilee, pour que l'analyse de sensibilite - des centaines de
+ * calculs - ne recompile pas toutes les formules a chaque fois. Ce cache ne
+ * change aucun resultat : il ne fait qu'eviter de refaire le meme travail.
+ * @param {import('./surcharges.js').Surcharges|null|undefined} surcharges
  */
-export function nouveauClasseur(contexte) {
-  return new Classeur(MODELE, contexte);
+export function modeleDe(surcharges) {
+  if (sansSurcharge(surcharges)) return MODELE;
+  const cle = JSON.stringify(surcharges);
+  let modele = MODELES_MODIFIES.get(cle);
+  if (!modele) {
+    modele = creerModele(domainesModifies(DOMAINES, /** @type {any} */ (surcharges)));
+    if (MODELES_MODIFIES.size >= 24) MODELES_MODIFIES.clear();
+    MODELES_MODIFIES.set(cle, modele);
+  }
+  return modele;
+}
+
+/**
+ * Un classeur neuf, sur le modele du moteur ou sur un modele modifie.
+ * @param {{entrees?: any, baremes?: any, trajectoires?: any}} contexte
+ * @param {any} [modele]
+ */
+export function nouveauClasseur(contexte, modele = MODELE) {
+  return new Classeur(modele, contexte);
 }

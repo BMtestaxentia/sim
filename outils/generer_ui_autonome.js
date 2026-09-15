@@ -38,6 +38,9 @@ const MODULES = [
   'formules/langage.js',
   'formules/fonctions.js', // depend de arrondis.js et dates.js
   'formules/classeur.js', // depend de langage.js et fonctions.js
+  'formules/surcharges.js', // depend de langage.js
+  'formules/niveaux.js',
+  'formules/ecriture.js', // depend de langage.js ; lu par l'ecran des calculs
   'parametrage.js',
   'produits.js',
   // Les grandeurs du moteur, domaine par domaine, puis le modele qui les

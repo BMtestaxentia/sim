@@ -4786,6 +4786,16 @@ const FONCTIONS = {
     arite: [2, 8],
     calc: (...v) => Math.max(...v),
   },
+  // La SOMME de valeurs citees une a une, comme `=SOMME(C3;C5;C8)` ou une
+  // plage verticale d'Excel. Sans POUR, c'est cette fonction ; avec, c'est
+  // l'agregat du meme nom. Une valeur absente compte pour zero, comme une
+  // cellule vide.
+  SOMME: {
+    libelle: 'Somme',
+    aide: 'La somme des valeurs citées ; une valeur absente compte pour zéro.',
+    arite: [1, 64],
+    calc: (...v) => v.reduce((s, x) => s + (x ?? 0), 0),
+  },
   ARRONDI: {
     libelle: 'Arrondi',
     aide: 'Arrondi au nombre de décimales indiqué, les demis s’éloignant de zéro (convention d’Excel).',
@@ -5174,6 +5184,8 @@ const OPERATIONS = /** @type {Record<string, (a: any, b: any) => any>} */ ({
  * @property {any} [constante]
  * @property {string} [ecran]      ou la valeur se regle, pour une saisie ou un parametre
  * @property {string} [note]       precision courte, affichee sous le libelle
+ * @property {string} [niveau]     importance a l'ecran : 'cle', 'etape' ou 'technique' (voir niveaux.js)
+ * @property {boolean} [ajoutee]   ligne inseree dans le classeur des calculs (surcharges.js)
  */
 
 /**
@@ -6146,6 +6158,506 @@ function structureParcours(p) {
     dans: p.dans ? structure(p.dans) : null,
     quand: p.quand ? structure(p.quand) : null,
   };
+}
+
+/* ===== src/formules/surcharges.js ===== */
+// @ts-check
+/**
+ * MODIFICATIONS DU MODELE : ce qu'un administrateur change dans le classeur des
+ * calculs, sans toucher au code.
+ *
+ * Trois sortes de modifications, toutes des DONNEES - un objet JSON qui
+ * s'enregistre, s'exporte, et voyage avec les referentiels jusqu'au moteur :
+ *
+ *   formules  { id: 'texte' }     la formule d'une grandeur existante, reecrite ;
+ *   ajouts    [{ id, domaine, apres, libelle, unite, sur, niveau, formule | constante }]
+ *                                 une grandeur nouvelle, rangee dans son domaine
+ *                                 juste apres une autre, comme une ligne inseree ;
+ *   niveaux   { id: 'cle' | 'etape' | 'technique' }   l'importance d'une ligne.
+ *
+ * Le modele modifie est un NOUVEAU modele, assemble des memes domaines : les
+ * definitions du depot ne sont jamais touchees, et « tout retablir » revient
+ * simplement a ne plus rien passer.
+ */
+
+/** Importance d'une ligne du classeur, de la plus visible a la plus discrete. */
+const NIVEAUX_IMPORTANCE = ['cle', 'etape', 'technique'];
+
+/** Identifiant d'une grandeur : minuscules sans accent, chiffres et soulignes. */
+const RE_IDENTIFIANT_GRANDEUR = /^[a-z_][a-z0-9_]*$/;
+
+/**
+ * @typedef {Object} Ajout
+ * @property {string} id
+ * @property {string} domaine
+ * @property {string} [apres]      grandeur apres laquelle ranger la nouvelle
+ * @property {string} libelle
+ * @property {string} unite
+ * @property {string[]} [sur]
+ * @property {string} [niveau]
+ * @property {string} [note]
+ * @property {string} [formule]
+ * @property {any} [constante]     valeur fixe, a defaut de formule
+ */
+
+/**
+ * @typedef {Object} Surcharges
+ * @property {Record<string, string>} [formules]
+ * @property {Ajout[]} [ajouts]
+ * @property {Record<string, string>} [niveaux]
+ */
+
+/**
+ * Vrai si les modifications ne changent rien au modele.
+ * @param {Surcharges|null|undefined} s
+ */
+function sansSurcharge(s) {
+  return (
+    !s ||
+    (!Object.keys(s.formules ?? {}).length && !(s.ajouts ?? []).length && !Object.keys(s.niveaux ?? {}).length)
+  );
+}
+
+/**
+ * Nombre de modifications, pour l'afficher.
+ * @param {Surcharges|null|undefined} s
+ */
+function nombreSurcharges(s) {
+  if (!s) return 0;
+  return Object.keys(s.formules ?? {}).length + (s.ajouts ?? []).length + Object.keys(s.niveaux ?? {}).length;
+}
+
+/**
+ * Definition d'une grandeur ajoutee.
+ * @param {Ajout} a
+ */
+function definitionAjout(a) {
+  /** @type {Record<string, any>} */
+  const def = { libelle: a.libelle, unite: a.unite, sur: a.sur ?? [], niveau: a.niveau ?? 'etape', ajoutee: true };
+  if (a.note) def.note = a.note;
+  if (a.formule !== undefined && a.formule !== null) def.formule = a.formule;
+  else def.constante = a.constante ?? null;
+  return def;
+}
+
+/**
+ * Les domaines du modele, modifies. Une grandeur modifiee est une COPIE de sa
+ * definition : le modele du depot reste celui que les tests verifient.
+ * @param {import('./classeur.js').Domaine[]} domaines
+ * @param {Surcharges} s
+ * @returns {import('./classeur.js').Domaine[]}
+ */
+function domainesModifies(domaines, s) {
+  const formules = s.formules ?? {};
+  const niveaux = s.niveaux ?? {};
+  const ajouts = s.ajouts ?? [];
+  const connus = new Set(domaines.flatMap((d) => Object.keys(d.grandeurs ?? {})));
+  for (const id of Object.keys(formules)) {
+    if (!connus.has(id)) throw new Error(`Formule modifiée d’une grandeur inconnue : ${id}`);
+  }
+  for (const [id, n] of Object.entries(niveaux)) {
+    if (!NIVEAUX_IMPORTANCE.includes(n)) throw new Error(`Importance inconnue pour ${id} : ${n}`);
+  }
+  for (const a of ajouts) {
+    if (!RE_IDENTIFIANT_GRANDEUR.test(a.id) || MOTS_RESERVES.has(a.id.toUpperCase())) {
+      throw new Error(`Nom de grandeur invalide : ${a.id}`);
+    }
+    if (connus.has(a.id)) throw new Error(`La grandeur ${a.id} existe déjà`);
+    if (!domaines.some((d) => d.domaine === a.domaine)) throw new Error(`Domaine inconnu pour ${a.id} : ${a.domaine}`);
+    connus.add(a.id);
+  }
+
+  return domaines.map((d) => {
+    const propres = ajouts.filter((a) => a.domaine === d.domaine);
+    const touche = Object.keys(d.grandeurs ?? {}).some((id) => id in formules || id in niveaux);
+    if (!propres.length && !touche) return d;
+    /** @type {Record<string, any>} */
+    const sortie = {};
+    const places = new Set();
+    /**
+     * Pose une grandeur, puis celles qu'on a inserees juste apres elle - une
+     * ligne inseree sous une ligne inseree suit la sienne.
+     * @param {string} id
+     * @param {any} def
+     */
+    const poser = (id, def) => {
+      sortie[id] = def;
+      for (const a of propres) {
+        if (a.apres === id && !places.has(a.id)) {
+          places.add(a.id);
+          poser(a.id, definitionAjout(a));
+        }
+      }
+    };
+    for (const [id, def] of Object.entries(d.grandeurs ?? {})) {
+      let copie = def;
+      if (id in formules) {
+        if (def.formule === undefined) {
+          throw new Error(`${id} n’est pas calculée par une formule : sa valeur se règle à son écran`);
+        }
+        copie = { ...copie, formule: formules[id] };
+      }
+      if (niveaux[id]) copie = { ...copie, niveau: niveaux[id] };
+      poser(id, copie);
+    }
+    // Une grandeur rangee apres une ligne qui n'existe plus se place en fin
+    // de domaine plutot que de disparaitre.
+    for (const a of propres) {
+      if (!places.has(a.id)) {
+        places.add(a.id);
+        poser(a.id, definitionAjout(a));
+      }
+    }
+    return { ...d, grandeurs: sortie };
+  });
+}
+
+/* ===== src/formules/niveaux.js ===== */
+// @ts-check
+/**
+ * IMPORTANCE DES LIGNES du classeur des calculs : ce qu'on lit d'abord, ce qui
+ * explique, ce qui se replie.
+ *
+ *   cle        un resultat que l'outil restitue et que l'on commente : total,
+ *              loyer annuel, autofinancement, besoin de tresorerie ;
+ *   etape      un calcul intermediaire qui se lit dans l'enchainement, ou une
+ *              saisie de l'operation ;
+ *   technique  un detail d'execution : un repli sur le lot, une valeur exacte
+ *              avant arrondi, un indicateur oui/non, un parametre de bareme.
+ *
+ * Une grandeur peut porter son niveau - `niveau` dans son domaine, ou choisi
+ * dans le classeur par un administrateur (surcharges.js) ; a defaut, il se
+ * deduit ici. Ce n'est qu'un affichage : aucun calcul n'en depend.
+ */
+
+/** Les resultats cles, domaine par domaine. */
+const RESULTATS_CLES = new Set([
+  // calendrier
+  'annee_mise_en_location',
+  // surfaces
+  'nb_logements_total',
+  'shab_totale',
+  'su_tranche',
+  'su_totale_tranches',
+  // loyers
+  'loyer_pratique_tranche',
+  'loyer_annuel_tranche',
+  'loyers_logements_annuels',
+  // prix de revient
+  'total_ttc_module',
+  'total_ttc_module_tranche',
+  'total_ht',
+  'total_ttc',
+  // subventions
+  'subventions_total',
+  'subventions_tranche',
+  'ssf_subvention_calculee',
+  // financement
+  'fonds_propres_total',
+  'fonds_propres_tranche',
+  'cdc_total',
+  // prets
+  'montant_pret',
+  'total_prets',
+  'total_prets_tranche',
+  // amortissement
+  'annuite_pret',
+  // fiscalite
+  'tfpb_base_tranche',
+  'taxe_amenagement',
+  // tresorerie
+  'total_depenses_final',
+  'besoin_maximal',
+  'total_tirages',
+  // exploitation
+  'loyers_nets',
+  'total_produits',
+  'total_charges',
+  'autofinancement',
+  'cumul_autofinancement',
+  'resultat_comptable',
+  'autofinancement_perimetre_horizon',
+  'resultat_cumule_final',
+  'tri',
+  'annee_reconstitution_fonds_propres',
+  // synthese
+  'prix_revient_par_logement',
+  'prix_revient_par_m2_shab',
+  'loyers_annuels_operation',
+  'rmo',
+  'taux_fonds_propres',
+]);
+
+/** Unites d'un indicateur d'execution plutot que d'un montant. */
+const UNITES_TECHNIQUES = new Set(['booleen', 'liste', 'texte']);
+
+/**
+ * Noms d'une grandeur d'execution : repli sur le lot, valeur exacte avant
+ * arrondi, option, liste, table de lecture, ordre de parcours.
+ */
+const RE_TECHNIQUE = /(_lot$|^lot_|_exacte?s?$|_brut$|^option_|^est_|_presente?s?$|_ordre|_reference|_designe|^cles_|_table_|_en_serie$)/;
+
+/** Saisie portee par un lot, lue en repli d'une saisie par tranche. */
+const RE_SAISIE_DE_REPLI = /(_lot$|^lot_)/;
+
+/**
+ * Importance d'une grandeur a l'ecran.
+ * @param {any} g  grandeur du modele
+ * @returns {'cle'|'etape'|'technique'}
+ */
+function niveauDe(g) {
+  if (g.niveau) return g.niveau;
+  if (RESULTATS_CLES.has(g.id)) return 'cle';
+  if (g.formule === undefined) {
+    // Une saisie est ce que l'utilisateur tape : elle se voit. Un parametre de
+    // bareme, une trajectoire, une lecture de table se replient.
+    if (g.saisie !== undefined) return RE_SAISIE_DE_REPLI.test(g.id) ? 'technique' : 'etape';
+    return 'technique';
+  }
+  if (UNITES_TECHNIQUES.has(g.unite) || RE_TECHNIQUE.test(g.id)) return 'technique';
+  return 'etape';
+}
+
+/* ===== src/formules/ecriture.js ===== */
+// @ts-check
+/**
+ * ECRITURE EXCEL DES FORMULES : le classeur des calculs les affiche et les lit
+ * comme Excel en francais.
+ *
+ * Comme Excel, le moteur garde ses formules dans une ecriture INTERNE et les
+ * montre dans l'ecriture francaise : Excel range `=IF(A1>0,1.5,"x")` et
+ * affiche `=SI(A1>0;1,5;"x")`. Ici l'ecriture interne est celle des domaines
+ * (langage.js) ; l'ecriture affichee
+ *   - commence par « = » ;
+ *   - ecrit les nombres avec la virgule decimale : 0,5 ;
+ *   - met les textes entre guillemets : "VEFA" ;
+ *   - separe les arguments par « ; », sans espaces ;
+ *   - designe une valeur par son NOM - le nom de la grandeur, qui joue le role
+ *     d'un nom defini d'Excel - ou, a la demande, par son ADRESSE dans le
+ *     classeur (C12, $B$4, 'Loyers'!D25) quand la reference en a une.
+ *
+ * Les agregats (POUR, DANS, QUAND) et les indices nommes ([exercice: ...])
+ * restent ecrits tels quels : ce sont les deux ajouts du langage au tableur,
+ * pour les grandeurs qui se declinent par tranche, par pret ou par annee.
+ *
+ * `versExcel` et `depuisExcel` sont inverses l'une de l'autre : relire ce qui
+ * s'affiche redonne la meme formule (tests/ecriture.test.js). Ce module ne
+ * connait pas la disposition du classeur : les adresses se resolvent par les
+ * fonctions que l'ecran lui passe.
+ */
+
+/** Mots du langage qui se lisent entoures d'espaces. */
+const MOTS_AGREGAT = new Set(['POUR', 'DANS', 'QUAND']);
+
+/**
+ * Un nombre en ecriture francaise.
+ * @param {number} v
+ */
+function nombreExcel(v) {
+  return String(v).replace('.', ',');
+}
+
+/**
+ * Pour chaque parenthese ouvrante, vrai si l'appel qu'elle ouvre est un
+ * agregat : un POUR figure a son propre niveau. Dans un agregat, un nom se lit
+ * pour chaque valeur parcourue - il n'a pas UNE adresse.
+ * @param {import('./langage.js').Jeton[]} jetons
+ */
+function appelsAgregats(jetons) {
+  /** @type {Map<number, boolean>} */
+  const agregat = new Map();
+  /** @type {number[]} */
+  const pile = [];
+  jetons.forEach((j, i) => {
+    if (j.type === 'op' && (j.v === '(' || j.v === '[')) pile.push(i);
+    else if (j.type === 'op' && (j.v === ')' || j.v === ']')) pile.pop();
+    else if (j.type === 'nom' && j.v === 'POUR' && pile.length) agregat.set(/** @type {number} */ (pile.at(-1)), true);
+  });
+  return agregat;
+}
+
+/**
+ * Formule interne -> ecriture Excel.
+ * @param {string} texte
+ * @param {{adresse?: (nom: string) => string|null}} [options]
+ *   `adresse` rend l'adresse d'une grandeur citee sans indice, ou null pour
+ *   garder son nom. Sans elle, toutes les references s'ecrivent en noms.
+ * @returns {string}
+ */
+function versExcel(texte, options = {}) {
+  const jetons = decouper(texte);
+  const agregats = appelsAgregats(jetons);
+  /** Profondeur des appels d'agregats et des indices ouverts. */
+  const pile = /** @type {boolean[]} */ ([]);
+  let sortie = '=';
+  jetons.forEach((j, i) => {
+    const suivant = jetons[i + 1];
+    switch (j.type) {
+      case 'nombre':
+        sortie += nombreExcel(j.v);
+        break;
+      case 'texte':
+        sortie += `"${String(j.v).replace(/"/g, '""')}"`;
+        break;
+      case 'nom': {
+        if (MOTS_AGREGAT.has(j.v)) {
+          sortie += ` ${j.v} `;
+          break;
+        }
+        const appel = suivant?.type === 'op' && (suivant.v === '(' || suivant.v === '[');
+        const protege = pile.some(Boolean);
+        const adresse = !appel && !protege && !MOTS_RESERVES.has(j.v) && options.adresse ? options.adresse(j.v) : null;
+        sortie += adresse ?? j.v;
+        break;
+      }
+      case 'op':
+        if (j.v === '(' || j.v === '[') {
+          // Un indice nomme se lit toujours en noms : ses expressions parlent
+          // de dimensions, pas de cellules.
+          pile.push(j.v === '[' || agregats.get(i) === true);
+        } else if (j.v === ')' || j.v === ']') pile.pop();
+        sortie += j.v;
+        break;
+      default:
+        break;
+    }
+  });
+  return sortie;
+}
+
+/**
+ * @typedef {Object} ReferenceExcel
+ * @property {string} texte          telle qu'ecrite : 'Prêts'!$C$5
+ * @property {string|null} feuille  nom d'onglet, sans guillemets
+ * @property {{col: string, colAbs: boolean, ligne: number, ligneAbs: boolean}} a
+ * @property {{col: string, colAbs: boolean, ligne: number, ligneAbs: boolean}|null} b  fin d'une plage
+ */
+
+const RE_REFERENCE =
+  /^(?:'((?:[^']|'')+)'!|([A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_.]*)!)?(\$?)([A-Z]{1,3})(\$?)([0-9]+)(?::(\$?)([A-Z]{1,3})(\$?)([0-9]+))?(?![A-Za-zÀ-ÿ0-9_(])/;
+
+/**
+ * Ecriture Excel -> formule interne.
+ *
+ * @param {string} texte  ce qu'on a tape, avec ou sans « = »
+ * @param {{reference?: (r: ReferenceExcel) => string}} [options]
+ *   `reference` traduit une adresse (ou une plage) en texte de formule interne,
+ *   et leve une erreur lisible si elle ne designe rien d'utilisable.
+ * @returns {string}
+ */
+function depuisExcel(texte, options = {}) {
+  const src = texte.trim().replace(/^=/, '');
+  /** @type {Array<{type: 'mot'|'nombre'|'texte'|'op'|'brut', v: string}>} */
+  const jetons = [];
+  let i = 0;
+  while (i < src.length) {
+    const reste = src.slice(i);
+    const c = src[i];
+    if (/\s/.test(c)) {
+      i++;
+      continue;
+    }
+    if (c === '"') {
+      let j = i + 1;
+      let v = '';
+      for (;;) {
+        if (j >= src.length) throw new Error('Texte sans guillemet fermant.');
+        if (src[j] === '"') {
+          if (src[j + 1] === '"') {
+            v += '"';
+            j += 2;
+            continue;
+          }
+          break;
+        }
+        v += src[j];
+        j++;
+      }
+      jetons.push({ type: 'texte', v: `'${v.replace(/'/g, "''")}'` });
+      i = j + 1;
+      continue;
+    }
+    const ref = RE_REFERENCE.exec(reste);
+    if (ref && (ref[1] || ref[2] || /^\$?[A-Z]{1,3}\$?[0-9]/.test(reste))) {
+      if (!options.reference) throw new Error(`L’adresse ${ref[0]} ne se lit que dans le classeur.`);
+      /** @type {ReferenceExcel} */
+      const r = {
+        texte: ref[0],
+        feuille: ref[1] !== undefined ? ref[1].replace(/''/g, "'") : ref[2] ?? null,
+        a: { col: ref[4], colAbs: ref[3] === '
+  </body>
+</html>
+, ligne: Number(ref[6]), ligneAbs: ref[5] === '
+  </body>
+</html>
+ },
+        b: ref[8] ? { col: ref[8], colAbs: ref[7] === '
+  </body>
+</html>
+, ligne: Number(ref[10]), ligneAbs: ref[9] === '
+  </body>
+</html>
+ } : null,
+      };
+      jetons.push({ type: 'brut', v: options.reference(r) });
+      i += ref[0].length;
+      continue;
+    }
+    const nombre = /^([0-9]+(?:,[0-9]+)?|,[0-9]+)(?:[eE][-+]?[0-9]+)?(%)?/.exec(reste);
+    if (nombre) {
+      let v = nombre[0].replace('%', '').replace(',', '.');
+      if (nombre[2]) v = centieme(v);
+      jetons.push({ type: 'nombre', v });
+      i += nombre[0].length;
+      continue;
+    }
+    const mot = /^[A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*(?:\.[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9_]*)*/.exec(reste);
+    if (mot) {
+      jetons.push({ type: 'mot', v: mot[0] });
+      i += mot[0].length;
+      continue;
+    }
+    const op = ['<>', '<=', '>=', '+', '-', '*', '/', '^', '=', '<', '>', '(', ')', '[', ']', ';', ':'].find((o) => reste.startsWith(o));
+    if (op) {
+      jetons.push({ type: 'op', v: op });
+      i += op.length;
+      continue;
+    }
+    if (c === '&') throw new Error('L’opérateur & n’existe pas ici : les formules du moteur calculent des nombres.');
+    if (c === ',') throw new Error('Les arguments se séparent par « ; » et la virgule est décimale, comme dans Excel en français.');
+    throw new Error(`Caractère inattendu : « ${c} ».`);
+  }
+  if (!jetons.length) throw new Error('La formule est vide.');
+
+  // Remise en forme lisible : l'espacement n'a pas de sens pour le langage.
+  let sortie = '';
+  jetons.forEach((j, k) => {
+    const prec = jetons[k - 1];
+    if (j.type === 'op') {
+      if (j.v === ';' || j.v === ':') sortie += `${j.v} `;
+      else if (j.v === '(' || j.v === '[' || j.v === ')' || j.v === ']') sortie += j.v;
+      else if ((j.v === '-' || j.v === '+') && (!prec || (prec.type === 'op' && !(prec.v === ')' || prec.v === ']')))) sortie += j.v;
+      else sortie += ` ${j.v} `;
+      return;
+    }
+    if (prec && prec.type !== 'op' && !sortie.endsWith(' ')) sortie += ' ';
+    sortie += j.v;
+  });
+  return sortie.replace(/ {2,}/g, ' ').trim();
+}
+
+/**
+ * Un nombre ecrit en pourcentage, divise par cent sans passer par le calcul
+ * flottant : « 0,3 % » vaut exactement 0.003, comme dans Excel.
+ * @param {string} v  nombre a point decimal, sans exposant
+ */
+function centieme(v) {
+  if (/e/i.test(v)) return String(Number(v) / 100);
+  const [entier, decimales = ''] = v.split('.');
+  const chiffres = entier.padStart(3, '0') + decimales;
+  const point = chiffres.length - decimales.length - 2;
+  const resultat = `${chiffres.slice(0, point)}.${chiffres.slice(point)}`.replace(/^0+(?=\d)/, '').replace(/\.?0+$/, '');
+  return resultat === '' || resultat === '.' ? '0' : resultat;
 }
 
 /* ===== src/parametrage.js ===== */
@@ -13132,7 +13644,8 @@ const SYNTHESE = {
 
 
 
-const MODELE = creerModele([
+
+const DOMAINES = [
   OPERATION,
   CALENDRIER,
   SURFACES,
@@ -13146,14 +13659,42 @@ const MODELE = creerModele([
   TRESORERIE,
   EXPLOITATION,
   SYNTHESE,
-]);
+];
+
+const MODELE = creerModele(DOMAINES);
+
+/** Modeles modifies deja assembles, par texte de leurs modifications. */
+const MODELES_MODIFIES = new Map();
 
 /**
- * Un classeur neuf sur le modele du moteur.
- * @param {{entrees?: any, baremes?: any, trajectoires?: any}} contexte
+ * Le modele du moteur avec les modifications d'un administrateur
+ * (`surcharges.js`), ou le modele du depot s'il n'y en a pas.
+ *
+ * Memes modifications, meme modele : il est garde en memoire, comme une
+ * formule compilee, pour que l'analyse de sensibilite - des centaines de
+ * calculs - ne recompile pas toutes les formules a chaque fois. Ce cache ne
+ * change aucun resultat : il ne fait qu'eviter de refaire le meme travail.
+ * @param {import('./surcharges.js').Surcharges|null|undefined} surcharges
  */
-function nouveauClasseur(contexte) {
-  return new Classeur(MODELE, contexte);
+function modeleDe(surcharges) {
+  if (sansSurcharge(surcharges)) return MODELE;
+  const cle = JSON.stringify(surcharges);
+  let modele = MODELES_MODIFIES.get(cle);
+  if (!modele) {
+    modele = creerModele(domainesModifies(DOMAINES, /** @type {any} */ (surcharges)));
+    if (MODELES_MODIFIES.size >= 24) MODELES_MODIFIES.clear();
+    MODELES_MODIFIES.set(cle, modele);
+  }
+  return modele;
+}
+
+/**
+ * Un classeur neuf, sur le modele du moteur ou sur un modele modifie.
+ * @param {{entrees?: any, baremes?: any, trajectoires?: any}} contexte
+ * @param {any} [modele]
+ */
+function nouveauClasseur(contexte, modele = MODELE) {
+  return new Classeur(modele, contexte);
 }
 
 /* ===== src/amortissement.js ===== */
@@ -15614,7 +16155,12 @@ function calculerAvecClasseur(entrees, referentiels) {
   // calendrier au compte d'exploitation - s'y calculent et s'y lisent ; ce
   // fichier ne fait que les restituer. Chaque cellule n'y est calculee qu'une
   // fois.
-  const classeur = nouveauClasseur({ entrees, baremes, trajectoires });
+  //
+  // Les MODIFICATIONS DU MODELE faites dans le classeur des calculs voyagent
+  // avec les referentiels : ce sont des donnees, comme les baremes, et le
+  // moteur calcule avec le modele qu'elles decrivent. Sans elles, c'est le
+  // modele du depot.
+  const classeur = nouveauClasseur({ entrees, baremes, trajectoires }, modeleDe(referentiels.surcharges_modele));
   /**
    * @param {string} id
    * @param {Record<string, any>} [indices]

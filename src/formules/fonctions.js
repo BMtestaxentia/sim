@@ -270,6 +270,16 @@ export const FONCTIONS = {
     arite: [2, 8],
     calc: (...v) => Math.max(...v),
   },
+  // La SOMME de valeurs citees une a une, comme `=SOMME(C3;C5;C8)` ou une
+  // plage verticale d'Excel. Sans POUR, c'est cette fonction ; avec, c'est
+  // l'agregat du meme nom. Une valeur absente compte pour zero, comme une
+  // cellule vide.
+  SOMME: {
+    libelle: 'Somme',
+    aide: 'La somme des valeurs citées ; une valeur absente compte pour zéro.',
+    arite: [1, 64],
+    calc: (...v) => v.reduce((s, x) => s + (x ?? 0), 0),
+  },
   ARRONDI: {
     libelle: 'Arrondi',
     aide: 'Arrondi au nombre de décimales indiqué, les demis s’éloignant de zéro (convention d’Excel).',

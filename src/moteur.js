@@ -17,7 +17,7 @@
 import { restituerLoyer, controlesLoyer } from './loyers.js';
 import { normaliserTrajectoires } from './trajectoires.js';
 import { restituerCalendrier } from './calendrier.js';
-import { nouveauClasseur } from './formules/modele.js';
+import { nouveauClasseur, modeleDe } from './formules/modele.js';
 import { restituerTresorerie } from './tresorerie.js';
 import { fusionner, surchargerTrajectoires, ecartsParametrage } from './parametrage.js';
 import { restituerPrixDeRevient } from './bilan.js';
@@ -88,7 +88,12 @@ export function calculerAvecClasseur(entrees, referentiels) {
   // calendrier au compte d'exploitation - s'y calculent et s'y lisent ; ce
   // fichier ne fait que les restituer. Chaque cellule n'y est calculee qu'une
   // fois.
-  const classeur = nouveauClasseur({ entrees, baremes, trajectoires });
+  //
+  // Les MODIFICATIONS DU MODELE faites dans le classeur des calculs voyagent
+  // avec les referentiels : ce sont des donnees, comme les baremes, et le
+  // moteur calcule avec le modele qu'elles decrivent. Sans elles, c'est le
+  // modele du depot.
+  const classeur = nouveauClasseur({ entrees, baremes, trajectoires }, modeleDe(referentiels.surcharges_modele));
   /**
    * @param {string} id
    * @param {Record<string, any>} [indices]

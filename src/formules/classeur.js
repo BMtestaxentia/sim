@@ -73,6 +73,8 @@ const OPERATIONS = /** @type {Record<string, (a: any, b: any) => any>} */ ({
  * @property {any} [constante]
  * @property {string} [ecran]      ou la valeur se regle, pour une saisie ou un parametre
  * @property {string} [note]       precision courte, affichee sous le libelle
+ * @property {string} [niveau]     importance a l'ecran : 'cle', 'etape' ou 'technique' (voir niveaux.js)
+ * @property {boolean} [ajoutee]   ligne inseree dans le classeur des calculs (surcharges.js)
  */
 
 /**

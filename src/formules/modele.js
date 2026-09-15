@@ -20,6 +20,7 @@ import { PRIX_REVIENT } from './domaines/prix_revient.js';
 import { SUBVENTIONS } from './domaines/subventions.js';
 import { FINANCEMENT } from './domaines/financement.js';
 import { PRETS } from './domaines/prets.js';
+import { AMORTISSEMENT } from './domaines/amortissement.js';
 
 export const MODELE = creerModele([
   OPERATION,
@@ -30,6 +31,7 @@ export const MODELE = creerModele([
   SUBVENTIONS,
   FINANCEMENT,
   PRETS,
+  AMORTISSEMENT,
 ]);
 
 /**

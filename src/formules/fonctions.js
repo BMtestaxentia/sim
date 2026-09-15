@@ -203,9 +203,13 @@ export const FONCTIONS = {
   ERREUR: {
     libelle: 'Erreur',
     aide: 'Arrête le calcul avec ce message : la saisie ne permet pas de conclure.',
-    arite: [1, 4],
+    arite: [1, 8],
     calc: (...morceaux) => {
-      throw new Error(morceaux.map(String).join(''));
+      // Marquee : c'est un arret VOULU par une formule - une saisie qui ne
+      // permet pas de conclure -, pas une formule qui se trompe.
+      const e = new Error(morceaux.map(String).join(''));
+      Object.defineProperty(e, 'issueDeFormule', { value: true });
+      throw e;
     },
   },
   NON: { libelle: 'Non', aide: 'Inverse une condition.', arite: [1, 1], calc: (x) => !x },

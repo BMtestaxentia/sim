@@ -50,6 +50,7 @@ const MODULES = [
   'formules/domaines/subventions.js',
   'formules/domaines/financement.js',
   'formules/domaines/prets.js', // depend de produits.js
+  'formules/domaines/amortissement.js',
   'formules/modele.js',
   'amortissement.js', // depend de dates.js
   'calendrier.js', // depend de dates.js

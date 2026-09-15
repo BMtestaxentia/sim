@@ -24,7 +24,7 @@ import { fusionner, surchargerTrajectoires, ecartsParametrage } from './parametr
 import { restituerPrixDeRevient, valeurComptableTerrain, baseAmortissementComptable } from './bilan.js';
 import { restituerSubventions, restituerSurchargeFonciere } from './subventions.js';
 import { quotiteFoncier, restituerEquilibre } from './financement.js';
-import { tableauAmortissement, anneePremiereEcheance } from './amortissement.js';
+import { restituerTableau } from './amortissement.js';
 import { exonerationTFPB, taxeAmenagement } from './fiscalite.js';
 import {
   compteExploitation,
@@ -466,22 +466,8 @@ export function calculer(entrees, referentiels) {
         principal: lire('principal_pret', P),
         taux_saisi: p.taux,
         annee_premiere_echeance: premiereEcheance,
-        tableau: tableauAmortissement({
-          montant_eur: p.montant_eur,
-          taux: p.taux,
-          progressivite: lire('progressivite_pret', P),
-          duree_ans: lire('duree_ans_pret', P),
-          annee_premiere_echeance: premiereEcheance,
-          revisabilite: lire('revisabilite_pret', P),
-          differe_ans: lire('differe_ans_pret', P),
-          differe_mois: lire('differe_mois_pret', P),
-          differe_type: lire('differe_type_pret', P),
-          profil: lire('profil_pret', P),
-          taux_plancher: lire('taux_plancher_pret', P),
-          periodicite: lire('periodicite_pret', P),
-          livret_a_origine: lire('livret_a_origine_final', P),
-          livret_a_par_annee: lire('livret_a_par_annee_final', P),
-        }),
+        // R-AMT : le tableau se lit dans le classeur, domaine « amortissement ».
+        tableau: restituerTableau(classeur, p.cle),
       };
     });
 

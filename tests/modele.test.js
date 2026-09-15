@@ -80,7 +80,16 @@ describe('modele des formules', () => {
     for (const g of MODELE.grandeurs.values()) {
       if (g.cachee) continue;
       for (const indices of combinaisons(c, g)) {
-        const v = c.valeur(g.id, indices);
+        let v;
+        try {
+          v = c.valeur(g.id, indices);
+        } catch (e) {
+          // Un controle qui ARRETE volontairement le calcul - un pret de
+          // montant nul n'a pas de tableau - n'a pas de valeur a expliquer.
+          // Toute autre erreur est une formule fausse.
+          if (/** @type {any} */ (e).issueDeFormule) continue;
+          throw e;
+        }
         const e = c.expliquer(g.id, indices);
         expect(e.v, g.id).toEqual(v);
         if (e.arbre) expect(e.arbre.v, `${g.id} ${JSON.stringify(indices)}`).toEqual(v);

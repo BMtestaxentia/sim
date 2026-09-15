@@ -33,6 +33,7 @@ export const OPERATION = {
     an: { libelle: 'Année civile' },
     code: { libelle: 'Code de tranche' },
     champ: { libelle: 'Caractéristique' },
+    nature: { libelle: 'Nature de prêt' },
   },
   grandeurs: {
     // --- Programme ----------------------------------------------------------

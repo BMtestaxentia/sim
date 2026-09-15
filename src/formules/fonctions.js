@@ -373,6 +373,12 @@ export const FONCTIONS = {
     arite: [2, 2],
     calc: (l, x) => Array.isArray(l) && l.includes(x),
   },
+  ENSEMBLE: {
+    libelle: 'Liste',
+    aide: 'La liste de ces valeurs, dans l’ordre écrit.',
+    arite: [1, 8],
+    calc: (...valeurs) => valeurs,
+  },
   ELEMENT: {
     libelle: 'Élément',
     aide: 'L’élément de la liste au rang indiqué, le premier étant au rang 0.',

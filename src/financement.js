@@ -62,23 +62,19 @@ export function soldeAFinancer({
  * @returns {{pls_eur: number, cpls_eur: number, part_pls: number|null, sous_plancher: boolean}}
  */
 export function scinderPLS({ montant_pls_eur, prix_revient_eur, plafond = 0.55, plancher = 0.51 }) {
-  if (!(montant_pls_eur > 0) || !(prix_revient_eur > 0)) {
-    return {
-      pls_eur: arrondiEuro(Math.max(0, montant_pls_eur || 0)),
-      cpls_eur: 0,
-      part_pls: null,
-      sous_plancher: false,
-    };
-  }
-  const maxi = prix_revient_eur * plafond;
-  const pls = Math.min(montant_pls_eur, maxi);
-  const part = pls / prix_revient_eur;
+  // Formules du domaine « prets » : `pls_eur`, `cpls_montant`, `part_pls`,
+  // `pls_sous_plancher`. Le plancher se juge sur le PLS effectivement appele.
+  const c = nouveauClasseur({})
+    .fixer('total_pls', {}, montant_pls_eur)
+    .fixer('pr_pls', {}, prix_revient_eur)
+    .fixer('plafond_pls', {}, plafond)
+    .fixer('plancher_pls', {}, plancher)
+    .fixer('tranche_pls_presente', {}, true);
   return {
-    pls_eur: arrondiEuro(pls),
-    cpls_eur: arrondiEuro(Math.max(0, montant_pls_eur - maxi)),
-    part_pls: part,
-    // Le plancher se juge sur le PLS effectivement appele, pas sur le total.
-    sous_plancher: part < plancher,
+    pls_eur: c.valeur('pls_eur'),
+    cpls_eur: c.valeur('cpls_montant'),
+    part_pls: c.valeur('part_pls'),
+    sous_plancher: c.valeur('pls_sous_plancher'),
   };
 }
 
@@ -96,12 +92,16 @@ export function scinderPLS({ montant_pls_eur, prix_revient_eur, plafond = 0.55, 
  * @returns {{plafond_eur: number, depassement_eur: number, part: number|null}}
  */
 export function plafondPretsLLI({ total_prets_eur, prix_revient_eur, plafond = 0.9 }) {
-  if (!(prix_revient_eur > 0)) return { plafond_eur: 0, depassement_eur: 0, part: null };
-  const maxi = prix_revient_eur * plafond;
+  // Formules du domaine « prets » : `plafond_prets_lli_eur`,
+  // `depassement_prets_lli`, `part_prets_lli`.
+  const c = nouveauClasseur({})
+    .fixer('total_prets_lli', {}, total_prets_eur)
+    .fixer('pr_lli', {}, prix_revient_eur)
+    .fixer('plafond_lli', {}, plafond);
   return {
-    plafond_eur: arrondiEuro(maxi),
-    depassement_eur: arrondiEuro(Math.max(0, total_prets_eur - maxi)),
-    part: total_prets_eur / prix_revient_eur,
+    plafond_eur: c.valeur('plafond_prets_lli_eur'),
+    depassement_eur: c.valeur('depassement_prets_lli'),
+    part: c.valeur('part_prets_lli'),
   };
 }
 
@@ -302,39 +302,45 @@ export function controleEquilibre(
   },
   referentiels,
 ) {
-  const ressources = subventions_eur + fonds_propres_eur + prets_eur;
-  const ecart = arrondiEuro(ressources - prix_revient_ttc_module_eur);
+  const c = nouveauClasseur({ baremes: referentiels })
+    .fixer('total_ttc_module', {}, prix_revient_ttc_module_eur)
+    .fixer('subventions_total', {}, subventions_eur)
+    .fixer('fonds_propres_total', {}, fonds_propres_eur)
+    .fixer('total_prets', {}, prets_eur)
+    .fixer('total_prets_cdc', {}, prets_cdc_eur)
+    .fixer('prix_revient_cdc', {}, prix_revient_cdc_eur);
+  // Sans referentiel, pas de minimum a opposer : le ratio ne se mesure pas.
+  if (!referentiels) c.fixer('ratio_prets_cdc', {}, null);
+  return restituerEquilibre(c);
+}
 
+/**
+ * R-FIN-1 et R-FIN-5 - Equilibre du plan de financement, tel que le moteur le
+ * restitue. `Subventions + FP + Prets = PR_TTC_module` : l'ecart est signale,
+ * jamais absorbe silencieusement.
+ *
+ * Le ratio se mesure sur le PERIMETRE des fonds d'epargne : une tranche libre,
+ * financee en banque, n'a rien a faire au denominateur d'un controle CDC.
+ * @param {import('./formules/classeur.js').Classeur} c
+ */
+export function restituerEquilibre(c) {
+  const ecart = c.valeur('ecart_plan');
+  const ratio = c.valeur('ratio_prets_cdc');
   const alertes = [];
   if (ecart > 0) alertes.push(`Surfinancement de ${ecart} EUR`);
   if (ecart < 0) alertes.push(`Sous-financement de ${-ecart} EUR`);
-
-  // Le ratio se mesure sur le PERIMETRE des fonds d'epargne, pas sur l'operation
-  // entiere : une tranche libre, financee en banque, n'a rien a faire au
-  // denominateur d'un controle CDC. Sans cette distinction, une operation moitie
-  // PLUS moitie libre affichait 45 % et declenchait une alerte alors qu'aucune
-  // regle n'etait enfreinte. Sur une operation homogene, les deux se confondent.
-  const assietteCDC = Number.isFinite(prix_revient_cdc_eur)
-    ? /** @type {number} */ (prix_revient_cdc_eur)
-    : prix_revient_ttc_module_eur;
-  let ratio_cdc = null;
-  if (referentiels && assietteCDC > 0) {
-    ratio_cdc = prets_cdc_eur / assietteCDC;
-    const mini = referentiels.constantes_reglementaires.controle_ratio_prets_cdc_min.valeur;
-    if (prets_cdc_eur > 0 && ratio_cdc < mini) {
-      alertes.push(
-        `Ratio prets CDC / prix de revient de ${(ratio_cdc * 100).toFixed(1)} %, ` +
-          `en dessous du minimum reglementaire de ${(mini * 100).toFixed(0)} %`,
-      );
-    }
+  if (ratio !== null && ratio !== undefined && c.valeur('ratio_cdc_insuffisant')) {
+    alertes.push(
+      `Ratio prets CDC / prix de revient de ${(ratio * 100).toFixed(1)} %, ` +
+        `en dessous du minimum reglementaire de ${(c.valeur('ratio_prets_cdc_min') * 100).toFixed(0)} %`,
+    );
   }
-
   return {
-    ressources_eur: arrondiEuro(ressources),
-    emplois_eur: arrondiEuro(prix_revient_ttc_module_eur),
+    ressources_eur: c.valeur('ressources_plan_arrondies'),
+    emplois_eur: c.valeur('emplois_plan'),
     ecart_eur: ecart,
-    equilibre: ecart === 0,
-    ratio_prets_cdc: ratio_cdc,
+    equilibre: c.valeur('plan_equilibre'),
+    ratio_prets_cdc: ratio ?? null,
     alertes,
   };
 }

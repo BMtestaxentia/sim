@@ -4760,6 +4760,12 @@ const FONCTIONS = {
     arite: [2, 2],
     calc: (l, x) => Array.isArray(l) && l.includes(x),
   },
+  ENSEMBLE: {
+    libelle: 'Liste',
+    aide: 'La liste de ces valeurs, dans l’ordre écrit.',
+    arite: [1, 8],
+    calc: (...valeurs) => valeurs,
+  },
   ELEMENT: {
     libelle: 'Élément',
     aide: 'L’élément de la liste au rang indiqué, le premier étant au rang 0.',
@@ -6639,6 +6645,7 @@ const OPERATION = {
     an: { libelle: 'Année civile' },
     code: { libelle: 'Code de tranche' },
     champ: { libelle: 'Caractéristique' },
+    nature: { libelle: 'Nature de prêt' },
   },
   grandeurs: {
     // --- Programme ----------------------------------------------------------
@@ -9104,6 +9111,753 @@ const FINANCEMENT = {
   },
 };
 
+/* ===== src/formules/domaines/prets.js ===== */
+// @ts-check
+/**
+ * DOMAINE « PRETS » - R-FIN-3/5/8/9 et R-AMT-1 : la liste des prets, leurs
+ * caracteristiques, la scission PLS / CPLS et l'equilibre du plan.
+ *
+ * LA LISTE. Les prets saisis d'abord. Si aucun n'est un pret foncier ou de
+ * construction, chaque tranche recoit en plus les prets que son produit pose
+ * par defaut - un foncier et une construction a la CDC, un seul pret en banque
+ * pour le logement libre. Un pret dont la duree reste inconnue est ecarte, avec
+ * une alerte ; le CPLS s'ajoute en fin de liste quand le PLS est plafonne.
+ *
+ * LES CARACTERISTIQUES. Chacune se lit sur la saisie, et a defaut sur les
+ * valeurs par defaut du produit de la tranche (duree selon la zone, marge de la
+ * grille CDC, modele de pret pour le libre). Le taux fait exception : un pret
+ * indexe se decrit par sa MARGE, et son taux vaut Livret A d'origine + marge
+ * des qu'une marge est connue, sauf taux saisi en clair.
+ *
+ * Sources : calculette CDC « production LS » (plafond PLS de 55 %, plancher de
+ * 51 %, plafond LLI de 90 %, controle AT32), `produits.js` (prets par defaut).
+ */
+
+/** Code et libelle des prets poses par defaut, avant suffixe de tranche. */
+const MODELES_PRETS_DEFAUT = /** @type {Record<string, {code: string, libelle: string}>} */ ({
+  foncier: { code: 'CDC_FONCIER', libelle: 'Prêt CDC foncier' },
+  construction: { code: 'CDC_BATIMENT', libelle: 'Prêt CDC construction' },
+});
+
+/** @type {import('../classeur.js').Domaine} */
+const PRETS = {
+  domaine: 'prets',
+  titre: 'Prêts',
+  dimensions: {
+    pret_base: {
+      libelle: 'Prêt',
+      valeurs: 'CONCATENER(INDICES(prets_saisis); SI(pret_principal_saisi; VIDE; cles_prets_defaut))',
+    },
+    pret: {
+      libelle: 'Prêt',
+      valeurs: "CONCATENER(prets_calculables; SI(cpls_montant > 0; ENSEMBLE('CPLS'); VIDE))",
+      etiquette: 'libelle_pret',
+    },
+  },
+  grandeurs: {
+    // --- Livret A ---------------------------------------------------------------
+    la_origine: {
+      libelle: 'Livret A de référence',
+      unite: 'taux',
+      regle: 'R-AMT-1',
+      trajectoire: 'taux_reference_livret_a',
+      ecran: 'Paramètres > Modèles de prêt',
+    },
+    la_par_annee: {
+      libelle: 'Trajectoire du Livret A',
+      unite: 'liste',
+      trajectoire: 'livret_a_par_annee',
+      ecran: 'Paramètres > Trajectoires macro',
+    },
+
+    // --- Valeurs par defaut des produits ------------------------------------------
+    defauts_prets_tranche: {
+      libelle: 'Prêts par défaut du produit',
+      unite: 'liste',
+      regle: 'R-AMT-1',
+      sur: ['code'],
+      // Lecture du referentiel des produits : duree selon la zone, marge de la
+      // grille CDC, modele de pret pour un produit finance en banque. Une
+      // tranche dont les valeurs ne se resolvent pas (marge ou zone inconnue)
+      // n'en a aucune, et le dit.
+      lire: (ctx, code) => {
+        const surcharges = ctx.entrees?.caracteristiques_prets_defaut ?? {};
+        const b = ctx.baremes ?? {};
+        try {
+          const defauts = pretsDefautResolus(code, {
+            zone_ABC: ctx.entrees?.identite?.zone_ABC,
+            livret_a_reference: surcharges.livret_a_origine ?? ctx.trajectoires?.taux_reference_livret_a,
+            marges: b.prets_cdc?.marges ?? {},
+            presets: b.presets_prets?.presets ?? [],
+            progressivite: surcharges.progressivite ?? b.prets_cdc?.defauts?.progressivite ?? 0,
+          });
+          return { defauts: Object.fromEntries(defauts.map((d) => [d.nature, d])), erreur: null };
+        } catch (e) {
+          return { defauts: {}, erreur: /** @type {Error} */ (e).message };
+        }
+      },
+      ecran: 'Paramètres > Modèles de prêt',
+    },
+    defaut_pret: {
+      libelle: 'Caractéristique par défaut',
+      unite: 'texte',
+      regle: 'R-AMT-1',
+      sur: ['code', 'nature', 'champ'],
+      formule: "CHAMP(CHAMP(CHAMP(defauts_prets_tranche; 'defauts'); nature); champ)",
+    },
+    erreur_defauts_pret: {
+      libelle: 'Valeurs par défaut non calculables',
+      unite: 'texte',
+      sur: ['code'],
+      formule: "CHAMP(defauts_prets_tranche; 'erreur')",
+    },
+    code_base_defaut: {
+      libelle: 'Code du prêt par défaut',
+      unite: 'texte',
+      sur: ['code', 'nature'],
+      // Le code cesse d'annoncer la CDC des que la tranche n'en releve pas.
+      lire: (_ctx, code, nature) =>
+        financeParCDC(code) ? MODELES_PRETS_DEFAUT[nature].code : `PRET_${String(nature).toUpperCase()}`,
+    },
+    libelle_base_defaut: {
+      libelle: 'Libellé du prêt par défaut',
+      unite: 'texte',
+      sur: ['code', 'nature'],
+      lire: (_ctx, code, nature) =>
+        produit(code).prets_defaut.find((d) => d.nature === nature)?.libelle ??
+        MODELES_PRETS_DEFAUT[nature].libelle,
+    },
+    finance_par_cdc_code: {
+      libelle: 'Produit financé sur fonds d’épargne',
+      unite: 'booleen',
+      regle: 'R-FIN-5',
+      sur: ['code'],
+      lire: (_ctx, code) => financeParCDC(code),
+    },
+
+    // --- La liste des prets ------------------------------------------------------
+    cles_prets_defaut: {
+      libelle: 'Prêts posés par défaut',
+      unite: 'liste',
+      regle: 'R-FIN-3',
+      formule: "LISTE(TEXTE.JOINDRE(t; '|'; n) POUR t DANS tranches_presentes POUR n DANS natures_defaut[tranche: t])",
+      note: 'Un par tranche et par nature que son produit déclare, quand aucun prêt foncier ou construction n’est saisi.',
+    },
+    tranche_defaut_pret: {
+      libelle: 'Tranche du prêt par défaut',
+      unite: 'texte',
+      sur: ['pret_base'],
+      formule: "SI(EST.NOMBRE(pret_base); VIDE; PARTIE(pret_base; '|'; 0))",
+    },
+    nature_defaut_pret: {
+      libelle: 'Nature du prêt par défaut',
+      unite: 'texte',
+      sur: ['pret_base'],
+      formule: "SI(EST.NOMBRE(pret_base); VIDE; PARTIE(pret_base; '|'; 1))",
+    },
+    champ_pret_defaut: {
+      libelle: 'Caractéristique posée sur le prêt par défaut',
+      unite: 'texte',
+      sur: ['pret_base', 'champ'],
+      formule:
+        "SI(champ = 'code'; TEXTE.JOINDRE(code_base_defaut[code: tranche_defaut_pret; nature: nature_defaut_pret]; '_'; tranche_defaut_pret); " +
+        "SI(champ = 'libelle'; TEXTE.JOINDRE(libelle_base_defaut[code: tranche_defaut_pret; nature: nature_defaut_pret]; " +
+        "SI(LONGUEUR(tranches_presentes) > 1; TEXTE.JOINDRE(' '; tranche_defaut_pret); '')); " +
+        "SI(champ = 'nature'; nature_defaut_pret; SI(champ = 'produit'; tranche_defaut_pret; " +
+        "SI(champ = 'montant_auto'; VRAI; INDEFINI)))))",
+    },
+    champ_pret_base: {
+      libelle: 'Caractéristique portée par le prêt',
+      unite: 'texte',
+      sur: ['pret_base', 'champ'],
+      formule: 'SI(EST.NOMBRE(pret_base); champ_pret_saisi[pret_saisi: pret_base]; champ_pret_defaut)',
+    },
+    nature_pret: {
+      libelle: 'Nature du prêt',
+      unite: 'texte',
+      sur: ['pret_base'],
+      formule: "champ_pret_base[champ: 'nature']",
+    },
+    tranche_pret: {
+      libelle: 'Tranche du prêt',
+      unite: 'texte',
+      sur: ['pret_base'],
+      formule: "DEFAUT(champ_pret_base[champ: 'produit']; tranche_unique)",
+    },
+    pret_auto: {
+      libelle: 'Prêt à montant automatique',
+      unite: 'booleen',
+      regle: 'R-FIN-3',
+      sur: ['pret_base'],
+      formule:
+        "OU(champ_pret_base[champ: 'montant_auto'] = VRAI; NON(RENSEIGNE(champ_pret_base[champ: 'montant_eur'])))",
+    },
+    carac_pret: {
+      libelle: 'Caractéristique du prêt',
+      unite: 'texte',
+      regle: 'R-AMT-1',
+      sur: ['pret_base', 'champ'],
+      formule:
+        'DEFAUT(champ_pret_base; SI(nature_pret; defaut_pret[code: tranche_pret; nature: nature_pret]; INDEFINI))',
+      note: 'La saisie, à défaut la valeur par défaut du produit de la tranche.',
+    },
+    montant_avant_scission: {
+      libelle: 'Montant du prêt avant scission',
+      unite: 'eur',
+      regle: 'R-FIN-3',
+      sur: ['pret_base'],
+      formule:
+        "SI(ET(pret_auto; tranche_pret); DEFAUT(montant_auto[tranche: tranche_pret; nature_auto: nature_pret]; 0); champ_pret_base[champ: 'montant_eur'])",
+    },
+    livret_a_origine_pret: {
+      libelle: 'Livret A d’origine du prêt',
+      unite: 'taux',
+      regle: 'R-AMT-1',
+      sur: ['pret_base'],
+      formule: "DEFAUT(champ_pret_base[champ: 'livret_a_origine']; la_origine)",
+    },
+    livret_a_par_annee_pret: {
+      libelle: 'Trajectoire du Livret A du prêt',
+      unite: 'liste',
+      sur: ['pret_base'],
+      formule: "DEFAUT(champ_pret_base[champ: 'livret_a_par_annee']; la_par_annee)",
+    },
+    spread_pret: {
+      libelle: 'Marge du prêt',
+      unite: 'taux',
+      regle: 'R-AMT-1',
+      sur: ['pret_base'],
+      formule: "carac_pret[champ: 'spread']",
+    },
+    taux_resolu_pret: {
+      libelle: 'Taux du prêt',
+      unite: 'taux',
+      regle: 'R-AMT-1',
+      sur: ['pret_base'],
+      formule:
+        "SI(RENSEIGNE(champ_pret_base[champ: 'taux']); champ_pret_base[champ: 'taux']; " +
+        "SI(EST.NOMBRE(spread_pret); livret_a_origine_pret + spread_pret; carac_pret[champ: 'taux']))",
+      note: 'Un prêt indexé se décrit par sa marge : son taux s’en déduit, sauf taux saisi en clair.',
+    },
+    duree_pret: {
+      libelle: 'Durée du prêt',
+      unite: 'an',
+      sur: ['pret_base'],
+      formule: "carac_pret[champ: 'duree_ans']",
+    },
+    pret_calculable: {
+      libelle: 'Prêt amortissable',
+      unite: 'booleen',
+      sur: ['pret_base'],
+      formule: 'duree_pret > 0',
+      note: 'Un prêt sans durée connue est écarté du plan, avec une alerte.',
+    },
+    prets_calculables: {
+      libelle: 'Prêts retenus',
+      unite: 'liste',
+      formule: 'LISTE(pret_base POUR pret_base QUAND pret_calculable)',
+    },
+
+    // --- R-FIN-8 : scission PLS / CPLS -------------------------------------------
+    tranche_pls_presente: {
+      libelle: 'Le programme porte une tranche PLS',
+      unite: 'booleen',
+      formule: "CONTIENT(tranches_ordre_saisie; 'PLS')",
+    },
+    prets_pls: {
+      libelle: 'Prêts PLS',
+      unite: 'liste',
+      regle: 'R-FIN-8',
+      formule:
+        "LISTE(p POUR p DANS prets_calculables QUAND ET(tranche_pret[pret_base: p] = 'PLS'; nature_pret[pret_base: p] <> 'autre'))",
+    },
+    total_pls: {
+      libelle: 'Prêts appelés en PLS',
+      unite: 'eur',
+      regle: 'R-FIN-8',
+      formule: 'SOMME(NOMBRE(montant_avant_scission[pret_base: p]) POUR p DANS prets_pls)',
+    },
+    pr_pls: {
+      libelle: 'Prix de revient de la tranche PLS',
+      unite: 'eur',
+      formule: "DEFAUT(total_ttc_module_tranche[tranche: 'PLS']; 0)",
+    },
+    plafond_pls: {
+      libelle: 'Part maximale du PLS',
+      unite: 'taux',
+      regle: 'R-FIN-8',
+      constante: 0.55,
+      note: 'Calculette CDC « production LS » : le PLS est compris entre 51 et 55 % du prix de revient.',
+    },
+    plancher_pls: {
+      libelle: 'Part minimale attendue du PLS',
+      unite: 'taux',
+      regle: 'R-FIN-8',
+      constante: 0.51,
+    },
+    scission_possible: {
+      libelle: 'PLS et prix de revient connus',
+      unite: 'booleen',
+      formule: 'ET(total_pls > 0; pr_pls > 0)',
+    },
+    plafond_pls_eur: {
+      libelle: 'Plafond du PLS',
+      unite: 'eur',
+      regle: 'R-FIN-8',
+      formule: 'pr_pls * plafond_pls',
+    },
+    pls_retenu: {
+      libelle: 'PLS dans la limite du plafond',
+      unite: 'eur',
+      regle: 'R-FIN-8',
+      formule: 'MIN(total_pls; plafond_pls_eur)',
+    },
+    part_pls: {
+      libelle: 'Part du PLS dans le prix de revient',
+      unite: 'taux',
+      regle: 'R-FIN-8',
+      formule: 'SI(scission_possible; pls_retenu / pr_pls; VIDE)',
+    },
+    pls_eur: {
+      libelle: 'PLS retenu, arrondi',
+      unite: 'eur',
+      formule: 'SI(scission_possible; ARRONDI.EURO(pls_retenu); ARRONDI.EURO(MAX(0; NOMBRE(total_pls))))',
+    },
+    cpls_montant: {
+      libelle: 'CPLS',
+      unite: 'eur',
+      regle: 'R-FIN-8',
+      formule:
+        'SI(ET(tranche_pls_presente; scission_possible); ARRONDI.EURO(MAX(0; total_pls - plafond_pls_eur)); 0)',
+      note: 'Au-delà du plafond, le complément n’est plus du PLS : c’est un CPLS.',
+    },
+    pls_sous_plancher: {
+      libelle: 'PLS sous le plancher',
+      unite: 'booleen',
+      regle: 'R-FIN-8',
+      formule: 'ET(scission_possible; part_pls < plancher_pls)',
+    },
+    pls_construction_preleve: {
+      libelle: 'Prêt construction PLS entamé',
+      unite: 'texte',
+      formule:
+        "PREMIER(p POUR p DANS prets_pls QUAND ET(nature_pret[pret_base: p] = 'construction'; montant_avant_scission[pret_base: p] > 0))",
+    },
+    pris_construction: {
+      libelle: 'Part du CPLS prise sur la construction',
+      unite: 'eur',
+      regle: 'R-FIN-8',
+      formule:
+        'SI(ET(cpls_montant > 0; RENSEIGNE(pls_construction_preleve)); ' +
+        'MIN(montant_avant_scission[pret_base: pls_construction_preleve]; cpls_montant); 0)',
+      note: 'L’excès se prélève sur la construction d’abord, et jamais au-delà de ce qu’elle porte.',
+    },
+    reste_cpls: {
+      libelle: 'Part du CPLS restant à prélever',
+      unite: 'eur',
+      formule:
+        'SI(ET(cpls_montant > 0; RENSEIGNE(pls_construction_preleve)); ARRONDI.EURO(cpls_montant - pris_construction); cpls_montant)',
+    },
+    pls_foncier_preleve: {
+      libelle: 'Prêt foncier PLS entamé',
+      unite: 'texte',
+      formule:
+        "PREMIER(p POUR p DANS prets_pls QUAND ET(nature_pret[pret_base: p] = 'foncier'; montant_avant_scission[pret_base: p] > 0))",
+    },
+    pris_foncier: {
+      libelle: 'Part du CPLS prise sur le foncier',
+      unite: 'eur',
+      regle: 'R-FIN-8',
+      formule:
+        'SI(ET(reste_cpls > 0; RENSEIGNE(pls_foncier_preleve)); MIN(montant_avant_scission[pret_base: pls_foncier_preleve]; reste_cpls); 0)',
+    },
+    montant_apres_scission: {
+      libelle: 'Montant du prêt après scission',
+      unite: 'eur',
+      regle: 'R-FIN-8',
+      sur: ['pret_base'],
+      formule:
+        'SI(ET(pris_construction > 0; pret_base = pls_construction_preleve); ARRONDI.EURO(montant_avant_scission - pris_construction); ' +
+        'SI(ET(pris_foncier > 0; pret_base = pls_foncier_preleve); ARRONDI.EURO(montant_avant_scission - pris_foncier); ' +
+        'montant_avant_scission))',
+    },
+    modele_cpls: {
+      libelle: 'Prêt dont le CPLS reprend les caractéristiques',
+      unite: 'texte',
+      formule:
+        "DEFAUT(PREMIER(p POUR p DANS prets_pls QUAND nature_pret[pret_base: p] = 'construction'); ELEMENT(prets_pls; 0))",
+    },
+
+    // --- Les prets du plan ---------------------------------------------------------
+    source_pret: {
+      libelle: 'Prêt d’origine',
+      unite: 'texte',
+      sur: ['pret'],
+      formule: "SI(pret = 'CPLS'; modele_cpls; pret)",
+    },
+    carac_final: {
+      libelle: 'Caractéristique du prêt',
+      unite: 'texte',
+      sur: ['pret', 'champ'],
+      formule: 'carac_pret[pret_base: source_pret]',
+    },
+    code_pret: {
+      libelle: 'Code du prêt',
+      unite: 'texte',
+      sur: ['pret'],
+      formule: "SI(pret = 'CPLS'; 'CPLS'; carac_final[champ: 'code'])",
+    },
+    libelle_pret: {
+      libelle: 'Libellé du prêt',
+      unite: 'texte',
+      sur: ['pret'],
+      formule: "SI(pret = 'CPLS'; 'CPLS'; carac_final[champ: 'libelle'])",
+    },
+    nature_pret_final: {
+      libelle: 'Nature du prêt',
+      unite: 'texte',
+      sur: ['pret'],
+      formule: "SI(pret = 'CPLS'; 'construction'; nature_pret[pret_base: pret])",
+    },
+    produit_pret: {
+      libelle: 'Tranche du prêt',
+      unite: 'texte',
+      sur: ['pret'],
+      formule: "SI(pret = 'CPLS'; 'PLS'; tranche_pret[pret_base: pret])",
+    },
+    montant_pret: {
+      libelle: 'Montant du prêt',
+      unite: 'eur',
+      regle: 'R-FIN-3',
+      sur: ['pret'],
+      formule: "SI(pret = 'CPLS'; cpls_montant; montant_apres_scission[pret_base: pret])",
+    },
+    montant_calcule_pret: {
+      libelle: 'Montant calculé',
+      unite: 'booleen',
+      sur: ['pret'],
+      formule: "SI(pret = 'CPLS'; VRAI; pret_auto[pret_base: pret])",
+    },
+    derive_pret: {
+      libelle: 'Prêt dérivé d’une règle',
+      unite: 'booleen',
+      sur: ['pret'],
+      formule: "SI(pret = 'CPLS'; VRAI; carac_final[champ: 'derive'] = VRAI)",
+    },
+    principal_saisi_pret: {
+      libelle: 'Prêt principal déclaré',
+      unite: 'booleen',
+      sur: ['pret'],
+      formule: "carac_final[champ: 'principal']",
+    },
+    principal_pret: {
+      libelle: 'Prêt principal de la tranche',
+      unite: 'booleen',
+      sur: ['pret'],
+      formule: 'OU(principal_saisi_pret = VRAI; derive_pret)',
+    },
+    livret_a_origine_final: {
+      libelle: 'Livret A d’origine',
+      unite: 'taux',
+      regle: 'R-AMT-1',
+      sur: ['pret'],
+      formule: 'livret_a_origine_pret[pret_base: source_pret]',
+    },
+    livret_a_par_annee_final: {
+      libelle: 'Trajectoire du Livret A',
+      unite: 'liste',
+      sur: ['pret'],
+      formule: 'livret_a_par_annee_pret[pret_base: source_pret]',
+    },
+    spread_final: {
+      libelle: 'Marge du prêt',
+      unite: 'taux',
+      regle: 'R-AMT-1',
+      sur: ['pret'],
+      formule: 'spread_pret[pret_base: source_pret]',
+    },
+    taux_premier: {
+      libelle: 'Taux résolu du prêt',
+      unite: 'taux',
+      sur: ['pret'],
+      formule: 'taux_resolu_pret[pret_base: source_pret]',
+    },
+    taux_pret: {
+      libelle: 'Taux du prêt',
+      unite: 'taux',
+      regle: 'R-AMT-1',
+      sur: ['pret'],
+      formule:
+        'SI(RENSEIGNE(taux_premier); taux_premier; SI(EST.NOMBRE(NOMBRE.BRUT(spread_final)); ' +
+        'livret_a_origine_final + NOMBRE.BRUT(spread_final); taux_premier))',
+      note: 'Taux = Livret A d’origine + marge, y compris pour un prêt « autre » posé depuis un modèle.',
+    },
+    progressivite_pret: {
+      libelle: 'Progressivité des échéances',
+      unite: 'taux',
+      regle: 'R-AMT-2',
+      sur: ['pret'],
+      formule: "DEFAUT(carac_final[champ: 'progressivite']; 0)",
+    },
+    duree_ans_pret: {
+      libelle: 'Durée du prêt',
+      unite: 'an',
+      sur: ['pret'],
+      formule: "carac_final[champ: 'duree_ans']",
+    },
+    revisabilite_saisie_pret: {
+      libelle: 'Révisabilité déclarée',
+      unite: 'texte',
+      sur: ['pret'],
+      formule: "carac_final[champ: 'revisabilite']",
+    },
+    revisabilite_pret: {
+      libelle: 'Révisabilité',
+      unite: 'texte',
+      regle: 'R-AMT-4',
+      sur: ['pret'],
+      formule: "DEFAUT(revisabilite_saisie_pret; 'TAUX FIXE')",
+    },
+    differe_ans_saisi_pret: {
+      libelle: 'Différé déclaré, en années',
+      unite: 'an',
+      sur: ['pret'],
+      formule: "carac_final[champ: 'differe_ans']",
+    },
+    differe_ans_pret: {
+      libelle: 'Différé, en années',
+      unite: 'an',
+      sur: ['pret'],
+      formule: 'DEFAUT(differe_ans_saisi_pret; 0)',
+    },
+    differe_mois_pret: {
+      libelle: 'Différé, en mois',
+      unite: 'mois',
+      regle: 'R-AMT-9',
+      sur: ['pret'],
+      formule: "DEFAUT(carac_final[champ: 'differe_mois']; SI(principal_saisi_pret; duree_chantier_retenue; INDEFINI))",
+      note: 'Un prêt principal diffère par défaut le temps des travaux : rien à rembourser tant que l’opération ne produit pas de loyer.',
+    },
+    differe_type_pret: {
+      libelle: 'Type de différé',
+      unite: 'nombre',
+      regle: 'R-AMT-9',
+      sur: ['pret'],
+      formule: "DEFAUT(carac_final[champ: 'differe_type']; SI(principal_saisi_pret; 2; INDEFINI))",
+    },
+    differe_mois_effectif_pret: {
+      libelle: 'Différé effectif, en mois',
+      unite: 'mois',
+      regle: 'R-AMT-9',
+      sur: ['pret'],
+      formule:
+        "DEFAUT(carac_final[champ: 'differe_mois']; SI(differe_ans_saisi_pret; differe_ans_saisi_pret * mois_par_an; " +
+        'SI(principal_saisi_pret; duree_chantier_retenue; 0)))',
+    },
+    profil_pret: {
+      libelle: 'Profil d’amortissement',
+      unite: 'texte',
+      regle: 'R-AMT-6',
+      sur: ['pret'],
+      formule: "DEFAUT(carac_final[champ: 'profil_amortissement']; 'annuite')",
+    },
+    taux_plancher_pret: {
+      libelle: 'Taux plancher',
+      unite: 'taux',
+      regle: 'R-AMT-7',
+      sur: ['pret'],
+      formule: "carac_final[champ: 'taux_plancher']",
+    },
+    periodicite_pret: {
+      libelle: 'Échéances par an',
+      unite: 'nombre',
+      regle: 'R-AMT-8',
+      sur: ['pret'],
+      formule: "DEFAUT(carac_final[champ: 'periodicite']; 1)",
+    },
+    annee_premiere_echeance_pret: {
+      libelle: 'Année de première échéance',
+      unite: 'annee',
+      regle: 'R-AMT-3',
+      sur: ['pret'],
+      formule: "DEFAUT(carac_final[champ: 'annee_premiere_echeance']; annee_mise_en_location)",
+      note: 'L’année de la mise en location elle-même : le prêt s’amortit dans la foulée de la livraison (Q-4, Q-28).',
+    },
+    marge_affichee_pret: {
+      libelle: 'Marge appliquée',
+      unite: 'taux',
+      sur: ['pret'],
+      formule: 'SI(ET(EST.NOMBRE(spread_final); taux_pret = livret_a_origine_final + spread_final); spread_final; VIDE)',
+      note: 'Vide sur un prêt à taux saisi, qui n’est pas indexé sur le Livret A.',
+    },
+    cle_marge_pret: {
+      libelle: 'Clé de la grille tarifaire',
+      unite: 'texte',
+      sur: ['pret'],
+      formule: "DEFAUT(carac_final[champ: 'cle_marge']; VIDE)",
+    },
+    taux_applique_pret: {
+      libelle: 'Taux appliqué',
+      unite: 'taux',
+      regle: 'R-AMT-7',
+      sur: ['pret'],
+      formule:
+        'SI(NON(RENSEIGNE(taux_pret)); VIDE; SI(NON(RENSEIGNE(taux_plancher_pret)); taux_pret; MAX(taux_pret; taux_plancher_pret)))',
+      note: 'Le taux nominal peut être négatif sur un prêt indexé sous le Livret A ; le prêt paie le taux plancher.',
+    },
+
+    // --- Totaux et equilibre (R-FIN-1/5) -------------------------------------------
+    total_prets: {
+      libelle: 'Prêts du plan de financement',
+      unite: 'eur',
+      regle: 'R-FIN-1',
+      formule: 'ARRONDI.EURO(SOMME(montant_pret POUR pret QUAND montant_pret > 0))',
+    },
+    toutes_tranches_cdc: {
+      libelle: 'Toutes les tranches relèvent des fonds d’épargne',
+      unite: 'booleen',
+      formule: 'NON(UN(NON(finance_par_cdc) POUR tranche))',
+    },
+    total_prets_cdc: {
+      libelle: 'Prêts CDC',
+      unite: 'eur',
+      regle: 'R-FIN-5',
+      formule:
+        'SI(ET(cdc_theoriques_actifs; toutes_tranches_cdc); cdc_total; ' +
+        "ARRONDI.EURO(SOMME(montant_pret POUR pret QUAND ET(montant_pret > 0; DEFAUT(nature_pret_final; 'autre') <> 'autre'; " +
+        'finance_par_cdc_code[code: produit_pret]))))',
+      note: 'Ni un prêt collecteur, ni le prêt bancaire d’une tranche libre ne sont des prêts de la Caisse des Dépôts.',
+    },
+    prix_revient_cdc_brut: {
+      libelle: 'Prix de revient des tranches financées sur fonds d’épargne',
+      unite: 'eur',
+      regle: 'R-FIN-5',
+      formule: 'ARRONDI.EURO(SOMME(total_ttc_module_tranche POUR tranche QUAND finance_par_cdc))',
+    },
+    prix_revient_cdc: {
+      libelle: 'Assiette CDC retenue',
+      unite: 'eur',
+      formule: 'SI(prix_revient_cdc_brut > 0; prix_revient_cdc_brut; INDEFINI)',
+    },
+    ressources_plan: {
+      libelle: 'Ressources du plan de financement',
+      unite: 'eur',
+      regle: 'R-FIN-1',
+      formule: 'subventions_total + fonds_propres_total + total_prets',
+    },
+    ressources_plan_arrondies: {
+      libelle: 'Ressources du plan de financement, arrondies',
+      unite: 'eur',
+      formule: 'ARRONDI.EURO(ressources_plan)',
+    },
+    emplois_plan: {
+      libelle: 'Emplois du plan de financement',
+      unite: 'eur',
+      regle: 'R-FIN-1',
+      formule: 'ARRONDI.EURO(total_ttc_module)',
+    },
+    ecart_plan: {
+      libelle: 'Écart du plan de financement',
+      unite: 'eur',
+      regle: 'R-FIN-1',
+      formule: 'ARRONDI.EURO(ressources_plan - total_ttc_module)',
+      note: 'Positif : surfinancement. Négatif : sous-financement. Il est signalé, jamais absorbé.',
+    },
+    plan_equilibre: {
+      libelle: 'Plan équilibré',
+      unite: 'booleen',
+      formule: 'ecart_plan = 0',
+    },
+    assiette_ratio_cdc: {
+      libelle: 'Assiette du ratio CDC',
+      unite: 'eur',
+      regle: 'R-FIN-5',
+      formule: 'SI(EST.NOMBRE(prix_revient_cdc); prix_revient_cdc; total_ttc_module)',
+    },
+    ratio_prets_cdc: {
+      libelle: 'Ratio prêts CDC sur prix de revient',
+      unite: 'taux',
+      regle: 'R-FIN-5',
+      formule: 'SI(assiette_ratio_cdc > 0; total_prets_cdc / assiette_ratio_cdc; VIDE)',
+    },
+    ratio_prets_cdc_min: {
+      libelle: 'Ratio minimal de prêts CDC',
+      unite: 'taux',
+      regle: 'R-FIN-5',
+      parametre: 'constantes_reglementaires.controle_ratio_prets_cdc_min.valeur',
+      ecran: 'Paramètres > Constantes réglementaires',
+    },
+    ratio_cdc_insuffisant: {
+      libelle: 'Ratio CDC sous le minimum',
+      unite: 'booleen',
+      regle: 'R-FIN-5',
+      formule: 'ET(total_prets_cdc > 0; ratio_prets_cdc < ratio_prets_cdc_min)',
+    },
+    total_prets_tranche: {
+      libelle: 'Prêts de la tranche',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'ARRONDI.EURO(SOMME(NOMBRE(montant_pret) POUR pret QUAND produit_pret = tranche))',
+    },
+    ressources_tranche: {
+      libelle: 'Ressources de la tranche',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule:
+        'ARRONDI.EURO(subventions_ventilees_tranche_arrondies + fonds_propres_tranche_arrondi + total_prets_tranche)',
+    },
+    ecart_tranche: {
+      libelle: 'Écart du plan de la tranche',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'ARRONDI.EURO(ressources_tranche - total_ttc_module_tranche)',
+    },
+
+    // --- R-FIN-9 : plafond des prets LLI --------------------------------------------
+    tranche_lli_presente: {
+      libelle: 'Le programme porte une tranche LLI',
+      unite: 'booleen',
+      formule: "CONTIENT(tranches_ordre_saisie; 'LOC')",
+    },
+    total_prets_lli: {
+      libelle: 'Prêts de la tranche LLI',
+      unite: 'eur',
+      regle: 'R-FIN-9',
+      formule: "SOMME(NOMBRE(montant_pret) POUR pret QUAND produit_pret = 'LOC')",
+    },
+    pr_lli: {
+      libelle: 'Prix de revient de la tranche LLI',
+      unite: 'eur',
+      formule: "DEFAUT(total_ttc_module_tranche[tranche: 'LOC']; 0)",
+    },
+    plafond_lli: {
+      libelle: 'Part maximale des prêts LLI',
+      unite: 'taux',
+      regle: 'R-FIN-9',
+      constante: 0.9,
+      note: 'Calculette CDC, contrôle AT32 : le solde vient en fonds propres ou en subventions.',
+    },
+    plafond_prets_lli_eur: {
+      libelle: 'Plafond des prêts LLI',
+      unite: 'eur',
+      regle: 'R-FIN-9',
+      formule: 'SI(pr_lli > 0; ARRONDI.EURO(pr_lli * plafond_lli); 0)',
+    },
+    depassement_prets_lli: {
+      libelle: 'Dépassement du plafond LLI',
+      unite: 'eur',
+      regle: 'R-FIN-9',
+      formule: 'SI(pr_lli > 0; ARRONDI.EURO(MAX(0; total_prets_lli - pr_lli * plafond_lli)); 0)',
+    },
+    part_prets_lli: {
+      libelle: 'Part des prêts LLI dans le prix de revient',
+      unite: 'taux',
+      regle: 'R-FIN-9',
+      formule: 'SI(pr_lli > 0; total_prets_lli / pr_lli; VIDE)',
+    },
+  },
+};
+
 /* ===== src/formules/modele.js ===== */
 // @ts-check
 /**
@@ -9126,6 +9880,7 @@ const FINANCEMENT = {
 
 
 
+
 const MODELE = creerModele([
   OPERATION,
   CALENDRIER,
@@ -9134,6 +9889,7 @@ const MODELE = creerModele([
   PRIX_REVIENT,
   SUBVENTIONS,
   FINANCEMENT,
+  PRETS,
 ]);
 
 /**
@@ -10944,23 +11700,19 @@ function soldeAFinancer({
  * @returns {{pls_eur: number, cpls_eur: number, part_pls: number|null, sous_plancher: boolean}}
  */
 function scinderPLS({ montant_pls_eur, prix_revient_eur, plafond = 0.55, plancher = 0.51 }) {
-  if (!(montant_pls_eur > 0) || !(prix_revient_eur > 0)) {
-    return {
-      pls_eur: arrondiEuro(Math.max(0, montant_pls_eur || 0)),
-      cpls_eur: 0,
-      part_pls: null,
-      sous_plancher: false,
-    };
-  }
-  const maxi = prix_revient_eur * plafond;
-  const pls = Math.min(montant_pls_eur, maxi);
-  const part = pls / prix_revient_eur;
+  // Formules du domaine « prets » : `pls_eur`, `cpls_montant`, `part_pls`,
+  // `pls_sous_plancher`. Le plancher se juge sur le PLS effectivement appele.
+  const c = nouveauClasseur({})
+    .fixer('total_pls', {}, montant_pls_eur)
+    .fixer('pr_pls', {}, prix_revient_eur)
+    .fixer('plafond_pls', {}, plafond)
+    .fixer('plancher_pls', {}, plancher)
+    .fixer('tranche_pls_presente', {}, true);
   return {
-    pls_eur: arrondiEuro(pls),
-    cpls_eur: arrondiEuro(Math.max(0, montant_pls_eur - maxi)),
-    part_pls: part,
-    // Le plancher se juge sur le PLS effectivement appele, pas sur le total.
-    sous_plancher: part < plancher,
+    pls_eur: c.valeur('pls_eur'),
+    cpls_eur: c.valeur('cpls_montant'),
+    part_pls: c.valeur('part_pls'),
+    sous_plancher: c.valeur('pls_sous_plancher'),
   };
 }
 
@@ -10978,12 +11730,16 @@ function scinderPLS({ montant_pls_eur, prix_revient_eur, plafond = 0.55, planche
  * @returns {{plafond_eur: number, depassement_eur: number, part: number|null}}
  */
 function plafondPretsLLI({ total_prets_eur, prix_revient_eur, plafond = 0.9 }) {
-  if (!(prix_revient_eur > 0)) return { plafond_eur: 0, depassement_eur: 0, part: null };
-  const maxi = prix_revient_eur * plafond;
+  // Formules du domaine « prets » : `plafond_prets_lli_eur`,
+  // `depassement_prets_lli`, `part_prets_lli`.
+  const c = nouveauClasseur({})
+    .fixer('total_prets_lli', {}, total_prets_eur)
+    .fixer('pr_lli', {}, prix_revient_eur)
+    .fixer('plafond_lli', {}, plafond);
   return {
-    plafond_eur: arrondiEuro(maxi),
-    depassement_eur: arrondiEuro(Math.max(0, total_prets_eur - maxi)),
-    part: total_prets_eur / prix_revient_eur,
+    plafond_eur: c.valeur('plafond_prets_lli_eur'),
+    depassement_eur: c.valeur('depassement_prets_lli'),
+    part: c.valeur('part_prets_lli'),
   };
 }
 
@@ -11184,39 +11940,45 @@ function controleEquilibre(
   },
   referentiels,
 ) {
-  const ressources = subventions_eur + fonds_propres_eur + prets_eur;
-  const ecart = arrondiEuro(ressources - prix_revient_ttc_module_eur);
+  const c = nouveauClasseur({ baremes: referentiels })
+    .fixer('total_ttc_module', {}, prix_revient_ttc_module_eur)
+    .fixer('subventions_total', {}, subventions_eur)
+    .fixer('fonds_propres_total', {}, fonds_propres_eur)
+    .fixer('total_prets', {}, prets_eur)
+    .fixer('total_prets_cdc', {}, prets_cdc_eur)
+    .fixer('prix_revient_cdc', {}, prix_revient_cdc_eur);
+  // Sans referentiel, pas de minimum a opposer : le ratio ne se mesure pas.
+  if (!referentiels) c.fixer('ratio_prets_cdc', {}, null);
+  return restituerEquilibre(c);
+}
 
+/**
+ * R-FIN-1 et R-FIN-5 - Equilibre du plan de financement, tel que le moteur le
+ * restitue. `Subventions + FP + Prets = PR_TTC_module` : l'ecart est signale,
+ * jamais absorbe silencieusement.
+ *
+ * Le ratio se mesure sur le PERIMETRE des fonds d'epargne : une tranche libre,
+ * financee en banque, n'a rien a faire au denominateur d'un controle CDC.
+ * @param {import('./formules/classeur.js').Classeur} c
+ */
+function restituerEquilibre(c) {
+  const ecart = c.valeur('ecart_plan');
+  const ratio = c.valeur('ratio_prets_cdc');
   const alertes = [];
   if (ecart > 0) alertes.push(`Surfinancement de ${ecart} EUR`);
   if (ecart < 0) alertes.push(`Sous-financement de ${-ecart} EUR`);
-
-  // Le ratio se mesure sur le PERIMETRE des fonds d'epargne, pas sur l'operation
-  // entiere : une tranche libre, financee en banque, n'a rien a faire au
-  // denominateur d'un controle CDC. Sans cette distinction, une operation moitie
-  // PLUS moitie libre affichait 45 % et declenchait une alerte alors qu'aucune
-  // regle n'etait enfreinte. Sur une operation homogene, les deux se confondent.
-  const assietteCDC = Number.isFinite(prix_revient_cdc_eur)
-    ? /** @type {number} */ (prix_revient_cdc_eur)
-    : prix_revient_ttc_module_eur;
-  let ratio_cdc = null;
-  if (referentiels && assietteCDC > 0) {
-    ratio_cdc = prets_cdc_eur / assietteCDC;
-    const mini = referentiels.constantes_reglementaires.controle_ratio_prets_cdc_min.valeur;
-    if (prets_cdc_eur > 0 && ratio_cdc < mini) {
-      alertes.push(
-        `Ratio prets CDC / prix de revient de ${(ratio_cdc * 100).toFixed(1)} %, ` +
-          `en dessous du minimum reglementaire de ${(mini * 100).toFixed(0)} %`,
-      );
-    }
+  if (ratio !== null && ratio !== undefined && c.valeur('ratio_cdc_insuffisant')) {
+    alertes.push(
+      `Ratio prets CDC / prix de revient de ${(ratio * 100).toFixed(1)} %, ` +
+        `en dessous du minimum reglementaire de ${(c.valeur('ratio_prets_cdc_min') * 100).toFixed(0)} %`,
+    );
   }
-
   return {
-    ressources_eur: arrondiEuro(ressources),
-    emplois_eur: arrondiEuro(prix_revient_ttc_module_eur),
+    ressources_eur: c.valeur('ressources_plan_arrondies'),
+    emplois_eur: c.valeur('emplois_plan'),
     ecart_eur: ecart,
-    equilibre: ecart === 0,
-    ratio_prets_cdc: ratio_cdc,
+    equilibre: c.valeur('plan_equilibre'),
+    ratio_prets_cdc: ratio ?? null,
     alertes,
   };
 }
@@ -12623,469 +13385,235 @@ function calculer(entrees, referentiels) {
       }
     : null;
 
-  // --- 6. Amortissement (R-AMT) ---
+  // --- 6. Prets (R-FIN-3/5/8/9 et R-AMT-1, domaines « financement » et « prets ») ---
   const laOrigine = trajectoires.taux_reference_livret_a;
-  const laParAnnee = trajectoires.livret_a_par_annee;
-
   // R-AMT-1 - Grille tarifaire des prets CDC, deja surchargee par la fusion des
   // referentiels : le taux d'un pret vaut Livret A + marge, et seule la marge
   // est propre au produit.
   const margesPrets = baremes.prets_cdc?.marges ?? {};
+  const codesFinances = codesPresents;
+
+  // Subventions ligne par ligne, chacune avec les parts par tranche que le
+  // besoin de chaque tranche a lues dans le classeur.
+  /** @type {Array<{libelle: string, montant_eur: number, affectation: string|null, par_tranche: Record<string, number>}>} */
+  const detailSubventions = [];
+  /**
+   * @param {string} libelle
+   * @param {number} montant
+   * @param {string|null} affectation
+   * @param {Record<string, number>} parTranche
+   */
+  const ligneSubvention = (libelle, montant, affectation, parTranche) => {
+    detailSubventions.push({ libelle, montant_eur: montant, affectation, par_tranche: parTranche });
+    // Une subvention rattachee a une tranche qui n'ouvre droit a aucune aide
+    // publique - le logement libre - n'est pas refusee : le montant saisi fait
+    // foi, et une participation de collectivite de droit commun existe. Mais
+    // elle se DIT : c'est le montage qui se decide, pas le calcul.
+    const versLibre = codesFinances.filter(
+      (c) => parTranche[c] > 0 && !lire('eligible_aides_publiques', { tranche: c }),
+    );
+    if (versLibre.length) {
+      alertes.push(
+        `Subvention « ${libelle} » : ${arrondiEuro(
+          versLibre.reduce((s, c) => s + parTranche[c], 0),
+        )} EUR sur ${versLibre.join(', ')}, tranche(s) hors aide publique. ` +
+          "A verifier : une aide de l'Etat n'a pas a financer du logement libre.",
+      );
+    }
+  };
+  for (const s of subventions.rattachees) {
+    ligneSubvention(
+      s.libelle ?? 'Subvention',
+      s.montant_eur,
+      s.affectation,
+      Object.fromEntries(codesFinances.map((c) => [c, c === s.affectation ? s.montant_eur : 0])),
+    );
+  }
+  if (ssf?.subvention_eur) {
+    ligneSubvention(
+      'Surcharge foncière',
+      ssf.subvention_eur,
+      null,
+      Object.fromEntries(codesFinances.map((c) => [c, lire('ssf_part_tranche', { tranche: c })])),
+    );
+  }
 
   /**
-   * Prets a amortir. En l'absence de prets saisis, on mobilise les prets CDC
-   * theoriques, dont les caracteristiques sont resolues depuis `produits.js`
-   * (R-AMT-1) et non laissees indefinies - sans quoi l'amortissement leve
-   * « Duree de pret invalide » (defaut V4).
-   * @type {Array<Object>}
-   */
-  let pretsACalculer;
-  /**
-   * Subventions et fonds propres revenant a chaque tranche, une fois ventilees.
-   * Rempli par le calcul des besoins, relu par la restitution par tranche.
+   * Subventions et fonds propres revenant a chaque tranche, arrondis : ceux que
+   * le besoin a lus, relus par la restitution par tranche.
    * @type {Record<string, {subventions_eur: number, fonds_propres_eur: number}>}
    */
   const ressourcesParTranche = {};
-  /**
-   * Subventions ligne par ligne, chacune ventilee sur les tranches. Une seule
-   * source pour le besoin de financement et pour la restitution.
-   * @type {Array<{libelle: string, montant_eur: number, affectation: string|null, par_tranche: Record<string, number>}>}
-   */
-  const detailSubventions = [];
-  {
-    const surcharges = entrees.caracteristiques_prets_defaut ?? {};
-    const codesFinances = codesPresents.length ? codesPresents : [];
-
-    // R-FIN-3 - Chaque tranche porte par defaut un pret CDC foncier et un pret
-    // CDC construction dont le MONTANT S'AJUSTE a son besoin de financement.
-    // Rien a saisir tant que l'equilibre convient : modifier les subventions ou
-    // les fonds propres d'une tranche suffit a faire bouger ses prets.
-    //
-    // Un pret dont le montant est saisi FIGE ce montant et sort du calcul
-    // automatique : il vient alors en deduction du besoin, comme une ressource
-    // deja acquise. C'est la seule facon d'avoir les deux a l'ecran sans qu'ils
-    // se contredisent.
-    const auto = (p) => p.montant_auto === true || p.montant_eur === null || p.montant_eur === undefined;
-
-    let prets = [...pretsSaisis];
-    if (!prets.some((p) => p.nature === 'foncier' || p.nature === 'construction')) {
-      const suffixe = codesFinances.length > 1;
-      // Les NATURES a poser sont celles que le produit declare. La CDC prete en
-      // deux lignes, foncier et construction ; une banque prete en une seule, sur
-      // l'operation entiere. Poser un pret foncier a une tranche qui n'en a pas
-      // lui aurait affecte une part du besoin qu'aucun pret n'aurait ensuite
-      // amortie, et la tranche serait sortie sous-financee sans raison visible.
-      // Un produit qui ne declare aucun pret par defaut garde les deux lignes :
-      // c'est le cas du PLUS 33, finance par les prets de sa tranche PLUS.
-      const naturesDe = (c) => {
-        const declares = produit(c).prets_defaut;
-        return declares.length
-          ? [...new Set(declares.map((d) => d.nature))]
-          : ['foncier', 'construction'];
-      };
-      const modele = {
-        foncier: { code: 'CDC_FONCIER', libelle: 'Prêt CDC foncier' },
-        construction: { code: 'CDC_BATIMENT', libelle: 'Prêt CDC construction' },
-      };
-      prets = prets.concat(
-        codesFinances.flatMap((c) =>
-          naturesDe(c).map((nature) => {
-            const declare = produit(c).prets_defaut.find((d) => d.nature === nature);
-            const base = modele[nature];
-            // Le code comme le libelle cessent d'annoncer la CDC des que la
-            // tranche n'en releve pas : « Pret CDC construction » sur du libre
-            // aurait nomme un preteur qui n'a rien finance.
-            const codeBase = financeParCDC(c) ? base.code : `PRET_${nature.toUpperCase()}`;
-            const libelle = declare?.libelle ?? base.libelle;
-            return {
-              code: `${codeBase}_${c}`,
-              libelle: `${libelle}${suffixe ? ` ${c}` : ''}`,
-              nature,
-              produit: c,
-              montant_auto: true,
-            };
-          }),
-        ),
-      );
-    }
-
-    // Subventions revenant a chaque tranche, besoin, redressement en serie,
-    // droit a pret foncier et montants automatiques des prets : domaine
-    // « financement ». Le detail des subventions se restitue ligne par ligne,
-    // avec les parts que le besoin a lues.
-    /** @type {Array<{libelle: string, montant_eur: number, affectation: string|null, par_tranche: Record<string, number>}>} */
-    const lignesSub = [];
-    /**
-     * @param {string} libelle
-     * @param {number} montant
-     * @param {string|null} affectation
-     * @param {Record<string, number>} parTranche
-     */
-    const ligneSubvention = (libelle, montant, affectation, parTranche) => {
-      lignesSub.push({ libelle, montant_eur: montant, affectation, par_tranche: parTranche });
-      // Une subvention rattachee a une tranche qui n'ouvre droit a aucune aide
-      // publique - le logement libre - n'est pas refusee : le montant saisi fait
-      // foi, et une participation de collectivite de droit commun existe. Mais
-      // elle se DIT : c'est le montage qui se decide, pas le calcul.
-      const versLibre = codesFinances.filter(
-        (c) => parTranche[c] > 0 && !lire('eligible_aides_publiques', { tranche: c }),
-      );
-      if (versLibre.length) {
-        alertes.push(
-          `Subvention « ${libelle} » : ${arrondiEuro(
-            versLibre.reduce((s, c) => s + parTranche[c], 0),
-          )} EUR sur ${versLibre.join(', ')}, tranche(s) hors aide publique. ` +
-            "A verifier : une aide de l'Etat n'a pas a financer du logement libre.",
-        );
-      }
+  for (const c of codesFinances) {
+    const T = { tranche: c };
+    ressourcesParTranche[c] = {
+      subventions_eur: lire('subventions_ventilees_tranche_arrondies', T),
+      fonds_propres_eur: lire('fonds_propres_tranche_arrondi', T),
     };
-    for (const s of subventions.rattachees) {
-      ligneSubvention(
-        s.libelle ?? 'Subvention',
-        s.montant_eur,
-        s.affectation,
-        Object.fromEntries(codesFinances.map((c) => [c, c === s.affectation ? s.montant_eur : 0])),
-      );
-    }
-    if (ssf?.subvention_eur) {
-      ligneSubvention(
-        'Surcharge foncière',
-        ssf.subvention_eur,
-        null,
-        Object.fromEntries(codesFinances.map((c) => [c, lire('ssf_part_tranche', { tranche: c })])),
-      );
-    }
-    detailSubventions.push(...lignesSub);
-
-    for (const c of codesFinances) {
-      const T = { tranche: c };
-      ressourcesParTranche[c] = {
-        subventions_eur: lire('subventions_ventilees_tranche_arrondies', T),
-        fonds_propres_eur: lire('fonds_propres_tranche_arrondi', T),
-      };
-    }
-    const excedentRedresse = lire('excedent_redresse');
-    if (excedentRedresse > 0) {
-      const surfinancees = codesFinances.filter((c) => lire('besoin_brut', { tranche: c }) < 0);
-      alertes.push(
-        `Tranche${surfinancees.length > 1 ? 's' : ''} ${surfinancees.join(', ')} surfinancee${surfinancees.length > 1 ? 's' : ''} ` +
-          `de ${excedentRedresse} EUR : cet excedent reduit d'autant les prets des autres tranches ` +
-          '(redressement en serie, calculette CDC).',
-      );
-    }
-
-    pretsACalculer = [];
-    /** Caracteristiques par defaut d'une tranche, resolues une seule fois. */
-    const defautsTranche = {};
-    const defautsDe = (code) => {
-      if (defautsTranche[code]) return defautsTranche[code];
-      try {
-        defautsTranche[code] = Object.fromEntries(
-          pretsDefautResolus(code, {
-            zone_ABC: identite.zone_ABC,
-            livret_a_reference: surcharges.livret_a_origine ?? laOrigine,
-            marges: margesPrets,
-            // Les modeles de prets, pour les produits dont le pret par defaut
-            // n'est pas indexe sur le Livret A (le libre, finance en banque).
-            presets: baremes.presets_prets?.presets ?? [],
-            // La progressivite des echeances est une regle de MONTAGE, pas une
-            // propriete du produit : elle vient du referentiel, ou une surcharge
-            // de simulation peut la remplacer.
-            progressivite:
-              surcharges.progressivite ?? baremes.prets_cdc?.defauts?.progressivite ?? 0,
-          }).map((d) => [d.nature, d]),
-        );
-      } catch (e) {
-        alertes.push(
-          `Prets CDC par defaut de la tranche ${code} non calculables : ` +
-            `${/** @type {Error} */ (e).message}. Saisir leur taux et leur duree.`,
-        );
-        defautsTranche[code] = {};
-      }
-      return defautsTranche[code];
-    };
-
-    /**
-     * Montant automatique d'un pret, lu dans le classeur : le foncier et la
-     * construction d'une tranche s'y arrondissent ensemble.
-     * @param {string|null} code
-     * @param {string} nature
-     */
-    const montantAutoDe = (code, nature) =>
-      codesFinances.includes(/** @type {string} */ (code)) && (nature === 'foncier' || nature === 'construction')
-        ? lire('montant_auto', { tranche: code, nature_auto: nature })
-        : 0;
-
-    for (const p of prets) {
-      const code = p.produit ?? trancheUnique;
-      let montant = p.montant_eur;
-      if (auto(p) && code) {
-        montant = montantAutoDe(code, p.nature);
-      }
-      // Les valeurs du pret ne sont reprises que si elles sont RENSEIGNEES :
-      // etaler `p` tel quel ecraserait un taux par defaut avec un `undefined`,
-      // et le pret deviendrait inamortissable sans qu'on comprenne pourquoi.
-      const renseignees = Object.fromEntries(
-        Object.entries(p).filter(([, v]) => v !== undefined && v !== null),
-      );
-      const resolu = {
-        ...(p.nature ? (defautsDe(code)?.[p.nature] ?? {}) : {}),
-        ...renseignees,
-        montant_eur: montant,
-        produit: code,
-        montant_calcule: auto(p),
-        livret_a_origine: p.livret_a_origine ?? laOrigine,
-        livret_a_par_annee: p.livret_a_par_annee ?? laParAnnee,
-      };
-      // Un pret CDC est TOUJOURS indexe sur le Livret A : ce qui se saisit est
-      // sa MARGE, pas son taux. Le taux s'en deduit et se recalcule donc ici,
-      // sans quoi une marge modifiee resterait sans effet, le taux par defaut du
-      // produit ayant deja ete pose par `defautsDe`.
-      // Un taux saisi en clair reste prioritaire : c'est le seul recours pour un
-      // pret hors fonds d'epargne, dont le taux n'est pas adosse au Livret A.
-      if (renseignees.taux === undefined && Number.isFinite(resolu.spread)) {
-        resolu.taux = resolu.livret_a_origine + resolu.spread;
-      }
-      pretsACalculer.push(resolu);
-    }
-
-    // Un pret theorique dont les caracteristiques n'ont pas pu etre resolues ne
-    // doit pas faire echouer toute la simulation : on le signale et on l'ecarte.
-    const incalculables = pretsACalculer.filter((p) => p.montant_eur > 0 && !(p.duree_ans > 0));
-    for (const p of incalculables) {
-      alertes.push(
-        `${p.libelle} de ${arrondiEuro(p.montant_eur)} EUR non amorti : duree et taux inconnus ` +
-          `pour le produit ${p.produit}. Saisir ce pret manuellement.`,
-      );
-    }
-    pretsACalculer = pretsACalculer.filter((p) => p.duree_ans > 0);
-
-    // R-FIN-8 - Scission PLS / CPLS. Au-dela de 55 % du prix de revient de la
-    // tranche, le complement n'est plus du PLS : c'est un CPLS. On scinde le
-    // pret CONSTRUCTION, le foncier etant deja plafonne par son propre droit.
-    if (tranches.PLS) {
-      const prPLS = bilan.par_tranche?.PLS?.total_ttc_module_eur ?? 0;
-      const pretsPLS = pretsACalculer.filter((p) => p.produit === 'PLS' && p.nature !== 'autre');
-      const totalPLS = pretsPLS.reduce((s, p) => s + (p.montant_eur || 0), 0);
-      const scission = scinderPLS({ montant_pls_eur: totalPLS, prix_revient_eur: prPLS });
-
-      if (scission.cpls_eur > 0) {
-        // L'exces se preleve sur la CONSTRUCTION d'abord, sur le foncier
-        // ensuite, et JAMAIS au-dela de ce que chaque pret porte : retirer
-        // aveuglement du pret construction rendait celui-ci negatif des que le
-        // foncier absorbait tout le besoin, ce qui arrive sur une operation a
-        // forte charge fonciere.
-        let reste = scission.cpls_eur;
-        const ordre = ['construction', 'foncier'];
-        for (const nature of ordre) {
-          if (reste <= 0) break;
-          const p = pretsPLS.find((x) => x.nature === nature && x.montant_eur > 0);
-          if (!p) continue;
-          const pris = Math.min(p.montant_eur, reste);
-          p.montant_eur = arrondiEuro(p.montant_eur - pris);
-          reste = arrondiEuro(reste - pris);
-        }
-        // Le CPLS reprend les caracteristiques du pret construction PLS : c'est
-        // de lui qu'il prend la place dans le plan.
-        const modele = pretsPLS.find((p) => p.nature === 'construction') ?? pretsPLS[0] ?? {};
-        pretsACalculer.push({
-          ...modele,
-          code: 'CPLS',
-          libelle: 'CPLS',
-          nature: 'construction',
-          produit: 'PLS',
-          montant_eur: scission.cpls_eur,
-          montant_calcule: true,
-          derive: true,
-        });
-        // Pas d'alerte : la ligne CPLS apparait d'elle-meme dans le plan de
-        // financement, avec son origine en jeton. Le dire deux fois faisait
-        // passer une mecanique normale pour un incident.
-      } else if (scission.sous_plancher && totalPLS > 0) {
-        alertes.push(
-          `PLS a ${(scission.part_pls * 100).toFixed(1)} % du prix de revient de sa tranche, ` +
-            'sous le plancher de 51 % de la calculette CDC. Un PLS trop faible signale que ' +
-            "l'operation n'en avait pas besoin : le corriger releve du montage, pas du calcul.",
-        );
-      }
-    }
-
-    // R-FIN-9 - L'ensemble des prets LLI ne peut exceder 90 % du prix de revient.
-    if (tranches.LOC) {
-      const prLLI = bilan.par_tranche?.LOC?.total_ttc_module_eur ?? 0;
-      const totalLLI = pretsACalculer
-        .filter((p) => p.produit === 'LOC')
-        .reduce((s, p) => s + (p.montant_eur || 0), 0);
-      const cap = plafondPretsLLI({ total_prets_eur: totalLLI, prix_revient_eur: prLLI });
-      if (cap.depassement_eur > 0) {
-        alertes.push(
-          `Prets LLI a ${(cap.part * 100).toFixed(1)} % du prix de revient de la tranche, ` +
-            `au-dela du plafond de 90 % : ${cap.depassement_eur} EUR de trop. Ce solde doit ` +
-            'venir en fonds propres ou en subventions (calculette CDC, controle AT32).',
-        );
-      }
-    }
+  }
+  const excedentRedresse = lire('excedent_redresse');
+  if (excedentRedresse > 0) {
+    const surfinancees = codesFinances.filter((c) => lire('besoin_brut', { tranche: c }) < 0);
+    alertes.push(
+      `Tranche${surfinancees.length > 1 ? 's' : ''} ${surfinancees.join(', ')} surfinancee${surfinancees.length > 1 ? 's' : ''} ` +
+        `de ${excedentRedresse} EUR : cet excedent reduit d'autant les prets des autres tranches ` +
+        '(redressement en serie, calculette CDC).',
+    );
   }
 
-  // R-AMT-1 - Un pret indexe se decrit par sa MARGE, jamais par son taux : le
-  // taux en decoule et changerait tout seul si le Livret A de reference bougeait.
-  // La derivation se fait ici, sur TOUS les prets, et non dans la seule branche
-  // des prets CDC theoriques : un pret « autre » pose depuis un modele - Action
-  // Logement, PHB 2.0 - porte lui aussi une marge et rien d'autre.
-  for (const p of pretsACalculer) {
-    if (p.taux === undefined || p.taux === null) {
-      const spread = Number(p.spread);
-      if (Number.isFinite(spread)) p.taux = (p.livret_a_origine ?? laOrigine) + spread;
+  // Valeurs par defaut qu'un produit n'a pas pu resoudre - une marge ou une zone
+  // inconnue : dites une fois par tranche, dans l'ordre des prets qui les
+  // appellent.
+  const clesPretsBase = classeur.valeursDimension('pret_base');
+  const tranchesSignalees = new Set();
+  for (const p of clesPretsBase) {
+    const P = { pret_base: p };
+    if (!lire('nature_pret', P)) continue;
+    const code = lire('tranche_pret', P);
+    if (tranchesSignalees.has(String(code))) continue;
+    tranchesSignalees.add(String(code));
+    const erreur = lire('erreur_defauts_pret', { code });
+    if (erreur) {
+      alertes.push(
+        `Prets CDC par defaut de la tranche ${code} non calculables : ` +
+          `${erreur}. Saisir leur taux et leur duree.`,
+      );
     }
   }
+  // Un pret dont la duree reste inconnue ne fait pas echouer la simulation : il
+  // est ecarte du plan, et signale.
+  for (const p of clesPretsBase) {
+    const P = { pret_base: p };
+    const montant = lire('montant_avant_scission', P);
+    if (montant > 0 && !lire('pret_calculable', P)) {
+      alertes.push(
+        `${lire('carac_pret', { ...P, champ: 'libelle' })} de ${arrondiEuro(montant)} EUR non amorti : ` +
+          `duree et taux inconnus pour le produit ${lire('tranche_pret', P)}. Saisir ce pret manuellement.`,
+      );
+    }
+  }
+  // R-FIN-8 - Le CPLS apparait de lui-meme dans le plan, avec son origine en
+  // jeton : le dire deux fois ferait passer une mecanique normale pour un
+  // incident. Seul un PLS sous le plancher se signale - le corriger releve du
+  // montage, pas du calcul.
+  if (tranches.PLS && !(lire('cpls_montant') > 0) && lire('pls_sous_plancher') && lire('total_pls') > 0) {
+    alertes.push(
+      `PLS a ${(lire('part_pls') * 100).toFixed(1)} % du prix de revient de sa tranche, ` +
+        'sous le plancher de 51 % de la calculette CDC. Un PLS trop faible signale que ' +
+        "l'operation n'en avait pas besoin : le corriger releve du montage, pas du calcul.",
+    );
+  }
+  // R-FIN-9 - L'ensemble des prets LLI ne peut exceder 90 % du prix de revient.
+  if (tranches.LOC && lire('depassement_prets_lli') > 0) {
+    alertes.push(
+      `Prets LLI a ${(lire('part_prets_lli') * 100).toFixed(1)} % du prix de revient de la tranche, ` +
+        `au-dela du plafond de 90 % : ${lire('depassement_prets_lli')} EUR de trop. Ce solde doit ` +
+        'venir en fonds propres ou en subventions (calculette CDC, controle AT32).',
+    );
+  }
 
-  const amortissements = pretsACalculer
+  // Les prets du plan, dans l'ordre : saisis, poses par defaut, puis le CPLS.
+  const prets = classeur.valeursDimension('pret').map((cle) => {
+    const P = { pret: cle };
+    return {
+      cle,
+      code: lire('code_pret', P),
+      libelle: lire('libelle_pret', P),
+      nature: lire('nature_pret_final', P),
+      produit: lire('produit_pret', P),
+      montant_eur: lire('montant_pret', P),
+      montant_calcule: lire('montant_calcule_pret', P),
+      derive: lire('derive_pret', P),
+      taux: lire('taux_pret', P),
+    };
+  });
+
+  const amortissements = prets
     .filter((p) => p.montant_eur > 0)
-    .map((p) => ({
-      code: p.code ?? p.libelle ?? 'pret',
-      libelle: p.libelle ?? p.code,
-      montant_eur: p.montant_eur,
-      nature: p.nature ?? 'autre',
-      produit: p.produit ?? trancheUnique,
-      // Vrai si le montant a ete calcule pour equilibrer la tranche, faux s'il
-      // a ete saisi. L'ecran s'en sert pour proposer le retour au calcul.
-      montant_calcule: p.montant_calcule === true,
-      // Pret DERIVE d'une regle et non saisi : l'ecran le montre en lecture seule.
-      derive: p.derive === true,
-      // Pret STRUCTURANT de la tranche : c'est lui qui absorbe l'ecart du plan
-      // de financement. Un pret ajoute a cote finance un besoin identifie, pas
-      // un solde - la distinction sert a l'ecran, qui ne les presente pas de la
-      // meme facon, et un pret derive l'est toujours (le CPLS nait du plafond).
-      principal: p.principal === true || p.derive === true,
-      taux_saisi: p.taux,
-      annee_premiere_echeance:
-        p.annee_premiere_echeance ??
-        anneePremiereEcheance(anneeMEL, { demembrement: identite.demembrement }),
-      tableau: tableauAmortissement({
+    .map((p) => {
+      const P = { pret: p.cle };
+      // R-AMT-3 : chaque pret garde SA date ; a defaut, la mise en location.
+      const premiereEcheance = lire('annee_premiere_echeance_pret', P);
+      return {
+        code: p.code ?? p.libelle ?? 'pret',
+        libelle: p.libelle ?? p.code,
         montant_eur: p.montant_eur,
-        taux: p.taux,
-        progressivite: p.progressivite ?? 0,
-        duree_ans: p.duree_ans,
-        // R-AMT-3 : chaque pret garde SA date ; a defaut, la regle par defaut.
-        annee_premiere_echeance:
-          p.annee_premiere_echeance ??
-          anneePremiereEcheance(anneeMEL, { demembrement: identite.demembrement }),
-        revisabilite: p.revisabilite ?? 'TAUX FIXE',
-        differe_ans: p.differe_ans ?? 0,
-        // R-AMT-9 : le differe se compte en MOIS, l'unite du chantier. Un pret
-        // principal differe par defaut le temps des travaux - il n'y a rien a
-        // rembourser tant que l'operation ne produit pas de loyer.
-        differe_mois: p.differe_mois ?? (p.principal ? dureeChantierMois : undefined),
-        differe_type: p.differe_type ?? (p.principal ? 2 : undefined),
-        // R-AMT-6 : capital constant plutot qu'annuite progressive. C'est le
-        // profil de la seconde phase du PHB 2.0 ; les prets CDC ordinaires
-        // gardent l'annuite, qui reste le defaut.
-        profil: p.profil_amortissement ?? 'annuite',
-        // R-AMT-7 : les prets indexes SOUS le Livret A portent un plancher.
-        taux_plancher: p.taux_plancher,
-        // R-AMT-8 : echeances par an. Le compte reste annuel, le pret non.
-        periodicite: p.periodicite ?? 1,
-        livret_a_origine: p.livret_a_origine ?? laOrigine,
-        livret_a_par_annee: p.livret_a_par_annee ?? laParAnnee,
-      }),
-    }));
+        nature: p.nature ?? 'autre',
+        produit: p.produit ?? trancheUnique,
+        // Vrai si le montant a ete calcule pour equilibrer la tranche, faux s'il
+        // a ete saisi. L'ecran s'en sert pour proposer le retour au calcul.
+        montant_calcule: p.montant_calcule === true,
+        // Pret DERIVE d'une regle et non saisi : l'ecran le montre en lecture seule.
+        derive: p.derive === true,
+        // Pret STRUCTURANT de la tranche : c'est lui qui absorbe l'ecart du plan
+        // de financement, et un pret derive l'est toujours.
+        principal: lire('principal_pret', P),
+        taux_saisi: p.taux,
+        annee_premiere_echeance: premiereEcheance,
+        tableau: tableauAmortissement({
+          montant_eur: p.montant_eur,
+          taux: p.taux,
+          progressivite: lire('progressivite_pret', P),
+          duree_ans: lire('duree_ans_pret', P),
+          annee_premiere_echeance: premiereEcheance,
+          revisabilite: lire('revisabilite_pret', P),
+          differe_ans: lire('differe_ans_pret', P),
+          differe_mois: lire('differe_mois_pret', P),
+          differe_type: lire('differe_type_pret', P),
+          profil: lire('profil_pret', P),
+          taux_plancher: lire('taux_plancher_pret', P),
+          periodicite: lire('periodicite_pret', P),
+          livret_a_origine: lire('livret_a_origine_final', P),
+          livret_a_par_annee: lire('livret_a_par_annee_final', P),
+        }),
+      };
+    });
 
   // Prets RESOLUS : la liste complete, y compris ceux dont le montant est nul et
-  // qui ne sont donc pas amortis. Leur taux et leur duree existent pourtant, et
-  // une restitution qui ne lirait que `amortissements` afficherait des tirets a
-  // la place de caracteristiques parfaitement determinees.
-  const pretsResolus = pretsACalculer.map((p) => ({
-    code: p.code ?? p.libelle ?? 'pret',
-    libelle: p.libelle ?? p.code,
-    nature: p.nature ?? 'autre',
-    produit: p.produit ?? trancheUnique,
-    montant_eur: p.montant_eur,
-    montant_calcule: p.montant_calcule === true,
-    derive: p.derive === true,
-    taux: p.taux ?? null,
-    // Marge effectivement appliquee, a cote du taux qu'elle produit : l'ecran
-    // donne a saisir la MARGE, et sans elle il ne pourrait afficher que le taux,
-    // dont le lecteur ne saurait pas s'il vient du produit ou d'une surcharge.
-    // Nulle sur un pret a taux saisi, qui n'est pas indexe sur le Livret A.
-    spread: Number.isFinite(p.spread) && p.taux === p.livret_a_origine + p.spread ? p.spread : null,
-    cle_marge: p.cle_marge ?? null,
-    // R-AMT-7 : le taux NOMINAL peut etre negatif sur un pret indexe sous le
-    // Livret A ; ce que le pret paie est le taux plancher. On publie les deux -
-    // le nominal reste la base des revisions, l'applique est ce qui se lit.
-    taux_plancher: p.taux_plancher ?? null,
-    taux_applique:
-      p.taux === undefined || p.taux === null
-        ? null
-        : p.taux_plancher === undefined || p.taux_plancher === null
-          ? p.taux
-          : Math.max(p.taux, p.taux_plancher),
-    duree_ans: p.duree_ans ?? null,
-    // R-AMT-9 : le differe EFFECTIF, en mois. Un pret principal le tient de la
-    // duree du chantier s'il n'en porte pas : l'ecran doit pouvoir le dire sans
-    // refaire la resolution de son cote.
-    differe_mois:
-      p.differe_mois ?? (p.differe_ans ? p.differe_ans * 12 : p.principal ? dureeChantierMois : 0),
-    revisabilite: p.revisabilite ?? null,
-    progressivite: p.progressivite ?? 0,
-  }));
+  // qui ne sont donc pas amortis. Leur taux et leur duree existent pourtant.
+  const pretsResolus = prets.map((p) => {
+    const P = { pret: p.cle };
+    return {
+      code: p.code ?? p.libelle ?? 'pret',
+      libelle: p.libelle ?? p.code,
+      nature: p.nature ?? 'autre',
+      produit: p.produit ?? trancheUnique,
+      montant_eur: p.montant_eur,
+      montant_calcule: p.montant_calcule === true,
+      derive: p.derive === true,
+      taux: p.taux ?? null,
+      // Marge effectivement appliquee, a cote du taux qu'elle produit ; nulle sur
+      // un pret a taux saisi, qui n'est pas indexe sur le Livret A.
+      spread: lire('marge_affichee_pret', P),
+      cle_marge: lire('cle_marge_pret', P),
+      // R-AMT-7 : le taux nominal, et le taux applique au-dessus du plancher.
+      taux_plancher: lire('taux_plancher_pret', P) ?? null,
+      taux_applique: lire('taux_applique_pret', P),
+      duree_ans: lire('duree_ans_pret', P) ?? null,
+      // R-AMT-9 : le differe EFFECTIF, en mois.
+      differe_mois: lire('differe_mois_effectif_pret', P),
+      revisabilite: lire('revisabilite_saisie_pret', P) ?? null,
+      progressivite: lire('progressivite_pret', P),
+    };
+  });
 
-  // Tous les prets amortis, quelle que soit leur nature. `amortissements` porte
-  // deja les prets « autre » : les rajouter les compterait deux fois (defaut V1).
-  const totalPrets = arrondiEuro(amortissements.reduce((s, a) => s + a.montant_eur, 0));
-
-  // Seuls les prets CDC entrent au ratio reglementaire R-FIN-5 : un pret
-  // collecteur ou une avance ne sont pas des prets de la Caisse des Depots, et
-  // le pret bancaire d'une tranche libre pas davantage - le logement libre ne
-  // releve pas des fonds d'epargne.
-  // Le droit theorique se calcule sur l'operation entiere : il ne vaut le total
-  // CDC que si TOUTE l'operation en releve. Des qu'une tranche libre s'y melange,
-  // ce sont les prets reellement mobilises qui font foi, tranche par tranche.
-  const toutesTranchesCDC = !codesPresents.some((c) => !financeParCDC(c));
-  const totalPretsCDC = cdcTheoriques && toutesTranchesCDC
-    ? cdcTheoriques.total_cdc_eur
-    : arrondiEuro(
-        amortissements
-          .filter((a) => a.nature !== 'autre' && financeParCDC(a.produit))
-          .reduce((s, a) => s + a.montant_eur, 0),
-      );
-
-  // Denominateur du meme ratio : le prix de revient des seules tranches qui en
-  // relevent. Faute de ventilation par tranche, l'operation entiere fait foi.
-  const codesCDC = codesPresents.filter((c) => financeParCDC(c));
-  const prixRevientCDCBrut = arrondiEuro(
-    codesCDC.reduce((s, c) => s + (bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0), 0),
-  );
-  const prixRevientCDC = prixRevientCDCBrut > 0 ? prixRevientCDCBrut : undefined;
-
-  const equilibre = controleEquilibre(
-    {
-      prix_revient_ttc_module_eur: bilan.total_ttc_module_eur,
-      subventions_eur: subventionsTotal,
-      fonds_propres_eur: fondsPropres,
-      prets_eur: totalPrets,
-      prets_cdc_eur: totalPretsCDC,
-      prix_revient_cdc_eur: prixRevientCDC,
-    },
-    baremes,
-  );
+  // Tous les prets amortis, quelle que soit leur nature (R-FIN-1), et les seuls
+  // prets CDC pour le ratio reglementaire (R-FIN-5).
+  const totalPrets = lire('total_prets');
+  const totalPretsCDC = lire('total_prets_cdc');
+  const equilibre = restituerEquilibre(classeur);
   alertes.push(...equilibre.alertes);
 
   // Plan de financement PAR TRANCHE. Une operation mixte n'a pas un plan mais
-  // autant de plans qu'elle porte de produits : chacun a son prix de revient,
-  // ses subventions, ses fonds propres et ses prets, et c'est a ce niveau que
-  // se juge un equilibre. Les ressources ventilees viennent du calcul des
-  // besoins, jamais d'un recalcul : deux ventilations finiraient par diverger.
+  // autant de plans qu'elle porte de produits, et c'est a ce niveau que se juge
+  // un equilibre.
   /** @type {Record<string, any>} */
   const planParTranche = {};
   for (const code of codesPresents) {
     const t = bilan.par_tranche?.[code];
     if (!t) continue;
+    const T = { tranche: code };
     const res = ressourcesParTranche[code] ?? { subventions_eur: 0, fonds_propres_eur: 0 };
-    const prets = pretsResolus.filter((p) => p.produit === code);
-    const totalPretsTranche = arrondiEuro(prets.reduce((s, p) => s + (p.montant_eur || 0), 0));
-    const ressources = arrondiEuro(
-      res.subventions_eur + res.fonds_propres_eur + totalPretsTranche,
-    );
     planParTranche[code] = {
       // Emplois : le prix de revient de la tranche, decline par chapitre.
       chapitres: Object.fromEntries(
@@ -13105,10 +13633,10 @@ function calculer(entrees, referentiels) {
         })),
       subventions_eur: res.subventions_eur,
       fonds_propres_eur: res.fonds_propres_eur,
-      prets,
-      total_prets_eur: totalPretsTranche,
-      ressources_eur: ressources,
-      ecart_eur: arrondiEuro(ressources - t.total_ttc_module_eur),
+      prets: pretsResolus.filter((p) => p.produit === code),
+      total_prets_eur: lire('total_prets_tranche', T),
+      ressources_eur: lire('ressources_tranche', T),
+      ecart_eur: lire('ecart_tranche', T),
     };
   }
 

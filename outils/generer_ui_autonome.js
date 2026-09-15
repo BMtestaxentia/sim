@@ -163,10 +163,14 @@ for (const m of lire('ui', 'app.js').matchAll(/referentiels\/([\w.]+)\.json/g)) 
 // et pas seulement les modules entre eux.
 // Les modules d'UI sont concatenes dans l'ordre de dependance, comme ceux du
 // moteur : `depot.js` avant `app.js`, qui l'importe.
-const UI_MODULES = ['depot.js', 'formules.js', 'app.js'];
+const UI_MODULES = ['depot.js', 'tableur.js', 'app.js'];
+// Toutes les substitutions passent par une FONCTION : une chaine de
+// remplacement interprete `$'`, `$&` ou `$$`, et le code en porte - une
+// reference absolue d'Excel s'ecrit `'$'` dans l'ecran des calculs. Une
+// chaine y aurait injecte la suite de la page au milieu du script.
 const app = aplatir(UI_MODULES.map((n) => lire('ui', n)).join('\n')).replace(
   /\/\/ __REFERENTIELS_DEBUT__[\s\S]*?\/\/ __REFERENTIELS_FIN__/,
-  `const referentiels = ${JSON.stringify(referentiels)};`,
+  () => `const referentiels = ${JSON.stringify(referentiels)};`,
 );
 if (app.includes('__REFERENTIELS_DEBUT__')) {
   throw new Error("Le bloc de referentiels n'a pas ete remplace : marqueurs absents de ui/app.js");
@@ -199,17 +203,27 @@ try {
 }
 
 // --- Assemblage ---
+// Un `</script` dans le code fermerait la balise au milieu du script.
+for (const [nom, code] of [['moteur', moteur], ['ui', app]]) {
+  if (/<\/script/i.test(code)) throw new Error(`Le code ${nom} contient « </script » : la page le couperait en deux.`);
+}
 const html = lire('ui', 'index.html')
-  .replace('<link rel="stylesheet" href="style.css" />', `<style>\n${lire('ui', 'style.css')}\n</style>`)
+  .replace('<link rel="stylesheet" href="style.css" />', () => `<style>\n${lire('ui', 'style.css')}\n</style>`)
   .replace(
     '<script type="module" src="app.js"></script>',
-    `<script>\n"use strict";\n(function () {\n${moteur}\n\n/* ===== ui/app.js ===== */\n${app}\n})();\n</script>`,
+    () => `<script>\n"use strict";\n(function () {\n${moteur}\n\n/* ===== ui/app.js ===== */\n${app}\n})();\n</script>`,
   )
   .replace(
     '<head>',
-    '<head>\n    <!-- FICHIER GENERE - ne pas editer. Source : ui/ + src/. ' +
+    () =>
+      '<head>\n    <!-- FICHIER GENERE - ne pas editer. Source : ui/ + src/. ' +
       'Regenerer avec : node outils/generer_ui_autonome.js -->',
   );
+// Le script doit se retrouver dans la page a l'octet pres : c'est lui que
+// le controle de compilation ci-dessus a verifie.
+if (!html.includes(moteur) || !html.includes(app)) {
+  throw new Error('Le script assemble a ete altere en entrant dans la page : verifier les substitutions.');
+}
 
 // A LA RACINE et nomme `index.html` : c'est ce que GitHub Pages sert par
 // defaut. Sans lui, Pages affiche le README, c'est-a-dire la documentation au

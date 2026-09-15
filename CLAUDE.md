@@ -37,7 +37,10 @@ moteur/
       langage.js        #   le langage : nombres, textes, opérateurs, fonctions, agrégats POUR ... DANS ... QUAND
       fonctions.js      #   sa bibliothèque : SI, DEFAUT, SOMME, REPARTIR, TRI, INDEXATION...
       classeur.js       #   ce qui les exécute : calcul paresseux, mémoïsation, forçage, explication d'une cellule
-      modele.js         #   le modèle du moteur : tous les domaines assemblés
+      modele.js         #   le modèle du moteur : tous les domaines assemblés ; modeleDe(modifications)
+      surcharges.js     #   les modifications du modèle faites dans l'onglet Calculs (formules, lignes, importance), en données
+      niveaux.js        #   l'importance de chaque ligne à l'écran : résultat clé, étape, détail technique
+      ecriture.js       #   l'écriture Excel des formules (=, virgule décimale, noms ou adresses) et sa relecture
       domaines/         #   une grandeur par valeur calculée : libellé, unité, règle R-xxx, formule
                         #   (operation, calendrier, surfaces, loyers, prix_revient, subventions, financement,
                         #    prets, amortissement, fiscalite, tresorerie, exploitation, synthese)
@@ -52,7 +55,8 @@ moteur/
     moteur.js           # orchestration : calculer(entrees, referentiels) -> resultats ; calculerAvecClasseur
     produits.js         # définitions paramétriques des produits (PLUS, PLAI, LIB, LOC/LLI, PLS...)
   ui/
-    formules.js         # écran « Formules » : catalogue des grandeurs, fiche en blocs, clic sur un chiffre
+    tableur.js          # onglet « Calculs » : tout le modèle en feuilles comme dans Excel, « Pourquoi ce chiffre ? »,
+                        # modifications du modèle avec aperçu de l'impact et journal
   referentiels/
     baremes_2025.json          # barèmes réglementaires versionnés (extraits de ParaGEN)
     trajectoires_axentia_2026.json  # scénario macro (LA, IRL, TFPB...)
@@ -71,7 +75,7 @@ moteur/
 ```
 
 Règles d'architecture non négociables :
-- **Tout calcul est une formule du modèle** (`src/formules/domaines/`). Chaque valeur que l'outil ressort est une grandeur, avec son libellé, son unité, sa règle R-xxx et sa formule. Le moteur exécute ces formules et l'écran « Formules » les affiche telles quelles : il n'existe pas de seconde rédaction des calculs. Les modules de `src/` restituent le classeur (`restituer*`) et gardent les fonctions historiques, qui évaluent ces mêmes formules sur les valeurs qu'on leur donne (`fixer`). Ajouter un calcul, c'est ajouter une grandeur ; `tests/modele.test.js` vérifie qu'elle compile, porte un libellé et une unité, et que son explication retombe sur sa valeur. Un chiffre affiché à l'écran porte `data-formule` (voir `attrFormule` dans `ui/app.js`) : un clic ouvre sa fiche.
+- **Tout calcul est une formule du modèle** (`src/formules/domaines/`). Chaque valeur que l'outil ressort est une grandeur, avec son libellé, son unité, sa règle R-xxx et sa formule. Le moteur exécute ces formules et l'onglet « Calculs » les affiche telles quelles, comme un classeur Excel (`ui/tableur.js`, écriture de `src/formules/ecriture.js`) : il n'existe pas de seconde rédaction des calculs. Un administrateur peut y modifier le modèle ; ses modifications sont des données (`src/formules/surcharges.js`) que le moteur reçoit avec les référentiels (`surcharges_modele`), et sans elles le moteur calcule avec le modèle du dépôt, à l'identique. Les modules de `src/` restituent le classeur (`restituer*`) et gardent les fonctions historiques, qui évaluent ces mêmes formules sur les valeurs qu'on leur donne (`fixer`). Ajouter un calcul, c'est ajouter une grandeur ; `tests/modele.test.js` vérifie qu'elle compile, porte un libellé et une unité, et que son explication retombe sur sa valeur. Un chiffre affiché à l'écran porte `data-formule` (voir `attrFormule` dans `ui/app.js`) : un clic ouvre « Pourquoi ce chiffre ? ».
 - **Le moteur est pur** : aucune I/O, aucun accès réseau, aucun état global, aucune date système implicite (la date est une entrée). Même entrées → même sorties, toujours.
 - **Aucun littéral métier dans le code de calcul** (pas de `345`, pas de `0.77`, pas de `0.006` en dur) : tout vient des référentiels ou des entrées. C'est la leçon de l'irrégularité I-2 de LEON.
 - Arithmétique : calculs en nombre flottant standard MAIS arrondis explicites et centralisés (module unique `arrondis.js`) appliqués aux frontières définies par le dictionnaire (R-CONV / I-9). Pas d'accumulation itérative quand une forme fermée existe (leçon I-4).

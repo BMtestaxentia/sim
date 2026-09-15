@@ -20,9 +20,9 @@ npm run check    # vérification de types via JSDoc (tsc --checkJs, si tsc dispo
 
 ## Structure
 
-- `src/formules/` - tous les calculs, écrits en formules : le langage, le classeur qui les exécute, et une grandeur par valeur calculée, domaine par domaine (`domaines/`)
+- `src/formules/` - tous les calculs, écrits en formules : le langage, le classeur qui les exécute, et une grandeur par valeur calculée, domaine par domaine (`domaines/`) ; leur écriture Excel (`ecriture.js`) et les modifications du modèle (`surcharges.js`)
 - `src/` - l'orchestration (`moteur.js`) et la restitution de chaque domaine de règles R-xxx du dictionnaire
-- `ui/` - l'interface ; `ui/formules.js` affiche la formule de chaque chiffre (page Formules des paramètres, clic sur un chiffre)
+- `ui/` - l'interface ; `ui/tableur.js` est l'onglet Calculs : tout le modèle en feuilles comme dans Excel, la formule de chaque chiffre et ce qui l'alimente, et les modifications du modèle
 - `referentiels/` - barèmes et trajectoires versionnés (extraits de la matrice, cellules sources citées)
 - `fixtures/` - jeux d'or (entrees.json + attendus.json par opération)
 - `tests/` - cas canoniques + comparaison aux annexes

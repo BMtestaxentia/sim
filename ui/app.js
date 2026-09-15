@@ -19,7 +19,9 @@
  * dans une portee unique et refuse les collisions de noms racine.
  */
 import { calculerAvecClasseur } from '../src/moteur.js';
-import { installerFormules, sectionFormules, rendreFormules } from './formules.js';
+import { installerTableur } from './tableur.js';
+import { modeleDe } from '../src/formules/modele.js';
+import { nombreSurcharges, sansSurcharge } from '../src/formules/surcharges.js';
 import { produitsOrdonnes, produit, ORDRE_PRODUITS } from '../src/produits.js';
 import { arrondirEnConservantLaSomme } from '../src/arrondis.js';
 import { ecartsParametrage, fusionner } from '../src/parametrage.js';
@@ -61,6 +63,106 @@ const referentiels = {
   departements: await (await fetch('../referentiels/departements.json')).json(),
 };
 // __REFERENTIELS_FIN__
+
+/**
+ * Les MODIFICATIONS DU MODELE faites dans l'onglet Calculs : formules
+ * reecrites, lignes inserees, importance des lignes. Elles vivent dans le
+ * stockage du navigateur, comme la saisie, et voyagent avec les referentiels
+ * jusqu'au moteur, qui calcule avec le modele qu'elles decrivent
+ * (src/formules/surcharges.js). L'analyse de sensibilite, qui copie les
+ * referentiels, les emporte donc aussi.
+ */
+const CLE_MODELE = 'moteur-sim.modele.v1';
+referentiels.surcharges_modele = lireSurchargesModele();
+/** Le classeur des calculs, pose avec les ecouteurs (voir `installerTableur`). */
+let tableur = /** @type {ReturnType<typeof installerTableur>|null} */ (null);
+
+function lireSurchargesModele() {
+  let s = {};
+  try {
+    s = JSON.parse(localStorage.getItem(CLE_MODELE) ?? 'null') ?? {};
+  } catch {
+    return {};
+  }
+  try {
+    modeleDe(s);
+    return s;
+  } catch {
+    // Une mise a jour du moteur peut rendre une modification caduque - une
+    // grandeur renommee, par exemple. Elle est mise de cote plutot que
+    // d'empecher tout calcul.
+    try {
+      localStorage.setItem(`${CLE_MODELE}.caduques`, JSON.stringify(s));
+      localStorage.removeItem(CLE_MODELE);
+    } catch {
+      /* stockage indisponible : on calcule sans elles */
+    }
+    return {};
+  }
+}
+
+/** Enregistre les modifications du modele, puis recalcule tout l'outil. */
+function ecrireSurchargesModele(s) {
+  referentiels.surcharges_modele = s;
+  try {
+    if (sansSurcharge(s)) localStorage.removeItem(CLE_MODELE);
+    else localStorage.setItem(CLE_MODELE, JSON.stringify(s));
+  } catch {
+    /* voir memoriserSaisie : le calcul se fait quand meme */
+  }
+  majPastilleModele();
+  recalculer();
+}
+
+/** La pastille de l'en-tete dit, sur tous les ecrans, que le modele est modifie. */
+function majPastilleModele() {
+  const p = document.getElementById('pastille-modele');
+  if (!p) return;
+  const n = nombreSurcharges(referentiels.surcharges_modele);
+  p.hidden = !n;
+  p.textContent = `Modèle modifié · ${n}`;
+}
+
+/**
+ * Chemin d'une donnee d'apres le chemin declare par sa grandeur :
+ * `lots[lot].shab_m2` devient `lots.2.shab_m2`. Les postes du prix de revient
+ * se comptent, dans le moteur, parmi ceux qui ont un montant : `reel` ramene
+ * leur rang a celui de la saisie.
+ */
+function cheminDonnee(chemin, indices, reel = false) {
+  return chemin.replace(/\[([^\]]+)\]/g, (_, dim) => {
+    let v = indices[dim];
+    if (reel && dim === 'poste' && chemin.startsWith('postes_bilan[')) {
+      v = etat.postes_bilan.map((p, j) => (nul(p.montant_ht_eur) ? -1 : j)).filter((j) => j >= 0)[v];
+    }
+    return `.${v}`;
+  });
+}
+
+/** Une saisie ou un parametre tape dans le classeur des calculs. */
+function ecrireCelluleTableur(g, indices, v) {
+  try {
+    if (g.saisie !== undefined) ecrireChemin(etat, cheminDonnee(g.saisie, indices, true), v);
+    else if (g.parametre !== undefined) ecrireSaisie(`baremes.${g.parametre}`, v);
+    else return 'Cette valeur ne se saisit pas ici.';
+  } catch (e) {
+    return `Écriture impossible : ${/** @type {Error} */ (e).message}`;
+  }
+  rafraichirTout();
+  return null;
+}
+
+/** Un calcul a blanc pour l'apercu : autre modele, ou une valeur changee. */
+function simulerTableur({ surcharges, cellule } = {}) {
+  const entrees = etatPourAnalyse();
+  if (cellule) {
+    const { g, indices, v } = cellule;
+    if (g.saisie !== undefined) ecrireChemin(entrees, cheminDonnee(g.saisie, indices), v);
+    else if (g.parametre !== undefined) ecrireChemin(entrees.parametrage, `baremes.${g.parametre}`, v);
+  }
+  const refs = surcharges === undefined ? referentiels : { ...referentiels, surcharges_modele: surcharges };
+  return calculerAvecClasseur(entrees, refs).classeur;
+}
 
 /**
  * Postes de prix de revient : la nomenclature complete est PRESENTE d'emblee,
@@ -4477,16 +4579,6 @@ function modeleParametres() {
         ),
       ],
     },
-    {
-      // Le catalogue des formules : rien a regler, tout a comprendre. Son
-      // contenu est produit par `formules.js`, depuis le modele du moteur.
-      id: 'formules',
-      rubrique: 'formules',
-      titre: 'Formules',
-      resume: 'Comment chaque chiffre se calcule',
-      aide: '',
-      formules: true,
-    },
   ];
 }
 
@@ -5125,15 +5217,10 @@ function rendreParametres() {
     ) +
     rubrique(
       'Admin',
-      sections.filter((s) => s.rubrique !== 'exploitation' && s.rubrique !== 'formules'),
-    ) +
-    rubrique(
-      'Comprendre les calculs',
-      sections.filter((s) => s.rubrique === 'formules'),
+      sections.filter((s) => s.rubrique !== 'exploitation'),
     );
 
   const bloc = (s) => {
-    if (s.formules) return sectionFormules();
     const champs = (s.champs ?? []).filter(correspond);
     const matrices = (s.matrices ?? []).map(tableMatrice).filter(Boolean);
     const traj = s.trajectoires && !enRecherche ? sectionTrajectoires() : '';
@@ -5386,7 +5473,7 @@ function recalculer() {
     rendreCalendrier(r);
     rendreFiligraneTFPB(r);
     rendreValeurs(r);
-    rendreFormules();
+    tableur?.rendre();
     pastille.textContent = 'à jour';
     pastille.className = 'pastille pastille--ok';
   } catch (e) {
@@ -5397,6 +5484,7 @@ function recalculer() {
     pastille.textContent = 'erreur';
     pastille.className = 'pastille pastille--calcul';
     viderRestitution(/** @type {Error} */ (e).message);
+    tableur?.rendre();
   }
 }
 
@@ -5583,6 +5671,7 @@ function afficherEcran(cible) {
     /* voir memoriserSaisie */
   }
   if (vise === 'parametres') rendreParametres();
+  if (vise === 'calculs') tableur?.rendre();
   // L'apercu est un CLONE des ecrans : il se refait a chaque arrivee sur
   // l'onglet, sinon il montrerait le dossier tel qu'il etait la fois d'avant.
   if (vise === 'exports') rendreApercuExport();
@@ -8612,9 +8701,19 @@ function informerBoite(titre, texte) {
 
 // ---------------------------------------------------------------- evenements
 
-// Ecran des formules : la page du parametrage et la boite ouverte d'un clic sur
-// un chiffre lisent toutes deux le classeur du dernier calcul.
-installerFormules(() => dernierClasseur);
+// Le classeur des calculs (onglet Calculs) lit le classeur du dernier calcul ;
+// sa boite « Pourquoi ce chiffre ? » s'ouvre d'un clic sur un chiffre de
+// n'importe quel ecran.
+tableur = installerTableur({
+  lireClasseur: () => dernierClasseur,
+  lireSurcharges: () => referentiels.surcharges_modele ?? {},
+  ecrireSurcharges: ecrireSurchargesModele,
+  ecrireCellule: ecrireCelluleTableur,
+  simuler: simulerTableur,
+  montrerEcran: () => afficherEcran('calculs'),
+});
+majPastilleModele();
+document.getElementById('pastille-modele')?.addEventListener('click', () => afficherEcran('calculs'));
 
 document.addEventListener('input', (ev) => {
   const el = /** @type {HTMLInputElement} */ (ev.target);

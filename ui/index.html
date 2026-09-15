@@ -81,6 +81,9 @@
         <button type="button" class="onglet" role="tab" data-ecran="exports" aria-selected="false">
           Exports
         </button>
+        <button type="button" class="onglet" role="tab" data-ecran="calculs" aria-selected="false">
+          Calculs
+        </button>
         <button type="button" class="onglet" role="tab" data-ecran="parametres" aria-selected="false">
           Paramètres
         </button>
@@ -88,6 +91,8 @@
 
       <div class="entete__actions">
         <span id="etat-calcul" class="pastille pastille--ok">à jour</span>
+        <button type="button" id="pastille-modele" class="pastille pastille--modele" hidden
+          title="Des formules du moteur ont été modifiées dans l’onglet Calculs : ouvrir le classeur">Modèle modifié</button>
         <!-- « Réinitialiser » a disparu avec la simulation unique : on ne repart
              plus d'une opération de démonstration, on ferme le dossier ou on en
              ouvre un autre depuis la bibliothèque. -->
@@ -829,6 +834,12 @@
       </div>
     </main>
 
+    <!-- Le classeur des calculs : tout le modele du moteur, en feuilles comme
+         dans Excel. Son contenu est pose et redessine par ui/tableur.js. -->
+    <main class="ecran ecran--calculs" id="ecran-calculs" role="tabpanel" hidden>
+      <div id="tableur" class="tb"></div>
+    </main>
+
     <main class="ecran" id="ecran-parametres" role="tabpanel" hidden>
       <!-- La barre de tete est STATIQUE : le champ de recherche s'y trouve, et
            le reconstruire a chaque frappe lui couterait le focus. Seul le
@@ -1005,7 +1016,7 @@
     <dialog id="boite-formule" class="boite boite--formule" aria-label="Formule d’un chiffre">
       <button type="button" class="bouton bouton--icone boite-formule__fermer" data-formule-fermer
         aria-label="Fermer" title="Fermer">×</button>
-      <div id="fx-detail-boite"></div>
+      <div id="tb-boite-corps" class="tb tb--boite"></div>
     </dialog>
 
     <script type="module" src="app.js"></script>

@@ -2419,6 +2419,11 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
 .pastille-tranche--active {
   background: var(--cat); border-color: var(--cat); color: var(--encre-sur-cat, #12161f);
 }
+/* « Tout » n'a pas de produit, donc pas de teinte : sans elle, la pastille
+   active n'avait plus de fond et son encre sombre se perdait sur le fond de
+   l'ecran. Elle prend l'encre du texte, qui s'inverse avec le theme - claire
+   en sombre, sombre en clair - et contraste donc avec `--encre-sur-cat`. */
+.pastille-tranche--tout { --cat: var(--text-primary); }
 
 .exports__info {
   margin-left: auto; font-size: 11.5px; color: var(--text-tertiary); white-space: nowrap;

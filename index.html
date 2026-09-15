@@ -2433,6 +2433,11 @@ tr.ligne--cible-apres > td { box-shadow: inset 0 -2px 0 var(--info-accent); }
 .pastille-tranche--active {
   background: var(--cat); border-color: var(--cat); color: var(--encre-sur-cat, #12161f);
 }
+/* « Tout » n'a pas de produit, donc pas de teinte : sans elle, la pastille
+   active n'avait plus de fond et son encre sombre se perdait sur le fond de
+   l'ecran. Elle prend l'encre du texte, qui s'inverse avec le theme - claire
+   en sombre, sombre en clair - et contraste donc avec `--encre-sur-cat`. */
+.pastille-tranche--tout { --cat: var(--text-primary); }
 
 .exports__info {
   margin-left: auto; font-size: 11.5px; color: var(--text-tertiary); white-space: nowrap;
@@ -15174,7 +15179,7 @@ function rendreStructureTranches() {
           </div>
         </section>
 
-        <section class="bloc">
+        <section class="bloc bloc--tranche">
           <h2 class="bloc__titre">
             Prêts de la tranche
             <button type="button" class="bouton bouton--ajout" data-ajouter-tranche="prets" data-produit="${code}">+ prêt</button>
@@ -17907,7 +17912,7 @@ function rendrePerimetreExploitation(r) {
   const retenues = new Set(tranchesAuCompte(r));
   const tout = retenues.size === tranches.length;
   barre.innerHTML =
-    `<button type="button" class="pastille-tranche${
+    `<button type="button" class="pastille-tranche pastille-tranche--tout${
       tout ? ' pastille-tranche--active' : ''
     }" data-perimetre-compte="tout" aria-pressed="${tout}"
       title="Présenter toutes les tranches">Tout</button>` +

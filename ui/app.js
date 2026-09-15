@@ -1084,7 +1084,7 @@ function rendreStructureTranches() {
           </div>
         </section>
 
-        <section class="bloc">
+        <section class="bloc bloc--tranche">
           <h2 class="bloc__titre">
             Prêts de la tranche
             <button type="button" class="bouton bouton--ajout" data-ajouter-tranche="prets" data-produit="${code}">+ prêt</button>
@@ -3817,7 +3817,7 @@ function rendrePerimetreExploitation(r) {
   const retenues = new Set(tranchesAuCompte(r));
   const tout = retenues.size === tranches.length;
   barre.innerHTML =
-    `<button type="button" class="pastille-tranche${
+    `<button type="button" class="pastille-tranche pastille-tranche--tout${
       tout ? ' pastille-tranche--active' : ''
     }" data-perimetre-compte="tout" aria-pressed="${tout}"
       title="Présenter toutes les tranches">Tout</button>` +

@@ -220,5 +220,7 @@ export const OPERATION = {
 
     // --- Constantes calendaires -------------------------------------------------
     mois_par_an: { libelle: 'Mois par an', unite: 'nombre', constante: 12 },
+    jours_par_an: { libelle: 'Jours par an', unite: 'nombre', constante: 365 },
+    liste_vide: { libelle: 'Liste vide', unite: 'liste', constante: [] },
   },
 };

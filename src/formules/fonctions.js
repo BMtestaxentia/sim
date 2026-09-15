@@ -315,6 +315,12 @@ export const FONCTIONS = {
     arite: [2, 2],
     calc: (x, motif) => String(x ?? '').toLowerCase().includes(String(motif).toLowerCase()),
   },
+  'TEXTE.REMPLACER': {
+    libelle: 'Remplacer',
+    aide: 'Le texte dont la première occurrence du motif est remplacée par le texte indiqué.',
+    arite: [3, 3],
+    calc: (x, motif, par) => String(x).replace(String(motif), String(par)),
+  },
   SUPPRESPACE: {
     libelle: 'Sans espaces autour',
     aide: 'Le texte sans ses espaces de début et de fin ; une valeur absente devient un texte vide.',

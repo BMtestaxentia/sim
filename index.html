@@ -4702,6 +4702,12 @@ const FONCTIONS = {
     arite: [2, 2],
     calc: (x, motif) => String(x ?? '').toLowerCase().includes(String(motif).toLowerCase()),
   },
+  'TEXTE.REMPLACER': {
+    libelle: 'Remplacer',
+    aide: 'Le texte dont la première occurrence du motif est remplacée par le texte indiqué.',
+    arite: [3, 3],
+    calc: (x, motif, par) => String(x).replace(String(motif), String(par)),
+  },
   SUPPRESPACE: {
     libelle: 'Sans espaces autour',
     aide: 'Le texte sans ses espaces de début et de fin ; une valeur absente devient un texte vide.',
@@ -6836,6 +6842,8 @@ const OPERATION = {
 
     // --- Constantes calendaires -------------------------------------------------
     mois_par_an: { libelle: 'Mois par an', unite: 'nombre', constante: 12 },
+    jours_par_an: { libelle: 'Jours par an', unite: 'nombre', constante: 365 },
+    liste_vide: { libelle: 'Liste vide', unite: 'liste', constante: [] },
   },
 };
 
@@ -10607,6 +10615,1648 @@ const FISCALITE = {
   },
 };
 
+/* ===== src/formules/domaines/exploitation.js ===== */
+// @ts-check
+/**
+ * DOMAINE « EXPLOITATION » - R-EXP : le compte d'exploitation previsionnel,
+ * tranche par tranche et exercice par exercice.
+ *
+ * Chaque tranche tient SON compte (R-EXP-8) : ses loyers ou sa redevance, ses
+ * annuites, sa taxe fonciere, sa part des charges communes. Le consolide de
+ * l'operation est la somme des comptes des tranches.
+ *
+ * Les grandeurs du compte portent le nom des lignes publiees, sans le suffixe
+ * `_eur` : la ligne `loyers_nets_eur` d'un exercice est l'arrondi a l'euro de
+ * la grandeur `loyers_nets` de cet exercice. Rien ne s'arrondit en chemin.
+ *
+ * Chaque poste suit SA trajectoire d'indexation (loyers, gestion, gros
+ * entretien, taxe fonciere). Le facteur d'une annee est celui de l'annee
+ * precedente multiplie par (1 + taux) : il se construit annee apres annee.
+ *
+ * Sources : SimPLS/SimPLUS colonnes DM a EC, SimTOTAL_IS, ParaGEN, annexes
+ * de reference des foyers (redevance forfaitaire et en transparence).
+ */
+
+/** @type {import('../classeur.js').Domaine} */
+const EXPLOITATION = {
+  domaine: 'exploitation',
+  titre: 'Compte d’exploitation',
+  dimensions: {
+    exercice: { libelle: 'Exercice', valeurs: 'SUITE(annee_mise_en_location; annee_fin_simulation)' },
+    regime: { libelle: 'Régime de produits', sur: ['tranche'], valeurs: 'regimes_de_la_tranche' },
+    charge: { libelle: 'Charge diverse', valeurs: 'charges_retenues', etiquette: 'libelle_charge' },
+    composant: { libelle: 'Composant amorti', valeurs: 'INDICES(grille_composants)', etiquette: 'libelle_composant' },
+    deduction_pge: { libelle: 'Poste retranché de l’assiette de PGE', valeurs: 'INDICES(deductions_pge)' },
+    // Dimensions LIBRES : une trajectoire se lit par son nom, depuis une annee
+    // de depart ; une charge deductible de l'impot, par son code.
+    index: { libelle: 'Trajectoire d’indexation' },
+    depuis: { libelle: 'Année de départ de l’indexation' },
+    poste_is: { libelle: 'Charge déductible de l’impôt' },
+  },
+  grandeurs: {
+    // --- Indexation -------------------------------------------------------------
+    trajectoires_saisies: {
+      libelle: 'Trajectoires saisies pour le compte',
+      unite: 'liste',
+      saisie: 'exploitation.trajectoires',
+      ecran: 'Paramètres > Trajectoires',
+    },
+    trajectoires_par_poste: {
+      libelle: 'Trajectoires du profil, par poste',
+      unite: 'liste',
+      trajectoire: 'par_poste',
+      ecran: 'Paramètres > Trajectoires',
+    },
+    trajectoires_exploitation: {
+      libelle: 'Trajectoires d’indexation du compte',
+      unite: 'liste',
+      formule: 'DEFAUT(trajectoires_saisies; trajectoires_par_poste)',
+    },
+    trajectoire_index: {
+      libelle: 'Trajectoire d’un poste',
+      unite: 'liste',
+      sur: ['index'],
+      formule: 'CHAMP(trajectoires_exploitation; index)',
+      note: 'Un taux par année, ou un taux unique.',
+    },
+    taux_index: {
+      libelle: 'Taux d’indexation de l’année',
+      unite: 'taux',
+      regle: 'R-EXP',
+      sur: ['index', 'an'],
+      formule: 'RECHERCHE.ANNEE(trajectoire_index; an; 0)',
+      note: 'Une année absente de la trajectoire reconduit le dernier taux connu.',
+    },
+    facteur_index: {
+      libelle: 'Facteur d’indexation',
+      unite: 'coef',
+      regle: 'R-EXP',
+      sur: ['index', 'depuis', 'an'],
+      formule:
+        'SI(an <= depuis; 1; SI(NON(RENSEIGNE(trajectoire_index)); 1; ' +
+        'SI(EST.NOMBRE(trajectoire_index); (1 + trajectoire_index) ^ (an - depuis); ' +
+        'facteur_index[an: an - 1] * (1 + taux_index))))',
+      note: 'Celui de l’année précédente multiplié par (1 + taux) ; un taux unique s’applique en puissance.',
+    },
+    indice_loyers: {
+      libelle: 'Indexation des loyers',
+      unite: 'coef',
+      sur: ['exercice'],
+      formule: "facteur_index[index: 'loyers_irl'; depuis: annee_mise_en_location; an: exercice]",
+    },
+    indice_gestion: {
+      libelle: 'Indexation de la gestion',
+      unite: 'coef',
+      sur: ['exercice'],
+      formule: "facteur_index[index: 'gestion'; depuis: annee_mise_en_location; an: exercice]",
+    },
+    indice_gros_entretien: {
+      libelle: 'Indexation du gros entretien',
+      unite: 'coef',
+      sur: ['exercice'],
+      formule: "facteur_index[index: 'gros_entretien'; depuis: annee_mise_en_location; an: exercice]",
+    },
+    indice_tfpb: {
+      libelle: 'Indexation de la taxe foncière',
+      unite: 'coef',
+      sur: ['exercice'],
+      formule: "facteur_index[index: 'tfpb'; depuis: annee_mise_en_location; an: exercice]",
+    },
+    rang_exercice: {
+      libelle: 'Rang de l’exercice',
+      unite: 'nombre',
+      sur: ['exercice'],
+      formule: 'exercice - annee_mise_en_location',
+      note: 'Zéro l’année de la mise en location.',
+    },
+
+    // --- Regime de produits (R-EXP-7, Q-27) --------------------------------------
+    mode_exploitation: {
+      libelle: 'Régime d’exploitation',
+      unite: 'texte',
+      formule: "DEFAUT(mode_exploitation_saisi; 'loyers')",
+    },
+    mode_redevance: {
+      libelle: 'Mode de redevance',
+      unite: 'texte',
+      formule: "DEFAUT(mode_redevance_saisi; 'forfaitaire')",
+    },
+    en_redevance: {
+      libelle: 'Opération en redevance',
+      unite: 'booleen',
+      formule: "mode_exploitation = 'redevance'",
+    },
+    en_transparence: {
+      libelle: 'Redevance en transparence',
+      unite: 'booleen',
+      formule: "ET(en_redevance; mode_redevance = 'transparence')",
+      note: 'Le bailleur refacture ses charges : la redevance en vaut la somme.',
+    },
+    redevance_saisie: {
+      libelle: 'Redevance annuelle saisie',
+      unite: 'eur',
+      saisie: 'exploitation.redevance_annuelle_eur',
+      ecran: 'Exploitation',
+    },
+    redevance_annuelle: {
+      libelle: 'Redevance annuelle',
+      unite: 'eur',
+      formule: 'DEFAUT(redevance_saisie; 0)',
+    },
+    redevance_annee_valeur: {
+      libelle: 'Année de valeur de la redevance',
+      unite: 'annee',
+      saisie: 'exploitation.redevance_annee_valeur',
+      ecran: 'Exploitation',
+    },
+    index_redevance_saisi: {
+      libelle: 'Trajectoire de la redevance saisie',
+      unite: 'texte',
+      saisie: 'exploitation.index_redevance',
+      ecran: 'Exploitation',
+    },
+    index_redevance: {
+      libelle: 'Trajectoire de la redevance',
+      unite: 'texte',
+      formule: "DEFAUT(index_redevance_saisi; 'loyers_irl')",
+    },
+    regimes_saisis: {
+      libelle: 'Régimes de produits par tranche',
+      unite: 'liste',
+      saisie: 'regimes_par_produit',
+      ecran: 'Tranche > Exploitation',
+    },
+    regimes_declares: {
+      libelle: 'Régimes déclarés tranche par tranche',
+      unite: 'booleen',
+      formule: 'LONGUEUR(CLES(regimes_saisis)) > 0',
+    },
+
+    // --- Parametres d'exploitation --------------------------------------------------
+    annuite_fp_saisie: {
+      libelle: 'Annuité de fonds propres saisie',
+      unite: 'eur',
+      saisie: 'exploitation.annuite_fonds_propres_eur',
+      ecran: 'Exploitation',
+    },
+    annuite_fp_forfait: {
+      libelle: 'Annuité de fonds propres forfaitaire',
+      unite: 'eur',
+      formule: 'DEFAUT(annuite_fp_saisie; 0)',
+      note: 'Portée en entier par chaque tranche, sans proratisation.',
+    },
+    duree_annuite_fp_saisie: {
+      libelle: 'Durée de l’annuité de fonds propres saisie',
+      unite: 'an',
+      saisie: 'exploitation.duree_annuite_fonds_propres_ans',
+      ecran: 'Exploitation',
+    },
+    duree_annuite_fp: {
+      libelle: 'Durée de l’annuité de fonds propres forfaitaire',
+      unite: 'an',
+      formule: 'DEFAUT(duree_annuite_fp_saisie; 0)',
+      note: 'Zéro : elle court sur tout l’horizon.',
+    },
+    nb_lits_saisi: {
+      libelle: 'Nombre de places saisi',
+      unite: 'nombre',
+      saisie: 'exploitation.nb_lits',
+      ecran: 'Exploitation',
+    },
+    nb_lits: {
+      libelle: 'Nombre de places',
+      unite: 'nombre',
+      formule: 'DEFAUT(nb_lits_saisi; nb_logements_total)',
+    },
+    qp_subventions_saisie: {
+      libelle: 'Quote-part de subventions virée au résultat, saisie',
+      unite: 'eur',
+      saisie: 'exploitation.qp_subventions_annuelle_eur',
+      ecran: 'Exploitation',
+    },
+    qp_subventions_annuelle: {
+      libelle: 'Quote-part annuelle de subventions',
+      unite: 'eur',
+      formule: 'DEFAUT(qp_subventions_saisie; 0)',
+    },
+    duree_qp_subventions_saisie: {
+      libelle: 'Durée d’étalement des subventions saisie',
+      unite: 'an',
+      saisie: 'exploitation.duree_qp_subventions_ans',
+      ecran: 'Exploitation',
+    },
+    duree_qp_subventions: {
+      libelle: 'Durée d’étalement des subventions',
+      unite: 'an',
+      formule: 'DEFAUT(duree_qp_subventions_saisie; 0)',
+      note: 'Zéro : la quote-part ne s’éteint pas.',
+    },
+    loyers_divers_saisis: {
+      libelle: 'Loyers divers saisis',
+      unite: 'eur',
+      saisie: 'exploitation.loyers_divers_annuels_eur',
+      ecran: 'Exploitation',
+    },
+    loyers_divers_annuels: {
+      libelle: 'Loyers divers annuels',
+      unite: 'eur',
+      formule: 'DEFAUT(loyers_divers_saisis; 0)',
+    },
+    frais_gestion_logement_saisis: {
+      libelle: 'Frais de gestion par logement saisis',
+      unite: 'eur',
+      saisie: 'exploitation.frais_gestion_annuels_eur',
+      ecran: 'Exploitation',
+    },
+    frais_gestion_par_logement: {
+      libelle: 'Frais de gestion par logement',
+      unite: 'eur',
+      formule: 'DEFAUT(frais_gestion_logement_saisis; 0)',
+    },
+    frais_gestion_pct_loyers_saisi: {
+      libelle: 'Frais de gestion en part des loyers, saisis',
+      unite: 'taux',
+      saisie: 'exploitation.frais_gestion_pct_loyers',
+      ecran: 'Exploitation',
+    },
+    frais_gestion_pct_loyers: {
+      libelle: 'Frais de gestion en part des loyers',
+      unite: 'taux',
+      formule: 'DEFAUT(frais_gestion_pct_loyers_saisi; 0)',
+    },
+    frais_gestion_pct_pr_saisi: {
+      libelle: 'Frais de gestion en part du prix de revient, saisis',
+      unite: 'taux',
+      saisie: 'exploitation.frais_gestion_pct_prix_revient',
+      ecran: 'Exploitation',
+    },
+    frais_gestion_pct_pr_bareme: {
+      libelle: 'Frais de gestion en part du prix de revient, barème',
+      unite: 'taux',
+      regle: 'R-EXP',
+      parametre: 'charges_exploitation.frais_gestion_pct_prix_revient',
+      ecran: 'Paramètres > Exploitation',
+    },
+    frais_gestion_pct_pr: {
+      libelle: 'Frais de gestion en part du prix de revient',
+      unite: 'taux',
+      regle: 'R-EXP',
+      formule: 'DEFAUT(frais_gestion_pct_pr_saisi; frais_gestion_pct_pr_bareme; 0)',
+      note: 'L’assiette de LEON (Q-17) : un coût de structure rapporté à la taille de l’opération.',
+    },
+    rel_saisi: {
+      libelle: 'REL par logement saisi',
+      unite: 'eur',
+      saisie: 'exploitation.rel_annuel_eur',
+      ecran: 'Exploitation',
+    },
+    rel_par_logement: {
+      libelle: 'REL par logement',
+      unite: 'eur',
+      formule: 'DEFAUT(rel_saisi; 0)',
+    },
+    gros_entretien_m2_saisi: {
+      libelle: 'Gros entretien au m² saisi',
+      unite: 'eur_m2',
+      saisie: 'exploitation.gros_entretien_eur_m2',
+      ecran: 'Exploitation',
+    },
+    gros_entretien_m2: {
+      libelle: 'Gros entretien au m²',
+      unite: 'eur_m2',
+      formule: 'DEFAUT(gros_entretien_m2_saisi; 0)',
+    },
+    gros_entretien_par_annee_saisi: {
+      libelle: 'Table de gros entretien, en euros par m²',
+      unite: 'liste',
+      saisie: 'exploitation.gros_entretien_par_annee',
+      ecran: 'Exploitation',
+    },
+    taux_vacance_saisi: {
+      libelle: 'Vacance et impayés saisis',
+      unite: 'taux',
+      saisie: 'exploitation.taux_vacance_impayes',
+      ecran: 'Exploitation',
+    },
+    taux_vacance: {
+      libelle: 'Vacance et impayés',
+      unite: 'taux',
+      formule: 'DEFAUT(taux_vacance_saisi; 0)',
+    },
+    taux_produits_financiers_saisi: {
+      libelle: 'Taux des produits financiers saisi',
+      unite: 'taux',
+      saisie: 'exploitation.taux_produits_financiers',
+      ecran: 'Exploitation',
+    },
+    taux_produits_financiers: {
+      libelle: 'Taux des produits financiers',
+      unite: 'taux',
+      formule: 'DEFAUT(taux_produits_financiers_saisi; 0)',
+    },
+    annee_debut_tfpb_saisie: {
+      libelle: 'Première année de taxe foncière saisie',
+      unite: 'annee',
+      saisie: 'exploitation.annee_debut_tfpb',
+      ecran: 'Exploitation',
+    },
+    annee_debut_tfpb_exploitation: {
+      libelle: 'Première année de taxe foncière du compte',
+      unite: 'annee',
+      regle: 'R-FISC-1',
+      formule: 'DEFAUT(annee_debut_tfpb_saisie; annee_debut_tfpb)',
+      note: 'Ne sert qu’à une tranche dont l’exonération dépasse l’horizon.',
+    },
+
+    // --- Charges diverses (Q-16) : la saisie active, le catalogue decrit -----------
+    charges_saisies: {
+      libelle: 'Charges diverses saisies',
+      unite: 'liste',
+      saisie: 'exploitation.charges_diverses',
+      ecran: 'Paramètres > Compte d’exploitation',
+    },
+    charges_retenues: {
+      libelle: 'Charges diverses actives',
+      unite: 'liste',
+      formule: "LISTE(i POUR i DANS INDICES(charges_saisies) QUAND CHAMP(ELEMENT(charges_saisies; i); 'actif') <> FAUX)",
+    },
+    postes_catalogue: {
+      libelle: 'Catalogue des charges d’exploitation',
+      unite: 'liste',
+      parametre: 'charges_exploitation.postes',
+      ecran: 'Paramètres > Compte d’exploitation',
+    },
+    code_charge: {
+      libelle: 'Code de la charge',
+      unite: 'texte',
+      sur: ['charge'],
+      saisie: 'exploitation.charges_diverses[charge].code',
+      ecran: 'Paramètres > Compte d’exploitation',
+    },
+    poste_catalogue_charge: {
+      libelle: 'Poste du catalogue',
+      unite: 'liste',
+      sur: ['charge'],
+      formule: "DERNIER(p POUR p DANS DEFAUT(postes_catalogue; liste_vide) QUAND CHAMP(p; 'code') = code_charge)",
+    },
+    libelle_charge_saisi: {
+      libelle: 'Libellé saisi',
+      unite: 'texte',
+      sur: ['charge'],
+      saisie: 'exploitation.charges_diverses[charge].libelle',
+      ecran: 'Paramètres > Compte d’exploitation',
+    },
+    libelle_charge: {
+      libelle: 'Libellé de la charge',
+      unite: 'texte',
+      sur: ['charge'],
+      formule: "DEFAUT(libelle_charge_saisi; CHAMP(poste_catalogue_charge; 'libelle'); code_charge)",
+    },
+    assiette_charge_saisie: {
+      libelle: 'Assiette saisie',
+      unite: 'texte',
+      sur: ['charge'],
+      saisie: 'exploitation.charges_diverses[charge].assiette',
+      ecran: 'Paramètres > Compte d’exploitation',
+    },
+    assiette_charge: {
+      libelle: 'Assiette de la charge',
+      unite: 'texte',
+      sur: ['charge'],
+      formule: "DEFAUT(assiette_charge_saisie; CHAMP(poste_catalogue_charge; 'assiette'))",
+      note: 'Logement, SHAB, prix de revient, forfait, ou produits locatifs bruts ou nets.',
+    },
+    valeur_charge_saisie: {
+      libelle: 'Valeur saisie',
+      unite: 'nombre',
+      sur: ['charge'],
+      saisie: 'exploitation.charges_diverses[charge].valeur',
+      ecran: 'Paramètres > Compte d’exploitation',
+    },
+    valeur_charge: {
+      libelle: 'Valeur de la charge',
+      unite: 'nombre',
+      sur: ['charge'],
+      formule: "DEFAUT(valeur_charge_saisie; CHAMP(poste_catalogue_charge; 'valeur'))",
+      note: 'En euros par unité d’assiette, ou en taux quand l’assiette est un montant.',
+    },
+    index_charge_saisi: {
+      libelle: 'Trajectoire saisie',
+      unite: 'texte',
+      sur: ['charge'],
+      saisie: 'exploitation.charges_diverses[charge].index',
+      ecran: 'Paramètres > Compte d’exploitation',
+    },
+    index_charge: {
+      libelle: 'Trajectoire de la charge',
+      unite: 'texte',
+      sur: ['charge'],
+      formule: "SI.ABSENT(index_charge_saisi; DEFAUT(CHAMP(poste_catalogue_charge; 'index'); VIDE))",
+      note: 'Vide : la charge ne s’indexe pas.',
+    },
+    annee_debut_charge: {
+      libelle: 'Première année de la charge',
+      unite: 'annee',
+      sur: ['charge'],
+      saisie: 'exploitation.charges_diverses[charge].annee_debut',
+      ecran: 'Paramètres > Compte d’exploitation',
+    },
+    annee_fin_charge: {
+      libelle: 'Dernière année de la charge',
+      unite: 'annee',
+      sur: ['charge'],
+      saisie: 'exploitation.charges_diverses[charge].annee_fin',
+      ecran: 'Paramètres > Compte d’exploitation',
+    },
+    montants_annuels_charge: {
+      libelle: 'Montants saisis année par année',
+      unite: 'liste',
+      sur: ['charge'],
+      saisie: 'exploitation.charges_diverses[charge].montants_par_annee',
+      ecran: 'Paramètres > Compte d’exploitation',
+    },
+    charge_decrite: {
+      libelle: 'Charge entièrement décrite',
+      unite: 'booleen',
+      sur: ['charge'],
+      formule:
+        "SI(ET(DEFINI(assiette_charge); DEFINI(valeur_charge)); VRAI; ERREUR('Charge d''exploitation « '; code_charge; " +
+        "' » absente du referentiel et incompletement decrite (assiette et valeur requises).'))",
+      note: 'Un code mal orthographié ne doit pas s’évaporer en silence.',
+    },
+    charge_applicable: {
+      libelle: 'Charge due cet exercice',
+      unite: 'booleen',
+      sur: ['charge', 'exercice'],
+      formule:
+        'ET(NON(ET(DEFINI(annee_debut_charge); exercice < annee_debut_charge)); ' +
+        'NON(ET(DEFINI(annee_fin_charge); exercice > annee_fin_charge)))',
+    },
+    montant_fixe_charge: {
+      libelle: 'Montant saisi pour l’exercice',
+      unite: 'eur',
+      sur: ['charge', 'exercice'],
+      formule: 'CHAMP(montants_annuels_charge; exercice)',
+      note: 'Prime sur l’assiette et ne s’indexe pas (Q-20).',
+    },
+    indice_charge: {
+      libelle: 'Indexation de la charge',
+      unite: 'coef',
+      sur: ['charge', 'exercice'],
+      formule: 'SI(index_charge; facteur_index[index: index_charge; depuis: annee_mise_en_location; an: exercice]; 1)',
+    },
+    taux_produits_bruts: {
+      libelle: 'Taux assis sur les produits locatifs bruts',
+      unite: 'taux',
+      sur: ['exercice'],
+      formule:
+        "SOMME(SI(ET(NON(DEFINI(montant_fixe_charge)); assiette_charge = 'produits_locatifs_bruts'); valeur_charge; 0) " +
+        'POUR charge QUAND charge_applicable)',
+    },
+    taux_produits_nets: {
+      libelle: 'Taux assis sur les produits locatifs nets',
+      unite: 'taux',
+      sur: ['exercice'],
+      formule:
+        "SOMME(SI(ET(NON(DEFINI(montant_fixe_charge)); assiette_charge = 'produits_locatifs_nets'); valeur_charge; 0) " +
+        'POUR charge QUAND charge_applicable)',
+    },
+
+    // --- R-EXP-PGE : provision pour gros entretien ------------------------------------
+    pge_taux_saisi: {
+      libelle: 'Taux de PGE saisi',
+      unite: 'taux',
+      saisie: 'exploitation.pge_taux',
+      ecran: 'Exploitation',
+    },
+    pge_taux_bareme: {
+      libelle: 'Taux de PGE du barème',
+      unite: 'taux',
+      regle: 'R-EXP-PGE',
+      parametre: 'provision_gros_entretien.taux_defaut',
+      ecran: 'Paramètres > Exploitation',
+    },
+    pge_taux: {
+      libelle: 'Taux de provision pour gros entretien',
+      unite: 'taux',
+      regle: 'R-EXP-PGE',
+      formule: 'DEFAUT(pge_taux_saisi; pge_taux_bareme; 0)',
+    },
+    pge_taux_plafond: {
+      libelle: 'Plafond du taux de PGE',
+      unite: 'taux',
+      regle: 'R-EXP-PGE',
+      parametre: 'provision_gros_entretien.taux_plafond',
+      ecran: 'Paramètres > Exploitation',
+    },
+    pge_taux_par_annee_saisis: {
+      libelle: 'Taux de PGE année par année',
+      unite: 'liste',
+      saisie: 'exploitation.pge_taux_par_annee',
+      ecran: 'Exploitation',
+    },
+    derniere_annee_pge: {
+      libelle: 'Dernière année de la table de PGE',
+      unite: 'annee',
+      formule: "MAX(NOMBRE.BRUT(CHAMP(t; 'annee')) POUR t DANS DEFAUT(pge_taux_par_annee_saisis; liste_vide))",
+    },
+    taux_pge: {
+      libelle: 'Taux de PGE de l’exercice',
+      unite: 'taux',
+      regle: 'R-EXP-PGE',
+      sur: ['exercice'],
+      formule:
+        "SI(LONGUEUR(pge_taux_par_annee_saisis) > 0; DEFAUT(DERNIER(CHAMP(t; 'taux') POUR t DANS pge_taux_par_annee_saisis " +
+        "QUAND NOMBRE.BRUT(CHAMP(t; 'annee')) = MIN(exercice; derniere_annee_pge)); 0); pge_taux)",
+      note: 'Au-delà de la table, le dernier taux est reconduit.',
+    },
+    deductions_pge_bareme: {
+      libelle: 'Postes retranchés de l’assiette hors VEFA',
+      unite: 'liste',
+      regle: 'R-EXP-PGE',
+      parametre: 'provision_gros_entretien.assiette.hors_vefa_deductions',
+      ecran: 'Paramètres > Exploitation',
+    },
+    deductions_pge: {
+      libelle: 'Postes retranchés de l’assiette',
+      unite: 'liste',
+      formule: 'DEFAUT(deductions_pge_bareme; liste_vide)',
+    },
+    poste_deduit_pge: {
+      libelle: 'Poste retranché',
+      unite: 'texte',
+      sur: ['deduction_pge'],
+      formule: "CHAMP(ELEMENT(deductions_pge; deduction_pge); 'poste')",
+    },
+    quotite_deduite_pge: {
+      libelle: 'Quotité retranchée',
+      unite: 'taux',
+      sur: ['deduction_pge'],
+      formule: "DEFAUT(CHAMP(ELEMENT(deductions_pge; deduction_pge); 'quotite'); 1)",
+    },
+    montant_deduit_pge: {
+      libelle: 'Montant retranché',
+      unite: 'eur',
+      sur: ['deduction_pge'],
+      formule:
+        'SOMME(DEFAUT(ttc_lasm_reference_poste_arrondi; ttc_saisie_poste_arrondi; 0) ' +
+        'POUR poste QUAND ET(id_poste; id_poste = poste_deduit_pge)) * quotite_deduite_pge',
+    },
+    operation_vefa: {
+      libelle: 'Opération en VEFA',
+      unite: 'booleen',
+      formule: "TEXTE.CONTIENT(type_operation; 'vefa')",
+    },
+    assiette_pge: {
+      libelle: 'Assiette de la provision pour gros entretien',
+      unite: 'eur',
+      regle: 'R-EXP-PGE',
+      formule:
+        'SI(operation_vefa; total_ttc_module; ' +
+        'ARRONDI.EURO(MAX(0; total_ttc_module - SOMME(montant_deduit_pge POUR deduction_pge))))',
+      note: 'Hors VEFA, le prix de revient net d’une part du foncier, des frais d’acte et des frais financiers (SimPLUS!BK31).',
+    },
+    pge_base_saisie: {
+      libelle: 'Assiette de PGE saisie',
+      unite: 'eur',
+      saisie: 'exploitation.pge_base_eur',
+      ecran: 'Exploitation',
+    },
+    pge_base: {
+      libelle: 'Assiette de PGE retenue',
+      unite: 'eur',
+      formule: 'DEFAUT(pge_base_saisie; assiette_pge)',
+    },
+
+    // --- R-EXP-2 et R-EXP-5 : amortissement comptable -----------------------------------
+    dotation_saisie: {
+      libelle: 'Dotation annuelle saisie',
+      unite: 'eur',
+      saisie: 'exploitation.dotation_amortissements_eur',
+      ecran: 'Exploitation',
+    },
+    dotations_saisies: {
+      libelle: 'Dotations saisies année par année',
+      unite: 'liste',
+      saisie: 'exploitation.dotation_amortissements_par_annee',
+      ecran: 'Exploitation',
+    },
+    duree_amortissement_saisie: {
+      libelle: 'Durée d’amortissement saisie',
+      unite: 'an',
+      saisie: 'exploitation.duree_amortissement_ans',
+      ecran: 'Exploitation',
+    },
+    duree_amortissement_bareme: {
+      libelle: 'Durée d’amortissement par défaut',
+      unite: 'an',
+      regle: 'R-EXP-2',
+      parametre: 'amortissement_comptable.duree_defaut_ans',
+      ecran: 'Paramètres > Exploitation',
+    },
+    duree_amortissement: {
+      libelle: 'Durée d’amortissement linéaire',
+      unite: 'an',
+      formule: 'DEFAUT(duree_amortissement_saisie; duree_amortissement_bareme)',
+    },
+    continuer_bareme: {
+      libelle: 'Renouveler les composants en fin de vie',
+      unite: 'booleen',
+      regle: 'R-EXP-5',
+      parametre: 'amortissement_comptable.continuer_amortissement',
+      ecran: 'Paramètres > Exploitation',
+    },
+    composants_saisis: {
+      libelle: 'Composants saisis',
+      unite: 'liste',
+      saisie: 'exploitation.composants_amortissement',
+      ecran: 'Exploitation',
+    },
+    nature_batie_saisie: {
+      libelle: 'Nature du bâti saisie pour le compte',
+      unite: 'texte',
+      saisie: 'exploitation.nature_batie',
+      ecran: 'Exploitation',
+    },
+    nature_batie_operation: {
+      libelle: 'Nature du bâti',
+      unite: 'texte',
+      saisie: 'identite.nature_batie',
+      ecran: 'Opération',
+    },
+    composants_bareme: {
+      libelle: 'Grilles de composants',
+      unite: 'liste',
+      regle: 'R-EXP-5',
+      parametre: 'amortissement_comptable.composants',
+      ecran: 'Paramètres > Exploitation',
+    },
+    grille_composants: {
+      libelle: 'Grille de composants retenue',
+      unite: 'liste',
+      regle: 'R-EXP-5',
+      formule:
+        "DEFAUT(composants_saisis; CHAMP(composants_bareme; DEFAUT(nature_batie_saisie; nature_batie_operation; 'collectif')); liste_vide)",
+      note: 'Un immeuble collectif porte des équipements à durée courte ; une maison est presque toute structure.',
+    },
+    libelle_composant: {
+      libelle: 'Composant',
+      unite: 'texte',
+      sur: ['composant'],
+      formule: "CHAMP(ELEMENT(grille_composants; composant); 'libelle')",
+    },
+    quote_part_composant: {
+      libelle: 'Quote-part du composant',
+      unite: 'taux',
+      sur: ['composant'],
+      formule: "CHAMP(ELEMENT(grille_composants; composant); 'quote_part')",
+    },
+    duree_composant: {
+      libelle: 'Durée de vie du composant',
+      unite: 'an',
+      sur: ['composant'],
+      formule: "CHAMP(ELEMENT(grille_composants; composant); 'duree_ans')",
+    },
+    quotite_terrain_saisie: {
+      libelle: 'Quotité de terrain non amortissable saisie',
+      unite: 'taux',
+      saisie: 'exploitation.quotite_terrain_non_amortissable',
+      ecran: 'Exploitation',
+    },
+    quotites_terrain: {
+      libelle: 'Quotités de terrain par zone',
+      unite: 'liste',
+      parametre: 'quotites_foncier_vefa',
+      ecran: 'Paramètres > Foncier et fiscalité',
+    },
+    zone_quotites: {
+      libelle: 'Zone lue dans la table des quotités',
+      unite: 'texte',
+      formule: "TEXTE.REMPLACER(TEXTE.REMPLACER(zone_abc; 'Abis'; 'A_bis'); ' '; '_')",
+    },
+    rang_zone_quotites: {
+      libelle: 'Rang de la zone dans la table',
+      unite: 'nombre',
+      formule: "POSITION(CHAMP(quotites_terrain; 'zones'); zone_quotites)",
+    },
+    quotite_terrain_bareme: {
+      libelle: 'Quotité de terrain de la zone',
+      unite: 'taux',
+      regle: 'R-EXP-2',
+      formule:
+        "SI(rang_zone_quotites < 0; ERREUR('Zone ABC inconnue : '; zone_abc); " +
+        "ELEMENT(CHAMP(quotites_terrain; 'valeur_comptable_terrain_vefa'); rang_zone_quotites))",
+    },
+    quotite_terrain: {
+      libelle: 'Quotité de terrain non amortissable',
+      unite: 'taux',
+      formule: 'DEFAUT(quotite_terrain_saisie; quotite_terrain_bareme)',
+    },
+    terrain_non_amortissable: {
+      libelle: 'Valeur du terrain, qui ne s’amortit pas',
+      unite: 'eur',
+      regle: 'R-EXP-2',
+      formule: "DEFAUT(ttc_lasm_chapitre[chapitre: 'charge_fonciere']; 0) * quotite_terrain",
+    },
+    base_amortissable: {
+      libelle: 'Base amortissable',
+      unite: 'eur',
+      regle: 'R-EXP-2',
+      formule: 'MAX(0; total_ttc_module - terrain_non_amortissable)',
+    },
+    dotation_lineaire: {
+      libelle: 'Dotation annuelle linéaire',
+      unite: 'eur',
+      regle: 'R-EXP-2',
+      formule:
+        'SI(DEFINI(dotation_saisie); dotation_saisie; ' +
+        'SI(duree_amortissement > 0; ARRONDI.EURO(base_amortissable / duree_amortissement); 0))',
+      note: 'Repli quand aucune grille de composants n’est retenue.',
+    },
+    dotation_composants: {
+      libelle: 'Dotation par composants',
+      unite: 'eur',
+      regle: 'R-EXP-5',
+      sur: ['exercice'],
+      formule:
+        'ARRONDI.EURO(SOMME(base_amortissable * quote_part_composant / duree_composant POUR composant ' +
+        'QUAND ET(duree_composant > 0; quote_part_composant > 0; OU(continuer_bareme = VRAI; rang_exercice < duree_composant))))',
+      note: 'Chaque composant cesse de doter au terme de sa durée : la dotation décroît par paliers.',
+    },
+    dotation_en_serie: {
+      libelle: 'Dotation tenue année par année',
+      unite: 'booleen',
+      formule:
+        'OU(LONGUEUR(dotations_saisies) > 0; ' +
+        'ET(NON(DEFINI(dotation_saisie)); LONGUEUR(grille_composants) > 0; duree_simulation > 0))',
+    },
+    dotation_annee: {
+      libelle: 'Dotation de l’exercice, pour l’opération',
+      unite: 'eur',
+      sur: ['exercice'],
+      formule:
+        "SI(LONGUEUR(dotations_saisies) > 0; DERNIER(CHAMP(d; 'montant_eur') POUR d DANS dotations_saisies " +
+        "QUAND NOMBRE.BRUT(CHAMP(d; 'annee')) = exercice); dotation_composants)",
+    },
+
+    // --- R-EXP-4 : impot sur les societes --------------------------------------------
+    is_produits_soumis: {
+      libelle: 'Produits soumis à l’impôt sur les sociétés',
+      unite: 'liste',
+      regle: 'R-EXP-4',
+      parametre: 'impot_societes.produits_soumis',
+      ecran: 'Paramètres > Impôt sur les sociétés',
+    },
+    is_taux_saisi: { libelle: 'Taux d’IS saisi', unite: 'taux', saisie: 'exploitation.is_taux', ecran: 'Exploitation' },
+    is_taux_bareme: {
+      libelle: 'Taux d’IS du barème',
+      unite: 'taux',
+      regle: 'R-EXP-4',
+      parametre: 'impot_societes.taux',
+      ecran: 'Paramètres > Impôt sur les sociétés',
+    },
+    is_differe_saisi: {
+      libelle: 'Différé d’IS saisi',
+      unite: 'an',
+      saisie: 'exploitation.is_duree_differe_ans',
+      ecran: 'Exploitation',
+    },
+    is_differe_bareme: {
+      libelle: 'Différé d’IS du barème',
+      unite: 'an',
+      regle: 'R-EXP-4',
+      parametre: 'impot_societes.duree_differe_ans',
+      ecran: 'Paramètres > Impôt sur les sociétés',
+    },
+    is_differe: {
+      libelle: 'Années sans IS depuis la mise en location',
+      unite: 'an',
+      formule: 'DEFAUT(is_differe_saisi; is_differe_bareme; 0)',
+    },
+    is_deductibles_saisis: {
+      libelle: 'Charges déductibles saisies',
+      unite: 'liste',
+      saisie: 'exploitation.is_charges_deductibles',
+      ecran: 'Exploitation',
+    },
+    is_deductibles_bareme: {
+      libelle: 'Charges déductibles du barème',
+      unite: 'liste',
+      regle: 'R-EXP-4',
+      parametre: 'impot_societes.charges_deductibles',
+      ecran: 'Paramètres > Impôt sur les sociétés',
+    },
+    is_charges_deductibles: {
+      libelle: 'Charges déductibles de la base fiscale',
+      unite: 'liste',
+      formule: 'DEFAUT(is_deductibles_saisis; is_deductibles_bareme; liste_vide)',
+      note: 'La base fiscale est plus étroite que le résultat comptable : seules ces lignes s’y retranchent.',
+    },
+    is_part_fixe_saisie: {
+      libelle: 'Part fixe de PGE déductible saisie',
+      unite: 'eur',
+      saisie: 'exploitation.is_part_fixe_ge_eur',
+      ecran: 'Exploitation',
+    },
+    is_part_fixe_bareme: {
+      libelle: 'Part fixe de PGE déductible du barème',
+      unite: 'eur',
+      regle: 'R-EXP-4',
+      parametre: 'impot_societes.part_fixe_gros_entretien.montant_eur',
+      ecran: 'Paramètres > Impôt sur les sociétés',
+    },
+    is_part_fixe: {
+      libelle: 'Part fixe de PGE déductible',
+      unite: 'eur',
+      formule: 'DEFAUT(is_part_fixe_saisie; is_part_fixe_bareme; 0)',
+    },
+    is_part_fixe_assiette_saisie: {
+      libelle: 'Assiette de la part fixe saisie',
+      unite: 'texte',
+      saisie: 'exploitation.is_part_fixe_ge_assiette',
+      ecran: 'Exploitation',
+    },
+    is_part_fixe_assiette_bareme: {
+      libelle: 'Assiette de la part fixe du barème',
+      unite: 'texte',
+      parametre: 'impot_societes.part_fixe_gros_entretien.assiette',
+      ecran: 'Paramètres > Impôt sur les sociétés',
+    },
+    is_part_fixe_assiette: {
+      libelle: 'Assiette de la part fixe',
+      unite: 'texte',
+      formule: 'DEFAUT(is_part_fixe_assiette_saisie; is_part_fixe_assiette_bareme)',
+      note: 'Par logement (« lot ») ou pour l’opération.',
+    },
+    is_part_fixe_differe_saisi: {
+      libelle: 'Différé de la part fixe saisi',
+      unite: 'an',
+      saisie: 'exploitation.is_part_fixe_ge_differe_ans',
+      ecran: 'Exploitation',
+    },
+    is_part_fixe_differe_bareme: {
+      libelle: 'Différé de la part fixe du barème',
+      unite: 'an',
+      parametre: 'impot_societes.part_fixe_gros_entretien.duree_differe_ans',
+      ecran: 'Paramètres > Impôt sur les sociétés',
+    },
+    is_part_fixe_differe: {
+      libelle: 'Différé de la part fixe',
+      unite: 'an',
+      formule: 'DEFAUT(is_part_fixe_differe_saisi; is_part_fixe_differe_bareme; 0)',
+    },
+    is_credits_saisis: {
+      libelle: 'Crédits d’impôt saisis',
+      unite: 'liste',
+      saisie: 'exploitation.is_credits_impot',
+      ecran: 'Exploitation',
+    },
+    is_credits_bareme: {
+      libelle: 'Crédits d’impôt TFPB des logements intermédiaires',
+      unite: 'liste',
+      regle: 'R-EXP-4',
+      parametre: 'impot_societes.credit_impot_tfpb_lli.lignes',
+      ecran: 'Paramètres > Impôt sur les sociétés',
+    },
+    lignes_credit_is: {
+      libelle: 'Crédits d’impôt retenus',
+      unite: 'liste',
+      formule: 'DEFAUT(is_credits_saisis; is_credits_bareme; liste_vide)',
+    },
+    credit_is_annee: {
+      libelle: 'Crédit d’impôt de l’exercice',
+      unite: 'eur',
+      regle: 'R-EXP-4',
+      sur: ['exercice'],
+      formule:
+        "SOMME(DEFAUT(CHAMP(l; 'montant_eur'); 0) POUR l DANS lignes_credit_is " +
+        "QUAND rang_exercice < DEFAUT(CHAMP(l; 'duree_ans'); 0))",
+      note: 'Chaque crédit court sur sa durée, à compter de la mise en location.',
+    },
+
+    // --- R-EXP-RLS : reduction de loyer de solidarite ------------------------------------
+    rls_actif_saisi: { libelle: 'RLS activée', unite: 'booleen', saisie: 'exploitation.rls_actif', ecran: 'Exploitation' },
+    rls_taux_saisi: { libelle: 'Taux de RLS saisi', unite: 'taux', saisie: 'exploitation.rls_taux', ecran: 'Exploitation' },
+    rls_taux_bareme: {
+      libelle: 'Taux de RLS du barème',
+      unite: 'taux',
+      regle: 'R-EXP-RLS',
+      parametre: 'charges_exploitation.reduction_loyer_solidarite.taux',
+      ecran: 'Paramètres > Compte d’exploitation',
+    },
+    rls_actif_bareme: {
+      libelle: 'RLS active par défaut',
+      unite: 'booleen',
+      parametre: 'charges_exploitation.reduction_loyer_solidarite.actif_par_defaut',
+      ecran: 'Paramètres > Compte d’exploitation',
+    },
+    rls_produits_soumis: {
+      libelle: 'Produits soumis à la RLS',
+      unite: 'liste',
+      regle: 'R-EXP-RLS',
+      parametre: 'charges_exploitation.reduction_loyer_solidarite.produits_soumis',
+      ecran: 'Paramètres > Compte d’exploitation',
+    },
+    rls_active: {
+      libelle: 'RLS appliquée',
+      unite: 'booleen',
+      regle: 'R-EXP-RLS',
+      formule: 'DEFAUT(rls_actif_saisi; SI(DEFINI(rls_taux_saisi); VRAI; rls_actif_bareme = VRAI))',
+      note: 'Inactive par défaut : un taux saisi suffit à l’activer.',
+    },
+    taux_rls_base: {
+      libelle: 'Taux de RLS',
+      unite: 'taux',
+      formule: 'DEFAUT(rls_taux_saisi; rls_taux_bareme; 0)',
+    },
+    rls_taux_par_annee_saisis: {
+      libelle: 'Taux de RLS année par année',
+      unite: 'liste',
+      saisie: 'exploitation.rls_taux_par_annee',
+      ecran: 'Exploitation',
+    },
+    taux_rls_annee: {
+      libelle: 'Taux de RLS saisi pour l’exercice',
+      unite: 'taux',
+      sur: ['exercice'],
+      formule:
+        "DERNIER(CHAMP(r; 'taux') POUR r DANS DEFAUT(rls_taux_par_annee_saisis; liste_vide) " +
+        "QUAND NOMBRE.BRUT(CHAMP(r; 'annee')) = exercice)",
+      note: 'Prime sur le taux de la tranche, quelle que soit la tranche.',
+    },
+
+    // --- Entrees du compte d'une tranche (R-EXP-8) ----------------------------------
+    // Ce qui porte une tranche se lit a la tranche : ses logements, sa surface,
+    // son loyer, son prix de revient, ses prets. Ce qui est commun a l'operation
+    // se proratise a la quote-part de surface utile, la cle de tout le moteur.
+    nb_lits_tranche: {
+      libelle: 'Places de la tranche',
+      unite: 'nombre',
+      sur: ['tranche'],
+      formule: 'nb_lits * quote_part_su',
+    },
+    qp_subventions_tranche: {
+      libelle: 'Quote-part de subventions de la tranche',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'qp_subventions_annuelle * quote_part_su',
+    },
+    loyers_annexes_tranche: {
+      libelle: 'Loyers d’annexes de la tranche',
+      unite: 'eur',
+      regle: 'R-LOYER-7',
+      sur: ['tranche'],
+      formule: 'loyers_annexes_annuels * quote_part_su',
+    },
+    loyers_divers_tranche: {
+      libelle: 'Loyers divers de la tranche',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'loyers_divers_annuels * quote_part_su',
+    },
+    frais_gestion_logement_tranche: {
+      libelle: 'Frais de gestion par logement, part de la tranche',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'frais_gestion_par_logement * quote_part_su',
+      note: 'Comme le calcul d’origine : le forfait par logement est proratisé, puis multiplié par les logements de la tranche. Anomalie signalée, conservée pour ne rien changer aux résultats.',
+    },
+    rel_logement_tranche: {
+      libelle: 'REL par logement, part de la tranche',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'rel_par_logement * quote_part_su',
+      note: 'Même double proratisation que les frais de gestion par logement.',
+    },
+    pge_base_tranche: {
+      libelle: 'Assiette de PGE de la tranche',
+      unite: 'eur',
+      regle: 'R-EXP-PGE',
+      sur: ['tranche'],
+      formule: 'pge_base * quote_part_su',
+    },
+    taux_rls_tranche: {
+      libelle: 'Taux de RLS de la tranche',
+      unite: 'taux',
+      regle: 'R-EXP-RLS',
+      sur: ['tranche'],
+      formule: 'SI(ET(rls_active; CONTIENT(rls_produits_soumis; tranche)); taux_rls_base; 0)',
+      note: 'Le parc conventionné APL la subit ; le logement intermédiaire et le libre non.',
+    },
+    soumis_is_tranche: {
+      libelle: 'Tranche soumise à l’impôt sur les sociétés',
+      unite: 'booleen',
+      regle: 'R-EXP-4',
+      sur: ['tranche'],
+      formule: 'CONTIENT(is_produits_soumis; tranche)',
+    },
+    is_taux_tranche: {
+      libelle: 'Taux d’IS de la tranche',
+      unite: 'taux',
+      regle: 'R-EXP-4',
+      sur: ['tranche'],
+      formule: 'SI(soumis_is_tranche; DEFAUT(is_taux_saisi; is_taux_bareme; 0); 0)',
+    },
+    is_actif: {
+      libelle: 'Impôt sur les sociétés dû',
+      unite: 'booleen',
+      sur: ['tranche'],
+      formule: 'is_taux_tranche > 0',
+    },
+    is_part_fixe_tranche: {
+      libelle: 'Part fixe de PGE déductible de la tranche',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: "is_part_fixe * SI(is_part_fixe_assiette = 'lot'; nb_logements_tranche; quote_part_su)",
+    },
+    comptable_disponible: {
+      libelle: 'Vue comptable tenue',
+      unite: 'booleen',
+      regle: 'R-EXP-2',
+      sur: ['tranche'],
+      formule: 'OU(dotation_en_serie; dotation_lineaire * quote_part_su > 0)',
+      note: 'Sans dotation, le résultat comptable ne serait qu’un autofinancement augmenté du capital remboursé : il n’est pas publié.',
+    },
+    tfpb_en_serie: {
+      libelle: 'Taxe foncière tenue année par année',
+      unite: 'booleen',
+      regle: 'R-FISC-1',
+      sur: ['tranche'],
+      formule: 'UN(exercice >= annee_debut_tfpb_tranche POUR exercice)',
+      note: 'Faux quand l’exonération de la tranche dépasse l’horizon.',
+    },
+    regimes_de_la_tranche: {
+      libelle: 'Régime de produits déclaré pour la tranche',
+      unite: 'liste',
+      sur: ['tranche'],
+      formule: 'SI(regimes_declares; ENSEMBLE(tranche); liste_vide)',
+    },
+    par_regime: {
+      libelle: 'Produits décrits par régime',
+      unite: 'booleen',
+      regle: 'R-EXP-7',
+      sur: ['tranche'],
+      formule: 'NB(regime POUR regime) > 0',
+    },
+    mode_regime: {
+      libelle: 'Régime de la tranche',
+      unite: 'texte',
+      sur: ['tranche', 'regime'],
+      formule: "DEFAUT(CHAMP(CHAMP(regimes_saisis; regime); 'mode'); 'loyers')",
+    },
+    mode_redevance_regime: {
+      libelle: 'Mode de redevance de la tranche',
+      unite: 'texte',
+      sur: ['tranche', 'regime'],
+      formule: "DEFAUT(CHAMP(CHAMP(regimes_saisis; regime); 'mode_redevance'); 'forfaitaire')",
+    },
+    redevance_regime: {
+      libelle: 'Redevance annuelle de la tranche',
+      unite: 'eur',
+      sur: ['tranche', 'regime'],
+      formule: "DEFAUT(CHAMP(CHAMP(regimes_saisis; regime); 'redevance_annuelle_eur'); 0)",
+    },
+    annee_valeur_regime: {
+      libelle: 'Année de valeur de la redevance de la tranche',
+      unite: 'annee',
+      sur: ['tranche', 'regime'],
+      formule: "CHAMP(CHAMP(regimes_saisis; regime); 'redevance_annee_valeur')",
+    },
+    index_regime: {
+      libelle: 'Trajectoire de la redevance de la tranche',
+      unite: 'texte',
+      sur: ['tranche', 'regime'],
+      formule: "DEFAUT(CHAMP(CHAMP(regimes_saisis; regime); 'index_redevance'); index_redevance)",
+    },
+    loyers_regime: {
+      libelle: 'Loyers annuels de la tranche',
+      unite: 'eur',
+      sur: ['tranche', 'regime'],
+      formule: 'loyer_annuel_tranche[tranche: regime]',
+    },
+    quote_part_regime: {
+      libelle: 'Quote-part de surface utile de la tranche',
+      unite: 'taux',
+      sur: ['tranche', 'regime'],
+      formule: 'quote_part_su[tranche: regime]',
+    },
+
+    // --- Series annuelles d'une tranche -----------------------------------------------
+    produit_amorti_pret: {
+      libelle: 'Tranche portant le prêt',
+      unite: 'texte',
+      sur: ['pret'],
+      formule: 'DEFAUT(produit_pret; tranche_unique)',
+    },
+    annuites: {
+      libelle: 'Annuités d’emprunt',
+      unite: 'eur',
+      regle: 'R-AMT-3',
+      sur: ['tranche', 'exercice'],
+      formule:
+        'SOMME(DEFAUT(annuite_pret[annee_pret: exercice]; 0) POUR pret ' +
+        'QUAND ET(montant_pret > 0; produit_amorti_pret = tranche))',
+      note: 'Chaque prêt compte à partir de SA première échéance.',
+    },
+    interets: {
+      libelle: 'Intérêts d’emprunt',
+      unite: 'eur',
+      regle: 'R-EXP-2',
+      sur: ['tranche', 'exercice'],
+      formule:
+        'DEFAUT(DERNIER(interets_pret[annee_pret: exercice] POUR pret QUAND ET(montant_pret > 0; ' +
+        'produit_amorti_pret = tranche; DEFINI(interets_pret[annee_pret: exercice]))); 0)',
+      note: 'Comme le calcul d’origine : quand plusieurs prêts courent la même année, seuls les intérêts du dernier sont retenus. Anomalie signalée, conservée pour ne rien changer aux résultats.',
+    },
+    tfpb_serie: {
+      libelle: 'Taxe foncière de l’exercice, avant indexation',
+      unite: 'eur',
+      regle: 'R-FISC-1',
+      sur: ['tranche', 'exercice'],
+      formule: 'SI(exercice >= annee_debut_tfpb_tranche; tfpb_base_tranche; 0)',
+    },
+    annuite_fp_serie: {
+      libelle: 'Charge de fonds propres de l’exercice',
+      unite: 'eur',
+      regle: 'R-FIN-7',
+      sur: ['tranche', 'exercice'],
+      formule: 'SI(ET(annuite_fp_tranche > 0; rang_exercice < duree_charge_fp); annuite_fp_tranche; 0)',
+    },
+    credit_is: {
+      libelle: 'Crédit d’impôt de la tranche',
+      unite: 'eur',
+      regle: 'R-EXP-4',
+      sur: ['tranche', 'exercice'],
+      formule: 'SI(soumis_is_tranche; credit_is_annee; 0)',
+    },
+    dotation_amortissements: {
+      libelle: 'Dotation aux amortissements',
+      unite: 'eur',
+      regle: 'R-EXP-2',
+      sur: ['tranche', 'exercice'],
+      formule:
+        'SI(dotation_en_serie; DEFAUT(dotation_annee * quote_part_su; 0); dotation_lineaire * quote_part_su)',
+    },
+
+    // --- Produits -----------------------------------------------------------------------
+    loyers_logements_indexes: {
+      libelle: 'Loyers des logements, avant RLS',
+      unite: 'eur',
+      regle: 'R-LOYER-5',
+      sur: ['tranche', 'exercice'],
+      formule:
+        "SI(par_regime; SOMME(SI(mode_regime <> 'redevance'; loyers_regime * indice_loyers; 0) POUR regime); " +
+        'SI(en_redevance; 0; loyer_annuel_tranche * indice_loyers))',
+    },
+    taux_rls: {
+      libelle: 'Taux de RLS de l’exercice',
+      unite: 'taux',
+      regle: 'R-EXP-RLS',
+      sur: ['tranche', 'exercice'],
+      formule: 'DEFAUT(taux_rls_annee; taux_rls_tranche)',
+    },
+    rls: {
+      libelle: 'Réduction de loyer de solidarité',
+      unite: 'eur',
+      regle: 'R-EXP-RLS',
+      sur: ['tranche', 'exercice'],
+      formule: 'loyers_logements_indexes * taux_rls',
+      note: 'Du loyer quittancé en moins, retiré avant la vacance et avant tout ce qui s’assoit sur les loyers.',
+    },
+    loyers_logements: {
+      libelle: 'Loyers des logements',
+      unite: 'eur',
+      regle: 'R-LOYER-5',
+      sur: ['tranche', 'exercice'],
+      formule: 'loyers_logements_indexes - rls',
+    },
+    redevance_forfait_regime: {
+      libelle: 'Redevance forfaitaire de la tranche',
+      unite: 'eur',
+      sur: ['tranche', 'regime', 'exercice'],
+      formule:
+        'redevance_regime * facteur_index[index: index_regime; ' +
+        'depuis: SI(annee_valeur_regime; annee_valeur_regime; annee_mise_en_location); an: exercice]',
+    },
+    redevance_forfait: {
+      libelle: 'Redevance forfaitaire',
+      unite: 'eur',
+      sur: ['exercice'],
+      formule:
+        'redevance_annuelle * facteur_index[index: index_redevance; ' +
+        'depuis: SI(redevance_annee_valeur; redevance_annee_valeur; annee_mise_en_location); an: exercice]',
+      note: 'Indexée depuis son année de valeur, à défaut depuis la mise en location.',
+    },
+    forfaits_redevance: {
+      libelle: 'Redevances forfaitaires',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule:
+        "SI(par_regime; SOMME(SI(ET(mode_regime = 'redevance'; mode_redevance_regime <> 'transparence'); " +
+        'redevance_forfait_regime; 0) POUR regime); SI(ET(en_redevance; NON(en_transparence)); redevance_forfait; 0))',
+    },
+    quote_part_transparence: {
+      libelle: 'Part des charges refacturée',
+      unite: 'taux',
+      regle: 'R-EXP-7',
+      sur: ['tranche'],
+      formule:
+        "SI(par_regime; SOMME(SI(ET(mode_regime = 'redevance'; mode_redevance_regime = 'transparence'); " +
+        'quote_part_regime; 0) POUR regime); SI(en_transparence; 1; 0))',
+    },
+    loyers_annexes: {
+      libelle: 'Loyers des annexes',
+      unite: 'eur',
+      regle: 'R-LOYER-7',
+      sur: ['tranche', 'exercice'],
+      formule: 'SI(ET(NON(par_regime); en_redevance); 0; loyers_annexes_tranche * indice_loyers)',
+    },
+    loyers_divers: {
+      libelle: 'Loyers divers',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule: 'SI(ET(NON(par_regime); en_redevance); 0; loyers_divers_tranche * indice_loyers)',
+    },
+
+    // --- Charges independantes des produits ----------------------------------------------
+    frais_gestion_forfait: {
+      libelle: 'Frais de gestion hors part des loyers',
+      unite: 'eur',
+      regle: 'R-EXP',
+      sur: ['tranche', 'exercice'],
+      formule:
+        'SI(frais_gestion_pct_pr > 0; frais_gestion_pct_pr * total_ttc_module_tranche * indice_gestion; ' +
+        'frais_gestion_logement_tranche * nb_logements_tranche * indice_gestion)',
+    },
+    tfpb: {
+      libelle: 'Taxe foncière',
+      unite: 'eur',
+      regle: 'R-FISC-1',
+      sur: ['tranche', 'exercice'],
+      formule:
+        'SI(tfpb_en_serie; tfpb_serie * indice_tfpb; SI(exercice >= annee_debut_tfpb_exploitation; ' +
+        'nb_logements_tranche * tfpb_par_logement * indice_tfpb; 0))',
+    },
+    gros_entretien_en_table: {
+      libelle: 'Gros entretien lu dans une table',
+      unite: 'booleen',
+      formule: 'LONGUEUR(gros_entretien_par_annee_saisi) > 0',
+    },
+    derniere_annee_ge: {
+      libelle: 'Dernière année de la table de gros entretien',
+      unite: 'annee',
+      formule: "MAX(NOMBRE.BRUT(CHAMP(g; 'annee')) POUR g DANS DEFAUT(gros_entretien_par_annee_saisi; liste_vide))",
+    },
+    gros_entretien_table: {
+      libelle: 'Gros entretien de la table, au m²',
+      unite: 'eur_m2',
+      sur: ['exercice'],
+      formule:
+        "DEFAUT(DERNIER(CHAMP(g; 'eur_par_m2') POUR g DANS DEFAUT(gros_entretien_par_annee_saisi; liste_vide) " +
+        "QUAND NOMBRE.BRUT(CHAMP(g; 'annee')) = MIN(exercice; derniere_annee_ge)); 0)",
+      note: 'La table porte sa propre progression et ne s’indexe pas ; au-delà, la dernière valeur est reconduite.',
+    },
+    pge_en_pourcentage: {
+      libelle: 'Provision en part du prix de revient',
+      unite: 'booleen',
+      regle: 'R-EXP-PGE',
+      sur: ['tranche'],
+      formule: 'ET(pge_base_tranche > 0; OU(pge_taux > 0; LONGUEUR(pge_taux_par_annee_saisis) > 0))',
+    },
+    gros_entretien: {
+      libelle: 'Gros entretien',
+      unite: 'eur',
+      regle: 'R-EXP-PGE',
+      sur: ['tranche', 'exercice'],
+      formule:
+        'SI(gros_entretien_en_table; gros_entretien_table * shab_tranche; SI(pge_en_pourcentage; ' +
+        'taux_pge * pge_base_tranche * indice_gros_entretien; gros_entretien_m2 * shab_tranche * indice_gros_entretien))',
+    },
+    rel: {
+      libelle: 'REL',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule: 'rel_logement_tranche * nb_logements_tranche * indice_gestion',
+    },
+    annuite_fonds_propres: {
+      libelle: 'Annuités de fonds propres',
+      unite: 'eur',
+      regle: 'R-FIN-7',
+      sur: ['tranche', 'exercice'],
+      formule:
+        'SI(ET(duree_annuite_fp > 0; rang_exercice >= duree_annuite_fp); 0; annuite_fp_forfait) + annuite_fp_serie',
+      note: 'Refacturées au même titre que les annuités d’emprunt en transparence.',
+    },
+    assiette_fixe_charge: {
+      libelle: 'Assiette fixe de la charge',
+      unite: 'nombre',
+      sur: ['tranche', 'charge'],
+      formule:
+        "SI(assiette_charge = 'logement'; nb_logements_tranche; SI(assiette_charge = 'shab'; shab_tranche; " +
+        "SI(assiette_charge = 'prix_revient_ttc'; total_ttc_module_tranche; SI(assiette_charge = 'forfait'; 1; INDEFINI))))",
+    },
+    charge_fixe: {
+      libelle: 'Charge à assiette fixe',
+      unite: 'eur',
+      sur: ['tranche', 'charge', 'exercice'],
+      formule:
+        'SI(DEFINI(montant_fixe_charge); montant_fixe_charge; ' +
+        "SI(OU(assiette_charge = 'produits_locatifs_bruts'; assiette_charge = 'produits_locatifs_nets'); 0; " +
+        'SI(DEFINI(assiette_fixe_charge); valeur_charge * assiette_fixe_charge * indice_charge; ' +
+        "ERREUR('Assiette de charge inconnue : '; assiette_charge; ' (poste '; code_charge; ')'))))",
+    },
+    charges_fixes: {
+      libelle: 'Charges diverses à assiette fixe',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule: 'SOMME(charge_fixe POUR charge QUAND charge_applicable)',
+    },
+
+    // --- Redevance en transparence (R-EXP-7) -----------------------------------------------
+    connus: {
+      libelle: 'Produits connus avant la redevance refacturée',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule: 'loyers_logements + loyers_annexes + loyers_divers + forfaits_redevance',
+    },
+    socle_transparence: {
+      libelle: 'Charges refacturées hors cotisations sur les produits',
+      unite: 'eur',
+      regle: 'R-EXP-7',
+      sur: ['tranche', 'exercice'],
+      formule:
+        'annuites + tfpb + gros_entretien + rel + annuite_fonds_propres + charges_fixes + ' +
+        'SI(frais_gestion_pct_loyers > 0; 0; frais_gestion_forfait)',
+    },
+    taux_assis_produits: {
+      libelle: 'Taux assis sur les produits',
+      unite: 'taux',
+      sur: ['exercice'],
+      formule: 'frais_gestion_pct_loyers + taux_produits_bruts + taux_produits_nets',
+    },
+    denominateur_transparence: {
+      libelle: 'Part non refacturée des cotisations',
+      unite: 'coef',
+      sur: ['tranche', 'exercice'],
+      formule: '1 - quote_part_transparence * taux_assis_produits',
+    },
+    redevance_transparence: {
+      libelle: 'Redevance refacturée',
+      unite: 'eur',
+      regle: 'R-EXP-7',
+      sur: ['tranche', 'exercice'],
+      formule:
+        'SI(quote_part_transparence > 0; SI(denominateur_transparence > 0; quote_part_transparence * ' +
+        '(socle_transparence + taux_assis_produits * connus - taux_produits_nets * taux_vacance * connus) / ' +
+        'denominateur_transparence; quote_part_transparence * socle_transparence); 0)',
+      note: 'Les cotisations sur les produits se refacturent elles-mêmes : R = C0 / (1 - t), en forme fermée plutôt qu’en itérant.',
+    },
+    redevance: {
+      libelle: 'Redevance',
+      unite: 'eur',
+      regle: 'R-EXP-7',
+      sur: ['tranche', 'exercice'],
+      formule: 'forfaits_redevance + redevance_transparence',
+    },
+    loyers_bruts: {
+      libelle: 'Produits locatifs bruts',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule: 'redevance + loyers_logements + loyers_annexes + loyers_divers',
+    },
+    vacance_impayes: {
+      libelle: 'Vacance et impayés',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule: '(loyers_bruts - redevance_transparence) * taux_vacance',
+      note: 'Sans effet sur la redevance refacturée : le gestionnaire la doit que les places soient occupées ou non.',
+    },
+    loyers_nets: {
+      libelle: 'Loyers nets',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule: 'loyers_bruts - vacance_impayes',
+    },
+    qp_subventions: {
+      libelle: 'Quote-part de subventions virée au résultat',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule: 'SI(ET(duree_qp_subventions > 0; rang_exercice >= duree_qp_subventions); 0; qp_subventions_tranche)',
+    },
+    produits_financiers: {
+      libelle: 'Produits financiers',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule: 'MAX(0; DEFAUT(cumul_autofinancement[exercice: exercice - 1]; 0)) * taux_produits_financiers',
+      note: 'Sur la trésorerie accumulée à la fin de l’exercice précédent.',
+    },
+    total_produits: {
+      libelle: 'Total des produits',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule: 'loyers_nets + qp_subventions + produits_financiers',
+    },
+
+    // --- Charges assises sur les produits, impot et soldes -----------------------------------
+    frais_gestion: {
+      libelle: 'Frais de gestion',
+      unite: 'eur',
+      regle: 'R-EXP',
+      sur: ['tranche', 'exercice'],
+      formule: 'SI(frais_gestion_pct_loyers > 0; loyers_bruts * frais_gestion_pct_loyers; frais_gestion_forfait)',
+    },
+    assiette_montant_charge: {
+      libelle: 'Assiette de la charge',
+      unite: 'nombre',
+      sur: ['tranche', 'charge', 'exercice'],
+      formule:
+        "SI(assiette_charge = 'produits_locatifs_bruts'; loyers_bruts; SI(assiette_charge = 'produits_locatifs_nets'; " +
+        'loyers_nets; SI(DEFINI(assiette_fixe_charge); assiette_fixe_charge; ' +
+        "ERREUR('Assiette de charge inconnue : '; assiette_charge; ' (poste '; code_charge; ')'))))",
+    },
+    montant_charge: {
+      libelle: 'Montant de la charge',
+      unite: 'eur',
+      regle: 'R-EXP',
+      sur: ['tranche', 'charge', 'exercice'],
+      formule: 'DEFAUT(montant_fixe_charge; valeur_charge * assiette_montant_charge * indice_charge)',
+    },
+    charges_diverses: {
+      libelle: 'Charges diverses',
+      unite: 'eur',
+      regle: 'R-EXP',
+      sur: ['tranche', 'exercice'],
+      formule: 'SOMME(montant_charge POUR charge QUAND charge_applicable)',
+    },
+    montant_deductible_is: {
+      libelle: 'Charge déductible de la base fiscale',
+      unite: 'eur',
+      regle: 'R-EXP-4',
+      sur: ['tranche', 'exercice', 'poste_is'],
+      formule:
+        "SI(poste_is = 'frais_gestion'; frais_gestion; SI(poste_is = 'tfpb'; tfpb; " +
+        "SI(poste_is = 'part_fixe_gros_entretien'; SI(rang_exercice < is_part_fixe_differe; 0; is_part_fixe_tranche); " +
+        "SI(poste_is = 'gros_entretien'; gros_entretien; SI(poste_is = 'interets'; interets; " +
+        "SI(poste_is = 'dotation_amortissements'; dotation_amortissements; SI(poste_is = 'rel'; rel; " +
+        "SI(poste_is = 'charges_diverses'; charges_diverses; SI(poste_is = 'annuites'; annuites; 0)))))))))",
+    },
+    base_is: {
+      libelle: 'Base de l’impôt sur les sociétés',
+      unite: 'eur',
+      regle: 'R-EXP-4',
+      sur: ['tranche', 'exercice'],
+      formule:
+        'SI(is_actif; loyers_nets - SOMME(montant_deductible_is[poste_is: d] POUR d DANS is_charges_deductibles); VIDE)',
+    },
+    impot_societes: {
+      libelle: 'Impôt sur les sociétés',
+      unite: 'eur',
+      regle: 'R-EXP-4',
+      sur: ['tranche', 'exercice'],
+      formule:
+        'SI(is_actif; SI(OU(rang_exercice < is_differe; base_is <= 0); 0; MAX(0; base_is * is_taux_tranche - credit_is)); 0)',
+      note: 'Une base négative ne crée pas de crédit reportable : l’impôt est nul cette année-là.',
+    },
+    total_charges: {
+      libelle: 'Total des charges',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule:
+        'annuites + frais_gestion + tfpb + gros_entretien + rel + annuite_fonds_propres + charges_diverses + impot_societes',
+    },
+    autofinancement: {
+      libelle: 'Autofinancement',
+      unite: 'eur',
+      regle: 'R-EXP-2',
+      sur: ['tranche', 'exercice'],
+      formule: 'total_produits - total_charges',
+      note: 'Vue trésorerie : les annuités sont la charge.',
+    },
+    cumul_autofinancement: {
+      libelle: 'Autofinancement cumulé',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule: 'DEFAUT(cumul_autofinancement[exercice: exercice - 1]; 0) + autofinancement',
+    },
+    capital_rembourse: {
+      libelle: 'Capital remboursé',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule: 'annuites - interets',
+    },
+    total_charges_comptables: {
+      libelle: 'Total des charges comptables',
+      unite: 'eur',
+      regle: 'R-EXP-2',
+      sur: ['tranche', 'exercice'],
+      formule: 'SI(comptable_disponible; total_charges - annuites + interets + dotation_amortissements; VIDE)',
+      note: 'Le capital remboursé n’est pas une charge ; l’usure du bien en est une.',
+    },
+    resultat_comptable: {
+      libelle: 'Résultat comptable',
+      unite: 'eur',
+      regle: 'R-EXP-2',
+      sur: ['tranche', 'exercice'],
+      formule: 'SI(comptable_disponible; total_produits - total_charges_comptables; VIDE)',
+    },
+    cumul_resultat_comptable: {
+      libelle: 'Résultat comptable cumulé',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule:
+        'SI(comptable_disponible; DEFAUT(cumul_resultat_comptable[exercice: exercice - 1]; 0) + resultat_comptable; VIDE)',
+    },
+    taux_marge: {
+      libelle: 'Taux de marge',
+      unite: 'taux',
+      sur: ['tranche', 'exercice'],
+      formule: 'SI(total_produits > 0; autofinancement / total_produits; VIDE)',
+    },
+    prix_journee: {
+      libelle: 'Prix de journée',
+      unite: 'eur',
+      sur: ['tranche', 'exercice'],
+      formule: 'SI(nb_lits_tranche > 0; redevance / (nb_lits_tranche * jours_par_an); VIDE)',
+      note: 'La redevance ramenée à la place et au jour.',
+    },
+
+    // --- Totaux du compte, sur l'horizon : sommes des lignes publiees ---------------------------
+    produits_horizon: {
+      libelle: 'Produits sur l’horizon',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'ARRONDI.EURO(SOMME(ARRONDI.EURO(total_produits) POUR exercice))',
+    },
+    charges_horizon: {
+      libelle: 'Charges sur l’horizon',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'ARRONDI.EURO(SOMME(ARRONDI.EURO(total_charges) POUR exercice))',
+    },
+    autofinancement_horizon: {
+      libelle: 'Autofinancement sur l’horizon',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'ARRONDI.EURO(SOMME(ARRONDI.EURO(autofinancement) POUR exercice))',
+    },
+    resultat_comptable_horizon: {
+      libelle: 'Résultat comptable sur l’horizon',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'SI(comptable_disponible; ARRONDI.EURO(SOMME(ARRONDI.EURO(resultat_comptable) POUR exercice)); VIDE)',
+    },
+    interets_horizon: {
+      libelle: 'Intérêts sur l’horizon',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'ARRONDI.EURO(SOMME(ARRONDI.EURO(interets) POUR exercice))',
+    },
+    dotation_horizon: {
+      libelle: 'Dotations sur l’horizon',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule:
+        'SI(comptable_disponible; ARRONDI.EURO(SOMME(ARRONDI.EURO(dotation_amortissements) POUR exercice)); VIDE)',
+    },
+    annuites_horizon: {
+      libelle: 'Annuités sur l’horizon',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'ARRONDI.EURO(SOMME(ARRONDI.EURO(annuites) POUR exercice))',
+    },
+    charges_diverses_horizon: {
+      libelle: 'Charges diverses sur l’horizon',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'ARRONDI.EURO(SOMME(ARRONDI.EURO(charges_diverses) POUR exercice))',
+    },
+    rls_horizon: {
+      libelle: 'RLS sur l’horizon',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'ARRONDI.EURO(SOMME(ARRONDI.EURO(rls) POUR exercice))',
+    },
+    impot_societes_horizon: {
+      libelle: 'Impôt sur les sociétés sur l’horizon',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'SI(is_actif; ARRONDI.EURO(SOMME(ARRONDI.EURO(impot_societes) POUR exercice)); VIDE)',
+    },
+    premiere_annee_positive: {
+      libelle: 'Premier exercice bénéficiaire',
+      unite: 'annee',
+      sur: ['tranche'],
+      formule: 'PREMIER(exercice POUR exercice QUAND ARRONDI.EURO(autofinancement) > 0)',
+    },
+    annee_retour_cumul_positif: {
+      libelle: 'Retour du cumul en positif',
+      unite: 'annee',
+      sur: ['tranche'],
+      formule: 'PREMIER(exercice POUR exercice QUAND ARRONDI.EURO(cumul_autofinancement) > 0)',
+    },
+  },
+};
+
 /* ===== src/formules/modele.js ===== */
 // @ts-check
 /**
@@ -10632,6 +12282,7 @@ const FISCALITE = {
 
 
 
+
 const MODELE = creerModele([
   OPERATION,
   CALENDRIER,
@@ -10643,6 +12294,7 @@ const MODELE = creerModele([
   PRETS,
   AMORTISSEMENT,
   FISCALITE,
+  EXPLOITATION,
 ]);
 
 /**
@@ -12602,24 +14254,21 @@ function taxeAmenagement(p, referentiels) {
 /**
  * R-EXP - Compte d'exploitation previsionnel (50 a 60 ans).
  *
- * Structure LEON : un tableau annees x postes (SimPLS/SimPLUS, colonnes DO..EC
- * et suivantes), montants affiches en kEUR. Ici le calcul se fait en EUROS et la
- * conversion n'intervient qu'a la presentation (CLAUDE.md §6).
+ * LES FORMULES VIVENT DANS `formules/domaines/exploitation.js` : le compte de
+ * chaque tranche, exercice par exercice - produits, charges, impot, soldes - et
+ * ses totaux sur l'horizon. Ce module restitue un compte tel que l'ecran et les
+ * exports le lisent, et garde les fonctions historiques (`compteExploitation`,
+ * `resoudreChargesExploitation`, `dotationParComposants`), qui evaluent ces
+ * memes formules sur les valeurs qu'on leur donne.
  *
- * Chaque poste est indexe par sa propre trajectoire annuelle (loyers/IRL,
- * gros entretien, gestion, TFPB, frais et produits financiers) : ces trajectoires
- * sont des ENTREES, jamais des constantes.
+ * Restent ecrits ici parce qu'ils lisent un compte deja publie, et non le
+ * classeur : la somme des comptes d'un perimetre choisi a l'ecran, les
+ * indicateurs de lecture et les jalons.
  *
- * Etat de validation : la mecanique (assiettes, indexation, enchainement des
- * soldes) suit le dictionnaire R-EXP. Le mapping fin des colonnes cachees de
- * LEON (GU/HB/HH/HX/IA) n'est pas encore confronte a un golden test - voir
- * QUESTIONS_SPEC Q-11.
- *
- * Unites : montants en euros, taux en fraction.
+ * Unites : montants en euros, taux en fraction. Les montants d'exploitation de
+ * LEON sont en kEUR : la conversion n'intervient qu'a la presentation.
  */
 
-/** Base du prix de journee d'un foyer (constante calendaire, pas un bareme). */
-const JOURS_PAR_AN = 365;
 
 
 // L'indexation et le TRI sont des fonctions du langage de formules : elles
@@ -12628,661 +14277,308 @@ const JOURS_PAR_AN = 365;
 { facteurIndexation, tauxRentabiliteInterne };
 
 /**
- * Un poste de charge decrit par sa DONNEE et non par du code (Q-16). Le trio
- * assiette / valeur / index suffit a produire TEOM, assurance PNO, CGLLS, ANCOLS
- * et tout poste a venir sans toucher au moteur.
- *
+ * Un poste de charge decrit par sa DONNEE et non par du code (Q-16).
  * @typedef {Object} ChargeDiverse
  * @property {string} code
  * @property {string} libelle
  * @property {'logement'|'produits_locatifs_bruts'|'produits_locatifs_nets'|'shab'|'prix_revient_ttc'|'forfait'} assiette
  * @property {number} valeur           EUR par unite d'assiette, ou taux si l'assiette est un montant
- * @property {string|null} [index]     cle de trajectoire ('gestion', 'tfpb'...) ; absente = pas d'indexation
- * @property {number} [annee_debut]    premiere annee ou le poste s'applique
- * @property {number} [annee_fin]      derniere annee incluse
+ * @property {string|null} [index]     cle de trajectoire ; absente = pas d'indexation
+ * @property {number} [annee_debut]
+ * @property {number} [annee_fin]
+ * @property {Record<number, number>} [montants_par_annee] montant propre a chaque annee (Q-20)
  */
+
+/** Arrondi a l'euro d'une valeur qui peut ne pas exister (vue comptable absente). */
+const euroOuNul = (/** @type {any} */ v) => (v === null || v === undefined ? null : arrondiEuro(v));
 
 /**
- * @typedef {Object} EntreesExploitation
- * @property {number} annee_mise_en_location
- * @property {number} duree_ans                        horizon de simulation
- * @property {'loyers'|'redevance'} [mode]             'redevance' pour les foyers (Q-27)
- * @property {number} [redevance_annuelle_eur]         mode foyer : redevance annuelle
- * @property {number} [redevance_annee_valeur]         annee de VALEUR de cette redevance
- * @property {string} [index_redevance]                trajectoire qui indexe la redevance
- * @property {number} [qp_subventions_annuelle_eur]    quote-part de subventions virée au résultat
- * @property {number} [duree_qp_subventions_ans]       au-dela, la quote-part s'eteint
- * @property {number} [prix_revient_ttc_eur]           assiette des charges au prorata du PR
- * @property {ChargeDiverse[]} [charges_diverses]      TEOM, assurance PNO, CGLLS, ANCOLS... (Q-16)
- * @property {number} loyers_logements_annuels_eur     loyers de l'annee 1 (R-LOYER-5)
- * @property {number} [loyers_annexes_annuels_eur]     R-LOYER-7
- * @property {number} [loyers_divers_annuels_eur]
- * @property {number} [frais_gestion_annuels_eur]
- * @property {number} [frais_gestion_pct_loyers]       variante en % des loyers
- * @property {number} [frais_gestion_pct_prix_revient] assiette de LEON, % du prix de revient TTC
- * @property {number} [rel_annuel_eur]
- * @property {number} [gros_entretien_eur_m2]          trajectoire GE, par m2 de SHAB
- * @property {number} [pge_taux]                       R-EXP-PGE : taux de provision, constant
- * @property {Array<{annee: number, taux: number}>} [pge_taux_par_annee]  taux annee par annee
- * @property {number} [pge_base_eur]                   assiette de la provision (prix de revient TTC)
- * @property {number} [shab_m2]
- * @property {number} [taux_vacance_impayes]           fraction des loyers ; sans effet en transparence
- * @property {number} [taux_produits_financiers]       applique a l'autofinancement cumule
- * @property {number} [is_taux]                        R-EXP-4, 0 = pas d'IS (cas des logements conventionnes)
- * @property {number} [is_duree_differe_ans]           annees sans IS depuis la mise en location
- * @property {string[]} [is_charges_deductibles]       postes retranches des loyers nets pour former la base
- * @property {Array<{annee: number, montant_eur: number}>} [is_credits_impot_par_annee] deduits de l'impot du
- * @property {number} [is_part_fixe_ge_eur]            part fixe de la PGE deductible, en euros par an
- * @property {number} [is_part_fixe_ge_differe_ans]    annees avant que cette part fixe ne soit deductible
- * @property {number} nb_logements
- * @property {number} [tfpb_par_logement_eur]
- * @property {number} annee_debut_tfpb
- * @property {Array<{annee: number, annuite_eur: number}>} [annuites]  toutes tables d'amortissement confondues
- * @property {Object} [trajectoires]                   taux annuels par poste
+ * Compte d'exploitation d'une tranche du classeur : une ligne par exercice,
+ * chaque montant arrondi a l'euro, et les totaux sur l'horizon.
+ * @param {import('./formules/classeur.js').Classeur} c
+ * @param {any} tranche
  */
-
-/**
- * R-EXP - Deroule le compte d'exploitation annee par annee.
- *
- * Produits : loyers (indexes IRL) + annexes + divers + produits financiers.
- * Charges  : annuites des prets (chaque pret compte a partir de SA date de
- *            premiere echeance, R-AMT-3/R-AMT-5) + gestion + TFPB (a partir de
- *            la fin d'exoneration, R-FISC-1) + REL + gros entretien + vacance.
- * Soldes   : resultat, autofinancement, cumul.
- *
- * @param {EntreesExploitation} e
- * @returns {{lignes: Array<Object>, totaux: Object}}
- */
-function compteExploitation(e) {
-  const {
-    annee_mise_en_location,
-    duree_ans,
-    mode = 'loyers',
-    mode_redevance = 'forfaitaire',
-    redevance_annuelle_eur = 0,
-    redevance_annee_valeur,
-    index_redevance = 'loyers_irl',
-    annuite_fonds_propres_eur = 0,
-    duree_annuite_fonds_propres_ans = 0,
-    annuites_fonds_propres = [],
-    tfpb_par_annee = [],
-    gros_entretien_par_annee = [],
-    // R-EXP-PGE : provision pour gros entretien en pourcentage d'une base.
-    pge_taux = 0,
-    pge_taux_par_annee = [],
-    pge_base_eur = 0,
-    // R-EXP-2 : vue comptable, distincte de la vue tresorerie.
-    interets_par_annee = [],
-    dotation_amortissements_eur = 0,
-    dotation_amortissements_par_annee = [],
-    // R-EXP-7 : produits par TRANCHE. Chacune est soit en loyers, soit en
-    // redevance, et une operation mixte porte les deux. Vide, le compte retombe
-    // sur les entrees scalaires ci-dessus, qui decrivent l'operation entiere.
-    tranches_produits = [],
-    // R-EXP-4 : impot sur les societes. Inactif tant que le taux est nul, ce
-    // qui laisse intact le regime d'exoneration des logements conventionnes.
-    is_taux = 0,
-    is_duree_differe_ans = 0,
-    is_charges_deductibles = [],
-    is_credits_impot_par_annee = [],
-    is_part_fixe_ge_eur = 0,
-    is_part_fixe_ge_differe_ans = 0,
-    nb_lits = 0,
-    qp_subventions_annuelle_eur = 0,
-    duree_qp_subventions_ans = 0,
-    prix_revient_ttc_eur = 0,
-    charges_diverses = [],
-    loyers_logements_annuels_eur,
-    loyers_annexes_annuels_eur = 0,
-    loyers_divers_annuels_eur = 0,
-    frais_gestion_annuels_eur = 0,
-    frais_gestion_pct_loyers = 0,
-    frais_gestion_pct_prix_revient = 0,
-    rel_annuel_eur = 0,
-    gros_entretien_eur_m2 = 0,
-    shab_m2 = 0,
-    taux_vacance_impayes = 0,
-    taux_produits_financiers = 0,
-    nb_logements,
-    tfpb_par_logement_eur = 0,
-    annee_debut_tfpb,
-    // R-EXP-RLS : reduction de loyer de solidarite, en part du loyer quittance.
-    // Nulle par defaut ; la table annuelle prime sur le scalaire, annee par annee.
-    rls_taux = 0,
-    rls_taux_par_annee: rls_taux_par_annee_saisi = [],
-    annuites = [],
-    trajectoires = {},
-  } = e;
-
-  /** @type {Record<number, number>} */
-  const rls_taux_par_annee = {};
-  for (const r of rls_taux_par_annee_saisi) rls_taux_par_annee[r.annee] = r.taux;
-
-  // Les annuites arrivent sous forme de lignes (annee, montant) : on les agrege
-  // par annee civile. Un pret qui demarre plus tard n'apparait tout simplement
-  // pas dans les annees anterieures - c'est la regle R-AMT-3 appliquee au compte.
-  /** @type {Record<number, number>} */
-  const annuitesParAnnee = {};
-  for (const a of annuites) {
-    annuitesParAnnee[a.annee] = (annuitesParAnnee[a.annee] ?? 0) + a.annuite_eur;
-  }
-
-  /** Charges de fonds propres annee par annee (R-FIN-7), meme agregation. */
-  /** @type {Record<number, number>} */
-  const annuitesFPParAnnee = {};
-  for (const a of annuites_fonds_propres) {
-    annuitesFPParAnnee[a.annee] = (annuitesFPParAnnee[a.annee] ?? 0) + a.montant_eur;
-  }
-
-  /**
-   * TFPB annee par annee (R-FISC-1). Une operation mixte n'a pas UNE fin
-   * d'exoneration : la duree est une propriete du produit, 25 ans en logement
-   * social et 20 ans en intermediaire. La serie porte ce cas, le couple
-   * (montant, annee de debut) ne le pouvait pas.
-   * @type {Record<number, number>}
-   */
-  const tfpbParAnnee = {};
-  for (const t of tfpb_par_annee) {
-    tfpbParAnnee[t.annee] = (tfpbParAnnee[t.annee] ?? 0) + t.montant_eur;
-  }
-  const tfpbEnSerie = tfpb_par_annee.length > 0;
-
-  /**
-   * R-EXP, Q-19 - Gros entretien en TABLE ANNUELLE, en EUR par m2 de SHAB.
-   *
-   * LEON ne l'indexe pas depuis un taux : il le lit dans `SimPLS!HT16:HU76`, une
-   * table qui MONTE EN CHARGE sur les quatre premieres annees (8,05 puis 10,98
-   * puis 14,04 puis 17,23 EUR/m2) avant de croitre d'environ 2,3 % par an. Un
-   * taux constant indexe ne peut pas reproduire cette montee : la provision se
-   * constitue, elle ne suit pas l'inflation.
-   *
-   * La table prime sur le scalaire des qu'elle existe, et ne s'indexe pas : elle
-   * porte deja sa propre progression.
-   * @type {Record<number, number>}
-   */
-  const gePar_m2ParAnnee = {};
-  for (const g of gros_entretien_par_annee) gePar_m2ParAnnee[g.annee] = g.eur_par_m2;
-  const geEnTable = gros_entretien_par_annee.length > 0;
-  // Au-dela de la table, la DERNIERE valeur connue est reconduite, comme pour
-  // toute trajectoire du moteur. Attention : LEON, lui, continue de la faire
-  // croitre d'environ 2,3 % par an au-dela de sa propre table - divergence
-  // documentee, la reponse propre etant de fournir une table qui couvre
-  // l'horizon de simulation.
-  const derniereAnneeGE = geEnTable
-    ? Math.max(...gros_entretien_par_annee.map((g) => g.annee))
-    : 0;
-
-  /**
-   * R-EXP-PGE - Provision pour gros entretien, dite aussi PCRC.
-   *
-   * LEON la calcule en `SimPLUS!DX` comme un TARIF ANNUEL AU M2 multiplie par la
-   * SHAB, ce tarif venant lui-meme de `taux x base / SHAB` (`SimPLUS!BJ12`) puis
-   * indexe (`GK = BJ x GI`). La SHAB se simplifie : la provision vaut donc
-   *
-   *     PGE(N) = taux(N) x base x cumul d'indexation du gros entretien
-   *
-   * et n'est PAS une grandeur au metre carre, malgre la forme sous laquelle
-   * LEON la presente. La base (`SimPLUS!BK31`) est le prix de revient TTC de la
-   * tranche en VEFA, le prix de revient de l'operation net de quelques postes et
-   * reparti a la surface utile sinon.
-   *
-   * Le TAUX peut varier par annee : c'est ainsi que la provision monte en charge
-   * sur les premieres annees d'une operation, ce qu'aucun taux constant ne
-   * reproduit (cf. OP-3, ou elle double en quatre ans).
-   * @type {Record<number, number>}
-   */
-  const tauxPGEParAnnee = {};
-  for (const t of pge_taux_par_annee) tauxPGEParAnnee[t.annee] = t.taux;
-  const pgeEnPourcentage = pge_base_eur > 0 && (pge_taux > 0 || pge_taux_par_annee.length > 0);
-  const dernierePGE = pge_taux_par_annee.length
-    ? Math.max(...pge_taux_par_annee.map((t) => t.annee))
-    : 0;
-  const tauxPGE = (annee) =>
-    pge_taux_par_annee.length
-      ? (tauxPGEParAnnee[Math.min(annee, dernierePGE)] ?? 0)
-      : pge_taux;
-
-  /**
-   * R-EXP-2 - Vue comptable. Les interets viennent des tableaux d'amortissement,
-   * la dotation d'une base amortissable etalee lineairement. Sans dotation, le
-   * resultat comptable n'est pas publie : voir plus bas.
-   */
-  const interetsParAnnee = {};
-  for (const i of interets_par_annee) interetsParAnnee[i.annee] = i.montant_eur;
-  const dotationParAnnee = {};
-  for (const d of dotation_amortissements_par_annee) dotationParAnnee[d.annee] = d.montant_eur;
-  const dotationEnSerie = dotation_amortissements_par_annee.length > 0;
-  const comptableDisponible = dotationEnSerie || dotation_amortissements_eur > 0;
-
-  // R-EXP-4 : credits d'impot venant en deduction de l'IS dudit exercice
-  // (SimTOTAL_IS colonne J : credit de TFPB des logements intermediaires).
-  /** @type {Record<number, number>} */
-  const creditIsParAnnee = {};
-  for (const c of is_credits_impot_par_annee) {
-    creditIsParAnnee[c.annee] = (creditIsParAnnee[c.annee] ?? 0) + c.montant_eur;
-  }
-  const isActif = is_taux > 0;
-  const dotationAnnuelle = (annee) =>
-    dotationEnSerie ? (dotationParAnnee[annee] ?? 0) : dotation_amortissements_eur;
-
-  const lignes = [];
-  let cumulAutofinancement = 0;
-  let cumulResultatComptable = 0;
-
-  for (let k = 0; k < duree_ans; k++) {
-    const annee = annee_mise_en_location + k;
-
-    // Facteurs d'indexation memoises : les charges diverses reclament des
-    // trajectoires arbitraires, on evite de les recalculer poste par poste.
-    /** @type {Record<string, number>} */
-    const facteurs = {};
-    const idx = (cle) => {
-      if (!cle) return 1;
-      if (facteurs[cle] === undefined) {
-        facteurs[cle] = facteurIndexation(trajectoires[cle] ?? 0, annee_mise_en_location, annee);
-      }
-      return facteurs[cle];
-    };
-    const idxLoyers = idx('loyers_irl');
-    const idxGestion = idx('gestion');
-    const idxGE = idx('gros_entretien');
-    const idxTFPB = idx('tfpb');
-
-    // --- Produits ---
-    // Mode foyer (R-EXP, Q-27) : les produits sont une redevance forfaitaire, un
-    // montant d'annee 1 indexe, et non un loyer au m2. Verifie sur l'annexe
-    // OP-6, ou redevance, frais de gestion et assurance suivent EXACTEMENT la
-    // meme trajectoire sur 60 ans (ecart relatif 5,6e-15).
-    const foyer = mode === 'redevance';
-    const transparence = foyer && mode_redevance === 'transparence';
-
-    // Charges INDEPENDANTES des produits : elles sont calculees d'abord, parce
-    // qu'en transparence ce sont elles qui determinent la redevance.
-    const annuitesAnnee = annuitesParAnnee[annee] ?? 0;
-    // R-EXP - Frais de gestion, TROIS assiettes possibles et une seule juste
-    // par operation (Q-17, close le 11/08/2026 sur les matrices BOURGES,
-    // CHAMBERY et OP-4) :
-    //  - % du PRIX DE REVIENT TTC, l'assiette de LEON : `ComPLUS!B150` les
-    //    affiche en euros par logement, mais `SimPLUS!A36` les calcule comme
-    //    `taux x PR TTC / nb logements`, le taux valant 0,3 % (`ParaGLOB!C49`)
-    //    sur les trois matrices. C'est un COUT DE STRUCTURE rapporte a la
-    //    taille de l'operation, pas une commission sur les recettes ;
-    //  - % des loyers, variante conservee pour les montages qui la retiennent ;
-    //  - forfait par logement, saisi tel quel.
-    const fraisGestionForfait =
-      frais_gestion_pct_prix_revient > 0
-        ? frais_gestion_pct_prix_revient * prix_revient_ttc_eur * idxGestion
-        : frais_gestion_annuels_eur * nb_logements * idxGestion;
-    // La serie prime des qu'elle existe : elle seule sait qu'une tranche sort
-    // d'exoneration cinq ans avant une autre.
-    const tfpb = tfpbEnSerie
-      ? (tfpbParAnnee[annee] ?? 0) * idxTFPB
-      : annee >= annee_debut_tfpb
-        ? nb_logements * tfpb_par_logement_eur * idxTFPB
-        : 0;
-    const grosEntretien = geEnTable
-      ? (gePar_m2ParAnnee[Math.min(annee, derniereAnneeGE)] ?? 0) * shab_m2
-      : pgeEnPourcentage
-        ? tauxPGE(annee) * pge_base_eur * idxGE
-        : gros_entretien_eur_m2 * shab_m2 * idxGE;
-    const rel = rel_annuel_eur * nb_logements * idxGestion;
-    // « ANNUITES DE FP » de la table de transparence : la remuneration des
-    // fonds propres est une charge refacturee au meme titre que les annuites
-    // d'emprunt (source : annexe 3204 STRASBOURG RA44, Presentation CA D126).
-    //
-    // Elle s'ARRETE au terme de la duree de reconstitution : le capital est
-    // rendu, il n'y a plus rien a servir. Une duree nulle la laisse courir sur
-    // tout l'horizon, ce que fait un appel qui ne precise que le montant.
-    //
-    // Deux formes d'entree, car deux besoins : un montant SCALAIRE assorti d'une
-    // duree suffit a une operation homogene, mais une operation dont une tranche
-    // sert des interets perpetuels et une autre rembourse sur trente ans n'a pas
-    // de duree unique. La SERIE annuelle, agregee comme les annuites de pret,
-    // porte ce cas exactement. Les deux s'additionnent.
-    const annuiteFP =
-      (duree_annuite_fonds_propres_ans > 0 && k >= duree_annuite_fonds_propres_ans
-        ? 0
-        : annuite_fonds_propres_eur) + (annuitesFPParAnnee[annee] ?? 0);
-
-    // Charges diverses : celles a assiette FIXE entrent dans le socle, celles a
-    // assiette locative dependent de la redevance et attendent son calcul.
-    const applicable = (c) =>
-      !(c.annee_debut !== undefined && annee < c.annee_debut) &&
-      !(c.annee_fin !== undefined && annee > c.annee_fin);
-    const assietteFixe = { logement: nb_logements, shab: shab_m2, prix_revient_ttc: prix_revient_ttc_eur, forfait: 1 };
-    let chargesFixes = 0;
-    let tauxBruts = 0;
-    let tauxNets = 0;
-    // Un poste peut porter un montant PROPRE A CHAQUE ANNEE plutot qu'une
-    // valeur indexee : c'est le cas de la colonne « AUTRES DEPENSES » de LEON,
-    // 51 valeurs saisies sans formule (Q-20). Le montant annuel prime alors sur
-    // tout le reste, assiette comprise, et ne s'indexe pas.
-    const montantAnnuel = (c) => c.montants_par_annee?.[annee];
-    for (const c of charges_diverses) {
-      if (!applicable(c)) continue;
-      const fixe = montantAnnuel(c);
-      if (fixe !== undefined) chargesFixes += fixe;
-      else if (c.assiette === 'produits_locatifs_bruts') tauxBruts += c.valeur;
-      else if (c.assiette === 'produits_locatifs_nets') tauxNets += c.valeur;
-      else if (assietteFixe[c.assiette] !== undefined) chargesFixes += c.valeur * assietteFixe[c.assiette] * idx(c.index);
-      else throw new Error(`Assiette de charge inconnue : ${c.assiette} (poste ${c.code})`);
-    }
-
-    // --- Produits ---
-    // Mode foyer (R-EXP, Q-27), deux regimes :
-    //  - FORFAITAIRE : la redevance est un montant negocie, indexe depuis son
-    //    annee de valeur. Verifie sur l'annexe OP-6, ou redevance, frais de
-    //    gestion et assurance suivent EXACTEMENT la meme trajectoire sur 60 ans
-    //    (ecart relatif 5,6e-15) sans aucune trace des ruptures de charges.
-    //  - TRANSPARENCE : le bailleur REFACTURE ses frais, la redevance vaut donc
-    //    la somme des charges de l'exercice (annexe RA44 : annuites d'emprunts +
-    //    annuites de FP + PGERC + frais de gestion + TFPB & TEOM + assurances).
-    //
-    // En transparence, les cotisations assises sur les produits locatifs sont
-    // elles-memes refacturees : R = C0 + t x R, resolu en forme fermee plutot
-    // qu'en iterant, R = C0 / (1 - t). Sans taux de ce genre, t vaut 0 et la
-    // redevance est la simple somme des charges.
-    // En TRANSPARENCE, le bailleur ne porte ni vacance ni impaye : il refacture
-    // ses frais au gestionnaire, qui les lui doit que les places soient
-    // occupees ou non. Appliquer le taux reviendrait a lui faire supporter un
-    // risque qu'il a precisement transfere. Un seul point de decision, utilise
-    // par la forme fermee ET par le calcul des loyers nets - les separer les
-    // aurait fait diverger a la premiere retouche.
-    // La REDEVANCE FORFAITAIRE porte une ANNEE DE VALEUR : le montant negocie
-    // date d'un exercice donne, et l'indexation court depuis CET exercice, pas
-    // depuis la mise en location. Une redevance en valeur 2026 pour une
-    // livraison en 2029 arrive donc deja indexee de trois ans en annee 1.
-    const redevanceForfait = (r) =>
-      (r.redevance_annuelle_eur ?? 0) *
-      (r.redevance_annee_valeur
-        ? facteurIndexation(
-            trajectoires[r.index_redevance ?? index_redevance] ?? 0,
-            r.redevance_annee_valeur,
-            annee,
-          )
-        : idx(r.index_redevance ?? index_redevance));
-
-    // Produits par TRANCHE quand la liste est fournie : une operation mixte
-    // porte des tranches en loyers a cote de tranches en redevance, et le compte
-    // les additionne. La voie scalaire reste pour les appels qui decrivent
-    // l'operation entiere d'un seul mode - les fixtures, notamment.
-    const parTranche = tranches_produits.length > 0;
-    let loyersLogements = 0;
-    let forfaits = 0;
-    /** Quote-part des tranches en transparence : elles refacturent CETTE part. */
-    let quotePartTransparence = 0;
-    if (parTranche) {
-      for (const t of tranches_produits) {
-        if (t.mode !== 'redevance') {
-          loyersLogements += (t.loyers_annuels_eur ?? 0) * idxLoyers;
-        } else if (t.mode_redevance === 'transparence') {
-          quotePartTransparence += t.quote_part ?? 0;
-        } else {
-          forfaits += redevanceForfait(t);
-        }
-      }
-    } else {
-      loyersLogements = foyer ? 0 : loyers_logements_annuels_eur * idxLoyers;
-      if (foyer && !transparence) {
-        forfaits = redevanceForfait({ redevance_annuelle_eur, redevance_annee_valeur, index_redevance });
-      }
-      if (transparence) quotePartTransparence = 1;
-    }
-    // R-EXP-RLS - REDUCTION DE LOYER DE SOLIDARITE (CCH art. L. 442-2-1).
-    //
-    // Le bailleur social diminue le loyer de ses locataires beneficiaires de
-    // l'APL ; la CGLLS lui en reprend la contrepartie. Ce n'est ni une charge ni
-    // une vacance : c'est un loyer QUITTANCE EN MOINS, et il faut donc le retirer
-    // avant tout ce qui s'assoit sur les loyers - vacance, frais de gestion au
-    // pourcentage, cotisations. Le retirer plus loin, en charge, aurait donne le
-    // meme resultat net mais fausse toutes les assiettes en chemin.
-    //
-    // Le taux ne porte QUE les loyers de logements : ni les annexes louees
-    // separement, ni une redevance de foyer ne sont quittancees a un locataire
-    // beneficiaire de l'APL au sens de la RLS.
-    //
-    // Nul par defaut. La RLS est une donnee de politique publique dont le taux
-    // se revise chaque annee : l'activer d'office changerait en silence toutes
-    // les simulations existantes, et la note HER elle-meme donne son taux comme
-    // une projection. C'est la saisie qui l'appelle, tranche par tranche - le
-    // logement intermediaire et le libre n'y sont pas soumis.
-    const tauxRLS = rls_taux_par_annee[annee] ?? rls_taux;
-    const rls = loyersLogements * tauxRLS;
-    loyersLogements -= rls;
-
-    const loyersAnnexes = (parTranche ? 1 : foyer ? 0 : 1) * loyers_annexes_annuels_eur * idxLoyers;
-    const loyersDivers = (parTranche ? 1 : foyer ? 0 : 1) * loyers_divers_annuels_eur * idxLoyers;
-
-    // R-EXP-7 - REDEVANCE EN TRANSPARENCE, part par part. Le bailleur refacture
-    // ses frais : la redevance des tranches concernees doit couvrir LEUR part
-    // des charges, quote-part de surface utile a l'appui - la meme cle que
-    // partout ailleurs dans le moteur.
-    //
-    // Les cotisations assises sur les produits locatifs se refacturent
-    // elles-memes, d'ou une equation en R. En notant L ce qui est deja connu
-    // (loyers et redevances forfaitaires), Q la quote-part en transparence, C0
-    // les charges fixes et k le total des taux assis sur les produits :
-    //   R = Q x (C0 + k x (L + R) - tauxNets x v x L)
-    //   R = Q x (C0 + k x L - tauxNets x v x L) / (1 - Q x k)
-    // A Q = 1 et L = 0, on retrouve la forme fermee d'une operation entierement
-    // en transparence, R = C0 / (1 - k).
-    const connus = loyersLogements + loyersAnnexes + loyersDivers + forfaits;
-    let redevanceTransparence = 0;
-    if (quotePartTransparence > 0) {
-      const socle =
-        annuitesAnnee + tfpb + grosEntretien + rel + annuiteFP + chargesFixes +
-        (frais_gestion_pct_loyers > 0 ? 0 : fraisGestionForfait);
-      const k = frais_gestion_pct_loyers + tauxBruts + tauxNets;
-      const num =
-        quotePartTransparence * (socle + k * connus - tauxNets * taux_vacance_impayes * connus);
-      const den = 1 - quotePartTransparence * k;
-      redevanceTransparence = den > 0 ? num / den : quotePartTransparence * socle;
-    }
-    const redevance = forfaits + redevanceTransparence;
-
-    // Assiette commune aux deux modes : ce que l'operation encaisse de son
-    // occupation. C'est elle que visent la vacance et les taux de cotisation.
-    const loyersBruts = redevance + loyersLogements + loyersAnnexes + loyersDivers;
-    // En TRANSPARENCE, le bailleur ne porte ni vacance ni impaye : il refacture
-    // ses frais au gestionnaire, qui les lui doit que les places soient
-    // occupees ou non. La vacance ne mord donc QUE sur le reste, ce qui permet
-    // a une operation mixte d'en porter sur ses tranches en loyers sans en
-    // faire supporter aux tranches qui ont transfere le risque.
-    const vacanceImpayes = (loyersBruts - redevanceTransparence) * taux_vacance_impayes;
-    const loyersNets = loyersBruts - vacanceImpayes;
-    // La quote-part de subventions virée au résultat s'eteint au terme de la
-    // duree d'etalement ; duree 0 = pas d'extinction.
-    const qpSubventions =
-      duree_qp_subventions_ans > 0 && k >= duree_qp_subventions_ans
-        ? 0
-        : qp_subventions_annuelle_eur;
-    // Les produits financiers portent sur la tresorerie accumulee de l'operation.
-    const produitsFinanciers = Math.max(0, cumulAutofinancement) * taux_produits_financiers;
-    const produits = loyersNets + qpSubventions + produitsFinanciers;
-
-    // --- Charges ---
-    // Les assiettes locatives sont maintenant connues : on peut evaluer les
-    // charges qui en dependent.
-    const fraisGestion =
-      frais_gestion_pct_loyers > 0 ? loyersBruts * frais_gestion_pct_loyers : fraisGestionForfait;
-
-    // Charges diverses pilotees par la donnee (Q-16) : TEOM, assurance PNO,
-    // CGLLS, ANCOLS. Le moteur ne connait aucun de ces postes par son nom, il
-    // n'applique qu'une assiette et une trajectoire.
+function restituerCompte(c, tranche) {
+  const T = { tranche };
+  const comptable = c.valeur('comptable_disponible', T);
+  const impose = c.valeur('is_actif', T);
+  const charges = c.valeursDimension('charge');
+  const lignes = c.valeursDimension('exercice').map((exercice) => {
+    const I = { tranche, exercice };
+    const v = (/** @type {string} */ id) => c.valeur(id, I);
+    const eur = (/** @type {string} */ id) => arrondiEuro(v(id));
     /** @type {Array<{code: string, libelle: string, montant_eur: number}>} */
-    const detailChargesDiverses = [];
-    let chargesDiverses = 0;
-    for (const c of charges_diverses) {
-      if (!applicable(c)) continue;
-      const assiette = {
-        ...assietteFixe,
-        produits_locatifs_bruts: loyersBruts,
-        produits_locatifs_nets: loyersNets,
-      }[c.assiette];
-      const montant = montantAnnuel(c) ?? c.valeur * assiette * idx(c.index);
-      detailChargesDiverses.push({ code: c.code, libelle: c.libelle, montant_eur: arrondiEuro(montant) });
-      chargesDiverses += montant;
+    const detail = [];
+    for (const charge of charges) {
+      if (!c.valeur('charge_applicable', { charge, exercice })) continue;
+      detail.push({
+        code: c.valeur('code_charge', { charge }),
+        libelle: c.valeur('libelle_charge', { charge }),
+        montant_eur: arrondiEuro(c.valeur('montant_charge', { tranche, charge, exercice })),
+      });
     }
-
-    const interets = interetsParAnnee[annee] ?? 0;
-    const dotation = dotationAnnuelle(annee);
-
-    // R-EXP-4 - Impot sur les societes. Sa base est un resultat FISCAL, plus
-    // etroit que le resultat comptable : LEON n'y deduit que six lignes
-    // (SimTOTAL_IS colonnes B a G), sans les autres depenses, l'assurance ni les
-    // frais de structure. Confondre les deux bases donnerait un impot faux, et
-    // c'est pourquoi la liste des charges deductibles vient du referentiel.
-    const is = isActif
-      ? (() => {
-          const deductibles = {
-            frais_gestion: fraisGestion,
-            tfpb,
-            // Seule la PART FIXE du gros entretien entre dans la base fiscale,
-            // et non la provision entiere : c'est un montant forfaitaire propre
-            // a l'IS, avec son propre differe. Le distinguer evite de deduire
-            // deux fois une provision qui n'est pas deductible comme telle.
-            part_fixe_gros_entretien: k < is_part_fixe_ge_differe_ans ? 0 : is_part_fixe_ge_eur,
-            gros_entretien: grosEntretien,
-            interets,
-            dotation_amortissements: dotation,
-            rel,
-            charges_diverses: chargesDiverses,
-            annuites: annuitesAnnee,
-          };
-          const base =
-            loyersNets - is_charges_deductibles.reduce((s, c) => s + (deductibles[c] ?? 0), 0);
-          // Le differe court depuis la mise en location. Une base negative ne
-          // cree pas de credit reportable (ParaGEN!GD30 = NON) : l'impot est nul
-          // cette annee-la, sans report sur les exercices suivants.
-          const impot =
-            k < is_duree_differe_ans || base <= 0
-              ? 0
-              : Math.max(0, base * is_taux - (creditIsParAnnee[annee] ?? 0));
-          return { base, impot };
-        })()
-      : null;
-
-    const charges =
-      annuitesAnnee +
-      fraisGestion +
-      tfpb +
-      grosEntretien +
-      rel +
-      annuiteFP +
-      chargesDiverses +
-      (is?.impot ?? 0);
-
-    // --- Soldes ---
-    // DEUX soldes, et non deux noms pour le meme (R-EXP-2). LEON les tient
-    // separement, et ils ne disent pas la meme chose :
-    //  - l'AUTOFINANCEMENT deduit les ANNUITES : c'est de la tresorerie, ce que
-    //    l'operation degage reellement une fois ses echeances payees ;
-    //  - le RESULTAT COMPTABLE deduit les INTERETS et la DOTATION aux
-    //    amortissements a la place : le remboursement du capital n'est pas une
-    //    charge, l'usure du bien en est une.
-    // Une operation peut afficher un autofinancement positif et un resultat
-    // negatif pendant vingt ans - c'est meme le cas courant en logement social.
-    const autofinancement = produits - charges;
-    cumulAutofinancement += autofinancement;
-
-    // Le resultat comptable n'a de sens que si la dotation est connue : sans
-    // elle, il ne serait qu'un autofinancement augmente du capital rembourse,
-    // ce qui ne s'appelle pas un resultat. On le laisse alors indefini plutot
-    // que de publier un nombre qui ne veut rien dire.
-    const chargesComptables = comptableDisponible
-      ? charges - annuitesAnnee + interets + dotation
-      : null;
-    const resultatComptable = comptableDisponible ? produits - chargesComptables : null;
-    if (comptableDisponible) cumulResultatComptable += resultatComptable;
-
-    lignes.push({
-      annee,
-      // Taux de marge : part du resultat dans les produits de l'annee. Une annee
-      // sans produit n'a pas de marge definie (null, et non 0 : la distinction
-      // compte pour les moyennes).
-      taux_marge: produits > 0 ? autofinancement / produits : null,
-      redevance_eur: arrondiEuro(redevance),
-      // Prix de journee : la redevance ramenee a la place et au jour, indicateur
-      // de reference des foyers (annexe RA44, Presentation CA colonne N).
-      prix_journee_eur: nb_lits > 0 ? redevance / (nb_lits * JOURS_PAR_AN) : null,
-      annuite_fonds_propres_eur: arrondiEuro(annuiteFP),
-      loyers_logements_eur: arrondiEuro(loyersLogements),
-      // R-EXP-RLS : le loyer quittance en moins, publie a part. Il est DEJA
-      // retire de `loyers_logements_eur` - le rajouter aux charges le compterait
-      // deux fois ; la ligne existe pour que l'ecran puisse le montrer.
-      rls_eur: arrondiEuro(rls),
-      loyers_annexes_eur: arrondiEuro(loyersAnnexes),
-      loyers_divers_eur: arrondiEuro(loyersDivers),
-      vacance_impayes_eur: arrondiEuro(vacanceImpayes),
-      loyers_nets_eur: arrondiEuro(loyersNets),
-      qp_subventions_eur: arrondiEuro(qpSubventions),
-      produits_financiers_eur: arrondiEuro(produitsFinanciers),
-      total_produits_eur: arrondiEuro(produits),
-      annuites_eur: arrondiEuro(annuitesAnnee),
-      frais_gestion_eur: arrondiEuro(fraisGestion),
-      tfpb_eur: arrondiEuro(tfpb),
-      gros_entretien_eur: arrondiEuro(grosEntretien),
-      rel_eur: arrondiEuro(rel),
-      charges_diverses_eur: arrondiEuro(chargesDiverses),
-      detail_charges_diverses: detailChargesDiverses,
-      total_charges_eur: arrondiEuro(charges),
-      // Vue TRESORERIE : les annuites sont la charge.
-      autofinancement_eur: arrondiEuro(autofinancement),
-      cumul_autofinancement_eur: arrondiEuro(cumulAutofinancement),
-      // Vue FISCALE : base de l'IS et impot du au titre de l'exercice.
-      base_is_eur: is ? arrondiEuro(is.base) : null,
-      impot_societes_eur: is ? arrondiEuro(is.impot) : null,
-      // Vue COMPTABLE : l'annuite se decompose, et l'amortissement s'ajoute.
-      interets_eur: arrondiEuro(interets),
-      capital_rembourse_eur: arrondiEuro(annuitesAnnee - interets),
-      dotation_amortissements_eur: comptableDisponible ? arrondiEuro(dotation) : null,
-      total_charges_comptables_eur: comptableDisponible ? arrondiEuro(chargesComptables) : null,
-      resultat_comptable_eur: comptableDisponible ? arrondiEuro(resultatComptable) : null,
-      cumul_resultat_comptable_eur: comptableDisponible ? arrondiEuro(cumulResultatComptable) : null,
-    });
-  }
-
-  const somme = (cle) => arrondiEuro(lignes.reduce((s, l) => s + l[cle], 0));
-
+    return {
+      annee: exercice,
+      taux_marge: v('taux_marge'),
+      redevance_eur: eur('redevance'),
+      prix_journee_eur: v('prix_journee'),
+      annuite_fonds_propres_eur: eur('annuite_fonds_propres'),
+      loyers_logements_eur: eur('loyers_logements'),
+      // R-EXP-RLS : DEJA retiree des loyers de logements, publiee a part pour
+      // que l'ecran puisse la montrer.
+      rls_eur: eur('rls'),
+      loyers_annexes_eur: eur('loyers_annexes'),
+      loyers_divers_eur: eur('loyers_divers'),
+      vacance_impayes_eur: eur('vacance_impayes'),
+      loyers_nets_eur: eur('loyers_nets'),
+      qp_subventions_eur: eur('qp_subventions'),
+      produits_financiers_eur: eur('produits_financiers'),
+      total_produits_eur: eur('total_produits'),
+      annuites_eur: eur('annuites'),
+      frais_gestion_eur: eur('frais_gestion'),
+      tfpb_eur: eur('tfpb'),
+      gros_entretien_eur: eur('gros_entretien'),
+      rel_eur: eur('rel'),
+      charges_diverses_eur: eur('charges_diverses'),
+      detail_charges_diverses: detail,
+      total_charges_eur: eur('total_charges'),
+      autofinancement_eur: eur('autofinancement'),
+      cumul_autofinancement_eur: eur('cumul_autofinancement'),
+      base_is_eur: impose ? eur('base_is') : null,
+      impot_societes_eur: impose ? eur('impot_societes') : null,
+      interets_eur: eur('interets'),
+      capital_rembourse_eur: eur('capital_rembourse'),
+      dotation_amortissements_eur: comptable ? eur('dotation_amortissements') : null,
+      total_charges_comptables_eur: euroOuNul(v('total_charges_comptables')),
+      resultat_comptable_eur: euroOuNul(v('resultat_comptable')),
+      cumul_resultat_comptable_eur: euroOuNul(v('cumul_resultat_comptable')),
+    };
+  });
+  const t = (/** @type {string} */ id) => c.valeur(id, T);
   return {
     lignes,
-    mode,
+    mode: c.valeur('mode_exploitation'),
     totaux: {
-      produits_eur: somme('total_produits_eur'),
-      charges_eur: somme('total_charges_eur'),
-      autofinancement_eur: somme('autofinancement_eur'),
-      resultat_comptable_eur: lignes[0]?.resultat_comptable_eur === null
-        ? null
-        : somme('resultat_comptable_eur'),
-      interets_eur: somme('interets_eur'),
-      dotation_amortissements_eur: lignes[0]?.dotation_amortissements_eur === null
-        ? null
-        : somme('dotation_amortissements_eur'),
-      annuites_eur: somme('annuites_eur'),
-      charges_diverses_eur: somme('charges_diverses_eur'),
-      // R-EXP-RLS : deja retire des produits, totalise pour memoire.
-      rls_eur: somme('rls_eur'),
-      impot_societes_eur: lignes[0]?.impot_societes_eur === null ? null : somme('impot_societes_eur'),
-      premiere_annee_positive:
-        lignes.find((l) => l.autofinancement_eur > 0)?.annee ?? null,
-      annee_retour_cumul_positif: lignes.find((l) => l.cumul_autofinancement_eur > 0)?.annee ?? null,
+      produits_eur: t('produits_horizon'),
+      charges_eur: t('charges_horizon'),
+      autofinancement_eur: t('autofinancement_horizon'),
+      resultat_comptable_eur: t('resultat_comptable_horizon'),
+      interets_eur: t('interets_horizon'),
+      dotation_amortissements_eur: t('dotation_horizon'),
+      annuites_eur: t('annuites_horizon'),
+      charges_diverses_eur: t('charges_diverses_horizon'),
+      rls_eur: t('rls_horizon'),
+      impot_societes_eur: t('impot_societes_horizon'),
+      premiere_annee_positive: t('premiere_annee_positive'),
+      annee_retour_cumul_positif: t('annee_retour_cumul_positif'),
     },
   };
 }
 
+/** Valeur d'une entree, ou son defaut si elle est absente - et seulement absente. */
+const ou = (/** @type {any} */ v, /** @type {any} */ defaut) => (v === undefined ? defaut : v);
+
 /**
- * Q-16 - Resout la saisie des charges diverses contre le catalogue du referentiel.
+ * Serie `[{annee, ...}]` ramenee a une table par annee : les montants d'une
+ * meme annee s'additionnent, ou le dernier l'emporte.
+ * @param {Array<any>} liste
+ * @param {string} cle
+ * @param {boolean} sommer
+ */
+function parAnnee(liste, cle, sommer) {
+  /** @type {Record<number, any>} */
+  const table = {};
+  for (const x of liste) table[x.annee] = sommer ? (table[x.annee] ?? 0) + x[cle] : x[cle];
+  return table;
+}
+
+/**
+ * R-EXP - Compte d'exploitation d'une operation decrite par ses seules valeurs :
+ * les formules du domaine « exploitation », sur un classeur ou chaque entree du
+ * compte est posee telle quelle, pour une tranche unique.
+ *
+ * @param {Object} e
+ * @param {number} e.annee_mise_en_location
+ * @param {number} e.duree_ans                        horizon de simulation
+ * @param {'loyers'|'redevance'} [e.mode]             'redevance' pour les foyers (Q-27)
+ * @param {Array<any>} [e.tranches_produits]          R-EXP-7 : regime de produits par tranche
+ * @param {ChargeDiverse[]} [e.charges_diverses]      deja resolues contre le catalogue
+ * @param {Array<{annee: number, annuite_eur: number}>} [e.annuites]  toutes tables d'amortissement confondues
+ * @param {Object} [e.trajectoires]                   taux annuels par poste
+ * @returns {{lignes: Array<any>, mode: string, totaux: any}}
+ */
+function compteExploitation(/** @type {any} */ e) {
+  const debut = e.annee_mise_en_location;
+  const exercices = [];
+  for (let k = 0; k < e.duree_ans; k++) exercices.push(debut + k);
+  const E = 'E';
+  const T = { tranche: E };
+  const c = nouveauClasseur({}).fixerDimension('tranche', [E]).fixerDimension('exercice', exercices);
+  const poser = (/** @type {string} */ id, /** @type {any} */ v, indices = {}) => c.fixer(id, indices, v);
+
+  // L'operation : regime, parametres, trajectoires.
+  poser('annee_mise_en_location', debut);
+  poser('mode_exploitation', ou(e.mode, 'loyers'));
+  poser('mode_redevance', ou(e.mode_redevance, 'forfaitaire'));
+  poser('redevance_annuelle', ou(e.redevance_annuelle_eur, 0));
+  poser('redevance_annee_valeur', e.redevance_annee_valeur);
+  poser('index_redevance', ou(e.index_redevance, 'loyers_irl'));
+  poser('trajectoires_exploitation', ou(e.trajectoires, {}));
+  poser('annuite_fp_forfait', ou(e.annuite_fonds_propres_eur, 0));
+  poser('duree_annuite_fp', ou(e.duree_annuite_fonds_propres_ans, 0));
+  poser('duree_qp_subventions', ou(e.duree_qp_subventions_ans, 0));
+  poser('frais_gestion_pct_loyers', ou(e.frais_gestion_pct_loyers, 0));
+  poser('frais_gestion_pct_pr', ou(e.frais_gestion_pct_prix_revient, 0));
+  poser('gros_entretien_m2', ou(e.gros_entretien_eur_m2, 0));
+  poser('gros_entretien_par_annee_saisi', ou(e.gros_entretien_par_annee, []));
+  poser('pge_taux', ou(e.pge_taux, 0));
+  poser('pge_taux_par_annee_saisis', ou(e.pge_taux_par_annee, []));
+  poser('taux_vacance', ou(e.taux_vacance_impayes, 0));
+  poser('taux_produits_financiers', ou(e.taux_produits_financiers, 0));
+  poser('tfpb_par_logement', ou(e.tfpb_par_logement_eur, 0));
+  poser('annee_debut_tfpb_exploitation', e.annee_debut_tfpb);
+  poser('rls_taux_par_annee_saisis', ou(e.rls_taux_par_annee, []));
+  poser('is_differe', ou(e.is_duree_differe_ans, 0));
+  poser('is_charges_deductibles', ou(e.is_charges_deductibles, []));
+  poser('is_part_fixe_differe', ou(e.is_part_fixe_ge_differe_ans, 0));
+
+  // Les charges diverses, deja resolues contre le catalogue.
+  const charges = ou(e.charges_diverses, []);
+  c.fixerDimension('charge', charges.map((/** @type {any} */ _, /** @type {number} */ i) => i));
+  charges.forEach((/** @type {any} */ ch, /** @type {number} */ i) => {
+    const C = { charge: i };
+    poser('code_charge', ch.code, C);
+    poser('libelle_charge', ch.libelle, C);
+    poser('assiette_charge', ch.assiette, C);
+    poser('valeur_charge', ch.valeur, C);
+    poser('index_charge', ch.index, C);
+    poser('annee_debut_charge', ch.annee_debut, C);
+    poser('annee_fin_charge', ch.annee_fin, C);
+    poser('montants_annuels_charge', ch.montants_par_annee, C);
+  });
+
+  // La tranche unique : ses effectifs, ses montants, ses taux.
+  poser('nb_logements_tranche', e.nb_logements, T);
+  poser('shab_tranche', ou(e.shab_m2, 0), T);
+  poser('loyer_annuel_tranche', e.loyers_logements_annuels_eur, T);
+  poser('total_ttc_module_tranche', ou(e.prix_revient_ttc_eur, 0), T);
+  poser('nb_lits_tranche', ou(e.nb_lits, 0), T);
+  poser('qp_subventions_tranche', ou(e.qp_subventions_annuelle_eur, 0), T);
+  poser('loyers_annexes_tranche', ou(e.loyers_annexes_annuels_eur, 0), T);
+  poser('loyers_divers_tranche', ou(e.loyers_divers_annuels_eur, 0), T);
+  poser('frais_gestion_logement_tranche', ou(e.frais_gestion_annuels_eur, 0), T);
+  poser('rel_logement_tranche', ou(e.rel_annuel_eur, 0), T);
+  poser('pge_base_tranche', ou(e.pge_base_eur, 0), T);
+  poser('taux_rls_tranche', ou(e.rls_taux, 0), T);
+  poser('is_taux_tranche', ou(e.is_taux, 0), T);
+  poser('is_part_fixe_tranche', ou(e.is_part_fixe_ge_eur, 0), T);
+  const tfpb = ou(e.tfpb_par_annee, []);
+  poser('tfpb_en_serie', tfpb.length > 0, T);
+  const dotations = ou(e.dotation_amortissements_par_annee, []);
+  const dotationFixe = ou(e.dotation_amortissements_eur, 0);
+  poser('comptable_disponible', dotations.length > 0 || dotationFixe > 0, T);
+
+  // R-EXP-7 : les regimes de produits, chacun une tranche de l'operation.
+  const regimes = ou(e.tranches_produits, []);
+  c.fixerDimension('regime', regimes.map((/** @type {any} */ _, /** @type {number} */ i) => i), T);
+  regimes.forEach((/** @type {any} */ r, /** @type {number} */ i) => {
+    const R = { tranche: E, regime: i };
+    poser('mode_regime', r.mode, R);
+    poser('mode_redevance_regime', r.mode_redevance, R);
+    poser('redevance_regime', r.redevance_annuelle_eur ?? 0, R);
+    poser('annee_valeur_regime', r.redevance_annee_valeur, R);
+    poser('index_regime', r.index_redevance ?? ou(e.index_redevance, 'loyers_irl'), R);
+    poser('loyers_regime', r.loyers_annuels_eur ?? 0, R);
+    poser('quote_part_regime', r.quote_part ?? 0, R);
+  });
+
+  // Les series annuelles, ramenees a l'exercice.
+  const annuites = parAnnee(ou(e.annuites, []), 'annuite_eur', true);
+  const interets = parAnnee(ou(e.interets_par_annee, []), 'montant_eur', false);
+  const tfpbParAnnee = parAnnee(tfpb, 'montant_eur', true);
+  const fondsPropres = parAnnee(ou(e.annuites_fonds_propres, []), 'montant_eur', true);
+  const credits = parAnnee(ou(e.is_credits_impot_par_annee, []), 'montant_eur', true);
+  const dotationParAnnee = parAnnee(dotations, 'montant_eur', false);
+  for (const exercice of exercices) {
+    const I = { tranche: E, exercice };
+    poser('annuites', annuites[exercice] ?? 0, I);
+    poser('interets', interets[exercice] ?? 0, I);
+    poser('tfpb_serie', tfpbParAnnee[exercice] ?? 0, I);
+    poser('annuite_fp_serie', fondsPropres[exercice] ?? 0, I);
+    poser('credit_is', credits[exercice] ?? 0, I);
+    poser('dotation_amortissements', dotations.length ? (dotationParAnnee[exercice] ?? 0) : dotationFixe, I);
+  }
+  return restituerCompte(c, E);
+}
+
+/**
+ * Charges diverses actives d'un classeur, chacune decrite en entier : la
+ * saisie, completee par le catalogue du referentiel. Une charge absente du
+ * catalogue et incompletement decrite arrete le calcul.
+ * @param {import('./formules/classeur.js').Classeur} c
+ * @returns {ChargeDiverse[]}
+ */
+function restituerChargesDiverses(c) {
+  return c.valeursDimension('charge').map((charge) => {
+    const C = { charge };
+    c.valeur('charge_decrite', C);
+    return {
+      code: c.valeur('code_charge', C),
+      libelle: c.valeur('libelle_charge', C),
+      assiette: c.valeur('assiette_charge', C),
+      valeur: c.valeur('valeur_charge', C),
+      index: c.valeur('index_charge', C),
+      annee_debut: c.valeur('annee_debut_charge', C),
+      annee_fin: c.valeur('annee_fin_charge', C),
+    };
+  });
+}
+
+/**
+ * Q-16 - Resout la saisie des charges diverses contre le catalogue du
+ * referentiel. Formules `*_charge` du domaine « exploitation ».
  *
  * La saisie ne porte qu'un code et, au besoin, une surcharge : assiette, valeur
  * et trajectoire restent la propriete du referentiel. Un poste absent du
  * catalogue est accepte s'il se decrit entierement lui-meme, et refuse sinon -
  * un code mal orthographie ne doit pas s'evaporer en silence.
  *
- * @param {Array<{code: string, actif?: boolean, libelle?: string, assiette?: string,
- *                valeur?: number, index?: string|null, annee_debut?: number, annee_fin?: number}>} saisie
- * @param {{charges_exploitation?: {postes?: Array<any>}}} baremes
+ * @param {Array<any>} [saisie]
+ * @param {any} [baremes]
  * @returns {ChargeDiverse[]}
  */
+function resoudreChargesExploitation(saisie = [], baremes = {}) {
+  return restituerChargesDiverses(
+    nouveauClasseur({ entrees: { exploitation: { charges_diverses: saisie } }, baremes }),
+  );
+}
+
+/**
+ * R-EXP-5 - Amortissement PAR COMPOSANTS. Formule : `dotation_composants`.
+ *
+ * Un immeuble ne s'use pas d'un seul tenant : la structure court sur cinquante
+ * ans quand les menuiseries en font quinze. Chaque composant recoit une
+ * quote-part de la base amortissable et sa propre duree, et sa dotation cesse a
+ * sa fin de vie, sauf a le renouveler (`continuer`).
+ *
+ * @param {number} base_amortissable_eur   prix de revient hors valeur du terrain
+ * @param {Array<{libelle?: string, quote_part: number, duree_ans: number}>} composants
+ * @param {number} annee_debut
+ * @param {number} duree_ans               profondeur de la serie a produire
+ * @param {{continuer?: boolean}} [options]
+ * @returns {Array<{annee: number, montant_eur: number}>}
+ */
+function dotationParComposants(base_amortissable_eur, composants, annee_debut, duree_ans, options = {}) {
+  const exercices = Array.from({ length: duree_ans }, (_, k) => annee_debut + k);
+  const c = nouveauClasseur({})
+    .fixerDimension('exercice', exercices)
+    .fixer('annee_mise_en_location', {}, annee_debut)
+    .fixer('base_amortissable', {}, base_amortissable_eur)
+    .fixer('grille_composants', {}, composants)
+    .fixer('continuer_bareme', {}, options.continuer === true);
+  return exercices.map((annee) => ({ annee, montant_eur: c.valeur('dotation_composants', { exercice: annee }) }));
+}
+
 /**
  * R-EXP-8 - Somme de plusieurs comptes d exploitation, annee par annee.
  *
@@ -13375,34 +14671,6 @@ function sommerComptes(comptes) {
   };
 }
 
-function resoudreChargesExploitation(saisie = [], baremes = {}) {
-  const catalogue = new Map(
-    (baremes.charges_exploitation?.postes ?? []).map((p) => [p.code, p]),
-  );
-  return saisie
-    .filter((c) => c.actif !== false)
-    .map((c) => {
-      const ref = catalogue.get(c.code);
-      const assiette = c.assiette ?? ref?.assiette;
-      const valeur = c.valeur ?? ref?.valeur;
-      if (assiette === undefined || valeur === undefined) {
-        throw new Error(
-          `Charge d'exploitation « ${c.code} » absente du referentiel et incompletement decrite ` +
-            '(assiette et valeur requises).',
-        );
-      }
-      return {
-        code: c.code,
-        libelle: c.libelle ?? ref?.libelle ?? c.code,
-        assiette: /** @type {any} */ (assiette),
-        valeur,
-        index: c.index !== undefined ? c.index : (ref?.index ?? null),
-        annee_debut: c.annee_debut,
-        annee_fin: c.annee_fin,
-      };
-    });
-}
-
 /**
  * Annee de reconstitution des fonds propres : premiere annee ou le cumul
  * d'autofinancement couvre les fonds propres investis.
@@ -13430,47 +14698,6 @@ function anneeReconstitutionFondsPropres(lignes, fonds_propres_eur) {
  * @param {Array<Object>} lignes
  * @returns {Object}
  */
-/**
- * R-EXP-5 - Amortissement PAR COMPOSANTS.
- *
- * Un immeuble ne s'use pas d'un seul tenant : la structure court sur cinquante
- * ans quand les menuiseries en font quinze. Chaque composant recoit donc une
- * quote-part de la base amortissable et sa propre duree, et sa dotation cesse
- * a sa fin de vie. La dotation totale n'est pas constante : elle DECROIT par
- * paliers, a mesure que les composants courts s'eteignent - c'est la difference
- * de fond avec un etalement lineaire unique, et elle se voit sur la base de
- * l'impot des la quinzieme annee.
- *
- * `continuer_amortissement` a vrai remet le composant a neuf pour une nouvelle
- * duree au lieu de l'eteindre (case correspondante de l'ecran LEON).
- *
- * @param {number} base_amortissable_eur   prix de revient hors valeur du terrain
- * @param {Array<{libelle?: string, quote_part: number, duree_ans: number}>} composants
- * @param {number} annee_debut
- * @param {number} duree_ans               profondeur de la serie a produire
- * @param {{continuer?: boolean}} [options]
- * @returns {Array<{annee: number, montant_eur: number}>}
- */
-function dotationParComposants(
-  base_amortissable_eur,
-  composants,
-  annee_debut,
-  duree_ans,
-  options = {},
-) {
-  const continuer = options.continuer === true;
-  return Array.from({ length: duree_ans }, (_, k) => {
-    let montant = 0;
-    for (const c of composants) {
-      if (!(c.duree_ans > 0) || !(c.quote_part > 0)) continue;
-      // Hors renouvellement, le composant ne dote plus une fois sa duree ecoulee.
-      if (!continuer && k >= c.duree_ans) continue;
-      montant += (base_amortissable_eur * c.quote_part) / c.duree_ans;
-    }
-    return { annee: annee_debut + k, montant_eur: arrondiEuro(montant) };
-  });
-}
-
 function indicateursExploitation(lignes, contexte = {}) {
   if (!lignes.length) return { exercices_deficitaires: 0 };
 
@@ -13596,7 +14823,6 @@ function jalonsExploitation(lignes, evenements = []) {
 
 
 
-
 /** Version du moteur, reportee dans les resultats pour la tracabilite. */
 const VERSION_MOTEUR = '0.4.0';
 
@@ -13635,10 +14861,10 @@ function calculer(entrees, referentiels) {
   const alertes = [];
 
   const { identite = {}, dates = {}, lots = [], options = {} } = entrees;
-  // LE CLASSEUR DE L'OPERATION. Les grandeurs deja ecrites en formules - le
-  // calendrier, les surfaces, les loyers - s'y calculent et s'y lisent ; le
-  // reste du moteur les consomme comme avant, en attendant d'y passer a son
-  // tour. Chaque cellule n'y est calculee qu'une fois.
+  // LE CLASSEUR DE L'OPERATION. Les grandeurs ecrites en formules - du
+  // calendrier au compte d'exploitation - s'y calculent et s'y lisent ; ce
+  // fichier ne fait que les restituer. Chaque cellule n'y est calculee qu'une
+  // fois.
   const classeur = nouveauClasseur({ entrees, baremes, trajectoires });
   /**
    * @param {string} id
@@ -13803,22 +15029,13 @@ function calculer(entrees, referentiels) {
   const tauxApport = lire('taux_apport_reference');
   /** @type {Record<string, any>} */
   const fondsPropresParTranche = {};
-  /** Charge de fonds propres annee par annee : chaque tranche a SA duree. */
-  /** @type {Array<{annee: number, montant_eur: number, produit: string}>} */
-  const annuitesFP = [];
+  // La charge annee par annee de ces fonds propres est une ligne du compte
+  // d'exploitation de chaque tranche (`annuite_fp_serie`).
   for (const c of codesPresents) {
     const T = { tranche: c };
     const taux = lire('taux_remuneration_fp', T);
     const duree = lire('duree_reconstitution_fp', T);
     const annuite = lire('annuite_fp_tranche', T);
-    if (annuite > 0) {
-      const derniere = lire('duree_charge_fp', T);
-      for (let k = 0; k < derniere; k++) {
-        // La tranche est PORTEE par la ligne : le compte d une tranche a besoin
-        // de savoir laquelle de ces annuites est la sienne.
-        annuitesFP.push({ annee: anneeMEL + k, montant_eur: annuite, produit: c });
-      }
-    }
     const tauxTranche = fpParProduit ? lire('taux_apport_tranche', T) : null;
     fondsPropresParTranche[c] = {
       montant_eur: lire('fonds_propres_tranche_arrondi', T),
@@ -14126,399 +15343,52 @@ function calculer(entrees, referentiels) {
   // 25 ans en logement social (CGI art. 1384 A), 20 ans en intermediaire
   // (art. 1384-0 A), rien en libre. Une duree posee sur la simulation prime,
   // pour les operations qui ne remplissent pas les conditions.
-  // Domaine « fiscalite » : la duree d'exoneration de chaque tranche, et la
-  // taxe fonciere qu'elle doit chaque annee a partir de la fin d'exoneration.
-  /** @type {Array<{annee: number, montant_eur: number, produit: string}>} */
-  const tfpbParAnnee = [];
-  const horizonTFPB = lire('duree_simulation');
-  for (const c of codesPresents) {
-    const T = { tranche: c };
-    const debut = lire('annee_debut_tfpb_tranche', T);
-    const montant = lire('tfpb_base_tranche', T);
-    for (let k = 0; k < horizonTFPB; k++) {
-      const annee = anneeMEL + k;
-      if (annee >= debut) tfpbParAnnee.push({ annee, montant_eur: montant, produit: c });
-    }
-  }
+  // Domaine « fiscalite » : la duree d'exoneration de chaque tranche. La taxe
+  // due chaque annee a partir de la fin d'exoneration est une ligne du compte
+  // d'exploitation de la tranche (`tfpb_serie`).
   const tfpb = restituerTFPB(classeur);
   // R-FISC-2 - La taxe d'amenagement, ventilee par tranche.
   const ta = restituerTaxeAmenagement(classeur);
 
-  // --- 8. Exploitation (R-EXP) ---
+  // --- 8. Exploitation (R-EXP, domaine « exploitation ») ---
   const exp = entrees.exploitation ?? {};
-
-  // R-EXP-PGE - Assiette de la provision pour gros entretien (`SimPLUS!BK31`).
-  // En VEFA, c'est le prix de revient TTC tel quel. Hors VEFA, LEON en retranche
-  // ce qu'une provision pour gros entretien n'a pas a couvrir : une part du
-  // foncier, les frais d'acte et les frais financiers. Les postes retranches et
-  // leur quotite viennent du referentiel, jamais du code.
-  const cfgPGE = baremes.provision_gros_entretien ?? {};
-  const assiettePGE = (() => {
-    const total = bilan.total_ttc_module_eur;
-    const vefa = /vefa/i.test(String(identite.type_operation ?? ''));
-    if (vefa) return total;
-    const parId = {};
-    for (const p of bilan.postes ?? []) {
-      if (p.id) parId[p.id] = (parId[p.id] ?? 0) + (p.ttc_lasm_eur ?? p.ttc_eur ?? 0);
-    }
-    const deductions = (cfgPGE.assiette?.hors_vefa_deductions ?? []).reduce(
-      (s, d) => s + (parId[d.poste] ?? 0) * (d.quotite ?? 1),
-      0,
-    );
-    return arrondiEuro(Math.max(0, total - deductions));
-  })();
 
   // Le plafond de PGE est un CONTROLE, pas un ecretement : l'annexe le porte a
   // cote du taux (« PLAFOND PGERC »), et le depasser est une decision de
   // montage. Le moteur le dit et laisse passer, comme pour le plancher du PLS.
-  const tauxPGERetenu = exp.pge_taux ?? cfgPGE.taux_defaut ?? 0;
-  if (cfgPGE.taux_plafond > 0 && tauxPGERetenu > cfgPGE.taux_plafond) {
+  const tauxPGERetenu = lire('pge_taux');
+  const plafondPGE = lire('pge_taux_plafond');
+  if (plafondPGE > 0 && tauxPGERetenu > plafondPGE) {
     alertes.push(
       `Provision pour gros entretien a ${(tauxPGERetenu * 100).toFixed(2)} % du prix de revient, ` +
-        `au-dela du plafond de ${(cfgPGE.taux_plafond * 100).toFixed(2)} %.`,
+        `au-dela du plafond de ${(plafondPGE * 100).toFixed(2)} %.`,
     );
   }
-  const annuitesAplaties = amortissements.flatMap((a) =>
-    a.tableau.map((l) => ({ annee: l.annee, annuite_eur: l.annuite_eur })),
-  );
-  // R-EXP-2 - Les INTERETS, pour la vue comptable. Ils sont deja dans les
-  // tableaux d'amortissement : le compte de resultat ne fait que les y lire,
-  // plutot que de les recalculer et risquer d'en donner une seconde version.
-  const interetsAplatis = amortissements.flatMap((a) =>
-    a.tableau.map((l) => ({ annee: l.annee, montant_eur: l.interets_eur })),
-  );
-
-  // R-EXP-2 et R-EXP-5 - Dotation aux amortissements comptables. La base est le
-  // prix de revient diminue de la valeur comptable du terrain, qui ne s'amortit
-  // pas. Sur cette base, deux etalements possibles :
-  //  - PAR COMPOSANTS (le cas de LEON) : chaque composant a sa quote-part et sa
-  //    duree, la dotation decroit par paliers a mesure qu'ils s'eteignent ;
-  //  - LINEAIRE sur une duree unique, repli quand aucune grille n'est retenue.
-  const cfgAmort = baremes.amortissement_comptable ?? {};
-  const baseAmortissable = (() => {
-    const quotiteTerrain =
-      exp.quotite_terrain_non_amortissable ??
-      quotiteFoncier(identite.zone_ABC, baremes, 'valeur_comptable_terrain_vefa');
-    const terrain = (bilan.chapitres.charge_fonciere?.ttc_lasm_eur ?? 0) * quotiteTerrain;
-    return Math.max(0, bilan.total_ttc_module_eur - terrain);
-  })();
-
-  // Une operation collective et une operation individuelle ne s'amortissent pas
-  // de la meme facon : la maison est presque tout structure, l'immeuble porte
-  // des equipements a duree courte. La grille suit donc la nature du programme.
-  const grilleComposants =
-    exp.composants_amortissement ??
-    cfgAmort.composants?.[exp.nature_batie ?? identite.nature_batie ?? 'collectif'];
-  const dureeSerie = dates.duree_simulation_ans ?? 50;
-  const dotationSerie =
-    exp.dotation_amortissements_par_annee?.length
-      ? exp.dotation_amortissements_par_annee
-      : exp.dotation_amortissements_eur === undefined && grilleComposants?.length
-        ? dotationParComposants(baseAmortissable, grilleComposants, anneeMEL, dureeSerie, {
-            continuer: cfgAmort.continuer_amortissement === true,
-          })
-        : [];
-
-  const dotationAnnuelle = (() => {
-    if (exp.dotation_amortissements_eur !== undefined) return exp.dotation_amortissements_eur;
-    const duree = exp.duree_amortissement_ans ?? cfgAmort.duree_defaut_ans;
-    if (!(duree > 0)) return 0;
-    return arrondiEuro(baseAmortissable / duree);
-  })();
   const nbLogements = lire('nb_logements_total');
   const shabTotal = lire('shab_totale');
 
-  // Q-16 : les postes de charge diverses viennent du referentiel, la saisie ne
-  // fait que les activer. Q-27 : le mode foyer remplace les loyers par une
-  // redevance forfaitaire indexee.
-  const chargesDiverses = resoudreChargesExploitation(exp.charges_diverses, baremes);
-
-  // R-EXP-7 - Regime de produits par tranche. Une tranche est soit en LOYERS,
-  // soit en REDEVANCE ; la redevance est forfaitaire (montant negocie) ou en
-  // transparence (refacturation des charges). La quote-part de surface utile
-  // suit, car c'est elle qui dit quelle PART des charges une tranche en
-  // transparence refacture - la meme cle de ventilation que partout ailleurs.
-  //
-  // La liste n'est constituee que si au moins une tranche declare un regime :
-  // sans cela on laisse le compte sur sa voie scalaire, qui porte les golden
-  // tests et decrit tres bien une operation d'un seul tenant.
-  const regimes = entrees.regimes_par_produit ?? {};
-  const produitsParTranche = Object.keys(regimes).length
-    ? loyers.map((l) => {
-        const g = regimes[l.code_produit] ?? {};
-        return {
-          code: l.code_produit,
-          mode: g.mode ?? 'loyers',
-          mode_redevance: g.mode_redevance ?? 'forfaitaire',
-          redevance_annuelle_eur: g.redevance_annuelle_eur ?? 0,
-          redevance_annee_valeur: g.redevance_annee_valeur,
-          index_redevance: g.index_redevance,
-          loyers_annuels_eur: l.loyer_annuel_eur,
-          quote_part: quotesParts[l.code_produit] ?? 0,
-        };
-      })
-    : [];
-
-  // R-EXP-4 - Impot sur les societes. Le logement social conventionne releve du
-  // service d'interet general et en est exonere ; le logement intermediaire non.
-  // C'est donc une propriete des PRODUITS presents dans le programme, et non un
-  // reglage d'operation : une seule tranche imposable suffit a rendre l'IS du.
-  // La saisie peut trancher elle-meme (exp.soumis_is), le referentiel fournit
-  // toujours le taux, le differe et la liste des charges deductibles.
-  const cfgIS = baremes.impot_societes ?? {};
-  const produitsSoumisIS = new Set(cfgIS.produits_soumis ?? []);
-
-  // R-EXP-RLS - Reduction de loyer de solidarite (CCH art. L. 442-2-1). Le
-  // bailleur social diminue le loyer de ses locataires beneficiaires de l'APL :
-  // c'est du loyer quittance en moins, pas une charge, et cela ne vise que le
-  // parc conventionne. INACTIVE par defaut - l'allumer d'office deplacerait en
-  // silence le resultat de toutes les simulations deja enregistrees, et le taux
-  // du referentiel est une projection de la note de cadrage, pas un bareme
-  // arrete. La saisie l'active, soit par le drapeau, soit en posant un taux.
-  const cfgRLS = baremes.charges_exploitation?.reduction_loyer_solidarite ?? {};
-  const produitsSoumisRLS = new Set(cfgRLS.produits_soumis ?? []);
-  const rlsActive =
-    exp.rls_actif ?? (exp.rls_taux !== undefined ? true : cfgRLS.actif_par_defaut === true);
-  const tauxRLSBase = exp.rls_taux ?? cfgRLS.taux ?? 0;
-  const tauxRLSDe = (code) => {
-    if (!rlsActive) return 0;
-    // Sans programme, il n'y a pas de tranche a filtrer : l'activation explicite
-    // est tout ce dont on dispose, et elle fait foi.
-    if (code === null) return tauxRLSBase;
-    return produitsSoumisRLS.has(code) ? tauxRLSBase : 0;
-  };
-  const soumisIS =
-    exp.soumis_is ?? loyers.some((l) => produitsSoumisIS.has(l.code_produit));
-
-  // La part fixe deductible se saisit par lot ou globalement (bloc « Part fixe
-  // de la PGE/PGR »). Le moteur ramene les deux a un montant annuel.
-  const partFixeGE = cfgIS.part_fixe_gros_entretien ?? {};
-  const partFixeGEAnnuelle =
-    (exp.is_part_fixe_ge_eur ?? partFixeGE.montant_eur ?? 0) *
-    ((exp.is_part_fixe_ge_assiette ?? partFixeGE.assiette) === 'lot' ? nbLogements : 1);
-
-  // Credits d'impot TFPB des logements intermediaires : un montant, une duree,
-  // a compter de la mise en location (SimTOTAL_IS colonne J).
-  const creditsIS = (exp.is_credits_impot ?? cfgIS.credit_impot_tfpb_lli?.lignes ?? []).flatMap(
-    (c) =>
-      Array.from({ length: c.duree_ans ?? 0 }, (_, k) => ({
-        annee: anneeMEL + k,
-        montant_eur: c.montant_eur ?? 0,
-      })),
-  );
-
-  /**
-   * R-EXP-8 - Contexte du compte d'exploitation, cadre sur UNE tranche.
-   *
-   * Le compte est deja une fonction pure de son contexte : le cadrer sur une
-   * tranche, c'est lui passer la part qui lui revient de chaque entree, pas
-   * ecrire un second moteur. La plupart des charges suivent d'elles-memes,
-   * leur assiette etant le logement ou les produits locatifs : leur passer le
-   * nombre de logements et les loyers de la tranche suffit a les mettre a
-   * l'echelle.
-   *
-   * Ce qui se FILTRE : les annuites de prets, leurs interets, la taxe fonciere
-   * et les annuites de fonds propres, chacune portant sa tranche.
-   *
-   * Ce qui se PRORATISE, faute de porter une tranche : les loyers d annexes,
-   * la quote-part de subventions et la base de provision pour gros entretien.
-   * La cle est la quote-part de surface utile, celle qui sert partout
-   * ailleurs (R-SUB, R-TVA).
-   *
-   * Ce qui se DECIDE par tranche : l'impot sur les societes. Le PLAI et le
-   * PLUS en sont exoneres, le LLI non - le calculer sur un resultat global
-   * melangeait des assiettes de regimes differents. Les credits d'impot TFPB
-   * suivent le produit qui les ouvre.
-   */
-  const contexteExploitation = (code) => {
-    const part = code === null ? 1 : (quotesParts[code] ?? 0);
-    const lotsDe = code === null ? lots : lots.filter((l) => l.code_produit === code);
-    const nbLog = code === null ? nbLogements : lotsDe.reduce((s, l) => s + (l.nb_logements ?? 0), 0);
-    const shab = code === null ? shabTotal : lotsDe.reduce((s, l) => s + (l.shab_m2 ?? 0), 0);
-    const loyerDe =
-      code === null
-        ? loyersLogementsAnnuels
-        : (loyers.find((l) => l.code_produit === code)?.loyer_annuel_eur ?? 0);
-    const prTranche =
-      code === null
-        ? bilan.total_ttc_module_eur
-        : (bilan.par_tranche?.[code]?.total_ttc_module_eur ?? 0);
-    const amortsDe = code === null ? amortissements : amortissements.filter((a) => a.produit === code);
-    const parProduit = (serie) => (code === null ? serie : serie.filter((x) => x.produit === code));
-    const soumisDe = code === null ? soumisIS : produitsSoumisIS.has(code);
-    return {
-      annee_mise_en_location: anneeMEL,
-      duree_ans: dates.duree_simulation_ans ?? 50,
-      mode: exp.mode ?? 'loyers',
-      mode_redevance: exp.mode_redevance ?? 'forfaitaire',
-      tranches_produits:
-        code === null ? produitsParTranche : produitsParTranche.filter((p) => p.code === code),
-      redevance_annuelle_eur: exp.redevance_annuelle_eur ?? 0,
-      redevance_annee_valeur: exp.redevance_annee_valeur,
-      index_redevance: exp.index_redevance ?? 'loyers_irl',
-      annuite_fonds_propres_eur: exp.annuite_fonds_propres_eur ?? 0,
-      duree_annuite_fonds_propres_ans: exp.duree_annuite_fonds_propres_ans ?? 0,
-      annuites_fonds_propres: parProduit(annuitesFP),
-      tfpb_par_annee: parProduit(tfpbParAnnee),
-      // Le nombre de places se saisit pour l operation ; une tranche en prend
-      // sa part. Lire son seul nombre de lots ferait perdre la saisie des
-      // foyers, ou une place n est pas un logement.
-      nb_lits: code === null ? (exp.nb_lits ?? nbLogements) : (exp.nb_lits ?? nbLogements) * part,
-      qp_subventions_annuelle_eur: (exp.qp_subventions_annuelle_eur ?? 0) * part,
-      duree_qp_subventions_ans: exp.duree_qp_subventions_ans ?? 0,
-      prix_revient_ttc_eur: prTranche,
-      charges_diverses: chargesDiverses,
-      loyers_logements_annuels_eur: loyerDe,
-      // R-EXP-RLS - Reduction de loyer de solidarite, decidee TRANCHE PAR
-      // TRANCHE comme l'impot sur les societes, et pour la raison inverse : le
-      // parc conventionne APL la subit, le logement intermediaire et le libre
-      // non. Un taux moyen pose sur l'operation entiere aurait abandonne du
-      // loyer libre a des locataires qui n'y ont pas droit.
-      rls_taux: tauxRLSDe(code),
-      rls_taux_par_annee: exp.rls_taux_par_annee ?? [],
-      loyers_annexes_annuels_eur: loyersAnnexesAnnuels * part,
-      loyers_divers_annuels_eur: (exp.loyers_divers_annuels_eur ?? 0) * part,
-      frais_gestion_annuels_eur: (exp.frais_gestion_annuels_eur ?? 0) * part,
-      frais_gestion_pct_loyers: exp.frais_gestion_pct_loyers ?? 0,
-      frais_gestion_pct_prix_revient:
-        exp.frais_gestion_pct_prix_revient ??
-        baremes.charges_exploitation?.frais_gestion_pct_prix_revient ??
-        0,
-      rel_annuel_eur: (exp.rel_annuel_eur ?? 0) * part,
-      gros_entretien_eur_m2: exp.gros_entretien_eur_m2 ?? 0,
-      pge_taux: tauxPGERetenu,
-      pge_taux_par_annee: exp.pge_taux_par_annee ?? [],
-      pge_base_eur: (exp.pge_base_eur ?? assiettePGE) * part,
-      shab_m2: shab,
-      taux_vacance_impayes: exp.taux_vacance_impayes ?? 0,
-      taux_produits_financiers: exp.taux_produits_financiers ?? 0,
-      nb_logements: nbLog,
-      tfpb_par_logement_eur:
-        exp.tfpb_par_logement_eur ?? baremes.constantes_reglementaires.tfpb.montant_par_logement_eur,
-      annee_debut_tfpb: exp.annee_debut_tfpb ?? tfpb.annee_debut_tfpb,
-      // `annuite_eur` et non `montant_eur` : le compte lit ce nom-la pour les
-      // annuites, et l autre pour les interets. Se tromper de cle ne leve
-      // rien - elle vaut `undefined`, la somme donne NaN, et le compte entier
-      // s efface sans un mot.
-      annuites: amortsDe.flatMap((a) =>
-        a.tableau.map((l) => ({ annee: l.annee, annuite_eur: l.annuite_eur })),
-      ),
-      interets_par_annee: amortsDe.flatMap((a) =>
-        a.tableau.map((l) => ({ annee: l.annee, montant_eur: l.interets_eur })),
-      ),
-      dotation_amortissements_eur: dotationAnnuelle * part,
-      dotation_amortissements_par_annee: dotationSerie.map((d) => ({
-        ...d,
-        montant_eur: d.montant_eur * part,
-      })),
-      is_taux: soumisDe ? (exp.is_taux ?? cfgIS.taux ?? 0) : 0,
-      is_duree_differe_ans: exp.is_duree_differe_ans ?? cfgIS.duree_differe_ans ?? 0,
-      is_charges_deductibles: exp.is_charges_deductibles ?? cfgIS.charges_deductibles ?? [],
-      is_credits_impot_par_annee: soumisDe ? creditsIS : [],
-      is_part_fixe_ge_eur:
-        (exp.is_part_fixe_ge_eur ?? partFixeGE.montant_eur ?? 0) *
-        ((exp.is_part_fixe_ge_assiette ?? partFixeGE.assiette) === 'lot' ? nbLog : part),
-      is_part_fixe_ge_differe_ans:
-        exp.is_part_fixe_ge_differe_ans ?? partFixeGE.duree_differe_ans ?? 0,
-      trajectoires: exp.trajectoires ?? trajectoires.par_poste,
-    };
-  };
+  // Q-16 : les postes de charges diverses viennent du referentiel, la saisie ne
+  // fait que les activer. Une charge incompletement decrite arrete le calcul.
+  const chargesDiverses = restituerChargesDiverses(classeur);
 
   // R-EXP-8 - LE CONSOLIDE EST LA SOMME DES TRANCHES.
   //
-  // Un compte tenu d un seul tenant sur une operation mixte melange des
-  // regimes qui ne se melangent pas. L impot sur les societes en est la
-  // preuve : le PLAI, le PLUS et le PLS relevent du service d interet general
-  // et en sont exoneres, le LLI non. Calcule sur le resultat global, il
-  // frappait le surplus des tranches exonerees des qu une seule tranche
-  // imposable figurait au programme - sur une operation PLAI+PLUS+PLS+LLI,
-  // 2 158 885 € contre 538 123 € en sommant les tranches, soit quatre fois
-  // trop. Tout le reste est additif a l euro pres (E-14).
+  // Chaque tranche tient SON compte dans le classeur : ses loyers ou sa
+  // redevance, ses prets, sa taxe fonciere, sa part des charges communes, et
+  // son regime d'impot. Un compte tenu d un seul tenant sur une operation mixte
+  // melangeait des regimes qui ne se melangent pas : l impot sur les societes,
+  // calcule sur le resultat global, frappait le surplus des tranches
+  // exonerees des qu une seule tranche imposable figurait au programme - sur
+  // une operation PLAI+PLUS+PLS+LLI, 2 158 885 € contre 538 123 € en sommant
+  // les tranches, soit quatre fois trop. Tout le reste est additif a l euro
+  // pres (E-14).
   //
-  // Sans tranche - les fixtures qui alimentent le bilan et les prets sans
-  // passer par un programme de lots - le compte reste calcule d un seul
-  // tenant : il n y a rien a sommer, et la voie scalaire decrit tres bien une
-  // operation qui ne se decoupe pas.
+  // Un programme sans tranche s'est arrete au prix de revient : il y a
+  // toujours au moins un compte a sommer.
   const comptesTranches = Object.fromEntries(
-    codesPresents.map((c) => [c, compteExploitation(contexteExploitation(c))]),
+    codesPresents.map((c) => [c, restituerCompte(classeur, c)]),
   );
-  const exploitation = codesPresents.length
-    ? sommerComptes(codesPresents.map((c) => comptesTranches[c]))
-    : compteExploitation({
-    annee_mise_en_location: anneeMEL,
-    duree_ans: dates.duree_simulation_ans ?? 50,
-    mode: exp.mode ?? 'loyers',
-    mode_redevance: exp.mode_redevance ?? 'forfaitaire',
-    // R-EXP-7 : le regime de produits se declare TRANCHE PAR TRANCHE. Un foyer
-    // en redevance peut cotoyer des logements familiaux en loyers dans la meme
-    // operation, et c'est le cas courant des programmes mixtes. Les entrees
-    // scalaires ci-dessus restent servies pour les appels qui decrivent
-    // l'operation d'un seul tenant.
-    tranches_produits: produitsParTranche,
-    redevance_annuelle_eur: exp.redevance_annuelle_eur ?? 0,
-    redevance_annee_valeur: exp.redevance_annee_valeur,
-    index_redevance: exp.index_redevance ?? 'loyers_irl',
-    // Somme des annuites de fonds propres remuneres des tranches (R-FIN-7).
-    // Une surcharge explicite reste possible pour un appel qui la connait deja.
-    // Le scalaire ne sert plus qu'aux appels qui le fournissent eux-memes ;
-    // les fonds propres des tranches passent par la SERIE, chacune avec sa duree.
-    annuite_fonds_propres_eur: exp.annuite_fonds_propres_eur ?? 0,
-    duree_annuite_fonds_propres_ans: exp.duree_annuite_fonds_propres_ans ?? 0,
-    annuites_fonds_propres: annuitesFP,
-    // R-FISC-1 : une serie, car la duree d exoneration varie selon le produit.
-    tfpb_par_annee: tfpbParAnnee,
-    // Le nombre de places d'un foyer, c'est son nombre de lots : le programme
-    // le porte deja, le redemander serait une saisie a tenir en double.
-    nb_lits: exp.nb_lits ?? nbLogements,
-    qp_subventions_annuelle_eur: exp.qp_subventions_annuelle_eur ?? 0,
-    duree_qp_subventions_ans: exp.duree_qp_subventions_ans ?? 0,
-    prix_revient_ttc_eur: bilan.total_ttc_module_eur,
-    // R-EXP-RLS : sans programme, aucune tranche a filtrer - l'activation
-    // explicite de la simulation fait foi.
-    rls_taux: tauxRLSDe(null),
-    rls_taux_par_annee: exp.rls_taux_par_annee ?? [],
-    charges_diverses: chargesDiverses,
-    loyers_logements_annuels_eur: loyersLogementsAnnuels,
-    loyers_annexes_annuels_eur: loyersAnnexesAnnuels,
-    loyers_divers_annuels_eur: exp.loyers_divers_annuels_eur ?? 0,
-    frais_gestion_annuels_eur: exp.frais_gestion_annuels_eur ?? 0,
-    frais_gestion_pct_loyers: exp.frais_gestion_pct_loyers ?? 0,
-    // Q-17 : assiette de LEON, 0,3 % du prix de revient TTC. Elle vient du
-    // referentiel et se surcharge par simulation, comme tout le reste.
-    frais_gestion_pct_prix_revient:
-      exp.frais_gestion_pct_prix_revient ??
-      baremes.charges_exploitation?.frais_gestion_pct_prix_revient ??
-      0,
-    rel_annuel_eur: exp.rel_annuel_eur ?? 0,
-    gros_entretien_eur_m2: exp.gros_entretien_eur_m2 ?? 0,
-    pge_taux: tauxPGERetenu,
-    pge_taux_par_annee: exp.pge_taux_par_annee ?? [],
-    pge_base_eur: exp.pge_base_eur ?? assiettePGE,
-    shab_m2: shabTotal,
-    taux_vacance_impayes: exp.taux_vacance_impayes ?? 0,
-    taux_produits_financiers: exp.taux_produits_financiers ?? 0,
-    nb_logements: nbLogements,
-    tfpb_par_logement_eur:
-      exp.tfpb_par_logement_eur ?? baremes.constantes_reglementaires.tfpb.montant_par_logement_eur,
-    annee_debut_tfpb: exp.annee_debut_tfpb ?? tfpb.annee_debut_tfpb,
-    annuites: annuitesAplaties,
-    // R-EXP-2 : de quoi tenir la vue comptable a cote de la vue tresorerie.
-    interets_par_annee: interetsAplatis,
-    dotation_amortissements_eur: dotationAnnuelle,
-    dotation_amortissements_par_annee: dotationSerie,
-    // R-EXP-4 : l'IS ne s'active que si un produit assujetti est au programme.
-    is_taux: soumisIS ? (exp.is_taux ?? cfgIS.taux ?? 0) : 0,
-    is_duree_differe_ans: exp.is_duree_differe_ans ?? cfgIS.duree_differe_ans ?? 0,
-    is_charges_deductibles: exp.is_charges_deductibles ?? cfgIS.charges_deductibles ?? [],
-    is_credits_impot_par_annee: creditsIS,
-    is_part_fixe_ge_eur: partFixeGEAnnuelle,
-    is_part_fixe_ge_differe_ans:
-      exp.is_part_fixe_ge_differe_ans ?? partFixeGE.duree_differe_ans ?? 0,
-    // Trajectoires par poste, issues du referentiel normalise. Une surcharge
-    // explicite dans les entrees reste possible pour tester un scenario.
-        trajectoires: exp.trajectoires ?? trajectoires.par_poste,
-      });
-
+  const exploitation = sommerComptes(codesPresents.map((c) => comptesTranches[c]));
   // Le mode vient de la saisie et non de la premiere tranche : une operation
   // mixte porte les deux, et c est la saisie qui dit lequel gouverne la vue.
   exploitation.mode = exp.mode ?? 'loyers';

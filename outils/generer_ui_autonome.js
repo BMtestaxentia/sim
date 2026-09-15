@@ -20,19 +20,28 @@
  * toute modification de `src/` ou de `ui/` fait partie de la routine de commit.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const RACINE = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 
-/** Ordre de dependance des modules du moteur (aucun cycle : chacun ne cite que les precedents). */
+/**
+ * Ordre de dependance des modules du moteur, chemins relatifs a `src/` (aucun
+ * cycle : chacun ne cite que les precedents, ce que `verifierExhaustivite`
+ * controle).
+ */
 const MODULES = [
   'arrondis.js',
+  'dates.js',
+  // Le noyau des formules : le langage, sa bibliotheque, le classeur.
+  'formules/langage.js',
+  'formules/fonctions.js', // depend de arrondis.js et dates.js
+  'formules/classeur.js', // depend de langage.js et fonctions.js
   'parametrage.js',
   'produits.js',
-  'amortissement.js',
-  'calendrier.js', // depend de amortissement.js (jourUTC)
+  'amortissement.js', // depend de dates.js
+  'calendrier.js', // depend de dates.js
   'tresorerie.js', // depend de arrondis.js et calendrier.js (decalerMois)
   'trajectoires.js',
   'loyers.js',
@@ -82,9 +91,17 @@ function verifierCollisions(morceaux) {
  */
 function verifierExhaustivite() {
   const manquants = new Set();
+  const desordre = [];
   for (const nom of MODULES) {
-    for (const m of lire('src', nom).matchAll(/from\s+['"]\.\/([^'"]+)['"]/g)) {
-      if (!MODULES.includes(m[1])) manquants.add(`${m[1]} (importe par ${nom})`);
+    // Les chemins se resolvent depuis le DOSSIER du module : `../arrondis.js`
+    // cite depuis `formules/` designe `arrondis.js`.
+    const dossier = posix.dirname(nom);
+    for (const m of lire('src', nom).matchAll(/from\s+['"](\.{1,2}\/[^'"]+)['"]/g)) {
+      const cible = posix.normalize(posix.join(dossier, m[1]));
+      if (!MODULES.includes(cible)) manquants.add(`${cible} (importe par ${nom})`);
+      // La concatenation execute les modules DANS L'ORDRE : un module qui en
+      // cite un place apres lui lirait une constante encore inexistante.
+      else if (MODULES.indexOf(cible) > MODULES.indexOf(nom)) desordre.push(`${nom} cite ${cible}, place apres lui`);
     }
   }
   if (manquants.size) {
@@ -93,6 +110,9 @@ function verifierExhaustivite() {
         [...manquants].join('\n  - ') +
         '\nAjoutez-les dans l ordre de dependance.',
     );
+  }
+  if (desordre.length) {
+    throw new Error('Modules du moteur dans le desordre :\n  - ' + desordre.join('\n  - '));
   }
 }
 

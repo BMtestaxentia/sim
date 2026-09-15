@@ -34,8 +34,11 @@ import { arrondiCRD } from './arrondis.js';
  */
 const BASE_JOURS_ACT365 = 365;
 
-/** Millisecondes par jour (constante calendaire). Source unique du projet. */
-export const MS_PAR_JOUR = 86400000;
+import { jourUTC, MS_PAR_JOUR } from './dates.js';
+
+// L'arithmetique des dates vit dans `dates.js`. Les deux noms restent exportes
+// d'ici pour les appelants qui les y cherchent.
+export { jourUTC, MS_PAR_JOUR };
 
 /** @typedef {'DOUBLE'|'D.LIMITEE'|'SIMPLE'|'TAUX FIXE'} Revisabilite */
 
@@ -449,21 +452,6 @@ export function tableauAmortissement(pret) {
   }
 
   return lignes;
-}
-
-/**
- * Numero de jour UTC d'une date exprimee en ISO 'AAAA-MM-JJ' (ou d'un objet Date).
- * Pas d'horloge systeme : la date est toujours une entree explicite.
- * @param {string|Date} date
- * @returns {number}
- */
-export function jourUTC(date) {
-  if (date instanceof Date) {
-    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) / MS_PAR_JOUR;
-  }
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date));
-  if (!m) throw new Error(`Date attendue au format AAAA-MM-JJ : ${date}`);
-  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / MS_PAR_JOUR;
 }
 
 /**

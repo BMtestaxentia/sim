@@ -13,42 +13,12 @@
  *
  * Aucune horloge systeme : toutes les dates sont des entrees explicites.
  */
-import { jourUTC, MS_PAR_JOUR } from './amortissement.js';
+import { jourUTC, versISO, decalerMois } from './dates.js';
 
-/**
- * Formate un numero de jour UTC en date ISO 'AAAA-MM-JJ'.
- * @param {number} jour
- * @returns {string}
- */
-function versISO(jour) {
-  return new Date(jour * MS_PAR_JOUR).toISOString().slice(0, 10);
-}
-
-/**
- * Decale une date d'un nombre entier de mois, en calendaire (et non en tranches
- * de 30 jours). Le jour du mois est conserve, sauf si le mois d'arrivee est plus
- * court : on retombe alors sur son dernier jour (31 janvier + 1 mois = 28 ou 29 fevrier).
- * @param {string|Date} date
- * @param {number} mois
- * @returns {string} date ISO
- */
-export function decalerMois(date, mois) {
-  const j = jourUTC(date);
-  const d = new Date(j * MS_PAR_JOUR);
-  const an = d.getUTCFullYear();
-  const m = d.getUTCMonth();
-  const jour = d.getUTCDate();
-
-  const cible = new Date(Date.UTC(an, m + mois, 1));
-  const dernierJourDuMois = new Date(
-    Date.UTC(cible.getUTCFullYear(), cible.getUTCMonth() + 1, 0),
-  ).getUTCDate();
-
-  return versISO(
-    Date.UTC(cible.getUTCFullYear(), cible.getUTCMonth(), Math.min(jour, dernierJourDuMois)) /
-      MS_PAR_JOUR,
-  );
-}
+// L'arithmetique des dates vit dans `dates.js`, partagee avec les prets, la
+// tresorerie et les formules. `decalerMois` reste exporte d'ici pour les
+// appelants qui l'y cherchent.
+export { decalerMois };
 
 /**
  * @typedef {Object} EntreesCalendrier

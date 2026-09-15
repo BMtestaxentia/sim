@@ -102,6 +102,12 @@ export const OPERATION = {
         'LISTE(p POUR p DANS tranches_ordre_saisie QUAND NON(CONTIENT(ordre_produits; p))))',
       note: 'Dans l’ordre réglementaire, du plus social au plus libre.',
     },
+    tranche_unique: {
+      libelle: 'Tranche unique du programme',
+      unite: 'texte',
+      formule: 'SI(LONGUEUR(tranches_presentes) = 1; ELEMENT(tranches_presentes; 0); VIDE)',
+      note: 'Vide dès que le programme compte plusieurs tranches : il n’y a pas de produit principal.',
+    },
 
     // --- Identite -------------------------------------------------------------
     zone_123: { libelle: 'Zone 1/2/3', unite: 'texte', saisie: 'identite.zone_123', ecran: 'Opération' },

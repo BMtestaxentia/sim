@@ -203,9 +203,9 @@ export const FONCTIONS = {
   ERREUR: {
     libelle: 'Erreur',
     aide: 'Arrête le calcul avec ce message : la saisie ne permet pas de conclure.',
-    arite: [1, 1],
-    calc: (message) => {
-      throw new Error(String(message));
+    arite: [1, 4],
+    calc: (...morceaux) => {
+      throw new Error(morceaux.map(String).join(''));
     },
   },
   NON: { libelle: 'Non', aide: 'Inverse une condition.', arite: [1, 1], calc: (x) => !x },
@@ -358,6 +358,18 @@ export const FONCTIONS = {
     aide: 'Les listes mises bout à bout, dans l’ordre.',
     arite: [2, 8],
     calc: (...listes) => listes.flatMap((l) => (Array.isArray(l) ? l : [])),
+  },
+  VALEURS: {
+    libelle: 'Valeurs',
+    aide: 'Les valeurs d’une saisie par tranche, dans l’ordre où elles ont été saisies.',
+    arite: [1, 1],
+    calc: (o) => (o && typeof o === 'object' ? Object.values(o) : []),
+  },
+  CLES: {
+    libelle: 'Clés',
+    aide: 'Les tranches d’une saisie par tranche, dans l’ordre où elles ont été saisies.',
+    arite: [1, 1],
+    calc: (o) => (o && typeof o === 'object' ? Object.keys(o) : []),
   },
 
   // --- Dates -----------------------------------------------------------------

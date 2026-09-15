@@ -21,12 +21,7 @@ import { nouveauClasseur } from './formules/modele.js';
 import { tresorerieChantier } from './tresorerie.js';
 import { pretsDefautResolus, produit, marge, financeParCDC } from './produits.js';
 import { fusionner, surchargerTrajectoires, ecartsParametrage } from './parametrage.js';
-import {
-  prixDeRevient,
-  prixDeRevientVentile,
-  valeurComptableTerrain,
-  baseAmortissementComptable,
-} from './bilan.js';
+import { restituerPrixDeRevient, valeurComptableTerrain, baseAmortissementComptable } from './bilan.js';
 import { agregerSubventions, surchargeFonciere } from './subventions.js';
 import {
   soldeAFinancer,
@@ -210,50 +205,13 @@ export function calculer(entrees, referentiels) {
   // zonage (1/2/3 ou A/B/C, propriete du produit) et son jeu de prets CDC par
   // defaut. Le seul repli est l'operation MONO-tranche, ou l'unique produit
   // present tient lieu de reference pour ce que la saisie n'a pas affecte.
-  const trancheUnique = codesPresents.length === 1 ? codesPresents[0] : null;
-  const postesBilan = entrees.postes_bilan ?? [];
-  const modulation = entrees.modulation_ttc_eur ?? 0;
+  const trancheUnique = lire('tranche_unique');
 
-  // Version globale : un seul taux de LASM, donc juste seulement en mono-tranche.
-  // Elle sert de socle (chapitres, detail par poste) et la ventilation par
-  // tranche la remplace des qu'il y a un programme.
-  const bilan = prixDeRevient(
-    {
-      code_produit: trancheUnique ?? codesPresents[0],
-      postes: postesBilan,
-      modulation_ttc_eur: modulation,
-      // R-TVA-2 : le PLUS en quartier prioritaire releve du taux social.
-      qpv: identite.qpv === true,
-    },
-    baremes,
-  );
-
-  if (codesPresents.length) {
-    const ventilation = prixDeRevientVentile(
-      {
-        postes: postesBilan,
-        su_par_produit: suParProduit,
-        modulation_ttc_eur: modulation,
-        qpv: identite.qpv === true,
-      },
-      baremes,
-    );
-    // La ventilation fait FOI des qu'elle existe : elle applique a chaque tranche
-    // son propre taux de livraison a soi-meme, la version globale n'en applique
-    // qu'un seul. Les chapitres viennent d'elle aussi, faute de quoi leur somme
-    // ne vaudrait plus le total en operation multi-tranches.
-    bilan.ventilation = ventilation;
-    bilan.chapitres = ventilation.chapitres;
-    bilan.par_tranche = ventilation.par_tranche;
-    bilan.total_ht_eur = ventilation.total_ht_eur;
-    bilan.total_tva_eur = ventilation.total_tva_eur;
-    bilan.total_ttc_eur = ventilation.total_ttc_eur;
-    bilan.total_ttc_lasm_eur = ventilation.total_ttc_lasm_eur;
-    bilan.total_ttc_module_eur = ventilation.total_ttc_module_eur;
-    bilan.taux_lasm_par_tranche = Object.fromEntries(
-      codesPresents.map((c) => [c, ventilation.par_tranche[c].taux_lasm]),
-    );
-  }
+  // Domaine « prix de revient ». La ventilation par tranche fait FOI pour les
+  // chapitres et les totaux : elle applique a chaque tranche son propre taux de
+  // livraison a soi-meme. La lecture d'un seul tenant, au taux de la tranche de
+  // reference, ne fournit que le detail des postes.
+  const bilan = restituerPrixDeRevient(classeur);
 
   // --- 4. Subventions (R-SUB) ---
   const subventions = agregerSubventions(entrees.subventions ?? [], quotesParts);

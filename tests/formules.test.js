@@ -48,13 +48,21 @@ describe('langage - analyse', () => {
     expect(analyser('SOMME(x POUR lot QUAND tranche_lot = tranche)')).toMatchObject({
       t: 'agr',
       nom: 'SOMME',
-      variable: 'lot',
-      dans: null,
-      quand: { t: 'bin', op: '=' },
+      parcours: [{ variable: 'lot', dans: null, quand: { t: 'bin', op: '=' } }],
     });
     expect(analyser('PRODUIT(1 + t POUR a DANS SUITE(1; 3))')).toMatchObject({
       t: 'agr',
-      dans: { t: 'fn', nom: 'SUITE' },
+      parcours: [{ variable: 'a', dans: { t: 'fn', nom: 'SUITE' } }],
+    });
+  });
+
+  it('lit plusieurs POUR a la suite, en boucles imbriquees', () => {
+    expect(analyser('SOMME(x POUR a POUR b DANS l QUAND b > a)')).toMatchObject({
+      t: 'agr',
+      parcours: [
+        { variable: 'a', dans: null, quand: null },
+        { variable: 'b', dans: { t: 'nom', nom: 'l' }, quand: { t: 'bin', op: '>' } },
+      ],
     });
   });
 
@@ -107,6 +115,10 @@ const DOMAINES = [
         libelle: 'Premier grand lot',
         formule: 'PREMIER(lot POUR lot QUAND shab_lot > 50)',
       },
+      su_croisee: {
+        libelle: 'SU croisée',
+        formule: 'SOMME(su_lot POUR tranche POUR lot QUAND tranche_lot = tranche)',
+      },
       taux_an: { libelle: 'Taux de l année', sur: ['an'], parametre: 'taux[an]' },
       taux_lu: { libelle: 'Taux lu', formule: 'taux_an[an: 2030]' },
       mauvaise: { libelle: 'Mauvaise', formule: 'su_lot' },
@@ -147,6 +159,14 @@ describe('classeur - evaluation', () => {
   it('lit une autre valeur de la dimension, et rend INDEFINI hors dimension', () => {
     expect(c.valeur('cumul', { annee: 2030 })).toBe(4);
     expect(c.valeur('hors')).toBeUndefined();
+  });
+
+  it('parcourt plusieurs variables avec un seul accumulateur', () => {
+    // Tranche par tranche, lot par lot : 60 + 30 (PLAI) puis 90 (PLUS).
+    expect(c.valeur('su_croisee')).toBe(180);
+    const e = c.expliquer('su_croisee');
+    expect(e.arbre.v).toBe(180);
+    expect(e.arbre.termes.map((x) => x.cle)).toEqual([['PLAI', 0], ['PLAI', 2], ['PLUS', 1]]);
   });
 
   it('n evalue que la branche retenue', () => {

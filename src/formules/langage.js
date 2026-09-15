@@ -44,8 +44,8 @@
  * @typedef {{t: 'neg', a: Noeud}} NoeudNegation
  * @typedef {{t: 'bin', op: string, a: Noeud, b: Noeud}} NoeudBinaire
  * @typedef {{t: 'fn', nom: string, args: Noeud[]}} NoeudFonction
- * @typedef {{t: 'agr', nom: string, corps: Noeud, variable: string, dans: Noeud|null,
- *            quand: Noeud|null, args: Noeud[]}} NoeudAgregat
+ * @typedef {{variable: string, dans: Noeud|null, quand: Noeud|null}} Parcours
+ * @typedef {{t: 'agr', nom: string, corps: Noeud, parcours: Parcours[], args: Noeud[]}} NoeudAgregat
  * @typedef {NoeudNombre|NoeudTexte|NoeudConstante|NoeudNom|NoeudNegation|NoeudBinaire|
  *           NoeudFonction|NoeudAgregat} Noeud
  */
@@ -280,6 +280,13 @@ export function analyser(texte) {
    * agregat : le corps est evalue pour chaque valeur de la variable, puis
    * combine par la fonction. Seul le premier argument peut en porter un, sans
    * quoi on ne saurait plus lequel des arguments parcourt quoi.
+   *
+   * Plusieurs `POUR` a la suite parcourent en BOUCLES IMBRIQUEES, dans l'ordre
+   * ecrit, avec un seul accumulateur : `SOMME(x POUR poste POUR tranche)`
+   * additionne poste apres poste, tranche apres tranche. Ce n'est pas la meme
+   * chose que deux SOMME imbriquees, qui totaliseraient chaque poste avant de
+   * les additionner - le resultat est le meme en arithmetique exacte, pas
+   * forcement au dernier bit en virgule flottante.
    * @param {string} nom
    * @returns {Noeud}
    */
@@ -287,12 +294,12 @@ export function analyser(texte) {
     attendre('(');
     /** @type {Noeud[]} */
     const args = [];
-    /** @type {{variable: string, dans: Noeud|null, quand: Noeud|null}|null} */
-    let parcours = null;
+    /** @type {Array<{variable: string, dans: Noeud|null, quand: Noeud|null}>} */
+    const parcours = [];
     if (!estOp(')')) {
       for (;;) {
         const e = expression();
-        if (estMot('POUR')) {
+        while (estMot('POUR')) {
           if (args.length) throw erreur(texte, courant().pos, 'POUR ne peut porter que sur le premier argument');
           k++;
           const v = courant();
@@ -308,7 +315,7 @@ export function analyser(texte) {
             k++;
             quand = expression();
           }
-          parcours = { variable: v.v, dans, quand };
+          parcours.push({ variable: v.v, dans, quand });
         }
         args.push(e);
         if (estOp(';')) {
@@ -319,9 +326,9 @@ export function analyser(texte) {
       }
     }
     attendre(')');
-    if (parcours) {
+    if (parcours.length) {
       const [corps, ...reste] = args;
-      return { t: 'agr', nom, corps, variable: parcours.variable, dans: parcours.dans, quand: parcours.quand, args: reste };
+      return { t: 'agr', nom, corps, parcours, args: reste };
     }
     return { t: 'fn', nom, args };
   };
@@ -356,8 +363,10 @@ export function nomsCites(n, acc = new Set()) {
       break;
     case 'agr':
       nomsCites(n.corps, acc);
-      if (n.dans) nomsCites(n.dans, acc);
-      if (n.quand) nomsCites(n.quand, acc);
+      for (const p of n.parcours) {
+        if (p.dans) nomsCites(p.dans, acc);
+        if (p.quand) nomsCites(p.quand, acc);
+      }
       for (const a of n.args) nomsCites(a, acc);
       break;
     default:

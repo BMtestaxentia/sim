@@ -391,10 +391,10 @@ function compilerNom(ctx, n, noms) {
 }
 
 /**
- * Source d'un agregat : la liste parcourue. Soit l'expression DANS, soit les
- * valeurs de la dimension qui porte le nom de la variable.
+ * Source d'un niveau d'agregat : la liste parcourue. Soit l'expression DANS,
+ * soit les valeurs de la dimension qui porte le nom de la variable.
  * @param {{modele: any, g: any}} ctx
- * @param {import('./langage.js').NoeudAgregat} n
+ * @param {import('./langage.js').Parcours} n
  * @param {string[]} noms
  */
 function compilerSource(ctx, n, noms) {
@@ -430,21 +430,33 @@ function compilerAgregat(ctx, n, noms) {
   if (n.args.length < mini || n.args.length > maxi) {
     throw new Error(`${ctx.g.id} : ${n.nom} attend de ${mini} a ${maxi} arguments apres le corps`);
   }
-  const source = compilerSource(ctx, n, noms);
-  const k = noms.length;
-  const interieur = [...noms, n.variable];
-  ctx.taille = Math.max(ctx.taille, k + 1);
-  const corps = compiler(ctx, n.corps, interieur);
-  const quand = n.quand ? compiler(ctx, n.quand, interieur) : null;
+  if (def.special && n.parcours.length !== 1) {
+    throw new Error(`${ctx.g.id} : ${n.nom} ne parcourt qu'une seule variable`);
+  }
+  // Un niveau par POUR : chacun ouvre une case de la portee, et sa condition
+  // QUAND voit les variables des niveaux qui le precedent.
+  /** @type {Array<{source: (c: any, s: any[]) => any, k: number, quand: ((c: any, s: any[]) => any)|null}>} */
+  const niveaux = [];
+  let portee = noms;
+  for (const p of n.parcours) {
+    const source = compilerSource(ctx, p, portee);
+    const k = portee.length;
+    portee = [...portee, p.variable];
+    ctx.taille = Math.max(ctx.taille, k + 1);
+    niveaux.push({ source, k, quand: p.quand ? compiler(ctx, p.quand, portee) : null });
+  }
+  const corps = compiler(ctx, n.corps, portee);
   const args = n.args.map((a) => compiler(ctx, a, noms));
+  const [{ source, k, quand }] = niveaux;
 
   if (def.special === 'repartir') {
     // La part de l'element COURANT : la variable doit donc deja etre liee a
     // l'exterieur, et la repartition se calcule pour toutes ses valeurs a la
     // fois - une seule fois par cellule exterieure, grace au cache.
-    const kExterieur = noms.lastIndexOf(n.variable);
+    const variable = n.parcours[0].variable;
+    const kExterieur = noms.lastIndexOf(variable);
     if (kExterieur < 0) {
-      throw new Error(`${ctx.g.id} : REPARTIR(… POUR ${n.variable}) doit etre ecrit dans une grandeur sur « ${n.variable} »`);
+      throw new Error(`${ctx.g.id} : REPARTIR(… POUR ${variable}) doit etre ecrit dans une grandeur sur « ${variable} »`);
     }
     const [total] = args;
     return (c, s) => {
@@ -487,15 +499,39 @@ function compilerAgregat(ctx, n, noms) {
   const init = /** @type {() => any} */ (def.init);
   const ajouter = /** @type {(a: any, v: any) => any} */ (def.ajouter);
   const { fin, arret, sansCorps } = def;
+  if (niveaux.length === 1) {
+    return (c, s) => {
+      const liste = source(c, s);
+      let acc = init();
+      for (let i = 0; i < liste.length; i++) {
+        s[k] = liste[i];
+        if (quand && !quand(c, s)) continue;
+        acc = ajouter(acc, sansCorps ? null : corps(c, s));
+        if (arret && arret(acc)) break;
+      }
+      return fin ? fin(acc) : acc;
+    };
+  }
+  // Boucles imbriquees, un seul accumulateur.
   return (c, s) => {
-    const liste = source(c, s);
     let acc = init();
-    for (let i = 0; i < liste.length; i++) {
-      s[k] = liste[i];
-      if (quand && !quand(c, s)) continue;
-      acc = ajouter(acc, sansCorps ? null : corps(c, s));
-      if (arret && arret(acc)) break;
-    }
+    let arrete = false;
+    /** @param {number} i */
+    const parcourir = (i) => {
+      if (i === niveaux.length) {
+        acc = ajouter(acc, sansCorps ? null : corps(c, s));
+        if (arret && arret(acc)) arrete = true;
+        return;
+      }
+      const niveau = niveaux[i];
+      const liste = niveau.source(c, s);
+      for (let j = 0; j < liste.length && !arrete; j++) {
+        s[niveau.k] = liste[j];
+        if (niveau.quand && !niveau.quand(c, s)) continue;
+        parcourir(i + 1);
+      }
+    };
+    parcourir(0);
     return fin ? fin(acc) : acc;
   };
 }
@@ -889,33 +925,45 @@ function tracer(c, g, n, noms, s) {
     }
     case 'agr': {
       const def = AGREGATS[n.nom];
-      const liste = n.dans
-        ? t(n.dans).v
-        : c.vn(
-            c.modele.dimensions.get(n.variable).grandeur,
-            c.modele.dimensions.get(n.variable).sur.map((p) => s[noms.lastIndexOf(p)]),
-          );
-      const interieur = [...noms, n.variable];
-      /** @type {Array<{cle: any, noeud: any, v: any}>} */
+      /** @type {Array<{cle: any, noeud: any, v: any, part?: number}>} */
       const termes = [];
-      let nbParcourus = 0;
-      for (const valeur of liste ?? []) {
-        const s2 = [...s, valeur];
-        if (n.quand && !tracer(c, g, n.quand, interieur, s2).v) continue;
-        nbParcourus++;
-        if (def.sansCorps) {
-          termes.push({ cle: valeur, noeud: null, v: null });
-          continue;
+      // Meme accumulation, dans le meme ordre, que le calcul compile - et le
+      // meme arret : PREMIER s'arrete au premier terme retenu.
+      let acc = def.special ? null : /** @type {() => any} */ (def.init)();
+      let arrete = false;
+      /**
+       * @param {number} i
+       * @param {string[]} nomsCourants
+       * @param {any[]} sCourante
+       * @param {any[]} cles
+       */
+      const parcourir = (i, nomsCourants, sCourante, cles) => {
+        if (i === n.parcours.length) {
+          const corps = def.sansCorps ? null : tracer(c, g, n.corps, nomsCourants, sCourante);
+          const v = corps ? corps.v : null;
+          termes.push({ cle: cles.length === 1 ? cles[0] : cles, noeud: corps, v });
+          if (!def.special) {
+            acc = /** @type {(a: any, v: any) => any} */ (def.ajouter)(acc, v);
+            if (def.arret && def.arret(acc)) arrete = true;
+          }
+          return;
         }
-        const corps = tracer(c, g, n.corps, interieur, s2);
-        termes.push({ cle: valeur, noeud: corps, v: corps.v });
-        if (def.arret) {
-          // Meme arret que le calcul : PREMIER s'arrete au premier terme.
-          let acc = def.init?.();
-          for (const x of termes) acc = def.ajouter?.(acc, x.v);
-          if (def.arret(acc)) break;
+        const p = n.parcours[i];
+        let liste;
+        if (p.dans) liste = tracer(c, g, p.dans, nomsCourants, sCourante).v;
+        else {
+          const dim = c.modele.dimensions.get(p.variable);
+          liste = c.vn(dim.grandeur, dim.sur.map((q) => sCourante[nomsCourants.lastIndexOf(q)]));
         }
-      }
+        const interieur = [...nomsCourants, p.variable];
+        for (const valeur of liste ?? []) {
+          if (arrete) break;
+          const s2 = [...sCourante, valeur];
+          if (p.quand && !tracer(c, g, p.quand, interieur, s2).v) continue;
+          parcourir(i + 1, interieur, s2, [...cles, valeur]);
+        }
+      };
+      parcourir(0, noms, s, []);
       const args = n.args.map((a) => t(a));
       let v;
       if (def.special === 'repartir') {
@@ -923,7 +971,7 @@ function tracer(c, g, n, noms, s) {
           termes.map((x) => x.v),
           args[0] ? args[0].v : undefined,
         );
-        const courant = s[noms.lastIndexOf(n.variable)];
+        const courant = s[noms.lastIndexOf(n.parcours[0].variable)];
         termes.forEach((x, i) => {
           x.part = entiers[i];
         });
@@ -931,23 +979,16 @@ function tracer(c, g, n, noms, s) {
       } else if (def.special === 'tri') {
         v = tauxRentabiliteInterne([args[0].v, ...termes.map((x) => x.v)]);
       } else {
-        let acc = /** @type {() => any} */ (def.init)();
-        for (const x of termes) {
-          acc = /** @type {(a: any, v: any) => any} */ (def.ajouter)(acc, x.v);
-          if (def.arret && def.arret(acc)) break;
-        }
         v = def.fin ? def.fin(acc) : acc;
       }
       return {
         t: 'agr',
         nom: n.nom,
-        variable: n.variable,
-        dans: n.dans ? structure(n.dans) : null,
-        quand: n.quand ? structure(n.quand) : null,
+        parcours: n.parcours.map(structureParcours),
         corps: structure(n.corps),
         args,
         termes,
-        parcourus: nbParcourus,
+        parcourus: termes.length,
         v,
       };
     }
@@ -985,13 +1026,23 @@ export function structure(n) {
       return {
         t: 'agr',
         nom: n.nom,
-        variable: n.variable,
+        parcours: n.parcours.map(structureParcours),
         corps: structure(n.corps),
-        dans: n.dans ? structure(n.dans) : null,
-        quand: n.quand ? structure(n.quand) : null,
         args: n.args.map(structure),
       };
     default:
       return { t: n.t };
   }
+}
+
+/**
+ * Structure d'un niveau de parcours d'agregat.
+ * @param {import('./langage.js').Parcours} p
+ */
+function structureParcours(p) {
+  return {
+    variable: p.variable,
+    dans: p.dans ? structure(p.dans) : null,
+    quand: p.quand ? structure(p.quand) : null,
+  };
 }

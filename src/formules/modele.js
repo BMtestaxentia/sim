@@ -16,8 +16,9 @@ import { OPERATION } from './domaines/operation.js';
 import { CALENDRIER } from './domaines/calendrier.js';
 import { SURFACES } from './domaines/surfaces.js';
 import { LOYERS } from './domaines/loyers.js';
+import { PRIX_REVIENT } from './domaines/prix_revient.js';
 
-export const MODELE = creerModele([OPERATION, CALENDRIER, SURFACES, LOYERS]);
+export const MODELE = creerModele([OPERATION, CALENDRIER, SURFACES, LOYERS, PRIX_REVIENT]);
 
 /**
  * Un classeur neuf sur le modele du moteur.

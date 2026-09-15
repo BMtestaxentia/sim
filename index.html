@@ -4034,8 +4034,8 @@ function decalerMois(date, mois) {
  * @typedef {{t: 'neg', a: Noeud}} NoeudNegation
  * @typedef {{t: 'bin', op: string, a: Noeud, b: Noeud}} NoeudBinaire
  * @typedef {{t: 'fn', nom: string, args: Noeud[]}} NoeudFonction
- * @typedef {{t: 'agr', nom: string, corps: Noeud, variable: string, dans: Noeud|null,
- *            quand: Noeud|null, args: Noeud[]}} NoeudAgregat
+ * @typedef {{variable: string, dans: Noeud|null, quand: Noeud|null}} Parcours
+ * @typedef {{t: 'agr', nom: string, corps: Noeud, parcours: Parcours[], args: Noeud[]}} NoeudAgregat
  * @typedef {NoeudNombre|NoeudTexte|NoeudConstante|NoeudNom|NoeudNegation|NoeudBinaire|
  *           NoeudFonction|NoeudAgregat} Noeud
  */
@@ -4270,6 +4270,13 @@ function analyser(texte) {
    * agregat : le corps est evalue pour chaque valeur de la variable, puis
    * combine par la fonction. Seul le premier argument peut en porter un, sans
    * quoi on ne saurait plus lequel des arguments parcourt quoi.
+   *
+   * Plusieurs `POUR` a la suite parcourent en BOUCLES IMBRIQUEES, dans l'ordre
+   * ecrit, avec un seul accumulateur : `SOMME(x POUR poste POUR tranche)`
+   * additionne poste apres poste, tranche apres tranche. Ce n'est pas la meme
+   * chose que deux SOMME imbriquees, qui totaliseraient chaque poste avant de
+   * les additionner - le resultat est le meme en arithmetique exacte, pas
+   * forcement au dernier bit en virgule flottante.
    * @param {string} nom
    * @returns {Noeud}
    */
@@ -4277,12 +4284,12 @@ function analyser(texte) {
     attendre('(');
     /** @type {Noeud[]} */
     const args = [];
-    /** @type {{variable: string, dans: Noeud|null, quand: Noeud|null}|null} */
-    let parcours = null;
+    /** @type {Array<{variable: string, dans: Noeud|null, quand: Noeud|null}>} */
+    const parcours = [];
     if (!estOp(')')) {
       for (;;) {
         const e = expression();
-        if (estMot('POUR')) {
+        while (estMot('POUR')) {
           if (args.length) throw erreur(texte, courant().pos, 'POUR ne peut porter que sur le premier argument');
           k++;
           const v = courant();
@@ -4298,7 +4305,7 @@ function analyser(texte) {
             k++;
             quand = expression();
           }
-          parcours = { variable: v.v, dans, quand };
+          parcours.push({ variable: v.v, dans, quand });
         }
         args.push(e);
         if (estOp(';')) {
@@ -4309,9 +4316,9 @@ function analyser(texte) {
       }
     }
     attendre(')');
-    if (parcours) {
+    if (parcours.length) {
       const [corps, ...reste] = args;
-      return { t: 'agr', nom, corps, variable: parcours.variable, dans: parcours.dans, quand: parcours.quand, args: reste };
+      return { t: 'agr', nom, corps, parcours, args: reste };
     }
     return { t: 'fn', nom, args };
   };
@@ -4346,8 +4353,10 @@ function nomsCites(n, acc = new Set()) {
       break;
     case 'agr':
       nomsCites(n.corps, acc);
-      if (n.dans) nomsCites(n.dans, acc);
-      if (n.quand) nomsCites(n.quand, acc);
+      for (const p of n.parcours) {
+        if (p.dans) nomsCites(p.dans, acc);
+        if (p.quand) nomsCites(p.quand, acc);
+      }
       for (const a of n.args) nomsCites(a, acc);
       break;
     default:
@@ -4576,9 +4585,9 @@ const FONCTIONS = {
   ERREUR: {
     libelle: 'Erreur',
     aide: 'Arrête le calcul avec ce message : la saisie ne permet pas de conclure.',
-    arite: [1, 1],
-    calc: (message) => {
-      throw new Error(String(message));
+    arite: [1, 4],
+    calc: (...morceaux) => {
+      throw new Error(morceaux.map(String).join(''));
     },
   },
   NON: { libelle: 'Non', aide: 'Inverse une condition.', arite: [1, 1], calc: (x) => !x },
@@ -4731,6 +4740,18 @@ const FONCTIONS = {
     aide: 'Les listes mises bout à bout, dans l’ordre.',
     arite: [2, 8],
     calc: (...listes) => listes.flatMap((l) => (Array.isArray(l) ? l : [])),
+  },
+  VALEURS: {
+    libelle: 'Valeurs',
+    aide: 'Les valeurs d’une saisie par tranche, dans l’ordre où elles ont été saisies.',
+    arite: [1, 1],
+    calc: (o) => (o && typeof o === 'object' ? Object.values(o) : []),
+  },
+  CLES: {
+    libelle: 'Clés',
+    aide: 'Les tranches d’une saisie par tranche, dans l’ordre où elles ont été saisies.',
+    arite: [1, 1],
+    calc: (o) => (o && typeof o === 'object' ? Object.keys(o) : []),
   },
 
   // --- Dates -----------------------------------------------------------------
@@ -5283,10 +5304,10 @@ function compilerNom(ctx, n, noms) {
 }
 
 /**
- * Source d'un agregat : la liste parcourue. Soit l'expression DANS, soit les
- * valeurs de la dimension qui porte le nom de la variable.
+ * Source d'un niveau d'agregat : la liste parcourue. Soit l'expression DANS,
+ * soit les valeurs de la dimension qui porte le nom de la variable.
  * @param {{modele: any, g: any}} ctx
- * @param {import('./langage.js').NoeudAgregat} n
+ * @param {import('./langage.js').Parcours} n
  * @param {string[]} noms
  */
 function compilerSource(ctx, n, noms) {
@@ -5322,21 +5343,33 @@ function compilerAgregat(ctx, n, noms) {
   if (n.args.length < mini || n.args.length > maxi) {
     throw new Error(`${ctx.g.id} : ${n.nom} attend de ${mini} a ${maxi} arguments apres le corps`);
   }
-  const source = compilerSource(ctx, n, noms);
-  const k = noms.length;
-  const interieur = [...noms, n.variable];
-  ctx.taille = Math.max(ctx.taille, k + 1);
-  const corps = compiler(ctx, n.corps, interieur);
-  const quand = n.quand ? compiler(ctx, n.quand, interieur) : null;
+  if (def.special && n.parcours.length !== 1) {
+    throw new Error(`${ctx.g.id} : ${n.nom} ne parcourt qu'une seule variable`);
+  }
+  // Un niveau par POUR : chacun ouvre une case de la portee, et sa condition
+  // QUAND voit les variables des niveaux qui le precedent.
+  /** @type {Array<{source: (c: any, s: any[]) => any, k: number, quand: ((c: any, s: any[]) => any)|null}>} */
+  const niveaux = [];
+  let portee = noms;
+  for (const p of n.parcours) {
+    const source = compilerSource(ctx, p, portee);
+    const k = portee.length;
+    portee = [...portee, p.variable];
+    ctx.taille = Math.max(ctx.taille, k + 1);
+    niveaux.push({ source, k, quand: p.quand ? compiler(ctx, p.quand, portee) : null });
+  }
+  const corps = compiler(ctx, n.corps, portee);
   const args = n.args.map((a) => compiler(ctx, a, noms));
+  const [{ source, k, quand }] = niveaux;
 
   if (def.special === 'repartir') {
     // La part de l'element COURANT : la variable doit donc deja etre liee a
     // l'exterieur, et la repartition se calcule pour toutes ses valeurs a la
     // fois - une seule fois par cellule exterieure, grace au cache.
-    const kExterieur = noms.lastIndexOf(n.variable);
+    const variable = n.parcours[0].variable;
+    const kExterieur = noms.lastIndexOf(variable);
     if (kExterieur < 0) {
-      throw new Error(`${ctx.g.id} : REPARTIR(… POUR ${n.variable}) doit etre ecrit dans une grandeur sur « ${n.variable} »`);
+      throw new Error(`${ctx.g.id} : REPARTIR(… POUR ${variable}) doit etre ecrit dans une grandeur sur « ${variable} »`);
     }
     const [total] = args;
     return (c, s) => {
@@ -5379,15 +5412,39 @@ function compilerAgregat(ctx, n, noms) {
   const init = /** @type {() => any} */ (def.init);
   const ajouter = /** @type {(a: any, v: any) => any} */ (def.ajouter);
   const { fin, arret, sansCorps } = def;
+  if (niveaux.length === 1) {
+    return (c, s) => {
+      const liste = source(c, s);
+      let acc = init();
+      for (let i = 0; i < liste.length; i++) {
+        s[k] = liste[i];
+        if (quand && !quand(c, s)) continue;
+        acc = ajouter(acc, sansCorps ? null : corps(c, s));
+        if (arret && arret(acc)) break;
+      }
+      return fin ? fin(acc) : acc;
+    };
+  }
+  // Boucles imbriquees, un seul accumulateur.
   return (c, s) => {
-    const liste = source(c, s);
     let acc = init();
-    for (let i = 0; i < liste.length; i++) {
-      s[k] = liste[i];
-      if (quand && !quand(c, s)) continue;
-      acc = ajouter(acc, sansCorps ? null : corps(c, s));
-      if (arret && arret(acc)) break;
-    }
+    let arrete = false;
+    /** @param {number} i */
+    const parcourir = (i) => {
+      if (i === niveaux.length) {
+        acc = ajouter(acc, sansCorps ? null : corps(c, s));
+        if (arret && arret(acc)) arrete = true;
+        return;
+      }
+      const niveau = niveaux[i];
+      const liste = niveau.source(c, s);
+      for (let j = 0; j < liste.length && !arrete; j++) {
+        s[niveau.k] = liste[j];
+        if (niveau.quand && !niveau.quand(c, s)) continue;
+        parcourir(i + 1);
+      }
+    };
+    parcourir(0);
     return fin ? fin(acc) : acc;
   };
 }
@@ -5781,33 +5838,45 @@ function tracer(c, g, n, noms, s) {
     }
     case 'agr': {
       const def = AGREGATS[n.nom];
-      const liste = n.dans
-        ? t(n.dans).v
-        : c.vn(
-            c.modele.dimensions.get(n.variable).grandeur,
-            c.modele.dimensions.get(n.variable).sur.map((p) => s[noms.lastIndexOf(p)]),
-          );
-      const interieur = [...noms, n.variable];
-      /** @type {Array<{cle: any, noeud: any, v: any}>} */
+      /** @type {Array<{cle: any, noeud: any, v: any, part?: number}>} */
       const termes = [];
-      let nbParcourus = 0;
-      for (const valeur of liste ?? []) {
-        const s2 = [...s, valeur];
-        if (n.quand && !tracer(c, g, n.quand, interieur, s2).v) continue;
-        nbParcourus++;
-        if (def.sansCorps) {
-          termes.push({ cle: valeur, noeud: null, v: null });
-          continue;
+      // Meme accumulation, dans le meme ordre, que le calcul compile - et le
+      // meme arret : PREMIER s'arrete au premier terme retenu.
+      let acc = def.special ? null : /** @type {() => any} */ (def.init)();
+      let arrete = false;
+      /**
+       * @param {number} i
+       * @param {string[]} nomsCourants
+       * @param {any[]} sCourante
+       * @param {any[]} cles
+       */
+      const parcourir = (i, nomsCourants, sCourante, cles) => {
+        if (i === n.parcours.length) {
+          const corps = def.sansCorps ? null : tracer(c, g, n.corps, nomsCourants, sCourante);
+          const v = corps ? corps.v : null;
+          termes.push({ cle: cles.length === 1 ? cles[0] : cles, noeud: corps, v });
+          if (!def.special) {
+            acc = /** @type {(a: any, v: any) => any} */ (def.ajouter)(acc, v);
+            if (def.arret && def.arret(acc)) arrete = true;
+          }
+          return;
         }
-        const corps = tracer(c, g, n.corps, interieur, s2);
-        termes.push({ cle: valeur, noeud: corps, v: corps.v });
-        if (def.arret) {
-          // Meme arret que le calcul : PREMIER s'arrete au premier terme.
-          let acc = def.init?.();
-          for (const x of termes) acc = def.ajouter?.(acc, x.v);
-          if (def.arret(acc)) break;
+        const p = n.parcours[i];
+        let liste;
+        if (p.dans) liste = tracer(c, g, p.dans, nomsCourants, sCourante).v;
+        else {
+          const dim = c.modele.dimensions.get(p.variable);
+          liste = c.vn(dim.grandeur, dim.sur.map((q) => sCourante[nomsCourants.lastIndexOf(q)]));
         }
-      }
+        const interieur = [...nomsCourants, p.variable];
+        for (const valeur of liste ?? []) {
+          if (arrete) break;
+          const s2 = [...sCourante, valeur];
+          if (p.quand && !tracer(c, g, p.quand, interieur, s2).v) continue;
+          parcourir(i + 1, interieur, s2, [...cles, valeur]);
+        }
+      };
+      parcourir(0, noms, s, []);
       const args = n.args.map((a) => t(a));
       let v;
       if (def.special === 'repartir') {
@@ -5815,7 +5884,7 @@ function tracer(c, g, n, noms, s) {
           termes.map((x) => x.v),
           args[0] ? args[0].v : undefined,
         );
-        const courant = s[noms.lastIndexOf(n.variable)];
+        const courant = s[noms.lastIndexOf(n.parcours[0].variable)];
         termes.forEach((x, i) => {
           x.part = entiers[i];
         });
@@ -5823,23 +5892,16 @@ function tracer(c, g, n, noms, s) {
       } else if (def.special === 'tri') {
         v = tauxRentabiliteInterne([args[0].v, ...termes.map((x) => x.v)]);
       } else {
-        let acc = /** @type {() => any} */ (def.init)();
-        for (const x of termes) {
-          acc = /** @type {(a: any, v: any) => any} */ (def.ajouter)(acc, x.v);
-          if (def.arret && def.arret(acc)) break;
-        }
         v = def.fin ? def.fin(acc) : acc;
       }
       return {
         t: 'agr',
         nom: n.nom,
-        variable: n.variable,
-        dans: n.dans ? structure(n.dans) : null,
-        quand: n.quand ? structure(n.quand) : null,
+        parcours: n.parcours.map(structureParcours),
         corps: structure(n.corps),
         args,
         termes,
-        parcourus: nbParcourus,
+        parcourus: termes.length,
         v,
       };
     }
@@ -5877,15 +5939,25 @@ function structure(n) {
       return {
         t: 'agr',
         nom: n.nom,
-        variable: n.variable,
+        parcours: n.parcours.map(structureParcours),
         corps: structure(n.corps),
-        dans: n.dans ? structure(n.dans) : null,
-        quand: n.quand ? structure(n.quand) : null,
         args: n.args.map(structure),
       };
     default:
       return { t: n.t };
   }
+}
+
+/**
+ * Structure d'un niveau de parcours d'agregat.
+ * @param {import('./langage.js').Parcours} p
+ */
+function structureParcours(p) {
+  return {
+    variable: p.variable,
+    dans: p.dans ? structure(p.dans) : null,
+    quand: p.quand ? structure(p.quand) : null,
+  };
 }
 
 /* ===== src/parametrage.js ===== */
@@ -6598,6 +6670,12 @@ const OPERATION = {
         'CONCATENER(LISTE(p POUR p DANS ordre_produits QUAND CONTIENT(tranches_ordre_saisie; p)); ' +
         'LISTE(p POUR p DANS tranches_ordre_saisie QUAND NON(CONTIENT(ordre_produits; p))))',
       note: 'Dans l’ordre réglementaire, du plus social au plus libre.',
+    },
+    tranche_unique: {
+      libelle: 'Tranche unique du programme',
+      unite: 'texte',
+      formule: 'SI(LONGUEUR(tranches_presentes) = 1; ELEMENT(tranches_presentes; 0); VIDE)',
+      note: 'Vide dès que le programme compte plusieurs tranches : il n’y a pas de produit principal.',
     },
 
     // --- Identite -------------------------------------------------------------
@@ -7318,6 +7396,581 @@ const LOYERS = {
   },
 };
 
+/* ===== src/formules/domaines/prix_revient.js ===== */
+// @ts-check
+/**
+ * DOMAINE « PRIX DE REVIENT » - R-TVA : postes, TVA, livraison a soi-meme et
+ * ventilation par tranche.
+ *
+ * Chaque poste se saisit une fois, globalement ou tranche par tranche. Saisi
+ * globalement, il se repartit au prorata de la surface utile (R-TVA-3) ; chaque
+ * tranche applique ENSUITE son propre taux de livraison a soi-meme (R-TVA-2) :
+ * un PLAI et un logement libre ne portent pas la meme TVA finale sur le meme
+ * poste.
+ *
+ * Aucun arrondi pendant la ventilation : les montants restent exacts jusqu'aux
+ * totaux, ou la repartition sans perte garantit que les tranches somment
+ * exactement le total de l'operation, et les chapitres le prix de revient.
+ *
+ * Sources : BilPLS!D:J (saisie par poste), maquette LEON REWORK PDR!B3
+ * (« saisie HT globale, ventilation au prorata SU »), referentiel tva.
+ */
+
+/** Libelles des chapitres, pour l'ecran. */
+const LIBELLES_CHAPITRES = /** @type {Record<string, string>} */ ({
+  charge_fonciere: 'Charge foncière',
+  batiment: 'Bâtiment',
+  honoraires: 'Honoraires',
+  frais_divers: 'Frais divers',
+  frais_financiers: 'Frais financiers',
+});
+
+/** @type {import('../classeur.js').Domaine} */
+const PRIX_REVIENT = {
+  domaine: 'prix_revient',
+  titre: 'Prix de revient',
+  dimensions: {
+    poste: { libelle: 'Poste', valeurs: 'INDICES(postes_saisis)', etiquette: 'libelle_poste' },
+    chapitre: {
+      libelle: 'Chapitre',
+      valeurs: 'UNIQUES(LISTE(chapitre_poste POUR poste))',
+      etiquette: 'libelle_chapitre',
+    },
+  },
+  grandeurs: {
+    // --- Saisie des postes ----------------------------------------------------
+    postes_saisis: {
+      libelle: 'Postes du prix de revient',
+      unite: 'liste',
+      saisie: 'postes_bilan',
+      ecran: 'Prix de revient',
+    },
+    id_poste: {
+      libelle: 'Identifiant du poste',
+      unite: 'texte',
+      sur: ['poste'],
+      saisie: 'postes_bilan[poste].id',
+      ecran: 'Prix de revient',
+    },
+    chapitre_poste: {
+      libelle: 'Chapitre du poste',
+      unite: 'texte',
+      sur: ['poste'],
+      saisie: 'postes_bilan[poste].chapitre',
+      ecran: 'Prix de revient',
+    },
+    libelle_poste: {
+      libelle: 'Libellé du poste',
+      unite: 'texte',
+      sur: ['poste'],
+      saisie: 'postes_bilan[poste].libelle',
+      ecran: 'Prix de revient',
+    },
+    libelle_chapitre: {
+      libelle: 'Libellé du chapitre',
+      unite: 'texte',
+      sur: ['chapitre'],
+      lire: (_ctx, ch) => LIBELLES_CHAPITRES[ch] ?? ch,
+    },
+    montant_ht_saisi_poste: {
+      libelle: 'Montant HT saisi',
+      unite: 'eur',
+      sur: ['poste'],
+      saisie: 'postes_bilan[poste].montant_ht_eur',
+      ecran: 'Prix de revient',
+    },
+    montants_ht_tranches_poste: {
+      libelle: 'Montants HT saisis tranche par tranche',
+      unite: 'liste',
+      sur: ['poste'],
+      saisie: 'postes_bilan[poste].montants_ht_par_produit',
+      ecran: 'Prix de revient',
+    },
+    montant_ht_tranche_saisi: {
+      libelle: 'Montant HT saisi pour la tranche',
+      unite: 'eur',
+      sur: ['poste', 'tranche'],
+      saisie: 'postes_bilan[poste].montants_ht_par_produit[tranche]',
+      ecran: 'Prix de revient',
+    },
+    taux_tva_poste: {
+      libelle: 'Taux de TVA saisi',
+      unite: 'taux',
+      sur: ['poste'],
+      saisie: 'postes_bilan[poste].taux_tva',
+      ecran: 'Prix de revient',
+    },
+    taux_tva_tranche_saisi: {
+      libelle: 'Taux de TVA saisi pour la tranche',
+      unite: 'taux',
+      sur: ['poste', 'tranche'],
+      saisie: 'postes_bilan[poste].taux_tva_par_produit[tranche]',
+      ecran: 'Prix de revient',
+    },
+    hors_lasm_poste: {
+      libelle: 'Poste hors livraison à soi-même',
+      unite: 'booleen',
+      sur: ['poste'],
+      saisie: 'postes_bilan[poste].hors_lasm',
+      ecran: 'Prix de revient',
+    },
+    modulation_saisie: {
+      libelle: 'Modulation TTC saisie',
+      unite: 'eur',
+      saisie: 'modulation_ttc_eur',
+      ecran: 'Prix de revient',
+    },
+    modulation_ttc: {
+      libelle: 'Modulation TTC',
+      unite: 'eur',
+      regle: 'R-TVA-4',
+      formule: 'DEFAUT(modulation_saisie; 0)',
+      note: 'TTC non finançable ajouté au prix de revient.',
+    },
+    qpv_saisi: {
+      libelle: 'Quartier prioritaire saisi',
+      unite: 'booleen',
+      saisie: 'identite.qpv',
+      ecran: 'Opération',
+    },
+    qpv: {
+      libelle: 'Opération en quartier prioritaire',
+      unite: 'booleen',
+      regle: 'R-TVA-2',
+      formule: 'qpv_saisi = VRAI',
+    },
+
+    // --- R-TVA-2 : taux de livraison a soi-meme ------------------------------
+    taux_lasm_qpv: {
+      libelle: 'Taux du PLUS en quartier prioritaire',
+      unite: 'taux',
+      regle: 'R-TVA-2',
+      parametre: 'tva.plus_en_qpv.taux',
+      ecran: 'Paramètres > TVA',
+    },
+    taux_lasm_produit: {
+      libelle: 'Taux de livraison à soi-même propre au produit',
+      unite: 'taux',
+      regle: 'R-TVA-2',
+      sur: ['tranche'],
+      parametre: 'tva.lasm_par_produit[tranche]',
+      ecran: 'Paramètres > TVA',
+    },
+    taux_lasm_designe: {
+      libelle: 'Taux désigné par le produit',
+      unite: 'taux',
+      regle: 'R-TVA-2',
+      sur: ['tranche'],
+      lire: (ctx, tranche) => ctx.baremes?.tva?.[produit(tranche).cle_lasm],
+      ecran: 'Paramètres > TVA',
+    },
+    taux_lasm: {
+      libelle: 'Taux de livraison à soi-même',
+      unite: 'taux',
+      regle: 'R-TVA-2',
+      sur: ['tranche'],
+      formule:
+        "SI(ET(tranche = 'PLUS'; qpv; DEFINI(taux_lasm_qpv)); taux_lasm_qpv; " +
+        'SI(DEFINI(taux_lasm_produit); taux_lasm_produit; ' +
+        "SI(DEFINI(taux_lasm_designe); taux_lasm_designe; ERREUR('Taux LASM introuvable pour '; tranche))))",
+      note: 'Le PLUS en quartier prioritaire relève du taux social (CGI 278 sexies) : une condition de localisation, pas un autre produit.',
+    },
+
+    // --- R-TVA-1/3 : montants des postes -------------------------------------
+    ventile_a_la_main_poste: {
+      libelle: 'Poste saisi tranche par tranche',
+      unite: 'booleen',
+      regle: 'R-TVA-3',
+      sur: ['poste'],
+      formule: 'SI(montants_ht_tranches_poste; VRAI; FAUX)',
+    },
+    ht_poste: {
+      libelle: 'Montant HT du poste',
+      unite: 'eur',
+      regle: 'R-TVA-3',
+      sur: ['poste'],
+      formule:
+        'SI(ventile_a_la_main_poste; SOMME(DEFAUT(m; 0) POUR m DANS VALEURS(montants_ht_tranches_poste)); ' +
+        'DEFAUT(montant_ht_saisi_poste; 0))',
+      note: 'Saisi tranche par tranche, le poste vaut la somme de ses tranches : la saisie par tranche fait foi.',
+    },
+    tva_saisie_poste: {
+      libelle: 'TVA du poste au taux saisi',
+      unite: 'eur',
+      regle: 'R-TVA-1',
+      sur: ['poste'],
+      formule: 'ht_poste * DEFAUT(taux_tva_poste; 0)',
+    },
+    ttc_saisie_poste: {
+      libelle: 'TTC du poste au taux saisi',
+      unite: 'eur',
+      regle: 'R-TVA-1',
+      sur: ['poste'],
+      formule: 'ht_poste + tva_saisie_poste',
+    },
+    ht_poste_arrondi: {
+      libelle: 'Montant HT du poste, arrondi',
+      unite: 'eur',
+      sur: ['poste'],
+      formule: 'ARRONDI.EURO(ht_poste)',
+    },
+    tva_saisie_poste_arrondie: {
+      libelle: 'TVA du poste au taux saisi, arrondie',
+      unite: 'eur',
+      sur: ['poste'],
+      formule: 'ARRONDI.EURO(tva_saisie_poste)',
+    },
+    ttc_saisie_poste_arrondi: {
+      libelle: 'TTC du poste au taux saisi, arrondi',
+      unite: 'eur',
+      sur: ['poste'],
+      formule: 'ARRONDI.EURO(ttc_saisie_poste)',
+    },
+
+    // --- Lecture d'un seul tenant, au taux de la tranche de reference ---------
+    tranche_reference: {
+      libelle: 'Tranche de référence',
+      unite: 'texte',
+      formule:
+        "DEFAUT(tranche_unique; ELEMENT(tranches_presentes; 0); ERREUR('Programme sans tranche : saisir au moins un lot.'))",
+      note: 'La tranche unique, ou à défaut la première : la lecture d’un seul tenant n’a qu’un taux.',
+    },
+    taux_lasm_reference: {
+      libelle: 'Taux de livraison à soi-même de référence',
+      unite: 'taux',
+      regle: 'R-TVA-2',
+      formule: 'taux_lasm[tranche: tranche_reference]',
+    },
+    ttc_lasm_reference_poste: {
+      libelle: 'TTC du poste au taux de référence',
+      unite: 'eur',
+      regle: 'R-TVA-2',
+      sur: ['poste'],
+      formule: 'SI(hors_lasm_poste; ttc_saisie_poste; ht_poste * (1 + taux_lasm_reference))',
+    },
+    ttc_lasm_reference_poste_arrondi: {
+      libelle: 'TTC du poste au taux de référence, arrondi',
+      unite: 'eur',
+      sur: ['poste'],
+      formule: 'ARRONDI.EURO(ttc_lasm_reference_poste)',
+    },
+    ht_chapitre_global: {
+      libelle: 'Montant HT du chapitre, d’un seul tenant',
+      unite: 'eur',
+      sur: ['chapitre'],
+      formule: 'ARRONDI.EURO(SOMME(ht_poste POUR poste QUAND chapitre_poste = chapitre))',
+    },
+    tva_chapitre_global: {
+      libelle: 'TVA du chapitre, d’un seul tenant',
+      unite: 'eur',
+      sur: ['chapitre'],
+      formule: 'ARRONDI.EURO(SOMME(tva_saisie_poste POUR poste QUAND chapitre_poste = chapitre))',
+    },
+    ttc_chapitre_global: {
+      libelle: 'TTC du chapitre, d’un seul tenant',
+      unite: 'eur',
+      sur: ['chapitre'],
+      formule: 'ARRONDI.EURO(SOMME(ttc_saisie_poste POUR poste QUAND chapitre_poste = chapitre))',
+    },
+    ttc_lasm_chapitre_global: {
+      libelle: 'TTC final du chapitre, d’un seul tenant',
+      unite: 'eur',
+      sur: ['chapitre'],
+      formule: 'ARRONDI.EURO(SOMME(ttc_lasm_reference_poste POUR poste QUAND chapitre_poste = chapitre))',
+    },
+    total_ht_global: {
+      libelle: 'Total HT, d’un seul tenant',
+      unite: 'eur',
+      formule: 'ARRONDI.EURO(SOMME(ht_poste POUR poste))',
+    },
+    total_tva_global: {
+      libelle: 'Total TVA, d’un seul tenant',
+      unite: 'eur',
+      formule: 'ARRONDI.EURO(SOMME(tva_saisie_poste POUR poste))',
+    },
+    total_ttc_global: {
+      libelle: 'Total TTC, d’un seul tenant',
+      unite: 'eur',
+      formule: 'ARRONDI.EURO(SOMME(ttc_saisie_poste POUR poste))',
+    },
+    total_ttc_lasm_global: {
+      libelle: 'Total TTC final, d’un seul tenant',
+      unite: 'eur',
+      formule: 'ARRONDI.EURO(SOMME(ttc_lasm_reference_poste POUR poste))',
+    },
+    total_ttc_module_global: {
+      libelle: 'Prix de revient modulé, d’un seul tenant',
+      unite: 'eur',
+      regle: 'R-TVA-4',
+      formule: 'ARRONDI.EURO(SOMME(ttc_lasm_reference_poste POUR poste) + modulation_ttc)',
+    },
+
+    // --- R-TVA-2/3 : ventilation par tranche -----------------------------------
+    ht_poste_tranche: {
+      libelle: 'Montant HT du poste pour la tranche',
+      unite: 'eur',
+      regle: 'R-TVA-3',
+      sur: ['poste', 'tranche'],
+      formule:
+        'SI(ventile_a_la_main_poste; DEFAUT(montant_ht_tranche_saisi; 0); ht_poste * quote_part_su)',
+    },
+    taux_tva_poste_tranche: {
+      libelle: 'Taux de TVA du poste pour la tranche',
+      unite: 'taux',
+      regle: 'R-TVA-2',
+      sur: ['poste', 'tranche'],
+      formule:
+        'SI(RENSEIGNE(taux_tva_tranche_saisi); taux_tva_tranche_saisi; ' +
+        'SI(hors_lasm_poste; DEFAUT(taux_tva_poste; 0); ' +
+        'SI(RENSEIGNE(taux_lasm); taux_lasm; DEFAUT(taux_tva_poste; 0))))',
+      note: 'Sans saisie propre à la tranche, le taux de son produit ; un poste hors livraison à soi-même garde son taux saisi.',
+    },
+    tva_poste_tranche: {
+      libelle: 'TVA du poste pour la tranche',
+      unite: 'eur',
+      regle: 'R-TVA-2',
+      sur: ['poste', 'tranche'],
+      formule: 'ht_poste_tranche * taux_tva_poste_tranche',
+    },
+    ttc_poste_tranche: {
+      libelle: 'TTC du poste pour la tranche',
+      unite: 'eur',
+      sur: ['poste', 'tranche'],
+      formule: 'ht_poste_tranche + tva_poste_tranche',
+    },
+    ttc_lasm_poste_tranche: {
+      libelle: 'TTC final du poste pour la tranche',
+      unite: 'eur',
+      regle: 'R-TVA-2',
+      sur: ['poste', 'tranche'],
+      formule:
+        'SI(hors_lasm_poste; ht_poste_tranche + tva_poste_tranche; ht_poste_tranche * (1 + taux_lasm))',
+    },
+    part_poste_tranche: {
+      libelle: 'Part du poste revenant à la tranche',
+      unite: 'taux',
+      sur: ['poste', 'tranche'],
+      formule: 'SI(ht_poste > 0; ht_poste_tranche / ht_poste; quote_part_su)',
+    },
+    tva_poste_ventile: {
+      libelle: 'TVA du poste, tranches cumulées',
+      unite: 'eur',
+      sur: ['poste'],
+      formule: 'ARRONDI.EURO(SOMME(tva_poste_tranche POUR tranche DANS tranches_ordre_saisie))',
+    },
+    ttc_poste_ventile: {
+      libelle: 'TTC du poste, tranches cumulées',
+      unite: 'eur',
+      sur: ['poste'],
+      formule: 'ARRONDI.EURO(SOMME(ttc_poste_tranche POUR tranche DANS tranches_ordre_saisie))',
+    },
+    ttc_lasm_poste_ventile: {
+      libelle: 'TTC final du poste, tranches cumulées',
+      unite: 'eur',
+      sur: ['poste'],
+      formule: 'ARRONDI.EURO(SOMME(ttc_lasm_poste_tranche POUR tranche DANS tranches_ordre_saisie))',
+    },
+
+    // --- Totaux par tranche : cumuls exacts, puis repartition sans perte ---------
+    cumul_ht_tranche: {
+      libelle: 'Montant HT exact de la tranche',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'SOMME(ht_poste_tranche POUR poste)',
+    },
+    cumul_tva_tranche: {
+      libelle: 'TVA exacte de la tranche',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'SOMME(tva_poste_tranche POUR poste)',
+    },
+    cumul_ttc_tranche: {
+      libelle: 'TTC exact de la tranche',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'SOMME(ttc_poste_tranche POUR poste)',
+    },
+    cumul_ttc_lasm_tranche: {
+      libelle: 'TTC final exact de la tranche',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'SOMME(ttc_lasm_poste_tranche POUR poste)',
+    },
+    modulation_tranche: {
+      libelle: 'Modulation revenant à la tranche',
+      unite: 'eur',
+      regle: 'R-TVA-4',
+      sur: ['tranche'],
+      formule: 'modulation_ttc * quote_part_su',
+    },
+    total_ht_tranche: {
+      libelle: 'Montant HT de la tranche',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'REPARTIR(cumul_ht_tranche POUR tranche DANS tranches_ordre_saisie)',
+    },
+    total_tva_tranche: {
+      libelle: 'TVA de la tranche',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'REPARTIR(cumul_tva_tranche POUR tranche DANS tranches_ordre_saisie)',
+    },
+    total_ttc_tranche: {
+      libelle: 'TTC de la tranche',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'REPARTIR(cumul_ttc_tranche POUR tranche DANS tranches_ordre_saisie)',
+    },
+    total_ttc_lasm_tranche: {
+      libelle: 'TTC final de la tranche',
+      unite: 'eur',
+      regle: 'R-TVA-2',
+      sur: ['tranche'],
+      formule: 'REPARTIR(cumul_ttc_lasm_tranche POUR tranche DANS tranches_ordre_saisie)',
+    },
+    total_ttc_module_tranche: {
+      libelle: 'Prix de revient de la tranche',
+      unite: 'eur',
+      regle: 'R-TVA-4',
+      sur: ['tranche'],
+      formule:
+        'REPARTIR(cumul_ttc_lasm_tranche + modulation_tranche POUR tranche DANS tranches_ordre_saisie)',
+    },
+    total_ht: {
+      libelle: 'Total HT',
+      unite: 'eur',
+      formule: 'SOMME(total_ht_tranche POUR tranche DANS tranches_ordre_saisie)',
+    },
+    total_tva: {
+      libelle: 'Total TVA',
+      unite: 'eur',
+      formule: 'SOMME(total_tva_tranche POUR tranche DANS tranches_ordre_saisie)',
+    },
+    total_ttc: {
+      libelle: 'Total TTC',
+      unite: 'eur',
+      formule: 'SOMME(total_ttc_tranche POUR tranche DANS tranches_ordre_saisie)',
+    },
+    total_ttc_lasm: {
+      libelle: 'Total TTC final',
+      unite: 'eur',
+      regle: 'R-TVA-2',
+      formule: 'SOMME(total_ttc_lasm_tranche POUR tranche DANS tranches_ordre_saisie)',
+    },
+    total_ttc_module: {
+      libelle: 'Prix de revient',
+      unite: 'eur',
+      regle: 'R-TVA-4',
+      formule: 'SOMME(total_ttc_module_tranche POUR tranche DANS tranches_ordre_saisie)',
+      note: 'Base du plan de financement (R-FIN-1).',
+    },
+
+    // --- Chapitres : exacts, repartis entre eux, puis entre tranches -------------
+    ht_chapitre_exact: {
+      libelle: 'Montant HT exact du chapitre',
+      unite: 'eur',
+      sur: ['chapitre'],
+      formule:
+        'SOMME(ht_poste_tranche POUR poste QUAND chapitre_poste = chapitre POUR tranche DANS tranches_ordre_saisie)',
+    },
+    tva_chapitre_exact: {
+      libelle: 'TVA exacte du chapitre',
+      unite: 'eur',
+      sur: ['chapitre'],
+      formule:
+        'SOMME(tva_poste_tranche POUR poste QUAND chapitre_poste = chapitre POUR tranche DANS tranches_ordre_saisie)',
+    },
+    ttc_chapitre_exact: {
+      libelle: 'TTC exact du chapitre',
+      unite: 'eur',
+      sur: ['chapitre'],
+      formule:
+        'SOMME(ttc_poste_tranche POUR poste QUAND chapitre_poste = chapitre POUR tranche DANS tranches_ordre_saisie)',
+    },
+    ttc_lasm_chapitre_exact: {
+      libelle: 'TTC final exact du chapitre',
+      unite: 'eur',
+      sur: ['chapitre'],
+      formule:
+        'SOMME(ttc_lasm_poste_tranche POUR poste QUAND chapitre_poste = chapitre POUR tranche DANS tranches_ordre_saisie)',
+    },
+    ht_chapitre: {
+      libelle: 'Montant HT du chapitre',
+      unite: 'eur',
+      sur: ['chapitre'],
+      formule: 'REPARTIR(ht_chapitre_exact POUR chapitre)',
+    },
+    tva_chapitre: {
+      libelle: 'TVA du chapitre',
+      unite: 'eur',
+      sur: ['chapitre'],
+      formule: 'REPARTIR(tva_chapitre_exact POUR chapitre)',
+    },
+    ttc_chapitre: {
+      libelle: 'TTC du chapitre',
+      unite: 'eur',
+      sur: ['chapitre'],
+      formule: 'REPARTIR(ttc_chapitre_exact POUR chapitre)',
+    },
+    ttc_lasm_chapitre: {
+      libelle: 'TTC final du chapitre',
+      unite: 'eur',
+      sur: ['chapitre'],
+      formule: 'REPARTIR(ttc_lasm_chapitre_exact POUR chapitre)',
+    },
+    ht_chapitre_tranche_exact: {
+      libelle: 'Montant HT exact du chapitre pour la tranche',
+      unite: 'eur',
+      sur: ['chapitre', 'tranche'],
+      formule: 'SOMME(ht_poste_tranche POUR poste QUAND chapitre_poste = chapitre)',
+    },
+    tva_chapitre_tranche_exact: {
+      libelle: 'TVA exacte du chapitre pour la tranche',
+      unite: 'eur',
+      sur: ['chapitre', 'tranche'],
+      formule: 'SOMME(tva_poste_tranche POUR poste QUAND chapitre_poste = chapitre)',
+    },
+    ttc_chapitre_tranche_exact: {
+      libelle: 'TTC exact du chapitre pour la tranche',
+      unite: 'eur',
+      sur: ['chapitre', 'tranche'],
+      formule: 'SOMME(ttc_poste_tranche POUR poste QUAND chapitre_poste = chapitre)',
+    },
+    ttc_lasm_chapitre_tranche_exact: {
+      libelle: 'TTC final exact du chapitre pour la tranche',
+      unite: 'eur',
+      sur: ['chapitre', 'tranche'],
+      formule: 'SOMME(ttc_lasm_poste_tranche POUR poste QUAND chapitre_poste = chapitre)',
+    },
+    ht_chapitre_tranche: {
+      libelle: 'Montant HT du chapitre pour la tranche',
+      unite: 'eur',
+      sur: ['chapitre', 'tranche'],
+      formule: 'REPARTIR(ht_chapitre_tranche_exact POUR tranche DANS tranches_ordre_saisie; ht_chapitre)',
+      note: 'Réparti sur le sous-total AFFICHÉ du chapitre : la ligne s’additionne à l’écran.',
+    },
+    tva_chapitre_tranche: {
+      libelle: 'TVA du chapitre pour la tranche',
+      unite: 'eur',
+      sur: ['chapitre', 'tranche'],
+      formule: 'REPARTIR(tva_chapitre_tranche_exact POUR tranche DANS tranches_ordre_saisie; tva_chapitre)',
+    },
+    ttc_chapitre_tranche: {
+      libelle: 'TTC du chapitre pour la tranche',
+      unite: 'eur',
+      sur: ['chapitre', 'tranche'],
+      formule: 'REPARTIR(ttc_chapitre_tranche_exact POUR tranche DANS tranches_ordre_saisie; ttc_chapitre)',
+    },
+    ttc_lasm_chapitre_tranche: {
+      libelle: 'TTC final du chapitre pour la tranche',
+      unite: 'eur',
+      sur: ['chapitre', 'tranche'],
+      formule:
+        'REPARTIR(ttc_lasm_chapitre_tranche_exact POUR tranche DANS tranches_ordre_saisie; ttc_lasm_chapitre)',
+    },
+  },
+};
+
 /* ===== src/formules/modele.js ===== */
 // @ts-check
 /**
@@ -7337,7 +7990,8 @@ const LOYERS = {
 
 
 
-const MODELE = creerModele([OPERATION, CALENDRIER, SURFACES, LOYERS]);
+
+const MODELE = creerModele([OPERATION, CALENDRIER, SURFACES, LOYERS, PRIX_REVIENT]);
 
 /**
  * Un classeur neuf sur le modele du moteur.
@@ -8551,16 +9205,21 @@ function controlesLoyer(loyer, code_produit) {
 /**
  * R-TVA - Prix de revient, TVA et livraison a soi-meme (LASM).
  *
- * Structure LEON (onglets Bil*) : 4 chapitres (charge fonciere, batiment,
- * honoraires, frais divers) x (collectif, individuel) x (HT, TVA, TTC), chaque
- * poste portant son propre taux de TVA de saisie. Une colonne separee recalcule
- * la « TVA finale » au taux de livraison a soi-meme du produit.
+ * LES FORMULES VIVENT DANS `formules/domaines/prix_revient.js`, ecrites une
+ * fois en blocs : les postes et leur TVA, le taux de livraison a soi-meme de
+ * chaque tranche, la ventilation au prorata des surfaces et les repartitions
+ * sans perte. C'est la que le moteur les execute, et de la que l'ecran les
+ * affiche.
  *
- * Ici la structure est une DONNEE : une liste de postes typees, pas 4 blocs de
- * colonnes dupliques. Ajouter un chapitre ou un poste ne touche pas le code.
- *
- * Sources : BilPLS!D:J (saisie HT/taux/TTC par poste), ParaGLOB!J44 (taux reduit
- * de la simulation), baremes_her_2027.json/tva.lasm_par_produit.
+ * Ce module garde :
+ *  - la RESTITUTION du prix de revient, sous la forme que l'ecran et les
+ *    exports consomment ;
+ *  - les fonctions historiques (`prixDeRevient`, `prixDeRevientVentile`,
+ *    `tauxLASM`...). Elles evaluent ces memes formules sur les valeurs qu'on
+ *    leur donne : elles ne calculent rien elles-memes ;
+ *  - trois regles encore ecrites ici, que le moteur n'emploie qu'en marge
+ *    (valeur comptable du terrain, base d'amortissement comptable, cle de
+ *    repartition generique).
  *
  * Unites : montants en euros.
  */
@@ -8579,92 +9238,68 @@ function controlesLoyer(loyer, code_produit) {
  */
 
 /**
+ * Classeur reduit a des postes et a des tranches donnees, pour evaluer les
+ * formules du prix de revient hors d'une operation complete.
+ * @param {{postes: any[], codes: string[], modulation_ttc_eur?: number, qpv?: boolean, referentiels?: any}} p
+ */
+function classeurDePostes({ postes, codes, modulation_ttc_eur, qpv = false, referentiels }) {
+  const c = nouveauClasseur({ entrees: { postes_bilan: postes, modulation_ttc_eur }, baremes: referentiels });
+  c.fixerDimension('tranche', codes).fixer('tranches_ordre_saisie', {}, codes).fixer('qpv', {}, Boolean(qpv));
+  return c;
+}
+
+/**
  * R-TVA-1 - Ventilation HT / TVA / TTC d'un poste au taux de saisie.
+ * Formules : `ht_poste`, `tva_saisie_poste`, `ttc_saisie_poste`.
  * @param {Poste} poste
  * @returns {{ht_eur: number, tva_eur: number, ttc_eur: number}}
  */
 function ventilerPoste(poste) {
-  const ht = montantHTPoste(poste);
-  const tva = ht * (poste.taux_tva ?? 0);
+  const c = nouveauClasseur({ entrees: { postes_bilan: [poste] } });
+  const P = { poste: 0 };
   return {
-    ht_eur: ht,
-    tva_eur: tva,
-    ttc_eur: ht + tva,
+    ht_eur: c.valeur('ht_poste', P),
+    tva_eur: c.valeur('tva_saisie_poste', P),
+    ttc_eur: c.valeur('ttc_saisie_poste', P),
   };
 }
 
 /**
- * R-TVA-3 - Montant HT d'un poste, quel que soit son mode de saisie.
- *
- * Un poste se saisit de DEUX facons, au choix, ligne par ligne :
- *  - un montant GLOBAL (`montant_ht_eur`), que le moteur ventile au prorata de
- *    surface utile ;
- *  - un montant PAR TRANCHE (`montants_ht_par_produit`), quand la depense n'est
- *    pas proportionnelle aux surfaces - un ascenseur qui ne dessert qu'un
- *    batiment, une subvention de travaux propre a une tranche.
- *
- * Des que la saisie par tranche existe, elle FAIT FOI et le total en decoule.
- * L'inverse ferait cohabiter deux verites pour la meme grandeur.
- *
+ * R-TVA-3 - Montant HT d'un poste, quel que soit son mode de saisie : global,
+ * ou tranche par tranche - la saisie par tranche fait alors foi. Formule : `ht_poste`.
  * @param {{montant_ht_eur?: number, montants_ht_par_produit?: Record<string, number>}} poste
  * @returns {number}
  */
 function montantHTPoste(poste) {
-  const parTranche = poste.montants_ht_par_produit;
-  if (!parTranche) return poste.montant_ht_eur ?? 0;
-  return Object.values(parTranche).reduce((s, v) => s + (v ?? 0), 0);
+  return nouveauClasseur({ entrees: { postes_bilan: [poste] } }).valeur('ht_poste', { poste: 0 });
 }
 
 /**
  * R-TVA-2 - Taux de TVA applicable a un poste POUR UNE TRANCHE donnee.
- * Le taux se surcharge tranche par tranche : une meme ligne de travaux peut
- * relever de 5,5 % en PLAI et de 10 % en PLUS. A defaut, le taux de la ligne.
- * @param {{taux_tva?: number, taux_tva_par_produit?: Record<string, number>}} poste
+ * Formule : `taux_tva_poste_tranche`.
+ * @param {{taux_tva?: number, taux_tva_par_produit?: Record<string, number>, hors_lasm?: boolean}} poste
  * @param {string} code
+ * @param {number} [taux_produit] taux de livraison a soi-meme du produit
  * @returns {number}
  */
 function tauxTVAPoste(poste, code, taux_produit) {
-  const t = poste.taux_tva_par_produit?.[code];
-  if (t !== undefined && t !== null) return t;
-  // A defaut de saisie, la tranche prend LE TAUX DE SON PRODUIT, tel qu'il est
-  // regle au referentiel. Pas celui de la ligne : le taux social est propre au
-  // produit, et une ligne a 5,5 % parce qu'une tranche est en PLAI n'a pas a
-  // imposer ce taux a la part PLS de la meme ligne, ou il n'existe pas.
-  // Corollaire voulu : changer le taux d'un produit a l'ecran des parametres
-  // deplace toutes les lignes de ce produit qui n'ont pas de saisie propre.
-  // Un poste HORS CHAMP de la livraison a soi-meme garde son taux de saisie :
-  // il est par definition en dehors du regime du produit, lui appliquer le taux
-  // de ce produit n'aurait pas de sens. C'est le cas des annexes OP-1, dont
-  // les postes portent une TVA nulle et un TTC egal au HT (Q-24).
-  if (poste.hors_lasm) return poste.taux_tva ?? 0;
-  if (taux_produit !== undefined && taux_produit !== null) return taux_produit;
-  return poste.taux_tva ?? 0;
+  const c = nouveauClasseur({ entrees: { postes_bilan: [poste] } });
+  c.fixerDimension('tranche', [code]).fixer('taux_lasm', { tranche: code }, taux_produit);
+  return c.valeur('taux_tva_poste_tranche', { poste: 0, tranche: code });
 }
 
 /**
  * Taux de livraison a soi-meme applicable a un produit (R-TVA-2).
- * Attention : pour PLUS/PLAI, LEON utilise le taux reduit de la simulation
- * (10 %) et non la valeur historique 5,5 % du tableau ParaGEN!A78 - l'ecart est
- * documente dans baremes_her_2027.json.
+ * Formule : `taux_lasm`.
  * @param {string} code_produit
  * @param {any} referentiels
+ * @param {{qpv?: boolean}} [contexte]
  * @returns {number}
  */
 function tauxLASM(code_produit, referentiels, contexte = {}) {
-  const def = produit(/** @type {any} */ (code_produit));
-  const tva = referentiels.tva;
-  const parProduit = tva.lasm_par_produit;
-  // Le PLUS en quartier prioritaire ou sous convention de renouvellement urbain
-  // releve du taux social de 5,5 % (CGI 278 sexies). Ce n'est pas un autre
-  // produit, seulement une condition de localisation : la traiter comme un
-  // huitieme produit dupliquerait tout son parametrage pour un seul chiffre.
-  if (code_produit === 'PLUS' && contexte.qpv && tva.plus_en_qpv?.taux !== undefined) {
-    return tva.plus_en_qpv.taux;
-  }
-  // Cle explicite du produit si elle existe, sinon le taux designe par le produit.
-  if (parProduit[code_produit] !== undefined) return parProduit[code_produit];
-  if (tva[def.cle_lasm] !== undefined) return tva[def.cle_lasm];
-  throw new Error(`Taux LASM introuvable pour ${code_produit}`);
+  const c = nouveauClasseur({ entrees: {}, baremes: referentiels });
+  c.fixerDimension('tranche', [code_produit]).fixer('qpv', {}, Boolean(contexte.qpv));
+  return c.valeur('taux_lasm', { tranche: code_produit });
 }
 
 /**
@@ -8676,6 +9311,8 @@ function tauxLASM(code_produit, referentiels, contexte = {}) {
  * pas, et c'est ainsi qu'une tranche PLS se retrouvait a 5,5 %. Le taux normal
  * et le taux nul restent possibles partout : des honoraires se facturent a 20 %
  * et une taxe ne porte pas de TVA, quel que soit le produit.
+ *
+ * Ce n'est pas un montant mais la liste des choix qu'offre l'ecran.
  *
  * @param {string} code_produit
  * @param {any} referentiels
@@ -8689,252 +9326,150 @@ function tauxTVAAdmissibles(code_produit, referentiels, contexte = {}) {
 }
 
 /**
- * R-TVA-1/2 - Prix de revient d'un produit.
+ * Detail poste par poste, tel que la lecture d'un seul tenant le restitue.
+ * @param {import('./formules/classeur.js').Classeur} c
+ */
+function postesGlobaux(c) {
+  return c.valeursDimension('poste').map((p) => {
+    const P = { poste: p };
+    const v = (/** @type {string} */ id) => c.valeur(id, P);
+    return {
+      // Identifiant stable du poste, s'il en porte un : c'est lui qui permet a
+      // une restitution de retrouver sa ligne de saisie, jamais le rang.
+      id: v('id_poste'),
+      chapitre: v('chapitre_poste'),
+      libelle: v('libelle_poste'),
+      taux_tva: v('taux_tva_poste'),
+      ht_eur: v('ht_poste_arrondi'),
+      tva_eur: v('tva_saisie_poste_arrondie'),
+      ttc_eur: v('ttc_saisie_poste_arrondi'),
+      ttc_lasm_eur: v('ttc_lasm_reference_poste_arrondi'),
+    };
+  });
+}
+
+/**
+ * R-TVA-1/2 - Prix de revient d'un produit, d'un seul tenant.
  *
- * Deux lectures du meme bilan :
- * - `saisie`      : TTC au taux de TVA de chaque poste (ce que coute l'operation) ;
- * - `lasm`        : TTC recalcule au taux de livraison a soi-meme du produit,
- *                   `TTC_final = HT x (1 + taux_lasm)` (R-TVA-2), qui sert de base
- *                   au plan de financement.
- * @param {Object} p
- * @param {string} p.code_produit
- * @param {Poste[]} p.postes
- * @param {number} [p.modulation_ttc_eur] TTC non fincancable ajoute au PR (R-TVA-4)
+ * Deux lectures du meme bilan : `ttc_eur` au taux de TVA de chaque poste (ce
+ * que coute l'operation), `ttc_lasm_eur` au taux de livraison a soi-meme du
+ * produit (R-TVA-2), qui sert de base au plan de financement.
+ *
+ * @param {{code_produit: string, postes: Poste[], modulation_ttc_eur?: number, qpv?: boolean}} p
  * @param {any} referentiels
  */
 function prixDeRevient({ code_produit, postes, modulation_ttc_eur = 0, qpv = false }, referentiels) {
-  const taux_lasm = tauxLASM(code_produit, referentiels, { qpv });
-
-  /** @type {Record<string, {ht_eur: number, tva_eur: number, ttc_eur: number, ttc_lasm_eur: number}>} */
+  const c = classeurDePostes({ postes, codes: [code_produit], modulation_ttc_eur, qpv, referentiels });
+  c.fixer('tranche_reference', {}, code_produit);
+  /** @type {Record<string, any>} */
   const chapitres = {};
-  /** Detail poste par poste, pour que la restitution n'ait rien a recalculer. */
-  const detail = [];
-  let ht = 0;
-  let tva = 0;
-  let ttc = 0;
-  let ttcLasm = 0;
-
-  for (const poste of postes) {
-    const v = ventilerPoste(poste);
-    // R-TVA-2 : un poste hors champ LASM conserve sa TVA de saisie.
-    const ttcFinal = poste.hors_lasm ? v.ttc_eur : v.ht_eur * (1 + taux_lasm);
-    const c = (chapitres[poste.chapitre] ??= { ht_eur: 0, tva_eur: 0, ttc_eur: 0, ttc_lasm_eur: 0 });
-    c.ht_eur += v.ht_eur;
-    c.tva_eur += v.tva_eur;
-    c.ttc_eur += v.ttc_eur;
-    c.ttc_lasm_eur += ttcFinal;
-    ht += v.ht_eur;
-    tva += v.tva_eur;
-    ttc += v.ttc_eur;
-    ttcLasm += ttcFinal;
-    detail.push({
-      // Identifiant stable du poste, s'il en porte un : c'est lui qui permet a
-      // une restitution de retrouver sa ligne de saisie, jamais le rang.
-      id: poste.id,
-      chapitre: poste.chapitre,
-      libelle: poste.libelle,
-      taux_tva: poste.taux_tva,
-      ht_eur: arrondiEuro(v.ht_eur),
-      tva_eur: arrondiEuro(v.tva_eur),
-      ttc_eur: arrondiEuro(v.ttc_eur),
-      ttc_lasm_eur: arrondiEuro(ttcFinal),
-    });
+  for (const ch of c.valeursDimension('chapitre')) {
+    const C = { chapitre: ch };
+    chapitres[ch] = {
+      ht_eur: c.valeur('ht_chapitre_global', C),
+      tva_eur: c.valeur('tva_chapitre_global', C),
+      ttc_eur: c.valeur('ttc_chapitre_global', C),
+      ttc_lasm_eur: c.valeur('ttc_lasm_chapitre_global', C),
+    };
   }
-
-  // Les totaux sont arrondis A PARTIR DES VALEURS EXACTES, jamais en sommant des
-  // valeurs deja arrondies : sommer des arrondis fait deriver le total (un total
-  // de 12 EUR pour un prix de revient de 11 EUR, constate en revue).
-  for (const c of Object.values(chapitres)) {
-    c.ht_eur = arrondiEuro(c.ht_eur);
-    c.tva_eur = arrondiEuro(c.tva_eur);
-    c.ttc_eur = arrondiEuro(c.ttc_eur);
-    c.ttc_lasm_eur = arrondiEuro(c.ttc_lasm_eur);
-  }
-
   return {
-    taux_lasm,
+    taux_lasm: c.valeur('taux_lasm_reference'),
     chapitres,
-    postes: detail,
-    total_ht_eur: arrondiEuro(ht),
-    total_tva_eur: arrondiEuro(tva),
-    total_ttc_eur: arrondiEuro(ttc),
+    postes: postesGlobaux(c),
+    total_ht_eur: c.valeur('total_ht_global'),
+    total_tva_eur: c.valeur('total_tva_global'),
+    total_ttc_eur: c.valeur('total_ttc_global'),
     /** Base du plan de financement (R-TVA-2). */
-    total_ttc_lasm_eur: arrondiEuro(ttcLasm),
+    total_ttc_lasm_eur: c.valeur('total_ttc_lasm_global'),
     /** R-TVA-4 : prix de revient module, reference de l'equilibre R-FIN-1. */
-    total_ttc_module_eur: arrondiEuro(ttcLasm + modulation_ttc_eur),
-    modulation_ttc_eur,
+    total_ttc_module_eur: c.valeur('total_ttc_module_global'),
+    modulation_ttc_eur: c.valeur('modulation_ttc'),
   };
 }
 
 /**
- * R-TVA-2/3 - Prix de revient VENTILE par tranche de financement.
- *
- * Methode reprise de la maquette LEON REWORK (`PDR!B3` : « Saisie HT globale,
- * ventilation au prorata SU ») : chaque poste est saisi une fois, globalement,
- * puis reparti entre les tranches au prorata de leur surface utile. Chaque
- * tranche applique ENSUITE son propre taux de livraison a soi-meme, ce qui est
- * tout l'interet de la ventilation : un PLAI et un LIBRE ne portent pas la meme
- * TVA finale sur le meme poste.
- *
- * La cle est unique pour toute l'operation (arbitrage metier du 05/08/2026 :
- * « ventile tout en SU »), conformement au titre de l'onglet source. Une cle par
- * chapitre ou par poste reste possible plus tard sans changer cette signature.
- *
- * Aucun arrondi n'intervient pendant la ventilation : les montants restent
- * exacts jusqu'aux totaux, ou `arrondirEnConservantLaSomme` garantit que la
- * somme des tranches vaut exactement le total de l'operation.
- *
- * @param {Object} p
- * @param {Poste[]} p.postes
- * @param {Record<string, number>} p.su_par_produit  surface utile de chaque tranche
- * @param {number} [p.modulation_ttc_eur]  TTC non finançable, ventile lui aussi
- * @param {any} referentiels
+ * Ventilation du prix de revient par tranche, telle que le moteur la restitue.
+ * Les tranches suivent l'ordre de saisie des lots : c'est celui des
+ * repartitions sans perte.
+ * @param {import('./formules/classeur.js').Classeur} c
  */
-function prixDeRevientVentile(
-  { postes, su_par_produit, modulation_ttc_eur = 0, qpv = false },
-  referentiels,
-) {
-  const codes = Object.keys(su_par_produit);
-  const suTotale = Object.values(su_par_produit).reduce((s, v) => s + v, 0);
-
-  // Sans surface, aucune ventilation n'a de sens : on retombe sur le calcul
-  // mono-produit plutot que de diviser par zero.
-  /** @type {Record<string, number>} */
-  const parts = {};
-  for (const code of codes) parts[code] = suTotale > 0 ? su_par_produit[code] / suTotale : 0;
-
-  /** @type {Record<string, number>} */
-  const tauxLasmParTranche = {};
-  for (const code of codes) tauxLasmParTranche[code] = tauxLASM(code, referentiels, { qpv });
-
-  /** Accumulateurs exacts par tranche, arrondis seulement a la fin. */
-  const cumul = Object.fromEntries(
-    codes.map((c) => [c, { ht: 0, tva: 0, ttc: 0, ttcLasm: 0, modulation: 0 }]),
-  );
-
-  /** Cumuls exacts par chapitre, pour que la somme des chapitres vaille le total. */
-  const chapitresExacts = {};
-
-  const detail = postes.map((poste) => {
-    const v = ventilerPoste(poste);
-    const ch = (chapitresExacts[poste.chapitre] ??= {
-      ht: 0, tva: 0, ttc: 0, ttcLasm: 0,
-      // Croisement chapitre x tranche : c'est lui qui alimente le sous-total
-      // affiche sous chaque colonne de tranche.
-      parTranche: Object.fromEntries(codes.map((c) => [c, { ht: 0, tva: 0, ttc: 0, ttcLasm: 0 }])),
-    });
-    // Une ligne saisie tranche par tranche impose sa repartition ; les autres
-    // suivent la cle de l'operation (prorata de surface utile).
-    const explicite = poste.montants_ht_par_produit;
-    const parTranche = {};
-    for (const code of codes) {
-      const ht = explicite ? (explicite[code] ?? 0) : v.ht_eur * parts[code];
-      const taux = tauxTVAPoste(poste, code, tauxLasmParTranche[code]);
-      const tva = ht * taux;
-      // R-TVA-2 : un poste hors champ LASM conserve la TVA de saisie.
-      const ttcLasm = poste.hors_lasm ? ht + tva : ht * (1 + tauxLasmParTranche[code]);
-      parTranche[code] = {
-        // Part REELLEMENT appliquee, et non la cle de l'operation : sur une
-        // ligne ventilee a la main, afficher le prorata SU mentirait.
-        part: v.ht_eur > 0 ? ht / v.ht_eur : parts[code],
-        explicite: Boolean(explicite),
-        taux_tva: taux,
-        ht_eur: ht,
-        tva_eur: tva,
-        ttc_eur: ht + tva,
-        ttc_lasm_eur: ttcLasm,
-      };
-      cumul[code].ht += ht;
-      cumul[code].tva += tva;
-      cumul[code].ttc += ht + tva;
-      cumul[code].ttcLasm += ttcLasm;
-      ch.ht += ht;
-      ch.tva += tva;
-      ch.ttc += ht + tva;
-      ch.ttcLasm += ttcLasm;
-      const cht = ch.parTranche[code];
-      cht.ht += ht;
-      cht.tva += tva;
-      cht.ttc += ht + tva;
-      cht.ttcLasm += ttcLasm;
-    }
-    // Totaux de LIGNE recomposes depuis les tranches, et non recalcules au taux
-    // global : des que les taux different d'une tranche a l'autre, le produit
-    // total x taux_global ne vaut plus la somme des TVA reellement dues.
-    const sommeTranches = (cle) =>
-      Object.values(parTranche).reduce((s, t) => s + t[cle], 0);
-
-    return {
-      id: poste.id,
-      chapitre: poste.chapitre,
-      libelle: poste.libelle,
-      taux_tva: poste.taux_tva,
-      ventile_a_la_main: Boolean(explicite),
-      ht_eur: arrondiEuro(v.ht_eur),
-      tva_eur: arrondiEuro(sommeTranches('tva_eur')),
-      ttc_eur: arrondiEuro(sommeTranches('ttc_eur')),
-      ttc_lasm_eur: arrondiEuro(sommeTranches('ttc_lasm_eur')),
-      par_tranche: parTranche,
-    };
-  });
-
-  for (const code of codes) cumul[code].modulation = modulation_ttc_eur * parts[code];
-
-  // Arrondis finaux : chaque grandeur est repartie en entiers dont la somme vaut
-  // exactement le total de l'operation.
-  const cle = (nom) => codes.map((c) => cumul[c][nom]);
-  const htArrondi = arrondirEnConservantLaSomme(cle('ht'));
-  const tvaArrondi = arrondirEnConservantLaSomme(cle('tva'));
-  const ttcArrondi = arrondirEnConservantLaSomme(cle('ttc'));
-  const lasmArrondi = arrondirEnConservantLaSomme(cle('ttcLasm'));
-  const moduleArrondi = arrondirEnConservantLaSomme(
-    codes.map((c) => cumul[c].ttcLasm + cumul[c].modulation),
-  );
+function restituerVentilation(c) {
+  const codes = c.valeur('tranches_ordre_saisie');
+  const v = (/** @type {string} */ id, /** @type {Record<string, any>} */ idx) => c.valeur(id, idx);
+  const parts = Object.fromEntries(codes.map((code) => [code, v('quote_part_su', { tranche: code })]));
 
   /** @type {Record<string, any>} */
   const parTranche = {};
-  codes.forEach((code, i) => {
+  for (const code of codes) {
+    const T = { tranche: code };
     parTranche[code] = {
       part_su: parts[code],
-      su_m2: su_par_produit[code],
-      taux_lasm: tauxLasmParTranche[code],
-      total_ht_eur: htArrondi[i],
-      total_tva_eur: tvaArrondi[i],
-      total_ttc_eur: ttcArrondi[i],
-      total_ttc_lasm_eur: lasmArrondi[i],
-      total_ttc_module_eur: moduleArrondi[i],
+      su_m2: v('su_tranche', T),
+      taux_lasm: v('taux_lasm', T),
+      total_ht_eur: v('total_ht_tranche', T),
+      total_tva_eur: v('total_tva_tranche', T),
+      total_ttc_eur: v('total_ttc_tranche', T),
+      total_ttc_lasm_eur: v('total_ttc_lasm_tranche', T),
+      total_ttc_module_eur: v('total_ttc_module_tranche', T),
     };
-  });
+  }
 
-  // Chapitres arrondis en conservant leur somme, pour la meme raison.
-  const nomsChapitres = Object.keys(chapitresExacts);
-  const chapHt = arrondirEnConservantLaSomme(nomsChapitres.map((n) => chapitresExacts[n].ht));
-  const chapTva = arrondirEnConservantLaSomme(nomsChapitres.map((n) => chapitresExacts[n].tva));
-  const chapTtc = arrondirEnConservantLaSomme(nomsChapitres.map((n) => chapitresExacts[n].ttc));
-  const chapLasm = arrondirEnConservantLaSomme(nomsChapitres.map((n) => chapitresExacts[n].ttcLasm));
   /** @type {Record<string, any>} */
   const chapitres = {};
-  nomsChapitres.forEach((nom, i) => {
-    const exact = chapitresExacts[nom];
-    // Ventilation du sous-total de chapitre entre tranches. Le total IMPOSE est
-    // le sous-total deja arrondi : la ligne doit s'additionner a l'ecran, or ce
-    // sous-total a lui-meme ete ajuste pour que la colonne des chapitres somme
-    // au prix de revient. L'exactitude est donc garantie LIGNE par ligne ; la
-    // colonne d'une tranche peut s'ecarter d'un euro de son total, un arrondi
-    // ne pouvant satisfaire les deux sens a la fois.
-    const repartir = (cle, total) =>
-      arrondirEnConservantLaSomme(codes.map((c) => exact.parTranche[c][cle]), total);
-    const htTr = repartir('ht', chapHt[i]);
-    const tvaTr = repartir('tva', chapTva[i]);
-    const ttcTr = repartir('ttc', chapTtc[i]);
-    const lasmTr = repartir('ttcLasm', chapLasm[i]);
-    chapitres[nom] = {
-      ht_eur: chapHt[i], tva_eur: chapTva[i], ttc_eur: chapTtc[i], ttc_lasm_eur: chapLasm[i],
+  for (const ch of c.valeursDimension('chapitre')) {
+    const C = { chapitre: ch };
+    chapitres[ch] = {
+      ht_eur: v('ht_chapitre', C),
+      tva_eur: v('tva_chapitre', C),
+      ttc_eur: v('ttc_chapitre', C),
+      ttc_lasm_eur: v('ttc_lasm_chapitre', C),
       par_tranche: Object.fromEntries(
-        codes.map((c, j) => [
-          c,
-          { ht_eur: htTr[j], tva_eur: tvaTr[j], ttc_eur: ttcTr[j], ttc_lasm_eur: lasmTr[j] },
-        ]),
+        codes.map((code) => {
+          const CT = { chapitre: ch, tranche: code };
+          return [
+            code,
+            {
+              ht_eur: v('ht_chapitre_tranche', CT),
+              tva_eur: v('tva_chapitre_tranche', CT),
+              ttc_eur: v('ttc_chapitre_tranche', CT),
+              ttc_lasm_eur: v('ttc_lasm_chapitre_tranche', CT),
+            },
+          ];
+        }),
+      ),
+    };
+  }
+
+  const postes = c.valeursDimension('poste').map((p) => {
+    const P = { poste: p };
+    return {
+      id: v('id_poste', P),
+      chapitre: v('chapitre_poste', P),
+      libelle: v('libelle_poste', P),
+      taux_tva: v('taux_tva_poste', P),
+      ventile_a_la_main: v('ventile_a_la_main_poste', P),
+      ht_eur: v('ht_poste_arrondi', P),
+      tva_eur: v('tva_poste_ventile', P),
+      ttc_eur: v('ttc_poste_ventile', P),
+      ttc_lasm_eur: v('ttc_lasm_poste_ventile', P),
+      par_tranche: Object.fromEntries(
+        codes.map((code) => {
+          const PT = { poste: p, tranche: code };
+          return [
+            code,
+            {
+              // Part REELLEMENT appliquee, et non la cle de l'operation : sur
+              // une ligne ventilee a la main, afficher le prorata SU mentirait.
+              part: v('part_poste_tranche', PT),
+              explicite: v('ventile_a_la_main_poste', P),
+              taux_tva: v('taux_tva_poste_tranche', PT),
+              ht_eur: v('ht_poste_tranche', PT),
+              tva_eur: v('tva_poste_tranche', PT),
+              ttc_eur: v('ttc_poste_tranche', PT),
+              ttc_lasm_eur: v('ttc_lasm_poste_tranche', PT),
+            },
+          ];
+        }),
       ),
     };
   });
@@ -8944,12 +9479,56 @@ function prixDeRevientVentile(
     parts,
     par_tranche: parTranche,
     chapitres,
-    postes: detail,
-    total_ht_eur: htArrondi.reduce((s, v) => s + v, 0),
-    total_tva_eur: tvaArrondi.reduce((s, v) => s + v, 0),
-    total_ttc_eur: ttcArrondi.reduce((s, v) => s + v, 0),
-    total_ttc_lasm_eur: lasmArrondi.reduce((s, v) => s + v, 0),
-    total_ttc_module_eur: moduleArrondi.reduce((s, v) => s + v, 0),
+    postes,
+    total_ht_eur: v('total_ht', {}),
+    total_tva_eur: v('total_tva', {}),
+    total_ttc_eur: v('total_ttc', {}),
+    total_ttc_lasm_eur: v('total_ttc_lasm', {}),
+    total_ttc_module_eur: v('total_ttc_module', {}),
+  };
+}
+
+/**
+ * R-TVA-2/3 - Prix de revient VENTILE par tranche de financement, a partir de
+ * postes et de surfaces donnes. Formules du domaine « prix de revient ».
+ * @param {{postes: Poste[], su_par_produit: Record<string, number>, modulation_ttc_eur?: number, qpv?: boolean}} p
+ * @param {any} referentiels
+ */
+function prixDeRevientVentile({ postes, su_par_produit, modulation_ttc_eur = 0, qpv = false }, referentiels) {
+  const codes = Object.keys(su_par_produit);
+  const c = classeurDePostes({ postes, codes, modulation_ttc_eur, qpv, referentiels });
+  for (const code of codes) c.fixer('su_tranche', { tranche: code }, su_par_produit[code]);
+  return restituerVentilation(c);
+}
+
+/**
+ * Prix de revient de l'operation, tel que le moteur le restitue : la lecture
+ * d'un seul tenant (detail des postes, taux de reference) et la ventilation
+ * par tranche, qui fait FOI pour les chapitres et les totaux - elle applique a
+ * chaque tranche son propre taux de livraison a soi-meme, la ou la lecture
+ * d'un seul tenant n'en applique qu'un.
+ * @param {import('./formules/classeur.js').Classeur} c
+ */
+function restituerPrixDeRevient(c) {
+  // Lu en premier : un programme sans tranche arrete le calcul ici.
+  const tauxReference = c.valeur('taux_lasm_reference');
+  const ventilation = restituerVentilation(c);
+  const codes = c.valeursDimension('tranche');
+  return {
+    taux_lasm: tauxReference,
+    chapitres: ventilation.chapitres,
+    postes: postesGlobaux(c),
+    total_ht_eur: ventilation.total_ht_eur,
+    total_tva_eur: ventilation.total_tva_eur,
+    total_ttc_eur: ventilation.total_ttc_eur,
+    total_ttc_lasm_eur: ventilation.total_ttc_lasm_eur,
+    total_ttc_module_eur: ventilation.total_ttc_module_eur,
+    modulation_ttc_eur: c.valeur('modulation_ttc'),
+    ventilation,
+    par_tranche: ventilation.par_tranche,
+    taux_lasm_par_tranche: Object.fromEntries(
+      codes.map((code) => [code, ventilation.par_tranche[code].taux_lasm]),
+    ),
   };
 }
 
@@ -10888,50 +11467,13 @@ function calculer(entrees, referentiels) {
   // zonage (1/2/3 ou A/B/C, propriete du produit) et son jeu de prets CDC par
   // defaut. Le seul repli est l'operation MONO-tranche, ou l'unique produit
   // present tient lieu de reference pour ce que la saisie n'a pas affecte.
-  const trancheUnique = codesPresents.length === 1 ? codesPresents[0] : null;
-  const postesBilan = entrees.postes_bilan ?? [];
-  const modulation = entrees.modulation_ttc_eur ?? 0;
+  const trancheUnique = lire('tranche_unique');
 
-  // Version globale : un seul taux de LASM, donc juste seulement en mono-tranche.
-  // Elle sert de socle (chapitres, detail par poste) et la ventilation par
-  // tranche la remplace des qu'il y a un programme.
-  const bilan = prixDeRevient(
-    {
-      code_produit: trancheUnique ?? codesPresents[0],
-      postes: postesBilan,
-      modulation_ttc_eur: modulation,
-      // R-TVA-2 : le PLUS en quartier prioritaire releve du taux social.
-      qpv: identite.qpv === true,
-    },
-    baremes,
-  );
-
-  if (codesPresents.length) {
-    const ventilation = prixDeRevientVentile(
-      {
-        postes: postesBilan,
-        su_par_produit: suParProduit,
-        modulation_ttc_eur: modulation,
-        qpv: identite.qpv === true,
-      },
-      baremes,
-    );
-    // La ventilation fait FOI des qu'elle existe : elle applique a chaque tranche
-    // son propre taux de livraison a soi-meme, la version globale n'en applique
-    // qu'un seul. Les chapitres viennent d'elle aussi, faute de quoi leur somme
-    // ne vaudrait plus le total en operation multi-tranches.
-    bilan.ventilation = ventilation;
-    bilan.chapitres = ventilation.chapitres;
-    bilan.par_tranche = ventilation.par_tranche;
-    bilan.total_ht_eur = ventilation.total_ht_eur;
-    bilan.total_tva_eur = ventilation.total_tva_eur;
-    bilan.total_ttc_eur = ventilation.total_ttc_eur;
-    bilan.total_ttc_lasm_eur = ventilation.total_ttc_lasm_eur;
-    bilan.total_ttc_module_eur = ventilation.total_ttc_module_eur;
-    bilan.taux_lasm_par_tranche = Object.fromEntries(
-      codesPresents.map((c) => [c, ventilation.par_tranche[c].taux_lasm]),
-    );
-  }
+  // Domaine « prix de revient ». La ventilation par tranche fait FOI pour les
+  // chapitres et les totaux : elle applique a chaque tranche son propre taux de
+  // livraison a soi-meme. La lecture d'un seul tenant, au taux de la tranche de
+  // reference, ne fournit que le detail des postes.
+  const bilan = restituerPrixDeRevient(classeur);
 
   // --- 4. Subventions (R-SUB) ---
   const subventions = agregerSubventions(entrees.subventions ?? [], quotesParts);

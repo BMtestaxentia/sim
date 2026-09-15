@@ -14,11 +14,12 @@
  * Chaque etape delegue a son module ; ce fichier ne contient aucune regle de
  * calcul metier, seulement l'assemblage et la propagation des donnees.
  */
-import { surfaceUtile, quotesPartsSU, loyerProduit, loyerAnnexesSeparees, controlesLoyer } from './loyers.js';
+import { restituerLoyer, controlesLoyer } from './loyers.js';
 import { normaliserTrajectoires } from './trajectoires.js';
-import { calendrierOperation } from './calendrier.js';
+import { restituerCalendrier } from './calendrier.js';
+import { nouveauClasseur } from './formules/modele.js';
 import { tresorerieChantier } from './tresorerie.js';
-import { pretsDefautResolus, produit, marge, financeParCDC, ORDRE_PRODUITS } from './produits.js';
+import { pretsDefautResolus, produit, marge, financeParCDC } from './produits.js';
 import { fusionner, surchargerTrajectoires, ecartsParametrage } from './parametrage.js';
 import {
   prixDeRevient,
@@ -49,7 +50,7 @@ import {
   indicateursExploitation,
   jalonsExploitation,
 } from './exploitation.js';
-import { arrondiEuro, arrondiSurface, arrondirEnConservantLaSomme } from './arrondis.js';
+import { arrondiEuro, arrondirEnConservantLaSomme } from './arrondis.js';
 
 /** Version du moteur, reportee dans les resultats pour la tracabilite. */
 export const VERSION_MOTEUR = '0.4.0';
@@ -89,110 +90,62 @@ export function calculer(entrees, referentiels) {
   const alertes = [];
 
   const { identite = {}, dates = {}, lots = [], options = {} } = entrees;
-  const zones = { zone_123: identite.zone_123, zone_ABC: identite.zone_ABC };
+  // LE CLASSEUR DE L'OPERATION. Les grandeurs deja ecrites en formules - le
+  // calendrier, les surfaces, les loyers - s'y calculent et s'y lisent ; le
+  // reste du moteur les consomme comme avant, en attendant d'y passer a son
+  // tour. Chaque cellule n'y est calculee qu'une fois.
+  const classeur = nouveauClasseur({ entrees, baremes, trajectoires });
+  /**
+   * @param {string} id
+   * @param {Record<string, any>} [indices]
+   */
+  const lire = (id, indices) => classeur.valeur(id, indices);
 
-  // --- 0. Calendrier (R-AMT-3 en amont) ---
-  const calendrier = calendrierOperation(dates);
+  // --- 0. Calendrier (R-AMT-3, domaine « calendrier ») ---
+  const calendrier = restituerCalendrier(classeur);
   const anneeMEL = calendrier.annee_mise_en_location;
   // Duree du chantier : elle sert au differe par defaut des prets principaux
   // (R-AMT-9) et a l'echeancier de tresorerie (R-TRESO).
-  const dureeChantierMois = Number(dates.duree_chantier_mois) || 0;
+  const dureeChantierMois = lire('duree_chantier_retenue');
 
-  // --- 1. Surfaces (R-SURF) ---
-  // La SU de chaque lot est conservee EXACTE pour l'agregation ; l'arrondi a
-  // 2 decimales n'intervient qu'a la tranche, seul niveau ou R-SURF-1 le
-  // prescrit. Arrondir lot par lot ferait deriver le total de l'operation.
-  const surfaces = lots.map((lot) => ({
+  // --- 1. Surfaces (R-SURF, domaine « surfaces ») ---
+  const surfaces = lots.map((lot, i) => ({
     ...lot,
-    su_m2: arrondiSurface(surfaceUtile(lot, baremes)),
-    su_exacte_m2: surfaceUtile({ ...lot, arrondir: false }, baremes),
+    su_m2: lire('su_lot', { lot: i }),
+    su_exacte_m2: lire('su_exacte_lot', { lot: i }),
   }));
 
-  // Agregation PAR TRANCHE DE FINANCEMENT avant tout calcul de loyer : le
-  // coefficient de structure est une fonction de (nb logements, SU) de la
-  // tranche entiere (R-SURF-2). Le calculer ligne a ligne donnerait des CS
-  // differents selon le decoupage de saisie, donc des loyers faux (defaut V3).
+  // Les tranches dans l'ordre de PREMIERE APPARITION dans les lots : c'est
+  // celui des repartitions au prorata des surfaces, qui en dependent jusqu'au
+  // tri des restes a egalite.
+  const ordreSaisie = lire('tranches_ordre_saisie');
   /** @type {Record<string, {nb_logements: number, su_m2: number, shab_m2: number, lignes: any[]}>} */
   const tranches = {};
-  for (const s of surfaces) {
-    const t = (tranches[s.code_produit] ??= { nb_logements: 0, su_m2: 0, shab_m2: 0, lignes: [] });
-    t.nb_logements += s.nb_logements ?? 0;
-    t.su_m2 += s.su_exacte_m2 ?? s.su_m2 ?? 0;
-    t.shab_m2 += s.shab_m2 ?? 0;
-    t.lignes.push(s);
+  for (const code of ordreSaisie) {
+    const T = { tranche: code };
+    tranches[code] = {
+      nb_logements: lire('nb_logements_tranche', T),
+      su_m2: lire('su_tranche', T),
+      shab_m2: lire('shab_tranche', T),
+      lignes: surfaces.filter((s) => s.code_produit === code),
+    };
   }
-
-  // Arrondi de la SU au niveau de la TRANCHE, une fois les lots sommes.
-  for (const t of Object.values(tranches)) t.su_m2 = arrondiSurface(t.su_m2);
-  const suParProduit = Object.fromEntries(
-    Object.entries(tranches).map(([code, t]) => [code, t.su_m2]),
+  const suParProduit = Object.fromEntries(ordreSaisie.map((code) => [code, tranches[code].su_m2]));
+  const quotesParts = Object.fromEntries(
+    ordreSaisie.map((code) => [code, lire('quote_part_su', { tranche: code })]),
   );
-  const quotesParts = quotesPartsSU(suParProduit);
 
   /** Codes de produit presents, dans l'ordre canonique. */
-  const codesPresents = ORDRE_PRODUITS.filter((c) => tranches[c]).concat(
-    Object.keys(tranches).filter((c) => !ORDRE_PRODUITS.includes(/** @type {any} */ (c))),
-  );
+  const codesPresents = [...lire('tranches_presentes')];
 
-  // --- 2. Loyers (R-LOYER), une ligne par TRANCHE ---
-  // Les parametres de loyer (majoration, marge locale, loyer force) sont des
-  // proprietes de la TRANCHE, pas du lot : `entrees.loyers_par_produit` est leur
-  // emplacement officiel. Les valeurs portees par un lot restent acceptees en
-  // repli (fixtures et anciens appels), premiere valeur renseignee retenue.
-  const parametresLoyer = entrees.loyers_par_produit ?? {};
-
-  // R-LOYER-9 - Millesime du bareme de loyers. Les plafonds sont revalorises au
-  // 1er janvier : les appliquer tels quels a une mise en location posterieure
-  // sous-estime les recettes de toute la simulation.
-  //
-  // Le moteur revalorise DONC PAR DEFAUT : il applique au plafond de zone le
-  // cumul des IRL de la trajectoire entre le millesime et la mise en location.
-  // La marge locale n'est pas touchee - c'est une saisie en euros du jour, elle
-  // n'a pas de millesime a rattraper.
-  //
-  // LEON, lui, applique le bareme tel quel. Les fixtures qui le reproduisent
-  // posent donc explicitement `revaloriser_loyers_plafonds: false` : l'ecart est
-  // ecrit dans la fixture, la ou il se lit, plutot que cache dans un defaut.
-  const millesimeBareme = (() => {
-    const a = [
-      baremes.loyers_max_zone_123?.annee_reference,
-      baremes.loyers_max_zone_ABC?.annee_reference,
-    ].filter((x) => Number.isFinite(x));
-    return a.length ? Math.min(...a) : null;
-  })();
-  const anneesARattraper = millesimeBareme === null ? 0 : Math.max(0, anneeMEL - millesimeBareme);
-  let cumulIRL = 1;
-  for (let a = millesimeBareme + 1; a <= anneeMEL && anneesARattraper > 0; a++) {
-    cumulIRL *= 1 + (trajectoires.par_poste?.loyers_irl?.[a] ?? 0);
-  }
-  const revaloriser = options.revaloriser_loyers_plafonds !== false && anneesARattraper > 0;
-  const coefficientMillesime = revaloriser ? cumulIRL : 1;
-
+  // --- 2. Loyers (R-LOYER, domaine « loyers »), une ligne par TRANCHE ---
+  // Les parametres de loyer se lisent a la tranche (`loyers_par_produit`), les
+  // valeurs portees par un lot restant lues en repli. R-LOYER-9 : les plafonds
+  // de zone sont revalorises du millesime du bareme a la mise en location,
+  // sauf si les options l'ecartent comme le fait LEON.
   const loyers = codesPresents.map((code) => {
     const t = tranches[code];
-    const params = parametresLoyer[code] ?? {};
-    const premiere = t.lignes.find((l) => l.marge_locale_eur_m2 !== undefined) ?? t.lignes[0];
-    const forcee = t.lignes.find((l) => l.loyer_sortie_force !== undefined && l.loyer_sortie_force !== null);
-    const l = loyerProduit(
-      {
-        code_produit: code,
-        su_m2: t.su_m2,
-        nb_logements: t.nb_logements,
-        zones,
-        marge_locale_eur_m2: params.marge_locale_eur_m2 ?? premiere?.marge_locale_eur_m2,
-        marge_majoration: params.marge_majoration ?? premiere?.marge_majoration,
-        loyer_sortie_force: params.loyer_sortie_force ?? forcee?.loyer_sortie_force,
-        loyer_plafond_convention_eur_m2:
-          params.loyer_plafond_convention_eur_m2 ?? premiere?.loyer_plafond_convention_eur_m2,
-        // Le foyer se declare au niveau du PRODUIT (FPLUS, FPLAI, FPLS) ou de
-        // l'operation entiere : une operation mixte peut porter une tranche de
-        // foyer a cote de tranches d'habitat ordinaire, chacune avec son propre
-        // coefficient de structure (R-SURF-2).
-        foyer: produit(code).foyer ?? identite.foyer,
-        coefficient_millesime: coefficientMillesime,
-      },
-      baremes,
-    );
+    const l = restituerLoyer(classeur, code);
     alertes.push(...controlesLoyer(l, code));
     return {
       code_produit: code,
@@ -204,6 +157,10 @@ export function calculer(entrees, referentiels) {
   });
 
   // Suite de R-LOYER-9 : dire ce que le millesime change, dans les deux sens.
+  const anneesARattraper = lire('annees_a_rattraper');
+  const millesimeBareme = lire('millesime_bareme');
+  const cumulIRL = lire('cumul_irl_millesime');
+  const revaloriser = lire('revaloriser_loyers');
   if (anneesARattraper > 0 && loyers.length) {
     const ecartPct = ((cumulIRL - 1) * 100).toFixed(1);
     const total = loyers.reduce((s, l) => s + l.loyer_annuel_eur, 0);
@@ -221,10 +178,8 @@ export function calculer(entrees, referentiels) {
     );
   }
 
-  const loyersLogementsAnnuels = arrondiEuro(
-    loyers.reduce((s, l) => s + l.loyer_annuel_eur, 0),
-  );
-  const loyersAnnexesAnnuels = loyerAnnexesSeparees(entrees.annexes_louees ?? []);
+  const loyersLogementsAnnuels = lire('loyers_logements_annuels');
+  const loyersAnnexesAnnuels = lire('loyers_annexes_annuels');
 
   // La saisie lot par lot est le mode normal : plusieurs lignes d'un meme
   // produit forment une tranche, sans avertissement. On ne signale que le cas
@@ -1178,8 +1133,8 @@ export function calculer(entrees, referentiels) {
     if (!(duree > 0)) return 0;
     return arrondiEuro(baseAmortissable / duree);
   })();
-  const nbLogements = lots.reduce((s, l) => s + (l.nb_logements ?? 0), 0);
-  const shabTotal = lots.reduce((s, l) => s + (l.shab_m2 ?? 0), 0);
+  const nbLogements = lire('nb_logements_total');
+  const shabTotal = lire('shab_totale');
 
   // Q-16 : les postes de charge diverses viennent du referentiel, la saisie ne
   // fait que les activer. Q-27 : le mode foyer remplace les loyers par une
@@ -1622,14 +1577,14 @@ export function calculer(entrees, referentiels) {
   const indicateurs = {
     nb_logements: nbLogements,
     shab_m2: shabTotal,
-    su_m2: Object.values(suParProduit).reduce((s, v) => s + v, 0),
+    su_m2: lire('su_totale_tranches'),
     prix_revient_ttc_eur: bilan.total_ttc_module_eur,
     prix_revient_par_logement_eur:
       nbLogements > 0 ? arrondiEuro(bilan.total_ttc_module_eur / nbLogements) : null,
     prix_revient_par_m2_shab_eur:
       shabTotal > 0 ? arrondiEuro(bilan.total_ttc_module_eur / shabTotal) : null,
     loyers_annuels_eur: arrondiEuro(loyersLogementsAnnuels + loyersAnnexesAnnuels),
-    surfaces_annexes_m2: lots.reduce((s, l) => s + (l.surfaces_annexes_m2 ?? 0), 0),
+    surfaces_annexes_m2: lire('annexes_totales'),
     subventions_eur: subventionsTotal,
     fonds_propres_eur: fondsPropres,
     ressources_eur: equilibre.ressources_eur,
@@ -1670,10 +1625,10 @@ export function calculer(entrees, referentiels) {
         codesPresents.map((c) => [
           c,
           {
-            nb_lots: tranches[c].lignes.length,
+            nb_lots: lire('nb_lots_tranche', { tranche: c }),
             nb_logements: tranches[c].nb_logements,
-            shab_m2: arrondiSurface(tranches[c].shab_m2),
-            su_m2: arrondiSurface(tranches[c].su_m2),
+            shab_m2: lire('shab_tranche_arrondie', { tranche: c }),
+            su_m2: tranches[c].su_m2,
             quote_part_su: quotesParts[c],
             // Apport RESOLU et non saisie brute : laisse au calcul, il vaut sa
             // part du prix de revient. Publier la saisie ici affichait une part

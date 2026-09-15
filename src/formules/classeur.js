@@ -131,7 +131,12 @@ export function creerModele(domaines) {
     };
     if (dim.valeurs !== undefined) g.formule = dim.valeurs;
     else if (dim.lire) g.lire = dim.lire;
-    else dim.libre = true;
+    else {
+      // Dimension LIBRE : elle n'a pas de liste, toute valeur y est admise. Sa
+      // grandeur cachee existe pour la forme, et ne rend rien.
+      dim.libre = true;
+      g.constante = undefined;
+    }
     grandeurs.set(id, g);
     dim.grandeur = g;
   }

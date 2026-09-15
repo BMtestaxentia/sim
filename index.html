@@ -4054,7 +4054,7 @@ const SYNONYMES = /** @type {Record<string, string>} */ ({
 });
 
 /** Mots reserves : ils ne peuvent pas nommer une grandeur. */
-const MOTS_RESERVES = new Set(['POUR', 'DANS', 'QUAND', 'VRAI', 'FAUX', 'VIDE', 'INDEFINI']);
+const MOTS_RESERVES = new Set(['POUR', 'DANS', 'QUAND', 'VRAI', 'FAUX', 'VIDE', 'INDEFINI', 'INFINI']);
 
 /**
  * @typedef {{type: 'nombre'|'texte'|'nom'|'op'|'fin', v: any, pos: number}} Jeton
@@ -4238,6 +4238,7 @@ function analyser(texte) {
       if (nom === 'FAUX') return { t: 'cst', v: false, nom };
       if (nom === 'VIDE') return { t: 'cst', v: null, nom };
       if (nom === 'INDEFINI') return { t: 'cst', v: undefined, nom };
+      if (nom === 'INFINI') return { t: 'cst', v: Infinity, nom };
       if (MOTS_RESERVES.has(nom)) throw erreur(texte, j.pos, `« ${nom} » est un mot reserve`);
       if (estOp('(')) return appel(nom);
       return { t: 'nom', nom, index: estOp('[') ? indices() : null };
@@ -4559,6 +4560,27 @@ const FONCTIONS = {
       return false;
     },
   },
+  'SI.ABSENT': {
+    libelle: 'Si absent',
+    aide: 'Rend la seconde valeur si la première est absente. Une valeur explicitement vide est gardée telle quelle.',
+    arite: [2, 2],
+    compiler: ([a, b]) => (c, s) => {
+      const v = a(c, s);
+      return v === undefined ? b(c, s) : v;
+    },
+    evaluer: ([a, b]) => {
+      const v = a();
+      return v === undefined ? b() : v;
+    },
+  },
+  ERREUR: {
+    libelle: 'Erreur',
+    aide: 'Arrête le calcul avec ce message : la saisie ne permet pas de conclure.',
+    arite: [1, 1],
+    calc: (message) => {
+      throw new Error(String(message));
+    },
+  },
   NON: { libelle: 'Non', aide: 'Inverse une condition.', arite: [1, 1], calc: (x) => !x },
   RENSEIGNE: {
     libelle: 'Renseigné',
@@ -4691,6 +4713,24 @@ const FONCTIONS = {
     aide: 'Vrai si la valeur figure dans la liste.',
     arite: [2, 2],
     calc: (l, x) => Array.isArray(l) && l.includes(x),
+  },
+  ELEMENT: {
+    libelle: 'Élément',
+    aide: 'L’élément de la liste au rang indiqué, le premier étant au rang 0.',
+    arite: [2, 2],
+    calc: (l, i) => (Array.isArray(l) ? l[i] : undefined),
+  },
+  UNIQUES: {
+    libelle: 'Sans doublon',
+    aide: 'La liste sans ses doublons, dans l’ordre de première apparition.',
+    arite: [1, 1],
+    calc: (l) => (Array.isArray(l) ? [...new Set(l)] : []),
+  },
+  CONCATENER: {
+    libelle: 'Mis bout à bout',
+    aide: 'Les listes mises bout à bout, dans l’ordre.',
+    arite: [2, 8],
+    calc: (...listes) => listes.flatMap((l) => (Array.isArray(l) ? l : [])),
   },
 
   // --- Dates -----------------------------------------------------------------
@@ -4983,7 +5023,12 @@ function creerModele(domaines) {
     };
     if (dim.valeurs !== undefined) g.formule = dim.valeurs;
     else if (dim.lire) g.lire = dim.lire;
-    else dim.libre = true;
+    else {
+      // Dimension LIBRE : elle n'a pas de liste, toute valeur y est admise. Sa
+      // grandeur cachee existe pour la forme, et ne rend rien.
+      dim.libre = true;
+      g.constante = undefined;
+    }
     grandeurs.set(id, g);
     dim.grandeur = g;
   }
@@ -6450,6 +6495,858 @@ function financeParCDC(code) {
   return PRODUITS[/** @type {CodeProduit} */ (code)]?.finance_par_cdc !== false;
 }
 
+/* ===== src/formules/domaines/operation.js ===== */
+// @ts-check
+/**
+ * DOMAINE « OPERATION » : ce que la saisie decrit, et les dimensions du modele.
+ *
+ * Presque rien ne s'y calcule. Ce sont les donnees d'entree - les lots du
+ * programme, l'identite de l'operation, les annexes louees - et la liste des
+ * tranches qui s'en deduit. Toutes les autres formules les citent.
+ *
+ * Les proprietes d'un PRODUIT (foyer, coefficient de structure, loyer de
+ * marche...) viennent du referentiel des produits (`produits.js`) : elles se
+ * lisent, elles ne se calculent pas.
+ */
+
+/**
+ * Lecture d'une propriete du produit d'une tranche.
+ * @param {string} cle
+ */
+const proprieteProduit = (cle) => (/** @type {any} */ _ctx, /** @type {any} */ tranche) =>
+  /** @type {any} */ (produit(tranche))[cle];
+
+/** @type {import('../classeur.js').Domaine} */
+const OPERATION = {
+  domaine: 'operation',
+  titre: 'Opération et programme',
+  dimensions: {
+    lot: { libelle: 'Lot', valeurs: 'INDICES(lots_saisis)', etiquette: 'libelle_lot' },
+    tranche: { libelle: 'Tranche', valeurs: 'tranches_presentes' },
+    annexe: { libelle: 'Annexe louée', valeurs: 'INDICES(annexes_louees_saisies)' },
+    // Dimension LIBRE : toute annee civile y est admise. Elle sert a lire les
+    // tables annuelles (trajectoires), pas a les parcourir.
+    an: { libelle: 'Année civile' },
+  },
+  grandeurs: {
+    // --- Programme ----------------------------------------------------------
+    lots_saisis: { libelle: 'Lots du programme', unite: 'liste', saisie: 'lots', ecran: 'Programme' },
+    code_produit_lot: {
+      libelle: 'Produit du lot',
+      unite: 'texte',
+      sur: ['lot'],
+      saisie: 'lots[lot].code_produit',
+      ecran: 'Programme',
+    },
+    nb_logements_lot: {
+      libelle: 'Logements du lot',
+      unite: 'nombre',
+      sur: ['lot'],
+      saisie: 'lots[lot].nb_logements',
+      ecran: 'Programme',
+    },
+    shab_lot: {
+      libelle: 'Surface habitable du lot',
+      unite: 'm2',
+      sur: ['lot'],
+      saisie: 'lots[lot].shab_m2',
+      ecran: 'Programme',
+    },
+    annexes_lot: {
+      libelle: 'Surfaces annexes du lot',
+      unite: 'm2',
+      sur: ['lot'],
+      saisie: 'lots[lot].surfaces_annexes_m2',
+      ecran: 'Programme',
+    },
+    su_forcee_lot: {
+      libelle: 'Surface utile forcée du lot',
+      unite: 'm2',
+      sur: ['lot'],
+      saisie: 'lots[lot].su_forcee_m2',
+      ecran: 'Programme',
+    },
+    libelle_lot: {
+      libelle: 'Libellé du lot',
+      unite: 'texte',
+      sur: ['lot'],
+      lire: (ctx, lot) => {
+        const l = ctx.entrees?.lots?.[lot] ?? {};
+        return [`Lot ${lot + 1}`, l.code_produit, l.typologie].filter(Boolean).join(' · ');
+      },
+    },
+    codes_des_lots: {
+      libelle: 'Produits des lots, dans l’ordre de saisie',
+      unite: 'liste',
+      formule: 'LISTE(code_produit_lot POUR lot)',
+    },
+    tranches_ordre_saisie: {
+      libelle: 'Tranches, dans l’ordre de saisie',
+      unite: 'liste',
+      formule: 'UNIQUES(codes_des_lots)',
+      note: 'Ordre de première apparition dans les lots : c’est celui des répartitions au prorata des surfaces.',
+    },
+    ordre_produits: {
+      libelle: 'Ordre réglementaire des produits',
+      unite: 'liste',
+      lire: () => ORDRE_PRODUITS,
+    },
+    tranches_presentes: {
+      libelle: 'Tranches du programme',
+      unite: 'liste',
+      formule:
+        'CONCATENER(LISTE(p POUR p DANS ordre_produits QUAND CONTIENT(tranches_ordre_saisie; p)); ' +
+        'LISTE(p POUR p DANS tranches_ordre_saisie QUAND NON(CONTIENT(ordre_produits; p))))',
+      note: 'Dans l’ordre réglementaire, du plus social au plus libre.',
+    },
+
+    // --- Identite -------------------------------------------------------------
+    zone_123: { libelle: 'Zone 1/2/3', unite: 'texte', saisie: 'identite.zone_123', ecran: 'Opération' },
+    zone_abc: { libelle: 'Zone A/B/C', unite: 'texte', saisie: 'identite.zone_ABC', ecran: 'Opération' },
+    type_operation: {
+      libelle: 'Type d’opération',
+      unite: 'texte',
+      saisie: 'identite.type_operation',
+      ecran: 'Opération',
+    },
+    foyer_operation: {
+      libelle: 'Opération en foyer',
+      unite: 'booleen',
+      saisie: 'identite.foyer',
+      ecran: 'Opération',
+    },
+
+    // --- Annexes louees separement ----------------------------------------------
+    annexes_louees_saisies: {
+      libelle: 'Annexes louées séparément',
+      unite: 'liste',
+      saisie: 'annexes_louees',
+      ecran: 'Programme',
+    },
+    nombre_annexe: {
+      libelle: 'Nombre d’annexes',
+      unite: 'nombre',
+      sur: ['annexe'],
+      saisie: 'annexes_louees[annexe].nombre',
+      ecran: 'Programme',
+    },
+    loyer_unitaire_annexe: {
+      libelle: 'Loyer mensuel d’une annexe',
+      unite: 'eur',
+      sur: ['annexe'],
+      saisie: 'annexes_louees[annexe].loyer_unitaire_eur_mois',
+      ecran: 'Programme',
+    },
+
+    // --- Proprietes des produits ------------------------------------------------
+    produit_foyer: {
+      libelle: 'Produit de foyer',
+      unite: 'booleen',
+      sur: ['tranche'],
+      lire: proprieteProduit('foyer'),
+      ecran: 'Référentiel des produits',
+    },
+    produit_avec_cs: {
+      libelle: 'Loyer soumis au coefficient de structure',
+      unite: 'booleen',
+      sur: ['tranche'],
+      lire: proprieteProduit('coefficient_structure'),
+      ecran: 'Référentiel des produits',
+    },
+    produit_loyer_par_convention: {
+      libelle: 'Plafond de loyer conventionnel',
+      unite: 'booleen',
+      sur: ['tranche'],
+      lire: proprieteProduit('loyer_par_convention'),
+      ecran: 'Référentiel des produits',
+    },
+    produit_loyer_de_marche: {
+      libelle: 'Loyer de marché',
+      unite: 'booleen',
+      sur: ['tranche'],
+      lire: proprieteProduit('loyer_de_marche'),
+      ecran: 'Référentiel des produits',
+    },
+    produit_avec_majoration: {
+      libelle: 'Produit à loyer majoré',
+      unite: 'booleen',
+      sur: ['tranche'],
+      lire: (_ctx, tranche) => Boolean(produit(tranche).majoration_loyer),
+      ecran: 'Référentiel des produits',
+    },
+
+    // --- Constantes calendaires -------------------------------------------------
+    mois_par_an: { libelle: 'Mois par an', unite: 'nombre', constante: 12 },
+  },
+};
+
+/* ===== src/formules/domaines/calendrier.js ===== */
+// @ts-check
+/**
+ * DOMAINE « CALENDRIER » : la chaine de dates derivee de la saisie.
+ *
+ * Seule la date de debut des travaux et la duree du chantier se saisissent
+ * d'ordinaire ; la livraison et la mise en location en decoulent (maquette LEON
+ * REWORK, onglet ACCUEIL). Chaque date derivee peut etre imposee par la saisie,
+ * pour figer un calendrier contractuel - une VEFA par exemple.
+ *
+ * L'annee de mise en location commande trois choses a la fois : la premiere
+ * annee du compte d'exploitation, la premiere echeance des prets et le point de
+ * depart de l'exoneration de taxe fonciere.
+ */
+
+/** @type {import('../classeur.js').Domaine} */
+const CALENDRIER = {
+  domaine: 'calendrier',
+  titre: 'Calendrier',
+  grandeurs: {
+    // --- Saisies --------------------------------------------------------------
+    date_debut_travaux_saisie: {
+      libelle: 'Début des travaux saisi',
+      unite: 'date',
+      saisie: 'dates.date_debut_travaux',
+      ecran: 'Opération > Calendrier',
+    },
+    duree_chantier_saisie: {
+      libelle: 'Durée du chantier saisie',
+      unite: 'mois',
+      saisie: 'dates.duree_chantier_mois',
+      ecran: 'Opération > Calendrier',
+    },
+    date_livraison_saisie: {
+      libelle: 'Livraison saisie',
+      unite: 'date',
+      saisie: 'dates.date_livraison',
+      ecran: 'Opération > Calendrier',
+    },
+    date_mise_en_location_saisie: {
+      libelle: 'Mise en location saisie',
+      unite: 'date',
+      saisie: 'dates.date_mise_en_location',
+      ecran: 'Opération > Calendrier',
+    },
+    annee_mise_en_location_saisie: {
+      libelle: 'Année de mise en location saisie',
+      unite: 'annee',
+      saisie: 'dates.annee_mise_en_location',
+      ecran: 'Opération > Calendrier',
+    },
+    duree_simulation_saisie: {
+      libelle: 'Durée de simulation saisie',
+      unite: 'an',
+      saisie: 'dates.duree_simulation_ans',
+      ecran: 'Opération > Calendrier',
+    },
+    duree_simulation_defaut: {
+      libelle: 'Durée de simulation par défaut',
+      unite: 'an',
+      constante: 50,
+    },
+
+    // --- Dates ----------------------------------------------------------------
+    date_debut_travaux: {
+      libelle: 'Début des travaux',
+      unite: 'date',
+      formule: 'SI(date_debut_travaux_saisie; DATE(date_debut_travaux_saisie); VIDE)',
+    },
+    duree_chantier_mois: {
+      libelle: 'Durée du chantier',
+      unite: 'mois',
+      formule: 'SI(EST.NOMBRE(duree_chantier_saisie); duree_chantier_saisie; VIDE)',
+    },
+    duree_chantier_retenue: {
+      libelle: 'Durée du chantier retenue',
+      unite: 'mois',
+      regle: 'R-AMT-9',
+      formule: 'NOMBRE(duree_chantier_saisie)',
+      note: 'Sert au différé par défaut des prêts principaux et à l’échéancier de trésorerie ; une durée non saisie vaut zéro.',
+    },
+    date_livraison: {
+      libelle: 'Livraison',
+      unite: 'date',
+      regle: 'R-AMT-3',
+      formule:
+        'SI(date_livraison_saisie; DATE(date_livraison_saisie); ' +
+        'SI(ET(date_debut_travaux_saisie; EST.NOMBRE(duree_chantier_saisie)); ' +
+        'AJOUTER.MOIS(date_debut_travaux_saisie; duree_chantier_saisie); VIDE))',
+    },
+    date_mise_en_location: {
+      libelle: 'Mise en location',
+      unite: 'date',
+      regle: 'R-AMT-3',
+      formule:
+        'SI(date_mise_en_location_saisie; DATE(date_mise_en_location_saisie); ' +
+        'SI(date_livraison; AJOUTER.JOURS(date_livraison; 1); VIDE))',
+    },
+    annee_mise_en_location: {
+      libelle: 'Année de mise en location',
+      unite: 'annee',
+      regle: 'R-AMT-3',
+      formule:
+        'SI(date_mise_en_location; ANNEE(date_mise_en_location); ' +
+        'SI(EST.ENTIER(annee_mise_en_location_saisie); annee_mise_en_location_saisie; ' +
+        "ERREUR('Calendrier incomplet : renseigner soit annee_mise_en_location, soit une date de mise en " +
+        "location, soit un debut de travaux avec une duree de chantier.')))",
+    },
+    duree_simulation: {
+      libelle: 'Durée de simulation',
+      unite: 'an',
+      formule: 'DEFAUT(duree_simulation_saisie; duree_simulation_defaut)',
+    },
+    annee_fin_simulation: {
+      libelle: 'Dernière année simulée',
+      unite: 'annee',
+      formule: 'annee_mise_en_location + duree_simulation - 1',
+    },
+
+    // --- Origine de chaque date, pour l'ecran ----------------------------------
+    origine_date_debut_travaux: {
+      libelle: 'Origine du début des travaux',
+      unite: 'texte',
+      formule: "SI(date_debut_travaux_saisie; 'saisie'; VIDE)",
+    },
+    origine_date_livraison: {
+      libelle: 'Origine de la livraison',
+      unite: 'texte',
+      formule: "SI(date_livraison_saisie; 'saisie'; SI(RENSEIGNE(date_livraison); 'calcule'; VIDE))",
+    },
+    origine_date_mise_en_location: {
+      libelle: 'Origine de la mise en location',
+      unite: 'texte',
+      formule:
+        "SI(date_mise_en_location_saisie; 'saisie'; SI(RENSEIGNE(date_mise_en_location); 'calcule'; VIDE))",
+    },
+    origine_annee_mise_en_location: {
+      libelle: 'Origine de l’année de mise en location',
+      unite: 'texte',
+      formule: "SI(RENSEIGNE(date_mise_en_location); 'calcule'; 'saisie')",
+    },
+  },
+};
+
+/* ===== src/formules/domaines/surfaces.js ===== */
+// @ts-check
+/**
+ * DOMAINE « SURFACES » - R-SURF : surface utile, agregation par tranche et cle
+ * de repartition.
+ *
+ * La surface utile sert deux fois : a calculer le loyer plafond, et a partager
+ * entre les tranches tout ce qui est commun a l'operation. Elle se garde EXACTE
+ * lot par lot et ne s'arrondit qu'a la tranche, seul niveau ou R-SURF-1 le
+ * prescrit : six lots de 70,005 m2 arrondis un a un donneraient 420,06 m2 au
+ * lieu de 420.
+ */
+
+/** @type {import('../classeur.js').Domaine} */
+const SURFACES = {
+  domaine: 'surfaces',
+  titre: 'Surfaces',
+  grandeurs: {
+    coefficient_annexes: {
+      libelle: 'Coefficient des surfaces annexes',
+      unite: 'coef',
+      regle: 'R-SURF-1',
+      parametre: 'constantes_reglementaires.coefficient_surface_annexes.valeur',
+      ecran: 'Paramètres > Constantes réglementaires',
+    },
+    su_exacte_lot: {
+      libelle: 'Surface utile du lot, non arrondie',
+      unite: 'm2',
+      regle: 'R-SURF-1',
+      sur: ['lot'],
+      formule:
+        'SI(RENSEIGNE(su_forcee_lot); su_forcee_lot; shab_lot + coefficient_annexes * SI.ABSENT(annexes_lot; 0))',
+    },
+    su_lot: {
+      libelle: 'Surface utile du lot',
+      unite: 'm2',
+      regle: 'R-SURF-1',
+      sur: ['lot'],
+      formule: 'ARRONDI(su_exacte_lot; 2)',
+    },
+    nb_logements_tranche: {
+      libelle: 'Logements de la tranche',
+      unite: 'nombre',
+      sur: ['tranche'],
+      formule: 'SOMME(DEFAUT(nb_logements_lot; 0) POUR lot QUAND code_produit_lot = tranche)',
+    },
+    su_tranche: {
+      libelle: 'Surface utile de la tranche',
+      unite: 'm2',
+      regle: 'R-SURF-1',
+      sur: ['tranche'],
+      formule: 'ARRONDI(SOMME(DEFAUT(su_exacte_lot; su_lot; 0) POUR lot QUAND code_produit_lot = tranche); 2)',
+      note: 'Somme des surfaces EXACTES des lots, arrondie une seule fois, à la tranche.',
+    },
+    shab_tranche: {
+      libelle: 'Surface habitable de la tranche',
+      unite: 'm2',
+      sur: ['tranche'],
+      formule: 'SOMME(DEFAUT(shab_lot; 0) POUR lot QUAND code_produit_lot = tranche)',
+    },
+    shab_tranche_arrondie: {
+      libelle: 'Surface habitable de la tranche, arrondie',
+      unite: 'm2',
+      sur: ['tranche'],
+      formule: 'ARRONDI(shab_tranche; 2)',
+    },
+    nb_lots_tranche: {
+      libelle: 'Lots de la tranche',
+      unite: 'nombre',
+      sur: ['tranche'],
+      formule: 'NB(lot POUR lot QUAND code_produit_lot = tranche)',
+    },
+    su_totale_tranches: {
+      libelle: 'Surface utile de l’opération',
+      unite: 'm2',
+      regle: 'R-SURF-3',
+      formule: 'SOMME(su_tranche POUR tranche DANS tranches_ordre_saisie)',
+    },
+    quote_part_su: {
+      libelle: 'Quote-part de surface utile',
+      unite: 'taux',
+      regle: 'R-SURF-3',
+      sur: ['tranche'],
+      formule: 'SI(su_totale_tranches > 0; su_tranche / su_totale_tranches; 0)',
+      note: 'Clé unique de répartition de tout ce qui est commun à l’opération (arbitrage du 05/08/2026).',
+    },
+    nb_logements_total: {
+      libelle: 'Logements de l’opération',
+      unite: 'nombre',
+      formule: 'SOMME(DEFAUT(nb_logements_lot; 0) POUR lot)',
+    },
+    shab_totale: {
+      libelle: 'Surface habitable de l’opération',
+      unite: 'm2',
+      formule: 'SOMME(DEFAUT(shab_lot; 0) POUR lot)',
+    },
+    annexes_totales: {
+      libelle: 'Surfaces annexes de l’opération',
+      unite: 'm2',
+      formule: 'SOMME(DEFAUT(annexes_lot; 0) POUR lot)',
+    },
+  },
+};
+
+/* ===== src/formules/domaines/loyers.js ===== */
+// @ts-check
+/**
+ * DOMAINE « LOYERS » - R-LOYER et R-SURF-2 : du plafond de zone au loyer annuel
+ * de chaque tranche.
+ *
+ * Le loyer se construit en quatre temps, chacun avec sa source : le plafond de
+ * zone (bareme), revalorise du millesime du bareme a la mise en location
+ * (R-LOYER-9) et augmente de la marge locale ; multiplie par le coefficient de
+ * structure de la tranche ; majore dans la limite du plafond de marge ; et
+ * remplace, s'il est saisi, par un loyer de sortie force.
+ *
+ * Sources LEON : `calculs!D72:D77` (loyer de base), `calculs!D92` (coefficient
+ * de structure), `calculs!D117:D119` (loyer max de base).
+ */
+
+/**
+ * Loyer maximal reglementaire d'un produit dans sa zone, lu au bareme.
+ * Le zonage applicable (1/2/3 ou A/B/C) est une propriete du produit, pas une
+ * branche de code (lecon I-1).
+ * @param {string} code_produit
+ * @param {{zone_123?: string|number, zone_ABC?: string}} zones
+ * @param {any} baremes
+ * @returns {number} EUR/m2 SU/mois
+ */
+function loyerMaxZone(code_produit, zones, baremes) {
+  const def = produit(/** @type {any} */ (code_produit));
+  const table = def.zonage === 'ABC' ? baremes.loyers_max_zone_ABC : baremes.loyers_max_zone_123;
+  const valeurs = table[def.cle_bareme_loyer];
+  if (!valeurs) throw new Error(`Bareme de loyer absent pour ${code_produit} (${def.cle_bareme_loyer})`);
+
+  const zone = def.zonage === 'ABC' ? zones.zone_ABC : zones.zone_123;
+  const cle = def.zonage === 'ABC' ? String(zone).replace(' ', '_') : `zone_${zone}`;
+  const i = table.zones.indexOf(def.zonage === 'ABC' ? cle.replace('Abis', 'A_bis') : cle);
+  if (i < 0) throw new Error(`Zone inconnue pour ${code_produit} : ${zone}`);
+  return valeurs[i];
+}
+
+/** @type {import('../classeur.js').Domaine} */
+const LOYERS = {
+  domaine: 'loyers',
+  titre: 'Loyers',
+  grandeurs: {
+    // --- R-LOYER-9 : millesime du bareme -----------------------------------------
+    millesime_bareme_123: {
+      libelle: 'Millésime du barème 1/2/3',
+      unite: 'annee',
+      parametre: 'loyers_max_zone_123.annee_reference',
+      ecran: 'Paramètres > Loyers plafonds',
+    },
+    millesime_bareme_abc: {
+      libelle: 'Millésime du barème A/B/C',
+      unite: 'annee',
+      parametre: 'loyers_max_zone_ABC.annee_reference',
+      ecran: 'Paramètres > Loyers plafonds',
+    },
+    millesime_bareme: {
+      libelle: 'Millésime des barèmes de loyer',
+      unite: 'annee',
+      regle: 'R-LOYER-9',
+      formule:
+        'SI(ET(EST.NOMBRE(millesime_bareme_123); EST.NOMBRE(millesime_bareme_abc)); ' +
+        'MIN(millesime_bareme_123; millesime_bareme_abc); ' +
+        'SI(EST.NOMBRE(millesime_bareme_123); millesime_bareme_123; ' +
+        'SI(EST.NOMBRE(millesime_bareme_abc); millesime_bareme_abc; VIDE)))',
+    },
+    annees_a_rattraper: {
+      libelle: 'Années de revalorisation à rattraper',
+      unite: 'nombre',
+      regle: 'R-LOYER-9',
+      formule: 'SI(millesime_bareme = VIDE; 0; MAX(0; annee_mise_en_location - millesime_bareme))',
+    },
+    taux_irl: {
+      libelle: 'Indice de référence des loyers de l’année',
+      unite: 'taux',
+      sur: ['an'],
+      trajectoire: 'par_poste.loyers_irl[an]',
+      ecran: 'Paramètres > Trajectoires macro',
+    },
+    cumul_irl_millesime: {
+      libelle: 'Cumul des IRL depuis le millésime',
+      unite: 'coef',
+      regle: 'R-LOYER-9',
+      formule:
+        'SI(annees_a_rattraper > 0; ' +
+        'PRODUIT(1 + DEFAUT(taux_irl[an: a]; 0) POUR a DANS SUITE(millesime_bareme + 1; annee_mise_en_location)); 1)',
+    },
+    option_revaloriser: {
+      libelle: 'Revaloriser les plafonds au millésime',
+      unite: 'booleen',
+      saisie: 'options.revaloriser_loyers_plafonds',
+      ecran: 'Paramètres',
+    },
+    revaloriser_loyers: {
+      libelle: 'Revalorisation des plafonds appliquée',
+      unite: 'booleen',
+      regle: 'R-LOYER-9',
+      formule: 'ET(option_revaloriser <> FAUX; annees_a_rattraper > 0)',
+      note: 'Par défaut. LEON applique le barème tel quel ; les fixtures qui le reproduisent désactivent l’option.',
+    },
+    coefficient_millesime: {
+      libelle: 'Coefficient de millésime',
+      unite: 'coef',
+      regle: 'R-LOYER-9',
+      formule: 'SI(revaloriser_loyers; cumul_irl_millesime; 1)',
+    },
+
+    // --- Parametres de loyer : la tranche d'abord, les lots en repli ---------------
+    marge_locale_saisie_tranche: {
+      libelle: 'Marge locale saisie',
+      unite: 'eur_m2_mois',
+      sur: ['tranche'],
+      saisie: 'loyers_par_produit[tranche].marge_locale_eur_m2',
+      ecran: 'Tranche > Loyers',
+    },
+    marge_majoration_saisie_tranche: {
+      libelle: 'Marge de majoration saisie',
+      unite: 'taux',
+      sur: ['tranche'],
+      saisie: 'loyers_par_produit[tranche].marge_majoration',
+      ecran: 'Tranche > Loyers',
+    },
+    loyer_force_saisi_tranche: {
+      libelle: 'Loyer de sortie saisi',
+      unite: 'eur_m2_mois',
+      sur: ['tranche'],
+      saisie: 'loyers_par_produit[tranche].loyer_sortie_force',
+      ecran: 'Tranche > Loyers',
+    },
+    loyer_convention_saisi_tranche: {
+      libelle: 'Plafond conventionnel saisi',
+      unite: 'eur_m2_mois',
+      sur: ['tranche'],
+      saisie: 'loyers_par_produit[tranche].loyer_plafond_convention_eur_m2',
+      ecran: 'Tranche > Loyers',
+    },
+    marge_locale_lot: {
+      libelle: 'Marge locale portée par le lot',
+      unite: 'eur_m2_mois',
+      sur: ['lot'],
+      saisie: 'lots[lot].marge_locale_eur_m2',
+      ecran: 'Programme',
+    },
+    marge_majoration_lot: {
+      libelle: 'Marge de majoration portée par le lot',
+      unite: 'taux',
+      sur: ['lot'],
+      saisie: 'lots[lot].marge_majoration',
+      ecran: 'Programme',
+    },
+    loyer_force_lot: {
+      libelle: 'Loyer de sortie porté par le lot',
+      unite: 'eur_m2_mois',
+      sur: ['lot'],
+      saisie: 'lots[lot].loyer_sortie_force',
+      ecran: 'Programme',
+    },
+    loyer_convention_lot: {
+      libelle: 'Plafond conventionnel porté par le lot',
+      unite: 'eur_m2_mois',
+      sur: ['lot'],
+      saisie: 'lots[lot].loyer_plafond_convention_eur_m2',
+      ecran: 'Programme',
+    },
+    lot_reference_loyer: {
+      libelle: 'Lot de référence des paramètres de loyer',
+      unite: 'nombre',
+      sur: ['tranche'],
+      formule:
+        'DEFAUT(PREMIER(lot POUR lot QUAND ET(code_produit_lot = tranche; DEFINI(marge_locale_lot))); ' +
+        'PREMIER(lot POUR lot QUAND code_produit_lot = tranche))',
+      note: 'Le premier lot de la tranche qui porte une marge locale, à défaut son premier lot. Il ne sert qu’en repli d’une saisie par tranche.',
+    },
+    lot_loyer_force: {
+      libelle: 'Lot portant un loyer de sortie',
+      unite: 'nombre',
+      sur: ['tranche'],
+      formule: 'PREMIER(lot POUR lot QUAND ET(code_produit_lot = tranche; RENSEIGNE(loyer_force_lot)))',
+    },
+    marge_locale_tranche: {
+      libelle: 'Marge locale',
+      unite: 'eur_m2_mois',
+      regle: 'R-LOYER-1',
+      sur: ['tranche'],
+      formule:
+        'SI.ABSENT(DEFAUT(marge_locale_saisie_tranche; marge_locale_lot[lot: lot_reference_loyer]); 0)',
+    },
+    marge_majoration_tranche: {
+      libelle: 'Marge de majoration demandée',
+      unite: 'taux',
+      regle: 'R-LOYER-3',
+      sur: ['tranche'],
+      formule:
+        'SI.ABSENT(DEFAUT(marge_majoration_saisie_tranche; marge_majoration_lot[lot: lot_reference_loyer]); 0)',
+    },
+    loyer_force_tranche: {
+      libelle: 'Loyer de sortie forcé',
+      unite: 'eur_m2_mois',
+      regle: 'R-LOYER-5',
+      sur: ['tranche'],
+      formule: 'DEFAUT(loyer_force_saisi_tranche; loyer_force_lot[lot: lot_loyer_force])',
+    },
+    loyer_convention_tranche: {
+      libelle: 'Plafond conventionnel',
+      unite: 'eur_m2_mois',
+      sur: ['tranche'],
+      formule: 'DEFAUT(loyer_convention_saisi_tranche; loyer_convention_lot[lot: lot_reference_loyer])',
+    },
+    foyer_tranche: {
+      libelle: 'Tranche en foyer',
+      unite: 'booleen',
+      regle: 'R-SURF-2',
+      sur: ['tranche'],
+      formule: 'DEFAUT(produit_foyer; foyer_operation)',
+    },
+
+    // --- R-SURF-2 : coefficient de structure -----------------------------------------
+    cs_base: {
+      libelle: 'Base du coefficient de structure',
+      unite: 'coef',
+      regle: 'R-SURF-2',
+      parametre: 'constantes_reglementaires.coefficient_structure.metropole_habitat.base',
+      ecran: 'Paramètres > Constantes réglementaires',
+    },
+    cs_facteur_habitat: {
+      libelle: 'Facteur de structure en habitat',
+      unite: 'nombre',
+      regle: 'R-SURF-2',
+      parametre: 'constantes_reglementaires.coefficient_structure.metropole_habitat.facteur_nl',
+      ecran: 'Paramètres > Constantes réglementaires',
+    },
+    cs_facteur_foyers: {
+      libelle: 'Facteur de structure en foyer',
+      unite: 'nombre',
+      regle: 'R-SURF-2',
+      parametre: 'constantes_reglementaires.coefficient_structure.foyers.facteur_nl',
+      ecran: 'Paramètres > Constantes réglementaires',
+    },
+    cs_exact: {
+      libelle: 'Coefficient de structure, non arrondi',
+      unite: 'coef',
+      regle: 'R-SURF-2',
+      sur: ['tranche'],
+      formule:
+        'SI(su_tranche > 0; cs_base * (1 + SI(OU(produit_foyer; foyer_tranche); cs_facteur_foyers; ' +
+        'cs_facteur_habitat) * nb_logements_tranche / su_tranche); 0)',
+      note: 'Se calcule sur la tranche entière, jamais lot par lot. Une surface utile nulle le ramène à zéro.',
+    },
+    cs_calcule: {
+      libelle: 'Coefficient de structure calculé',
+      unite: 'coef',
+      regle: 'R-SURF-2',
+      sur: ['tranche'],
+      formule: 'ARRONDI(cs_exact; 4)',
+    },
+    cs_tranche: {
+      libelle: 'Coefficient de structure',
+      unite: 'coef',
+      regle: 'R-SURF-2',
+      sur: ['tranche'],
+      formule: 'SI(produit_loyer_par_convention; 1; SI(produit_avec_cs; cs_calcule; 1))',
+    },
+
+    // --- R-LOYER-1/2 : plafond --------------------------------------------------------
+    loyer_max_zone: {
+      libelle: 'Plafond de loyer de la zone',
+      unite: 'eur_m2_mois',
+      regle: 'R-LOYER-1',
+      sur: ['tranche'],
+      lire: (ctx, tranche) =>
+        loyerMaxZone(
+          tranche,
+          { zone_123: ctx.entrees?.identite?.zone_123, zone_ABC: ctx.entrees?.identite?.zone_ABC },
+          ctx.baremes,
+        ),
+      ecran: 'Paramètres > Loyers plafonds',
+      note: 'Lu au barème du produit, dans la zone de l’opération.',
+    },
+    majoration_produit: {
+      libelle: 'Majoration de loyer du produit',
+      unite: 'taux',
+      regle: 'R-LOYER-1',
+      sur: ['tranche'],
+      lire: (ctx, tranche) => {
+        const cle = produit(tranche).majoration_loyer;
+        if (!cle) return undefined;
+        const maj = ctx.baremes?.constantes_reglementaires?.[cle];
+        return typeof maj === 'object' && maj !== null ? maj.valeur : maj;
+      },
+      ecran: 'Paramètres > Constantes réglementaires',
+    },
+    loyer_base_bareme: {
+      libelle: 'Loyer de base au barème',
+      unite: 'eur_m2_mois',
+      regle: 'R-LOYER-1',
+      sur: ['tranche'],
+      formule:
+        'ARRONDI((loyer_max_zone * coefficient_millesime + marge_locale_tranche) * ' +
+        'SI(produit_avec_majoration; 1 + majoration_produit; 1); 2)',
+    },
+    loyer_plafond_conventionnel: {
+      libelle: 'Plafond conventionnel retenu',
+      unite: 'eur_m2_mois',
+      sur: ['tranche'],
+      formule: 'ARRONDI(DEFAUT(loyer_convention_tranche; 0); 2)',
+    },
+    loyer_base_tranche: {
+      libelle: 'Loyer de base',
+      unite: 'eur_m2_mois',
+      regle: 'R-LOYER-1',
+      sur: ['tranche'],
+      formule: 'SI(produit_loyer_par_convention; loyer_plafond_conventionnel; loyer_base_bareme)',
+    },
+    loyer_max_base_tranche: {
+      libelle: 'Loyer plafond',
+      unite: 'eur_m2_mois',
+      regle: 'R-LOYER-2',
+      sur: ['tranche'],
+      formule:
+        'SI(produit_loyer_par_convention; loyer_plafond_conventionnel; ARRONDI(cs_tranche * loyer_base_tranche; 2))',
+    },
+
+    // --- R-LOYER-3/5 : loyer pratique ------------------------------------------------
+    loyer_force_actif: {
+      libelle: 'Loyer de sortie forcé',
+      unite: 'booleen',
+      sur: ['tranche'],
+      formule: 'RENSEIGNE(loyer_force_tranche)',
+    },
+    plafond_marge_parametre: {
+      libelle: 'Plafond de la marge de majoration',
+      unite: 'taux',
+      regle: 'R-LOYER-3',
+      parametre: 'constantes_reglementaires.marge_locale_plafond_defaut.valeur',
+      ecran: 'Paramètres > Constantes réglementaires',
+    },
+    plafond_marge_tranche: {
+      libelle: 'Plafond de marge applicable',
+      unite: 'taux',
+      regle: 'R-LOYER-3',
+      sur: ['tranche'],
+      formule: 'SI(produit_loyer_de_marche; INFINI; DEFAUT(plafond_marge_parametre; INFINI))',
+      note: 'Aucun plafond sur un loyer de marché : il n’y a pas de convention à respecter.',
+    },
+    marge_appliquee: {
+      libelle: 'Marge de majoration appliquée',
+      unite: 'taux',
+      regle: 'R-LOYER-3',
+      sur: ['tranche'],
+      formule: 'MIN(0 + marge_majoration_tranche; plafond_marge_tranche)',
+    },
+    marge_plafonnee: {
+      libelle: 'Marge ramenée au plafond',
+      unite: 'booleen',
+      regle: 'R-LOYER-3',
+      sur: ['tranche'],
+      formule: 'marge_appliquee < marge_majoration_tranche',
+    },
+    loyer_pratique_tranche: {
+      libelle: 'Loyer pratiqué',
+      unite: 'eur_m2_mois',
+      regle: 'R-LOYER-5',
+      sur: ['tranche'],
+      formule:
+        'SI(produit_loyer_par_convention; ARRONDI(DEFAUT(loyer_force_tranche; loyer_plafond_conventionnel); 2); ' +
+        'SI(loyer_force_actif; ARRONDI(loyer_force_tranche; 2); ARRONDI(loyer_max_base_tranche * (1 + marge_appliquee); 2)))',
+    },
+    loyer_annuel_tranche: {
+      libelle: 'Loyer annuel de la tranche',
+      unite: 'eur',
+      regle: 'R-LOYER-5',
+      sur: ['tranche'],
+      formule: 'ARRONDI.EURO(mois_par_an * su_tranche * loyer_pratique_tranche)',
+    },
+    loyers_logements_annuels: {
+      libelle: 'Loyers annuels des logements',
+      unite: 'eur',
+      regle: 'R-LOYER-5',
+      formule: 'ARRONDI.EURO(SOMME(loyer_annuel_tranche POUR tranche))',
+    },
+    loyers_annexes_annuels: {
+      libelle: 'Loyers annuels des annexes louées',
+      unite: 'eur',
+      regle: 'R-LOYER-7',
+      formule: 'ARRONDI.EURO(SOMME(nombre_annexe * loyer_unitaire_annexe * mois_par_an POUR annexe))',
+      note: 'Garages, parkings, commerces : ils ne passent pas par le coefficient de structure.',
+    },
+  },
+};
+
+/* ===== src/formules/modele.js ===== */
+// @ts-check
+/**
+ * LE MODELE DU MOTEUR : toutes les grandeurs qu'il calcule, domaine par domaine.
+ *
+ * C'est ici qu'on vient pour savoir COMMENT une valeur se calcule : chaque
+ * domaine de `domaines/` ecrit ses grandeurs en formules, avec leur libelle,
+ * leur unite et leur regle du dictionnaire. Le moteur les execute telles
+ * quelles, et l'ecran les affiche telles quelles : il n'existe pas d'autre
+ * redaction des calculs qui pourrait diverger de celle-ci.
+ *
+ * L'ordre des domaines est celui de la chaine de calcul, et celui dans lequel
+ * l'ecran les presente.
+ */
+
+
+
+
+
+const MODELE = creerModele([OPERATION, CALENDRIER, SURFACES, LOYERS]);
+
+/**
+ * Un classeur neuf sur le modele du moteur.
+ * @param {{entrees?: any, baremes?: any, trajectoires?: any}} contexte
+ */
+function nouveauClasseur(contexte) {
+  return new Classeur(MODELE, contexte);
+}
+
 /* ===== src/amortissement.js ===== */
 // @ts-check
 /**
@@ -6964,13 +7861,15 @@ function prefinancement({ tirages, taux, date_fin, capitaliser = true }) {
  * date de debut des travaux est saisie ; livraison et mise en location en
  * decoulent (`C24 = C22 decalee de C23 mois`, `C25 = C24 + 1 jour`).
  *
- * Ce module existe pour que cette derivation reste une REGLE DE CALCUL du
- * moteur et n'aille pas se loger dans l'interface, ou elle serait invisible aux
- * tests et divergerait a la premiere occasion. L'UI l'appelle pour afficher, le
- * moteur l'appelle pour calculer : une seule implementation.
+ * LES REGLES VIVENT DANS `formules/domaines/calendrier.js`, ecrites en blocs :
+ * c'est la que le moteur les lit et que l'ecran les affiche. Ce module ne fait
+ * que restituer le calendrier sous la forme que l'ecran et les exports
+ * consomment, et garde `calendrierOperation` pour les appelants qui ne
+ * disposent que des dates.
  *
  * Aucune horloge systeme : toutes les dates sont des entrees explicites.
  */
+
 
 // L'arithmetique des dates vit dans `dates.js`, partagee avec les prets, la
 // tresorerie et les formules. `decalerMois` reste exporte d'ici pour les
@@ -6995,72 +7894,45 @@ function prefinancement({ tirages, taux, date_fin, capitaliser = true }) {
  */
 
 /**
- * Derive le calendrier de l'operation.
+ * Restitue le calendrier d'un classeur.
  *
- * Regles (maquette ACCUEIL) :
- *   livraison        = debut des travaux decale de la duree de chantier, en mois
- *   mise en location = livraison + 1 jour
- * Chaque date derivee peut etre surchargee par la saisie ; `origine` indique
- * pour chacune si elle a ete saisie ou calculee, ce qui permet a l'interface de
- * distinguer visuellement les deux sans reimplementer la regle.
+ * `origine` dit pour chaque date si elle a ete saisie ou calculee : l'ecran s'en
+ * sert pour griser les dates derivees sans reimplementer la regle.
  *
+ * @param {import('./formules/classeur.js').Classeur} c
+ * @returns {Calendrier}
+ */
+function restituerCalendrier(c) {
+  const v = (/** @type {string} */ id) => c.valeur(id);
+  // Lue en premier : une saisie qui ne permet pas de la situer arrete tout.
+  const annee = v('annee_mise_en_location');
+
+  /** @type {Record<string, 'saisie'|'calcule'>} */
+  const origine = {};
+  for (const cle of ['date_livraison', 'date_mise_en_location']) {
+    const o = v(`origine_${cle}`);
+    if (o) origine[cle] = o;
+  }
+  origine.annee_mise_en_location = v('origine_annee_mise_en_location');
+  if (v('origine_date_debut_travaux')) origine.date_debut_travaux = 'saisie';
+
+  return {
+    date_debut_travaux: v('date_debut_travaux'),
+    duree_chantier_mois: v('duree_chantier_mois'),
+    date_livraison: v('date_livraison'),
+    date_mise_en_location: v('date_mise_en_location'),
+    annee_mise_en_location: annee,
+    origine,
+  };
+}
+
+/**
+ * Derive le calendrier de l'operation a partir de ses seules dates.
  * @param {EntreesCalendrier} entrees
  * @returns {Calendrier}
  */
 function calendrierOperation(entrees = {}) {
-  const {
-    date_debut_travaux,
-    duree_chantier_mois,
-    date_livraison,
-    date_mise_en_location,
-    annee_mise_en_location,
-  } = entrees;
-
-  /** @type {Record<string, 'saisie'|'calcule'>} */
-  const origine = {};
-
-  let livraison = null;
-  if (date_livraison) {
-    livraison = versISO(jourUTC(date_livraison));
-    origine.date_livraison = 'saisie';
-  } else if (date_debut_travaux && Number.isFinite(duree_chantier_mois)) {
-    livraison = decalerMois(date_debut_travaux, Number(duree_chantier_mois));
-    origine.date_livraison = 'calcule';
-  }
-
-  let miseEnLocation = null;
-  if (date_mise_en_location) {
-    miseEnLocation = versISO(jourUTC(date_mise_en_location));
-    origine.date_mise_en_location = 'saisie';
-  } else if (livraison) {
-    miseEnLocation = versISO(jourUTC(livraison) + 1);
-    origine.date_mise_en_location = 'calcule';
-  }
-
-  let annee;
-  if (miseEnLocation) {
-    annee = Number(miseEnLocation.slice(0, 4));
-    origine.annee_mise_en_location = 'calcule';
-  } else if (Number.isInteger(annee_mise_en_location)) {
-    annee = Number(annee_mise_en_location);
-    origine.annee_mise_en_location = 'saisie';
-  } else {
-    throw new Error(
-      "Calendrier incomplet : renseigner soit annee_mise_en_location, soit une date de mise en " +
-        'location, soit un debut de travaux avec une duree de chantier.',
-    );
-  }
-
-  if (date_debut_travaux) origine.date_debut_travaux = 'saisie';
-
-  return {
-    date_debut_travaux: date_debut_travaux ? versISO(jourUTC(date_debut_travaux)) : null,
-    duree_chantier_mois: Number.isFinite(duree_chantier_mois) ? Number(duree_chantier_mois) : null,
-    date_livraison: livraison,
-    date_mise_en_location: miseEnLocation,
-    annee_mise_en_location: annee,
-    origine,
-  };
+  return restituerCalendrier(nouveauClasseur({ entrees: { dates: entrees } }));
 }
 
 /* ===== src/tresorerie.js ===== */
@@ -7420,142 +8292,100 @@ function normaliserTrajectoires(t) {
 /**
  * R-SURF + R-LOYER - Surfaces, coefficient de structure et loyers reglementes.
  *
- * Sources LEON verifiees le 04/08/2026 (classeur OP-3, matrice complete) :
- * - `calculs!D384` : surface utile = SHAB + 0,5 x annexes.
- * - `calculs!D92/D94/D95/D96` : coefficient de structure, variantes metropole/DOM,
- *   par produit / mixte / hors annexes.
- * - `calculs!D72:D77` : loyer de base = loyer max de zone + marge locale.
- * - `calculs!D117:D119` : loyer max de base = CS x loyer de base.
- * - `calculs!B117:B119` et `B92` : arrondis pilotes par un flag global (I-9), ici
- *   remplaces par la politique explicite d'`arrondis.js`.
+ * LES FORMULES NE SONT PLUS ICI. Elles vivent dans `formules/domaines/surfaces.js`
+ * et `formules/domaines/loyers.js`, ecrites une fois en blocs : c'est la que le
+ * moteur les execute, et de la que l'ecran les affiche.
  *
- * Aucun litteral metier ici : 0,77 / 20 / 38 / 0,685 / 31 / 0,5 viennent tous du
- * referentiel de baremes (lecon I-2).
+ * Ce module garde :
+ *  - la RESTITUTION du loyer d'une tranche, lue dans le classeur ;
+ *  - les fonctions historiques (`surfaceUtile`, `coefficientStructure`,
+ *    `loyerProduit`...). Elles evaluent ces memes formules sur les valeurs
+ *    qu'on leur donne, en posant ces valeurs dans un classeur : elles ne
+ *    calculent rien elles-memes, et ne peuvent donc pas diverger du moteur ;
+ *  - les controles de coherence, qui produisent des alertes et non des valeurs.
  *
  * Unites : surfaces en m2, loyers en EUR/m2 SU/mois sauf mention `_annuel_eur`.
  */
 
 
-/** Nombre de mois d'un loyer annuel (constante calendaire). */
-const MOIS_PAR_AN = 12;
+
+{ loyerMaxZone };
+
+/**
+ * Classeur reduit a UNE tranche, pour evaluer les formules de loyer sur des
+ * valeurs donnees plutot que sur un programme de lots.
+ * @param {string} code
+ * @param {any} referentiels
+ * @param {any} [entrees]
+ */
+function classeurDeTranche(code, referentiels, entrees = {}) {
+  const c = nouveauClasseur({ entrees, baremes: referentiels });
+  c.fixerDimension('tranche', [code]);
+  return c;
+}
 
 /**
  * R-SURF-1 - Surface utile d'un lot : SU = SHAB + coefficient x surfaces annexes.
- * Peut etre forcee par la saisie (la valeur forcee court-circuite le calcul).
- * @param {Object} p
- * @param {number} p.shab_m2
- * @param {number} [p.surfaces_annexes_m2]
- * @param {number} [p.su_forcee_m2]
- * @param {{constantes_reglementaires: any}} referentiels
- * @returns {number} surface utile arrondie a 2 decimales
+ * Formule : `su_lot` (arrondie) ou `su_exacte_lot`.
+ * @param {{shab_m2: number, surfaces_annexes_m2?: number, su_forcee_m2?: number, arrondir?: boolean}} lot
+ * @param {any} referentiels
+ * @returns {number}
  */
-function surfaceUtile({ shab_m2, surfaces_annexes_m2 = 0, su_forcee_m2, arrondir = true }, referentiels) {
-  const k = referentiels.constantes_reglementaires.coefficient_surface_annexes.valeur;
-  const su =
-    su_forcee_m2 !== undefined && su_forcee_m2 !== null
-      ? su_forcee_m2
-      : shab_m2 + k * surfaces_annexes_m2;
-  // `arrondir: false` sert a l'agregation lot par lot : la surface utile est une
-  // grandeur de TRANCHE (R-SURF-1), et arrondir chaque lot avant de sommer fait
-  // deriver le total (six lots a 70,005 m2 donnent 420,06 au lieu de 420).
-  return arrondir ? arrondiSurface(su) : su;
+function surfaceUtile(lot, referentiels) {
+  const c = nouveauClasseur({ entrees: { lots: [lot] }, baremes: referentiels });
+  return c.valeur(lot.arrondir === false ? 'su_exacte_lot' : 'su_lot', { lot: 0 });
 }
 
 /**
- * R-SURF-2 - Coefficient de structure : `CS = base x (1 + facteur_nl x NL / SU)`.
- * `facteur_nl` vaut 20 en habitat et 38 en foyers (referentiel).
- *
- * La variante DOM du dictionnaire n'est PAS implementee : hors perimetre
- * (decision du 06/08/2026). Le referentiel conserve ses coefficients pour
- * memoire, mais aucun code ne les lit - mieux vaut une absence franche qu'une
- * branche jamais exercee et donc jamais testee.
- *
- * @param {Object} p
- * @param {number} p.nb_logements
- * @param {number} p.su_m2
- * @param {boolean} [p.foyer]
- * @param {boolean} [p.arrondir]      applique l'arrondi 4 decimales (option LEON)
- * @param {{constantes_reglementaires: any}} referentiels
+ * R-SURF-2 - Coefficient de structure. Formule : `cs_calcule` (ou `cs_exact`).
+ * @param {{nb_logements: number, su_m2: number, foyer?: boolean, arrondir?: boolean}} p
+ * @param {any} referentiels
  * @returns {number}
  */
 function coefficientStructure({ nb_logements, su_m2, foyer = false, arrondir = true }, referentiels) {
-  if (!(su_m2 > 0)) return 0;
-  const cfg = referentiels.constantes_reglementaires.coefficient_structure;
-  const facteur = foyer ? cfg.foyers.facteur_nl : cfg.metropole_habitat.facteur_nl;
-  const cs = cfg.metropole_habitat.base * (1 + (facteur * nb_logements) / su_m2);
-  return arrondir ? arrondiCS(cs) : cs;
+  const T = { tranche: '_' };
+  const c = classeurDeTranche('_', referentiels)
+    .fixer('nb_logements_tranche', T, nb_logements)
+    .fixer('su_tranche', T, su_m2)
+    .fixer('produit_foyer', T, foyer)
+    .fixer('foyer_tranche', T, foyer);
+  return c.valeur(arrondir ? 'cs_calcule' : 'cs_exact', T);
 }
 
 /**
- * R-SURF-3 - Quotes-parts de surface utile, cle de ventilation de tous les
- * montants partages entre produits (prix de revient, subventions, foncier).
+ * R-SURF-3 - Quotes-parts de surface utile. Formule : `quote_part_su`.
  * @param {Record<string, number>} su_par_produit
- * @returns {Record<string, number>} quotes-parts sommant a 1 (ou toutes nulles)
+ * @returns {Record<string, number>}
  */
 function quotesPartsSU(su_par_produit) {
-  const total = Object.values(su_par_produit).reduce((s, v) => s + v, 0);
-  /** @type {Record<string, number>} */
-  const qp = {};
-  for (const [code, su] of Object.entries(su_par_produit)) {
-    qp[code] = total > 0 ? su / total : 0;
-  }
-  return qp;
+  const codes = Object.keys(su_par_produit);
+  const c = nouveauClasseur({ entrees: {} });
+  c.fixerDimension('tranche', codes).fixer('tranches_ordre_saisie', {}, codes);
+  for (const code of codes) c.fixer('su_tranche', { tranche: code }, su_par_produit[code]);
+  return Object.fromEntries(codes.map((code) => [code, c.valeur('quote_part_su', { tranche: code })]));
 }
 
 /**
- * Loyer maximal reglementaire d'un produit dans sa zone, lu au bareme.
- * Le zonage applicable (1/2/3/1bis ou A/Abis/B1/B2/C) est une propriete du
- * produit, pas une branche de code (lecon I-1).
- * @param {string} code_produit
- * @param {{zone_123?: string|number, zone_ABC?: string}} zones
- * @param {any} baremes
- * @returns {number} EUR/m2 SU/mois
- */
-function loyerMaxZone(code_produit, zones, baremes) {
-  const def = produit(/** @type {any} */ (code_produit));
-  const table = def.zonage === 'ABC' ? baremes.loyers_max_zone_ABC : baremes.loyers_max_zone_123;
-  const valeurs = table[def.cle_bareme_loyer];
-  if (!valeurs) throw new Error(`Bareme de loyer absent pour ${code_produit} (${def.cle_bareme_loyer})`);
-
-  const zone = def.zonage === 'ABC' ? zones.zone_ABC : zones.zone_123;
-  const cle = def.zonage === 'ABC' ? String(zone).replace(' ', '_') : `zone_${zone}`;
-  const i = table.zones.indexOf(def.zonage === 'ABC' ? cle.replace('Abis', 'A_bis') : cle);
-  if (i < 0) throw new Error(`Zone inconnue pour ${code_produit} : ${zone}`);
-  return valeurs[i];
-}
-
-/**
- * R-LOYER-1 - Loyer de base = loyer max de zone + marge locale departementale.
- * Le PLUS 33 % applique en plus une majoration multiplicative (arbitrage I-6 :
- * x1,33 partout, jamais +0,33).
- * @param {Object} p
- * @param {string} p.code_produit
- * @param {{zone_123?: string|number, zone_ABC?: string}} p.zones
- * @param {number} [p.marge_locale_eur_m2]
- * @param {number} [p.coefficient_millesime] R-LOYER-9 : revalorisation du PLAFOND
- *   entre le millesime du bareme et la mise en location. Ne porte que sur le
- *   plafond de zone : la marge locale est une saisie en euros du jour, elle n'a
- *   pas de millesime a rattraper.
+ * R-LOYER-1 - Loyer de base. Formule : `loyer_base_bareme`.
+ * @param {{code_produit: string, zones: {zone_123?: string|number, zone_ABC?: string},
+ *          marge_locale_eur_m2?: number, coefficient_millesime?: number}} p
  * @param {any} referentiels
- * @returns {number} EUR/m2 SU/mois
+ * @returns {number}
  */
-function loyerDeBase(
-  { code_produit, zones, marge_locale_eur_m2 = 0, coefficient_millesime = 1 },
-  referentiels,
-) {
-  const def = produit(/** @type {any} */ (code_produit));
-  let loyer =
-    loyerMaxZone(code_produit, zones, referentiels) * coefficient_millesime + marge_locale_eur_m2;
-  if (def.majoration_loyer) {
-    const maj = referentiels.constantes_reglementaires[def.majoration_loyer];
-    loyer *= 1 + (typeof maj === 'object' ? maj.valeur : maj);
-  }
-  return arrondiLoyer(loyer);
+function loyerDeBase({ code_produit, zones, marge_locale_eur_m2 = 0, coefficient_millesime = 1 }, referentiels) {
+  const T = { tranche: code_produit };
+  const c = classeurDeTranche(code_produit, referentiels, {
+    identite: { zone_123: zones?.zone_123, zone_ABC: zones?.zone_ABC },
+  })
+    .fixer('marge_locale_tranche', T, marge_locale_eur_m2)
+    .fixer('coefficient_millesime', {}, coefficient_millesime);
+  return c.valeur('loyer_base_bareme', T);
 }
 
 /**
  * R-LOYER-3 - Marge locale de majoration : somme des majorations affectees,
- * plafonnee. Le plafonnement est separe par produit (FinPLUS!S26:T29).
+ * plafonnee. Le moteur n'en a plus l'usage - la formule `marge_appliquee` ne
+ * porte qu'une marge par tranche - mais la regle reste disponible.
  * @param {number[]} majorations
  * @param {number} plafond
  * @returns {number}
@@ -7569,6 +8399,8 @@ function margePlafonnee(majorations, plafond) {
  * R-LOYER-4 - Majoration liee aux locaux collectifs residentiels (LCR).
  * Sous le seuil bas : nulle. Au-dessus du seuil haut : majoration forfaitaire.
  * Entre les deux : ratio / 100 (borne intermediaire encore a confirmer, Q-10).
+ * REGLE NON BRANCHEE : aucune grandeur du moteur ne l'emploie (dictionnaire,
+ * §12 bis).
  * @param {number} ratio_lcr en pourcentage (ex. 15 pour 15 %)
  * @param {any} referentiels
  * @returns {number} majoration en fraction
@@ -7581,24 +8413,56 @@ function majorationLCR(ratio_lcr, referentiels) {
 }
 
 /**
- * R-LOYER-2 et R-LOYER-5 - Loyer pratique d'un produit.
- *   Lmax_base = CS x loyer_de_base   (les produits sans CS prennent le loyer de marche)
- *   loyer     = Lmax_base x (1 + marge_plafonnee)
- *   annuel    = 12 x SU x loyer
- * Un loyer de sortie force court-circuite tout le calcul.
+ * Loyer d'une tranche, tel que le moteur le restitue. Les champs dependent du
+ * regime : un plafond conventionnel ne connait ni marge ni plafond de marge.
+ * @param {import('./formules/classeur.js').Classeur} c
+ * @param {string} code
+ */
+function restituerLoyer(c, code) {
+  const T = { tranche: code };
+  const v = (/** @type {string} */ id) => c.valeur(id, T);
+  if (v('produit_loyer_par_convention')) {
+    return {
+      cs: v('cs_tranche'),
+      loyer_base_eur_m2: v('loyer_base_tranche'),
+      loyer_max_base_eur_m2: v('loyer_max_base_tranche'),
+      loyer_pratique_eur_m2: v('loyer_pratique_tranche'),
+      loyer_annuel_eur: v('loyer_annuel_tranche'),
+      force: v('loyer_force_actif'),
+      plafond_conventionnel: true,
+    };
+  }
+  const plafond = v('plafond_marge_tranche');
+  return {
+    cs: v('cs_tranche'),
+    loyer_base_eur_m2: v('loyer_base_tranche'),
+    loyer_max_base_eur_m2: v('loyer_max_base_tranche'),
+    loyer_pratique_eur_m2: v('loyer_pratique_tranche'),
+    loyer_annuel_eur: v('loyer_annuel_tranche'),
+    force: v('loyer_force_actif'),
+    /** Marge REELLEMENT appliquee, une fois le plafond R-LOYER-3 passe. */
+    marge_majoration: v('marge_appliquee'),
+    marge_majoration_saisie: v('marge_majoration_tranche'),
+    marge_plafonnee: v('marge_plafonnee'),
+    plafond_marge: Number.isFinite(plafond) ? plafond : null,
+  };
+}
+
+/**
+ * R-LOYER-2 et R-LOYER-5 - Loyer pratique d'un produit, a partir de valeurs
+ * donnees. Formules du domaine « loyers ».
  * @param {Object} p
  * @param {string} p.code_produit
  * @param {number} p.su_m2
  * @param {number} p.nb_logements
  * @param {{zone_123?: string|number, zone_ABC?: string}} p.zones
  * @param {number} [p.marge_locale_eur_m2]
- * @param {number} [p.marge_majoration]     fraction deja plafonnee (R-LOYER-3)
+ * @param {number} [p.marge_majoration]     fraction avant plafond (R-LOYER-3)
  * @param {number} [p.loyer_sortie_force]   EUR/m2/mois, court-circuite le calcul
- * @param {number} [p.loyer_plafond_convention_eur_m2] produits a plafond conventionnel (rehabilitation)
+ * @param {number} [p.loyer_plafond_convention_eur_m2] produits a plafond conventionnel
  * @param {boolean} [p.foyer]
+ * @param {number} [p.coefficient_millesime] R-LOYER-9
  * @param {any} referentiels
- * @returns {{cs: number, loyer_base_eur_m2: number, loyer_max_base_eur_m2: number,
- *            loyer_pratique_eur_m2: number, loyer_annuel_eur: number, force: boolean}}
  */
 function loyerProduit(
   {
@@ -7615,92 +8479,36 @@ function loyerProduit(
   },
   referentiels,
 ) {
-  const def = produit(/** @type {any} */ (code_produit));
-
-  // R-LOYER - Produits dont le plafond est CONVENTIONNEL (rehabilitation,
-  // ParaREH!A23 « Loyer maxi convention »). Aucun bareme de zone ne s'applique :
-  // le plafond est celui de la convention APL en vigueur, eventuellement majore
-  // de l'impact loyer des travaux. Le moteur le prend tel quel plutot que
-  // d'inventer un plafond a partir d'un bareme de logement neuf.
-  if (def.loyer_par_convention) {
-    const plafond = arrondiLoyer(loyer_plafond_convention_eur_m2 ?? 0);
-    const pratique = arrondiLoyer(loyer_sortie_force ?? plafond);
-    return {
-      cs: 1,
-      loyer_base_eur_m2: plafond,
-      loyer_max_base_eur_m2: plafond,
-      loyer_pratique_eur_m2: pratique,
-      loyer_annuel_eur: arrondiEuro(MOIS_PAR_AN * su_m2 * pratique),
-      force: loyer_sortie_force !== undefined && loyer_sortie_force !== null,
-      plafond_conventionnel: true,
-    };
-  }
-
-  // Un produit foyer l'est par nature (FPLUS, FPLAI, FPLS) ; le drapeau
-  // d'operation permet en plus de traiter en foyer un produit qui ne l'est pas
-  // de base. Les deux se cumulent, le produit ne pouvant pas etre dementi.
-  const cs = def.coefficient_structure
-    ? coefficientStructure({ nb_logements, su_m2, foyer: def.foyer || foyer }, referentiels)
-    : 1;
-
-  const loyerBase = loyerDeBase(
-    { code_produit, zones, marge_locale_eur_m2, coefficient_millesime },
-    referentiels,
-  );
-  const loyerMaxBase = arrondiLoyer(cs * loyerBase);
-
-  const force = loyer_sortie_force !== undefined && loyer_sortie_force !== null;
-  // R-LOYER-3 - La marge de majoration est PLAFONNEE. Le plafond est une donnee
-  // de simulation (ParaPLUS!AD30, 12 % au referentiel) et la regle est un simple
-  // minimum, mais elle n'etait appliquee nulle part : le plafond se reglait a
-  // l'ecran sans rien commander, et une marge de 200 % triplait le loyer d'un
-  // PLUS sans un mot. Un loyer qu'aucune convention n'accepterait equilibrait
-  // alors l'operation.
-  //
-  // Le plafond ne s'applique PAS a un produit a loyer de marche : il n'y a pas
-  // de convention a respecter sur du libre, et la marge y est le pari
-  // commercial lui-meme.
-  const plafondMarge = def.loyer_de_marche
-    ? Infinity
-    : (referentiels.constantes_reglementaires.marge_locale_plafond_defaut?.valeur ?? Infinity);
-  const margeAppliquee = margePlafonnee([marge_majoration], plafondMarge);
-  const margePlafonneeAtteinte = margeAppliquee < marge_majoration;
-
-  const loyerPratique = force
-    ? arrondiLoyer(loyer_sortie_force)
-    : arrondiLoyer(loyerMaxBase * (1 + margeAppliquee));
-
-  return {
-    cs,
-    loyer_base_eur_m2: loyerBase,
-    loyer_max_base_eur_m2: loyerMaxBase,
-    loyer_pratique_eur_m2: loyerPratique,
-    loyer_annuel_eur: arrondiEuro(MOIS_PAR_AN * su_m2 * loyerPratique),
-    force,
-    /** Marge REELLEMENT appliquee, une fois le plafond R-LOYER-3 passe. */
-    marge_majoration: margeAppliquee,
-    marge_majoration_saisie: marge_majoration,
-    marge_plafonnee: margePlafonneeAtteinte,
-    plafond_marge: Number.isFinite(plafondMarge) ? plafondMarge : null,
-  };
+  const T = { tranche: code_produit };
+  const c = classeurDeTranche(code_produit, referentiels, {
+    identite: { zone_123: zones?.zone_123, zone_ABC: zones?.zone_ABC },
+  })
+    .fixer('su_tranche', T, su_m2)
+    .fixer('nb_logements_tranche', T, nb_logements)
+    .fixer('marge_locale_tranche', T, marge_locale_eur_m2)
+    .fixer('marge_majoration_tranche', T, marge_majoration)
+    .fixer('loyer_force_tranche', T, loyer_sortie_force)
+    .fixer('loyer_convention_tranche', T, loyer_plafond_convention_eur_m2)
+    .fixer('foyer_tranche', T, foyer)
+    .fixer('coefficient_millesime', {}, coefficient_millesime);
+  return restituerLoyer(c, code_produit);
 }
 
 /**
- * R-LOYER-7 - Loyers des annexes louees separement (garages, parkings, commerces,
- * jardins) : ils ne passent PAS par le coefficient de structure.
+ * R-LOYER-7 - Loyers des annexes louees separement. Formule : `loyers_annexes_annuels`.
  * @param {Array<{nombre: number, loyer_unitaire_eur_mois: number}>} annexes
  * @returns {number} loyer annuel en euros
  */
 function loyerAnnexesSeparees(annexes) {
-  return arrondiEuro(
-    annexes.reduce((s, a) => s + a.nombre * a.loyer_unitaire_eur_mois * MOIS_PAR_AN, 0),
-  );
+  return nouveauClasseur({ entrees: { annexes_louees: annexes } }).valeur('loyers_annexes_annuels');
 }
 
 /**
  * R-LOYER-8 - Controles de coherence. Ne bloquent pas le calcul : ils remontent
  * des alertes que l'appelant (ou l'UI) presente.
- * @param {{loyer_pratique_eur_m2: number, loyer_max_base_eur_m2: number, force: boolean}} loyer
+ * @param {{loyer_pratique_eur_m2: number, loyer_max_base_eur_m2: number, force: boolean,
+ *          marge_plafonnee?: boolean, marge_majoration?: number, marge_majoration_saisie?: number,
+ *          plafond_conventionnel?: boolean}} loyer
  * @param {string} code_produit
  * @returns {string[]}
  */
@@ -7712,8 +8520,8 @@ function controlesLoyer(loyer, code_produit) {
   if (loyer.marge_plafonnee) {
     alertes.push(
       `${code_produit} : marge de majoration ramenee de ` +
-        `${(loyer.marge_majoration_saisie * 100).toFixed(1)} % a ` +
-        `${(loyer.marge_majoration * 100).toFixed(1)} %, plafond reglementaire de la simulation`,
+        `${(/** @type {number} */ (loyer.marge_majoration_saisie) * 100).toFixed(1)} % a ` +
+        `${(/** @type {number} */ (loyer.marge_majoration) * 100).toFixed(1)} %, plafond reglementaire de la simulation`,
     );
   }
   // Un plafond conventionnel non saisi vaut zero : le compte serait faux en
@@ -9921,6 +10729,7 @@ function jalonsExploitation(lignes, evenements = []) {
 
 
 
+
 /** Version du moteur, reportee dans les resultats pour la tracabilite. */
 const VERSION_MOTEUR = '0.4.0';
 
@@ -9959,110 +10768,62 @@ function calculer(entrees, referentiels) {
   const alertes = [];
 
   const { identite = {}, dates = {}, lots = [], options = {} } = entrees;
-  const zones = { zone_123: identite.zone_123, zone_ABC: identite.zone_ABC };
+  // LE CLASSEUR DE L'OPERATION. Les grandeurs deja ecrites en formules - le
+  // calendrier, les surfaces, les loyers - s'y calculent et s'y lisent ; le
+  // reste du moteur les consomme comme avant, en attendant d'y passer a son
+  // tour. Chaque cellule n'y est calculee qu'une fois.
+  const classeur = nouveauClasseur({ entrees, baremes, trajectoires });
+  /**
+   * @param {string} id
+   * @param {Record<string, any>} [indices]
+   */
+  const lire = (id, indices) => classeur.valeur(id, indices);
 
-  // --- 0. Calendrier (R-AMT-3 en amont) ---
-  const calendrier = calendrierOperation(dates);
+  // --- 0. Calendrier (R-AMT-3, domaine « calendrier ») ---
+  const calendrier = restituerCalendrier(classeur);
   const anneeMEL = calendrier.annee_mise_en_location;
   // Duree du chantier : elle sert au differe par defaut des prets principaux
   // (R-AMT-9) et a l'echeancier de tresorerie (R-TRESO).
-  const dureeChantierMois = Number(dates.duree_chantier_mois) || 0;
+  const dureeChantierMois = lire('duree_chantier_retenue');
 
-  // --- 1. Surfaces (R-SURF) ---
-  // La SU de chaque lot est conservee EXACTE pour l'agregation ; l'arrondi a
-  // 2 decimales n'intervient qu'a la tranche, seul niveau ou R-SURF-1 le
-  // prescrit. Arrondir lot par lot ferait deriver le total de l'operation.
-  const surfaces = lots.map((lot) => ({
+  // --- 1. Surfaces (R-SURF, domaine « surfaces ») ---
+  const surfaces = lots.map((lot, i) => ({
     ...lot,
-    su_m2: arrondiSurface(surfaceUtile(lot, baremes)),
-    su_exacte_m2: surfaceUtile({ ...lot, arrondir: false }, baremes),
+    su_m2: lire('su_lot', { lot: i }),
+    su_exacte_m2: lire('su_exacte_lot', { lot: i }),
   }));
 
-  // Agregation PAR TRANCHE DE FINANCEMENT avant tout calcul de loyer : le
-  // coefficient de structure est une fonction de (nb logements, SU) de la
-  // tranche entiere (R-SURF-2). Le calculer ligne a ligne donnerait des CS
-  // differents selon le decoupage de saisie, donc des loyers faux (defaut V3).
+  // Les tranches dans l'ordre de PREMIERE APPARITION dans les lots : c'est
+  // celui des repartitions au prorata des surfaces, qui en dependent jusqu'au
+  // tri des restes a egalite.
+  const ordreSaisie = lire('tranches_ordre_saisie');
   /** @type {Record<string, {nb_logements: number, su_m2: number, shab_m2: number, lignes: any[]}>} */
   const tranches = {};
-  for (const s of surfaces) {
-    const t = (tranches[s.code_produit] ??= { nb_logements: 0, su_m2: 0, shab_m2: 0, lignes: [] });
-    t.nb_logements += s.nb_logements ?? 0;
-    t.su_m2 += s.su_exacte_m2 ?? s.su_m2 ?? 0;
-    t.shab_m2 += s.shab_m2 ?? 0;
-    t.lignes.push(s);
+  for (const code of ordreSaisie) {
+    const T = { tranche: code };
+    tranches[code] = {
+      nb_logements: lire('nb_logements_tranche', T),
+      su_m2: lire('su_tranche', T),
+      shab_m2: lire('shab_tranche', T),
+      lignes: surfaces.filter((s) => s.code_produit === code),
+    };
   }
-
-  // Arrondi de la SU au niveau de la TRANCHE, une fois les lots sommes.
-  for (const t of Object.values(tranches)) t.su_m2 = arrondiSurface(t.su_m2);
-  const suParProduit = Object.fromEntries(
-    Object.entries(tranches).map(([code, t]) => [code, t.su_m2]),
+  const suParProduit = Object.fromEntries(ordreSaisie.map((code) => [code, tranches[code].su_m2]));
+  const quotesParts = Object.fromEntries(
+    ordreSaisie.map((code) => [code, lire('quote_part_su', { tranche: code })]),
   );
-  const quotesParts = quotesPartsSU(suParProduit);
 
   /** Codes de produit presents, dans l'ordre canonique. */
-  const codesPresents = ORDRE_PRODUITS.filter((c) => tranches[c]).concat(
-    Object.keys(tranches).filter((c) => !ORDRE_PRODUITS.includes(/** @type {any} */ (c))),
-  );
+  const codesPresents = [...lire('tranches_presentes')];
 
-  // --- 2. Loyers (R-LOYER), une ligne par TRANCHE ---
-  // Les parametres de loyer (majoration, marge locale, loyer force) sont des
-  // proprietes de la TRANCHE, pas du lot : `entrees.loyers_par_produit` est leur
-  // emplacement officiel. Les valeurs portees par un lot restent acceptees en
-  // repli (fixtures et anciens appels), premiere valeur renseignee retenue.
-  const parametresLoyer = entrees.loyers_par_produit ?? {};
-
-  // R-LOYER-9 - Millesime du bareme de loyers. Les plafonds sont revalorises au
-  // 1er janvier : les appliquer tels quels a une mise en location posterieure
-  // sous-estime les recettes de toute la simulation.
-  //
-  // Le moteur revalorise DONC PAR DEFAUT : il applique au plafond de zone le
-  // cumul des IRL de la trajectoire entre le millesime et la mise en location.
-  // La marge locale n'est pas touchee - c'est une saisie en euros du jour, elle
-  // n'a pas de millesime a rattraper.
-  //
-  // LEON, lui, applique le bareme tel quel. Les fixtures qui le reproduisent
-  // posent donc explicitement `revaloriser_loyers_plafonds: false` : l'ecart est
-  // ecrit dans la fixture, la ou il se lit, plutot que cache dans un defaut.
-  const millesimeBareme = (() => {
-    const a = [
-      baremes.loyers_max_zone_123?.annee_reference,
-      baremes.loyers_max_zone_ABC?.annee_reference,
-    ].filter((x) => Number.isFinite(x));
-    return a.length ? Math.min(...a) : null;
-  })();
-  const anneesARattraper = millesimeBareme === null ? 0 : Math.max(0, anneeMEL - millesimeBareme);
-  let cumulIRL = 1;
-  for (let a = millesimeBareme + 1; a <= anneeMEL && anneesARattraper > 0; a++) {
-    cumulIRL *= 1 + (trajectoires.par_poste?.loyers_irl?.[a] ?? 0);
-  }
-  const revaloriser = options.revaloriser_loyers_plafonds !== false && anneesARattraper > 0;
-  const coefficientMillesime = revaloriser ? cumulIRL : 1;
-
+  // --- 2. Loyers (R-LOYER, domaine « loyers »), une ligne par TRANCHE ---
+  // Les parametres de loyer se lisent a la tranche (`loyers_par_produit`), les
+  // valeurs portees par un lot restant lues en repli. R-LOYER-9 : les plafonds
+  // de zone sont revalorises du millesime du bareme a la mise en location,
+  // sauf si les options l'ecartent comme le fait LEON.
   const loyers = codesPresents.map((code) => {
     const t = tranches[code];
-    const params = parametresLoyer[code] ?? {};
-    const premiere = t.lignes.find((l) => l.marge_locale_eur_m2 !== undefined) ?? t.lignes[0];
-    const forcee = t.lignes.find((l) => l.loyer_sortie_force !== undefined && l.loyer_sortie_force !== null);
-    const l = loyerProduit(
-      {
-        code_produit: code,
-        su_m2: t.su_m2,
-        nb_logements: t.nb_logements,
-        zones,
-        marge_locale_eur_m2: params.marge_locale_eur_m2 ?? premiere?.marge_locale_eur_m2,
-        marge_majoration: params.marge_majoration ?? premiere?.marge_majoration,
-        loyer_sortie_force: params.loyer_sortie_force ?? forcee?.loyer_sortie_force,
-        loyer_plafond_convention_eur_m2:
-          params.loyer_plafond_convention_eur_m2 ?? premiere?.loyer_plafond_convention_eur_m2,
-        // Le foyer se declare au niveau du PRODUIT (FPLUS, FPLAI, FPLS) ou de
-        // l'operation entiere : une operation mixte peut porter une tranche de
-        // foyer a cote de tranches d'habitat ordinaire, chacune avec son propre
-        // coefficient de structure (R-SURF-2).
-        foyer: produit(code).foyer ?? identite.foyer,
-        coefficient_millesime: coefficientMillesime,
-      },
-      baremes,
-    );
+    const l = restituerLoyer(classeur, code);
     alertes.push(...controlesLoyer(l, code));
     return {
       code_produit: code,
@@ -10074,6 +10835,10 @@ function calculer(entrees, referentiels) {
   });
 
   // Suite de R-LOYER-9 : dire ce que le millesime change, dans les deux sens.
+  const anneesARattraper = lire('annees_a_rattraper');
+  const millesimeBareme = lire('millesime_bareme');
+  const cumulIRL = lire('cumul_irl_millesime');
+  const revaloriser = lire('revaloriser_loyers');
   if (anneesARattraper > 0 && loyers.length) {
     const ecartPct = ((cumulIRL - 1) * 100).toFixed(1);
     const total = loyers.reduce((s, l) => s + l.loyer_annuel_eur, 0);
@@ -10091,10 +10856,8 @@ function calculer(entrees, referentiels) {
     );
   }
 
-  const loyersLogementsAnnuels = arrondiEuro(
-    loyers.reduce((s, l) => s + l.loyer_annuel_eur, 0),
-  );
-  const loyersAnnexesAnnuels = loyerAnnexesSeparees(entrees.annexes_louees ?? []);
+  const loyersLogementsAnnuels = lire('loyers_logements_annuels');
+  const loyersAnnexesAnnuels = lire('loyers_annexes_annuels');
 
   // La saisie lot par lot est le mode normal : plusieurs lignes d'un meme
   // produit forment une tranche, sans avertissement. On ne signale que le cas
@@ -11048,8 +11811,8 @@ function calculer(entrees, referentiels) {
     if (!(duree > 0)) return 0;
     return arrondiEuro(baseAmortissable / duree);
   })();
-  const nbLogements = lots.reduce((s, l) => s + (l.nb_logements ?? 0), 0);
-  const shabTotal = lots.reduce((s, l) => s + (l.shab_m2 ?? 0), 0);
+  const nbLogements = lire('nb_logements_total');
+  const shabTotal = lire('shab_totale');
 
   // Q-16 : les postes de charge diverses viennent du referentiel, la saisie ne
   // fait que les activer. Q-27 : le mode foyer remplace les loyers par une
@@ -11492,14 +12255,14 @@ function calculer(entrees, referentiels) {
   const indicateurs = {
     nb_logements: nbLogements,
     shab_m2: shabTotal,
-    su_m2: Object.values(suParProduit).reduce((s, v) => s + v, 0),
+    su_m2: lire('su_totale_tranches'),
     prix_revient_ttc_eur: bilan.total_ttc_module_eur,
     prix_revient_par_logement_eur:
       nbLogements > 0 ? arrondiEuro(bilan.total_ttc_module_eur / nbLogements) : null,
     prix_revient_par_m2_shab_eur:
       shabTotal > 0 ? arrondiEuro(bilan.total_ttc_module_eur / shabTotal) : null,
     loyers_annuels_eur: arrondiEuro(loyersLogementsAnnuels + loyersAnnexesAnnuels),
-    surfaces_annexes_m2: lots.reduce((s, l) => s + (l.surfaces_annexes_m2 ?? 0), 0),
+    surfaces_annexes_m2: lire('annexes_totales'),
     subventions_eur: subventionsTotal,
     fonds_propres_eur: fondsPropres,
     ressources_eur: equilibre.ressources_eur,
@@ -11540,10 +12303,10 @@ function calculer(entrees, referentiels) {
         codesPresents.map((c) => [
           c,
           {
-            nb_lots: tranches[c].lignes.length,
+            nb_lots: lire('nb_lots_tranche', { tranche: c }),
             nb_logements: tranches[c].nb_logements,
-            shab_m2: arrondiSurface(tranches[c].shab_m2),
-            su_m2: arrondiSurface(tranches[c].su_m2),
+            shab_m2: lire('shab_tranche_arrondie', { tranche: c }),
+            su_m2: tranches[c].su_m2,
             quote_part_su: quotesParts[c],
             // Apport RESOLU et non saisie brute : laisse au calcul, il vaut sa
             // part du prix de revient. Publier la saisie ici affichait une part

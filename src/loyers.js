@@ -2,143 +2,101 @@
 /**
  * R-SURF + R-LOYER - Surfaces, coefficient de structure et loyers reglementes.
  *
- * Sources LEON verifiees le 04/08/2026 (classeur OP-3, matrice complete) :
- * - `calculs!D384` : surface utile = SHAB + 0,5 x annexes.
- * - `calculs!D92/D94/D95/D96` : coefficient de structure, variantes metropole/DOM,
- *   par produit / mixte / hors annexes.
- * - `calculs!D72:D77` : loyer de base = loyer max de zone + marge locale.
- * - `calculs!D117:D119` : loyer max de base = CS x loyer de base.
- * - `calculs!B117:B119` et `B92` : arrondis pilotes par un flag global (I-9), ici
- *   remplaces par la politique explicite d'`arrondis.js`.
+ * LES FORMULES NE SONT PLUS ICI. Elles vivent dans `formules/domaines/surfaces.js`
+ * et `formules/domaines/loyers.js`, ecrites une fois en blocs : c'est la que le
+ * moteur les execute, et de la que l'ecran les affiche.
  *
- * Aucun litteral metier ici : 0,77 / 20 / 38 / 0,685 / 31 / 0,5 viennent tous du
- * referentiel de baremes (lecon I-2).
+ * Ce module garde :
+ *  - la RESTITUTION du loyer d'une tranche, lue dans le classeur ;
+ *  - les fonctions historiques (`surfaceUtile`, `coefficientStructure`,
+ *    `loyerProduit`...). Elles evaluent ces memes formules sur les valeurs
+ *    qu'on leur donne, en posant ces valeurs dans un classeur : elles ne
+ *    calculent rien elles-memes, et ne peuvent donc pas diverger du moteur ;
+ *  - les controles de coherence, qui produisent des alertes et non des valeurs.
  *
  * Unites : surfaces en m2, loyers en EUR/m2 SU/mois sauf mention `_annuel_eur`.
  */
-import { arrondiSurface, arrondiCS, arrondiLoyer, arrondiEuro } from './arrondis.js';
 import { produit } from './produits.js';
+import { nouveauClasseur } from './formules/modele.js';
+import { loyerMaxZone } from './formules/domaines/loyers.js';
 
-/** Nombre de mois d'un loyer annuel (constante calendaire). */
-const MOIS_PAR_AN = 12;
+export { loyerMaxZone };
+
+/**
+ * Classeur reduit a UNE tranche, pour evaluer les formules de loyer sur des
+ * valeurs donnees plutot que sur un programme de lots.
+ * @param {string} code
+ * @param {any} referentiels
+ * @param {any} [entrees]
+ */
+function classeurDeTranche(code, referentiels, entrees = {}) {
+  const c = nouveauClasseur({ entrees, baremes: referentiels });
+  c.fixerDimension('tranche', [code]);
+  return c;
+}
 
 /**
  * R-SURF-1 - Surface utile d'un lot : SU = SHAB + coefficient x surfaces annexes.
- * Peut etre forcee par la saisie (la valeur forcee court-circuite le calcul).
- * @param {Object} p
- * @param {number} p.shab_m2
- * @param {number} [p.surfaces_annexes_m2]
- * @param {number} [p.su_forcee_m2]
- * @param {{constantes_reglementaires: any}} referentiels
- * @returns {number} surface utile arrondie a 2 decimales
+ * Formule : `su_lot` (arrondie) ou `su_exacte_lot`.
+ * @param {{shab_m2: number, surfaces_annexes_m2?: number, su_forcee_m2?: number, arrondir?: boolean}} lot
+ * @param {any} referentiels
+ * @returns {number}
  */
-export function surfaceUtile({ shab_m2, surfaces_annexes_m2 = 0, su_forcee_m2, arrondir = true }, referentiels) {
-  const k = referentiels.constantes_reglementaires.coefficient_surface_annexes.valeur;
-  const su =
-    su_forcee_m2 !== undefined && su_forcee_m2 !== null
-      ? su_forcee_m2
-      : shab_m2 + k * surfaces_annexes_m2;
-  // `arrondir: false` sert a l'agregation lot par lot : la surface utile est une
-  // grandeur de TRANCHE (R-SURF-1), et arrondir chaque lot avant de sommer fait
-  // deriver le total (six lots a 70,005 m2 donnent 420,06 au lieu de 420).
-  return arrondir ? arrondiSurface(su) : su;
+export function surfaceUtile(lot, referentiels) {
+  const c = nouveauClasseur({ entrees: { lots: [lot] }, baremes: referentiels });
+  return c.valeur(lot.arrondir === false ? 'su_exacte_lot' : 'su_lot', { lot: 0 });
 }
 
 /**
- * R-SURF-2 - Coefficient de structure : `CS = base x (1 + facteur_nl x NL / SU)`.
- * `facteur_nl` vaut 20 en habitat et 38 en foyers (referentiel).
- *
- * La variante DOM du dictionnaire n'est PAS implementee : hors perimetre
- * (decision du 06/08/2026). Le referentiel conserve ses coefficients pour
- * memoire, mais aucun code ne les lit - mieux vaut une absence franche qu'une
- * branche jamais exercee et donc jamais testee.
- *
- * @param {Object} p
- * @param {number} p.nb_logements
- * @param {number} p.su_m2
- * @param {boolean} [p.foyer]
- * @param {boolean} [p.arrondir]      applique l'arrondi 4 decimales (option LEON)
- * @param {{constantes_reglementaires: any}} referentiels
+ * R-SURF-2 - Coefficient de structure. Formule : `cs_calcule` (ou `cs_exact`).
+ * @param {{nb_logements: number, su_m2: number, foyer?: boolean, arrondir?: boolean}} p
+ * @param {any} referentiels
  * @returns {number}
  */
 export function coefficientStructure({ nb_logements, su_m2, foyer = false, arrondir = true }, referentiels) {
-  if (!(su_m2 > 0)) return 0;
-  const cfg = referentiels.constantes_reglementaires.coefficient_structure;
-  const facteur = foyer ? cfg.foyers.facteur_nl : cfg.metropole_habitat.facteur_nl;
-  const cs = cfg.metropole_habitat.base * (1 + (facteur * nb_logements) / su_m2);
-  return arrondir ? arrondiCS(cs) : cs;
+  const T = { tranche: '_' };
+  const c = classeurDeTranche('_', referentiels)
+    .fixer('nb_logements_tranche', T, nb_logements)
+    .fixer('su_tranche', T, su_m2)
+    .fixer('produit_foyer', T, foyer)
+    .fixer('foyer_tranche', T, foyer);
+  return c.valeur(arrondir ? 'cs_calcule' : 'cs_exact', T);
 }
 
 /**
- * R-SURF-3 - Quotes-parts de surface utile, cle de ventilation de tous les
- * montants partages entre produits (prix de revient, subventions, foncier).
+ * R-SURF-3 - Quotes-parts de surface utile. Formule : `quote_part_su`.
  * @param {Record<string, number>} su_par_produit
- * @returns {Record<string, number>} quotes-parts sommant a 1 (ou toutes nulles)
+ * @returns {Record<string, number>}
  */
 export function quotesPartsSU(su_par_produit) {
-  const total = Object.values(su_par_produit).reduce((s, v) => s + v, 0);
-  /** @type {Record<string, number>} */
-  const qp = {};
-  for (const [code, su] of Object.entries(su_par_produit)) {
-    qp[code] = total > 0 ? su / total : 0;
-  }
-  return qp;
+  const codes = Object.keys(su_par_produit);
+  const c = nouveauClasseur({ entrees: {} });
+  c.fixerDimension('tranche', codes).fixer('tranches_ordre_saisie', {}, codes);
+  for (const code of codes) c.fixer('su_tranche', { tranche: code }, su_par_produit[code]);
+  return Object.fromEntries(codes.map((code) => [code, c.valeur('quote_part_su', { tranche: code })]));
 }
 
 /**
- * Loyer maximal reglementaire d'un produit dans sa zone, lu au bareme.
- * Le zonage applicable (1/2/3/1bis ou A/Abis/B1/B2/C) est une propriete du
- * produit, pas une branche de code (lecon I-1).
- * @param {string} code_produit
- * @param {{zone_123?: string|number, zone_ABC?: string}} zones
- * @param {any} baremes
- * @returns {number} EUR/m2 SU/mois
- */
-export function loyerMaxZone(code_produit, zones, baremes) {
-  const def = produit(/** @type {any} */ (code_produit));
-  const table = def.zonage === 'ABC' ? baremes.loyers_max_zone_ABC : baremes.loyers_max_zone_123;
-  const valeurs = table[def.cle_bareme_loyer];
-  if (!valeurs) throw new Error(`Bareme de loyer absent pour ${code_produit} (${def.cle_bareme_loyer})`);
-
-  const zone = def.zonage === 'ABC' ? zones.zone_ABC : zones.zone_123;
-  const cle = def.zonage === 'ABC' ? String(zone).replace(' ', '_') : `zone_${zone}`;
-  const i = table.zones.indexOf(def.zonage === 'ABC' ? cle.replace('Abis', 'A_bis') : cle);
-  if (i < 0) throw new Error(`Zone inconnue pour ${code_produit} : ${zone}`);
-  return valeurs[i];
-}
-
-/**
- * R-LOYER-1 - Loyer de base = loyer max de zone + marge locale departementale.
- * Le PLUS 33 % applique en plus une majoration multiplicative (arbitrage I-6 :
- * x1,33 partout, jamais +0,33).
- * @param {Object} p
- * @param {string} p.code_produit
- * @param {{zone_123?: string|number, zone_ABC?: string}} p.zones
- * @param {number} [p.marge_locale_eur_m2]
- * @param {number} [p.coefficient_millesime] R-LOYER-9 : revalorisation du PLAFOND
- *   entre le millesime du bareme et la mise en location. Ne porte que sur le
- *   plafond de zone : la marge locale est une saisie en euros du jour, elle n'a
- *   pas de millesime a rattraper.
+ * R-LOYER-1 - Loyer de base. Formule : `loyer_base_bareme`.
+ * @param {{code_produit: string, zones: {zone_123?: string|number, zone_ABC?: string},
+ *          marge_locale_eur_m2?: number, coefficient_millesime?: number}} p
  * @param {any} referentiels
- * @returns {number} EUR/m2 SU/mois
+ * @returns {number}
  */
-export function loyerDeBase(
-  { code_produit, zones, marge_locale_eur_m2 = 0, coefficient_millesime = 1 },
-  referentiels,
-) {
-  const def = produit(/** @type {any} */ (code_produit));
-  let loyer =
-    loyerMaxZone(code_produit, zones, referentiels) * coefficient_millesime + marge_locale_eur_m2;
-  if (def.majoration_loyer) {
-    const maj = referentiels.constantes_reglementaires[def.majoration_loyer];
-    loyer *= 1 + (typeof maj === 'object' ? maj.valeur : maj);
-  }
-  return arrondiLoyer(loyer);
+export function loyerDeBase({ code_produit, zones, marge_locale_eur_m2 = 0, coefficient_millesime = 1 }, referentiels) {
+  const T = { tranche: code_produit };
+  const c = classeurDeTranche(code_produit, referentiels, {
+    identite: { zone_123: zones?.zone_123, zone_ABC: zones?.zone_ABC },
+  })
+    .fixer('marge_locale_tranche', T, marge_locale_eur_m2)
+    .fixer('coefficient_millesime', {}, coefficient_millesime);
+  return c.valeur('loyer_base_bareme', T);
 }
 
 /**
  * R-LOYER-3 - Marge locale de majoration : somme des majorations affectees,
- * plafonnee. Le plafonnement est separe par produit (FinPLUS!S26:T29).
+ * plafonnee. Le moteur n'en a plus l'usage - la formule `marge_appliquee` ne
+ * porte qu'une marge par tranche - mais la regle reste disponible.
  * @param {number[]} majorations
  * @param {number} plafond
  * @returns {number}
@@ -152,6 +110,8 @@ export function margePlafonnee(majorations, plafond) {
  * R-LOYER-4 - Majoration liee aux locaux collectifs residentiels (LCR).
  * Sous le seuil bas : nulle. Au-dessus du seuil haut : majoration forfaitaire.
  * Entre les deux : ratio / 100 (borne intermediaire encore a confirmer, Q-10).
+ * REGLE NON BRANCHEE : aucune grandeur du moteur ne l'emploie (dictionnaire,
+ * §12 bis).
  * @param {number} ratio_lcr en pourcentage (ex. 15 pour 15 %)
  * @param {any} referentiels
  * @returns {number} majoration en fraction
@@ -164,24 +124,56 @@ export function majorationLCR(ratio_lcr, referentiels) {
 }
 
 /**
- * R-LOYER-2 et R-LOYER-5 - Loyer pratique d'un produit.
- *   Lmax_base = CS x loyer_de_base   (les produits sans CS prennent le loyer de marche)
- *   loyer     = Lmax_base x (1 + marge_plafonnee)
- *   annuel    = 12 x SU x loyer
- * Un loyer de sortie force court-circuite tout le calcul.
+ * Loyer d'une tranche, tel que le moteur le restitue. Les champs dependent du
+ * regime : un plafond conventionnel ne connait ni marge ni plafond de marge.
+ * @param {import('./formules/classeur.js').Classeur} c
+ * @param {string} code
+ */
+export function restituerLoyer(c, code) {
+  const T = { tranche: code };
+  const v = (/** @type {string} */ id) => c.valeur(id, T);
+  if (v('produit_loyer_par_convention')) {
+    return {
+      cs: v('cs_tranche'),
+      loyer_base_eur_m2: v('loyer_base_tranche'),
+      loyer_max_base_eur_m2: v('loyer_max_base_tranche'),
+      loyer_pratique_eur_m2: v('loyer_pratique_tranche'),
+      loyer_annuel_eur: v('loyer_annuel_tranche'),
+      force: v('loyer_force_actif'),
+      plafond_conventionnel: true,
+    };
+  }
+  const plafond = v('plafond_marge_tranche');
+  return {
+    cs: v('cs_tranche'),
+    loyer_base_eur_m2: v('loyer_base_tranche'),
+    loyer_max_base_eur_m2: v('loyer_max_base_tranche'),
+    loyer_pratique_eur_m2: v('loyer_pratique_tranche'),
+    loyer_annuel_eur: v('loyer_annuel_tranche'),
+    force: v('loyer_force_actif'),
+    /** Marge REELLEMENT appliquee, une fois le plafond R-LOYER-3 passe. */
+    marge_majoration: v('marge_appliquee'),
+    marge_majoration_saisie: v('marge_majoration_tranche'),
+    marge_plafonnee: v('marge_plafonnee'),
+    plafond_marge: Number.isFinite(plafond) ? plafond : null,
+  };
+}
+
+/**
+ * R-LOYER-2 et R-LOYER-5 - Loyer pratique d'un produit, a partir de valeurs
+ * donnees. Formules du domaine « loyers ».
  * @param {Object} p
  * @param {string} p.code_produit
  * @param {number} p.su_m2
  * @param {number} p.nb_logements
  * @param {{zone_123?: string|number, zone_ABC?: string}} p.zones
  * @param {number} [p.marge_locale_eur_m2]
- * @param {number} [p.marge_majoration]     fraction deja plafonnee (R-LOYER-3)
+ * @param {number} [p.marge_majoration]     fraction avant plafond (R-LOYER-3)
  * @param {number} [p.loyer_sortie_force]   EUR/m2/mois, court-circuite le calcul
- * @param {number} [p.loyer_plafond_convention_eur_m2] produits a plafond conventionnel (rehabilitation)
+ * @param {number} [p.loyer_plafond_convention_eur_m2] produits a plafond conventionnel
  * @param {boolean} [p.foyer]
+ * @param {number} [p.coefficient_millesime] R-LOYER-9
  * @param {any} referentiels
- * @returns {{cs: number, loyer_base_eur_m2: number, loyer_max_base_eur_m2: number,
- *            loyer_pratique_eur_m2: number, loyer_annuel_eur: number, force: boolean}}
  */
 export function loyerProduit(
   {
@@ -198,92 +190,36 @@ export function loyerProduit(
   },
   referentiels,
 ) {
-  const def = produit(/** @type {any} */ (code_produit));
-
-  // R-LOYER - Produits dont le plafond est CONVENTIONNEL (rehabilitation,
-  // ParaREH!A23 « Loyer maxi convention »). Aucun bareme de zone ne s'applique :
-  // le plafond est celui de la convention APL en vigueur, eventuellement majore
-  // de l'impact loyer des travaux. Le moteur le prend tel quel plutot que
-  // d'inventer un plafond a partir d'un bareme de logement neuf.
-  if (def.loyer_par_convention) {
-    const plafond = arrondiLoyer(loyer_plafond_convention_eur_m2 ?? 0);
-    const pratique = arrondiLoyer(loyer_sortie_force ?? plafond);
-    return {
-      cs: 1,
-      loyer_base_eur_m2: plafond,
-      loyer_max_base_eur_m2: plafond,
-      loyer_pratique_eur_m2: pratique,
-      loyer_annuel_eur: arrondiEuro(MOIS_PAR_AN * su_m2 * pratique),
-      force: loyer_sortie_force !== undefined && loyer_sortie_force !== null,
-      plafond_conventionnel: true,
-    };
-  }
-
-  // Un produit foyer l'est par nature (FPLUS, FPLAI, FPLS) ; le drapeau
-  // d'operation permet en plus de traiter en foyer un produit qui ne l'est pas
-  // de base. Les deux se cumulent, le produit ne pouvant pas etre dementi.
-  const cs = def.coefficient_structure
-    ? coefficientStructure({ nb_logements, su_m2, foyer: def.foyer || foyer }, referentiels)
-    : 1;
-
-  const loyerBase = loyerDeBase(
-    { code_produit, zones, marge_locale_eur_m2, coefficient_millesime },
-    referentiels,
-  );
-  const loyerMaxBase = arrondiLoyer(cs * loyerBase);
-
-  const force = loyer_sortie_force !== undefined && loyer_sortie_force !== null;
-  // R-LOYER-3 - La marge de majoration est PLAFONNEE. Le plafond est une donnee
-  // de simulation (ParaPLUS!AD30, 12 % au referentiel) et la regle est un simple
-  // minimum, mais elle n'etait appliquee nulle part : le plafond se reglait a
-  // l'ecran sans rien commander, et une marge de 200 % triplait le loyer d'un
-  // PLUS sans un mot. Un loyer qu'aucune convention n'accepterait equilibrait
-  // alors l'operation.
-  //
-  // Le plafond ne s'applique PAS a un produit a loyer de marche : il n'y a pas
-  // de convention a respecter sur du libre, et la marge y est le pari
-  // commercial lui-meme.
-  const plafondMarge = def.loyer_de_marche
-    ? Infinity
-    : (referentiels.constantes_reglementaires.marge_locale_plafond_defaut?.valeur ?? Infinity);
-  const margeAppliquee = margePlafonnee([marge_majoration], plafondMarge);
-  const margePlafonneeAtteinte = margeAppliquee < marge_majoration;
-
-  const loyerPratique = force
-    ? arrondiLoyer(loyer_sortie_force)
-    : arrondiLoyer(loyerMaxBase * (1 + margeAppliquee));
-
-  return {
-    cs,
-    loyer_base_eur_m2: loyerBase,
-    loyer_max_base_eur_m2: loyerMaxBase,
-    loyer_pratique_eur_m2: loyerPratique,
-    loyer_annuel_eur: arrondiEuro(MOIS_PAR_AN * su_m2 * loyerPratique),
-    force,
-    /** Marge REELLEMENT appliquee, une fois le plafond R-LOYER-3 passe. */
-    marge_majoration: margeAppliquee,
-    marge_majoration_saisie: marge_majoration,
-    marge_plafonnee: margePlafonneeAtteinte,
-    plafond_marge: Number.isFinite(plafondMarge) ? plafondMarge : null,
-  };
+  const T = { tranche: code_produit };
+  const c = classeurDeTranche(code_produit, referentiels, {
+    identite: { zone_123: zones?.zone_123, zone_ABC: zones?.zone_ABC },
+  })
+    .fixer('su_tranche', T, su_m2)
+    .fixer('nb_logements_tranche', T, nb_logements)
+    .fixer('marge_locale_tranche', T, marge_locale_eur_m2)
+    .fixer('marge_majoration_tranche', T, marge_majoration)
+    .fixer('loyer_force_tranche', T, loyer_sortie_force)
+    .fixer('loyer_convention_tranche', T, loyer_plafond_convention_eur_m2)
+    .fixer('foyer_tranche', T, foyer)
+    .fixer('coefficient_millesime', {}, coefficient_millesime);
+  return restituerLoyer(c, code_produit);
 }
 
 /**
- * R-LOYER-7 - Loyers des annexes louees separement (garages, parkings, commerces,
- * jardins) : ils ne passent PAS par le coefficient de structure.
+ * R-LOYER-7 - Loyers des annexes louees separement. Formule : `loyers_annexes_annuels`.
  * @param {Array<{nombre: number, loyer_unitaire_eur_mois: number}>} annexes
  * @returns {number} loyer annuel en euros
  */
 export function loyerAnnexesSeparees(annexes) {
-  return arrondiEuro(
-    annexes.reduce((s, a) => s + a.nombre * a.loyer_unitaire_eur_mois * MOIS_PAR_AN, 0),
-  );
+  return nouveauClasseur({ entrees: { annexes_louees: annexes } }).valeur('loyers_annexes_annuels');
 }
 
 /**
  * R-LOYER-8 - Controles de coherence. Ne bloquent pas le calcul : ils remontent
  * des alertes que l'appelant (ou l'UI) presente.
- * @param {{loyer_pratique_eur_m2: number, loyer_max_base_eur_m2: number, force: boolean}} loyer
+ * @param {{loyer_pratique_eur_m2: number, loyer_max_base_eur_m2: number, force: boolean,
+ *          marge_plafonnee?: boolean, marge_majoration?: number, marge_majoration_saisie?: number,
+ *          plafond_conventionnel?: boolean}} loyer
  * @param {string} code_produit
  * @returns {string[]}
  */
@@ -295,8 +231,8 @@ export function controlesLoyer(loyer, code_produit) {
   if (loyer.marge_plafonnee) {
     alertes.push(
       `${code_produit} : marge de majoration ramenee de ` +
-        `${(loyer.marge_majoration_saisie * 100).toFixed(1)} % a ` +
-        `${(loyer.marge_majoration * 100).toFixed(1)} %, plafond reglementaire de la simulation`,
+        `${(/** @type {number} */ (loyer.marge_majoration_saisie) * 100).toFixed(1)} % a ` +
+        `${(/** @type {number} */ (loyer.marge_majoration) * 100).toFixed(1)} %, plafond reglementaire de la simulation`,
     );
   }
   // Un plafond conventionnel non saisi vaut zero : le compte serait faux en

@@ -187,6 +187,27 @@ export const FONCTIONS = {
       return false;
     },
   },
+  'SI.ABSENT': {
+    libelle: 'Si absent',
+    aide: 'Rend la seconde valeur si la première est absente. Une valeur explicitement vide est gardée telle quelle.',
+    arite: [2, 2],
+    compiler: ([a, b]) => (c, s) => {
+      const v = a(c, s);
+      return v === undefined ? b(c, s) : v;
+    },
+    evaluer: ([a, b]) => {
+      const v = a();
+      return v === undefined ? b() : v;
+    },
+  },
+  ERREUR: {
+    libelle: 'Erreur',
+    aide: 'Arrête le calcul avec ce message : la saisie ne permet pas de conclure.',
+    arite: [1, 1],
+    calc: (message) => {
+      throw new Error(String(message));
+    },
+  },
   NON: { libelle: 'Non', aide: 'Inverse une condition.', arite: [1, 1], calc: (x) => !x },
   RENSEIGNE: {
     libelle: 'Renseigné',
@@ -319,6 +340,24 @@ export const FONCTIONS = {
     aide: 'Vrai si la valeur figure dans la liste.',
     arite: [2, 2],
     calc: (l, x) => Array.isArray(l) && l.includes(x),
+  },
+  ELEMENT: {
+    libelle: 'Élément',
+    aide: 'L’élément de la liste au rang indiqué, le premier étant au rang 0.',
+    arite: [2, 2],
+    calc: (l, i) => (Array.isArray(l) ? l[i] : undefined),
+  },
+  UNIQUES: {
+    libelle: 'Sans doublon',
+    aide: 'La liste sans ses doublons, dans l’ordre de première apparition.',
+    arite: [1, 1],
+    calc: (l) => (Array.isArray(l) ? [...new Set(l)] : []),
+  },
+  CONCATENER: {
+    libelle: 'Mis bout à bout',
+    aide: 'Les listes mises bout à bout, dans l’ordre.',
+    arite: [2, 8],
+    calc: (...listes) => listes.flatMap((l) => (Array.isArray(l) ? l : [])),
   },
 
   // --- Dates -----------------------------------------------------------------

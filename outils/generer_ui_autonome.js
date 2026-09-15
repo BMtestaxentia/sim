@@ -40,6 +40,13 @@ const MODULES = [
   'formules/classeur.js', // depend de langage.js et fonctions.js
   'parametrage.js',
   'produits.js',
+  // Les grandeurs du moteur, domaine par domaine, puis le modele qui les
+  // assemble. Les modules historiques qui suivent les lisent.
+  'formules/domaines/operation.js', // depend de produits.js
+  'formules/domaines/calendrier.js',
+  'formules/domaines/surfaces.js',
+  'formules/domaines/loyers.js', // depend de produits.js
+  'formules/modele.js',
   'amortissement.js', // depend de dates.js
   'calendrier.js', // depend de dates.js
   'tresorerie.js', // depend de arrondis.js et calendrier.js (decalerMois)

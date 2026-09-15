@@ -64,7 +64,7 @@ const SYNONYMES = /** @type {Record<string, string>} */ ({
 });
 
 /** Mots reserves : ils ne peuvent pas nommer une grandeur. */
-export const MOTS_RESERVES = new Set(['POUR', 'DANS', 'QUAND', 'VRAI', 'FAUX', 'VIDE', 'INDEFINI']);
+export const MOTS_RESERVES = new Set(['POUR', 'DANS', 'QUAND', 'VRAI', 'FAUX', 'VIDE', 'INDEFINI', 'INFINI']);
 
 /**
  * @typedef {{type: 'nombre'|'texte'|'nom'|'op'|'fin', v: any, pos: number}} Jeton
@@ -248,6 +248,7 @@ export function analyser(texte) {
       if (nom === 'FAUX') return { t: 'cst', v: false, nom };
       if (nom === 'VIDE') return { t: 'cst', v: null, nom };
       if (nom === 'INDEFINI') return { t: 'cst', v: undefined, nom };
+      if (nom === 'INFINI') return { t: 'cst', v: Infinity, nom };
       if (MOTS_RESERVES.has(nom)) throw erreur(texte, j.pos, `« ${nom} » est un mot reserve`);
       if (estOp('(')) return appel(nom);
       return { t: 'nom', nom, index: estOp('[') ? indices() : null };

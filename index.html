@@ -4726,6 +4726,12 @@ const FONCTIONS = {
     arite: [3, 3],
     calc: (x, separateur, rang) => String(x).split(String(separateur))[rang],
   },
+  'TEXTE.DECOUPER': {
+    libelle: 'Texte découpé',
+    aide: 'Les morceaux du texte coupé au séparateur, dans l’ordre.',
+    arite: [2, 2],
+    calc: (x, separateur) => String(x).split(String(separateur)),
+  },
 
   // --- Tables ------------------------------------------------------------------
   CHAMP: {
@@ -10637,6 +10643,64 @@ const FISCALITE = {
  * de reference des foyers (redevance forfaitaire et en transparence).
  */
 
+/**
+ * Lignes du compte qui s'additionnent d'une tranche a l'autre, dans l'ordre de
+ * publication, et la condition qui les rend absentes d'une tranche : pas
+ * d'impot sur une tranche exoneree, pas de vue comptable sans dotation.
+ * @type {Array<{ligne: string, libelle: string, si?: string}>}
+ */
+const LIGNES_ADDITIVES = [
+  { ligne: 'redevance', libelle: 'Redevance' },
+  { ligne: 'annuite_fonds_propres', libelle: 'Annuités de fonds propres' },
+  { ligne: 'loyers_logements', libelle: 'Loyers des logements' },
+  { ligne: 'rls', libelle: 'Réduction de loyer de solidarité' },
+  { ligne: 'loyers_annexes', libelle: 'Loyers des annexes' },
+  { ligne: 'loyers_divers', libelle: 'Loyers divers' },
+  { ligne: 'vacance_impayes', libelle: 'Vacance et impayés' },
+  { ligne: 'loyers_nets', libelle: 'Loyers nets' },
+  { ligne: 'qp_subventions', libelle: 'Quote-part de subventions' },
+  { ligne: 'produits_financiers', libelle: 'Produits financiers' },
+  { ligne: 'total_produits', libelle: 'Total des produits' },
+  { ligne: 'annuites', libelle: 'Annuités d’emprunt' },
+  { ligne: 'frais_gestion', libelle: 'Frais de gestion' },
+  { ligne: 'tfpb', libelle: 'Taxe foncière' },
+  { ligne: 'gros_entretien', libelle: 'Gros entretien' },
+  { ligne: 'rel', libelle: 'REL' },
+  { ligne: 'charges_diverses', libelle: 'Charges diverses' },
+  { ligne: 'total_charges', libelle: 'Total des charges' },
+  { ligne: 'autofinancement', libelle: 'Autofinancement' },
+  { ligne: 'cumul_autofinancement', libelle: 'Autofinancement cumulé' },
+  { ligne: 'base_is', libelle: 'Base de l’impôt sur les sociétés', si: 'is_actif' },
+  { ligne: 'impot_societes', libelle: 'Impôt sur les sociétés', si: 'is_actif' },
+  { ligne: 'interets', libelle: 'Intérêts d’emprunt' },
+  { ligne: 'capital_rembourse', libelle: 'Capital remboursé' },
+  { ligne: 'dotation_amortissements', libelle: 'Dotation aux amortissements', si: 'comptable_disponible' },
+  { ligne: 'total_charges_comptables', libelle: 'Total des charges comptables', si: 'comptable_disponible' },
+  { ligne: 'resultat_comptable', libelle: 'Résultat comptable', si: 'comptable_disponible' },
+  { ligne: 'cumul_resultat_comptable', libelle: 'Résultat comptable cumulé', si: 'comptable_disponible' },
+];
+
+/**
+ * R-EXP-8 - Chaque ligne d'un perimetre est la somme des lignes PUBLIEES de
+ * ses tranches, c'est-a-dire arrondies a l'euro. Une ligne absente de toutes
+ * les tranches reste absente ; absente de certaines, elle y compte pour zero.
+ */
+const LIGNES_PERIMETRE = Object.fromEntries(
+  LIGNES_ADDITIVES.map(({ ligne, libelle, si }) => [
+    `${ligne}_perimetre`,
+    {
+      libelle: `${libelle} du périmètre`,
+      unite: 'eur',
+      regle: 'R-EXP-8',
+      sur: ['perimetre', 'exercice'],
+      formule: si
+        ? `SI(UN(${si}[tranche: t] POUR t DANS tranches_perimetre); ARRONDI.EURO(SOMME(SI(${si}[tranche: t]; ` +
+          `ARRONDI.EURO(${ligne}[tranche: t]); 0) POUR t DANS tranches_perimetre)); VIDE)`
+        : `ARRONDI.EURO(SOMME(ARRONDI.EURO(${ligne}[tranche: t]) POUR t DANS tranches_perimetre))`,
+    },
+  ]),
+);
+
 /** @type {import('../classeur.js').Domaine} */
 const EXPLOITATION = {
   domaine: 'exploitation',
@@ -10652,6 +10716,9 @@ const EXPLOITATION = {
     index: { libelle: 'Trajectoire d’indexation' },
     depuis: { libelle: 'Année de départ de l’indexation' },
     poste_is: { libelle: 'Charge déductible de l’impôt' },
+    // Un perimetre se designe par les codes de ses tranches, « PLAI+PLUS », ou
+    // par « operation » pour l'operation entiere.
+    perimetre: { libelle: 'Périmètre de tranches' },
   },
   grandeurs: {
     // --- Indexation -------------------------------------------------------------
@@ -12253,6 +12320,191 @@ const EXPLOITATION = {
       unite: 'annee',
       sur: ['tranche'],
       formule: 'PREMIER(exercice POUR exercice QUAND ARRONDI.EURO(cumul_autofinancement) > 0)',
+    },
+
+    // --- R-EXP-8 : le compte d'un perimetre de tranches ------------------------------------
+    tranches_perimetre: {
+      libelle: 'Tranches du périmètre',
+      unite: 'liste',
+      regle: 'R-EXP-8',
+      sur: ['perimetre'],
+      formule: "SI(perimetre = 'operation'; tranches_presentes; TEXTE.DECOUPER(perimetre; '+'))",
+    },
+    perimetre_unique: {
+      libelle: 'Périmètre d’une seule tranche',
+      unite: 'booleen',
+      sur: ['perimetre'],
+      formule: 'LONGUEUR(tranches_perimetre) = 1',
+      note: 'Son compte est celui de la tranche, taux compris.',
+    },
+    tranche_du_perimetre: {
+      libelle: 'Première tranche du périmètre',
+      unite: 'texte',
+      sur: ['perimetre'],
+      formule: 'ELEMENT(tranches_perimetre; 0)',
+    },
+    ...LIGNES_PERIMETRE,
+    taux_marge_perimetre: {
+      libelle: 'Taux de marge du périmètre',
+      unite: 'taux',
+      regle: 'R-EXP-8',
+      sur: ['perimetre', 'exercice'],
+      formule:
+        'SI(perimetre_unique; taux_marge[tranche: tranche_du_perimetre]; ' +
+        'SI(total_produits_perimetre > 0; autofinancement_perimetre / total_produits_perimetre; VIDE))',
+      note: 'Additionner des taux ne veut rien dire : celui du tout est le résultat du tout sur ses produits.',
+    },
+    places_perimetre: {
+      libelle: 'Places du périmètre',
+      unite: 'nombre',
+      sur: ['perimetre', 'exercice'],
+      formule:
+        'SOMME(SI(ET(prix_journee[tranche: t]; ARRONDI.EURO(redevance[tranche: t])); ' +
+        'ARRONDI.EURO(redevance[tranche: t]) / (prix_journee[tranche: t] * jours_par_an); 0) POUR t DANS tranches_perimetre)',
+      note: 'Retrouvées tranche par tranche, par la redevance et le prix de journée.',
+    },
+    prix_journee_perimetre: {
+      libelle: 'Prix de journée du périmètre',
+      unite: 'eur',
+      sur: ['perimetre', 'exercice'],
+      formule:
+        'SI(perimetre_unique; prix_journee[tranche: tranche_du_perimetre]; ' +
+        'SI(places_perimetre > 0; redevance_perimetre / (places_perimetre * jours_par_an); VIDE))',
+    },
+    montant_charge_perimetre: {
+      libelle: 'Charge diverse du périmètre',
+      unite: 'eur',
+      sur: ['perimetre', 'charge', 'exercice'],
+      formule: 'ARRONDI.EURO(SOMME(ARRONDI.EURO(montant_charge[tranche: t]) POUR t DANS tranches_perimetre))',
+    },
+    produits_perimetre_horizon: {
+      libelle: 'Produits du périmètre sur l’horizon',
+      unite: 'eur',
+      sur: ['perimetre'],
+      formule: 'ARRONDI.EURO(SOMME(total_produits_perimetre POUR exercice))',
+    },
+    charges_perimetre_horizon: {
+      libelle: 'Charges du périmètre sur l’horizon',
+      unite: 'eur',
+      sur: ['perimetre'],
+      formule: 'ARRONDI.EURO(SOMME(total_charges_perimetre POUR exercice))',
+    },
+    autofinancement_perimetre_horizon: {
+      libelle: 'Autofinancement du périmètre sur l’horizon',
+      unite: 'eur',
+      sur: ['perimetre'],
+      formule: 'ARRONDI.EURO(SOMME(autofinancement_perimetre POUR exercice))',
+    },
+    resultat_comptable_perimetre_horizon: {
+      libelle: 'Résultat comptable du périmètre sur l’horizon',
+      unite: 'eur',
+      sur: ['perimetre'],
+      formule:
+        'SI(RENSEIGNE(resultat_comptable_perimetre[exercice: annee_mise_en_location]); ' +
+        'ARRONDI.EURO(SOMME(DEFAUT(resultat_comptable_perimetre; 0) POUR exercice)); VIDE)',
+    },
+    interets_perimetre_horizon: {
+      libelle: 'Intérêts du périmètre sur l’horizon',
+      unite: 'eur',
+      sur: ['perimetre'],
+      formule: 'ARRONDI.EURO(SOMME(interets_perimetre POUR exercice))',
+    },
+
+    // --- R-EXP-3 : indicateurs de lecture d'un perimetre ------------------------------------
+    prix_revient_perimetre: {
+      libelle: 'Prix de revient du périmètre',
+      unite: 'eur',
+      sur: ['perimetre'],
+      formule:
+        "SI(perimetre = 'operation'; total_ttc_module; " +
+        'SOMME(total_ttc_module_tranche[tranche: t] POUR t DANS tranches_perimetre))',
+    },
+    fonds_propres_perimetre: {
+      libelle: 'Fonds propres du périmètre',
+      unite: 'eur',
+      sur: ['perimetre'],
+      formule:
+        "SI(perimetre = 'operation'; fonds_propres_total; " +
+        'SOMME(fonds_propres_tranche_arrondi[tranche: t] POUR t DANS tranches_perimetre))',
+    },
+    resultat_cumule_final: {
+      libelle: 'Autofinancement cumulé en fin d’horizon',
+      unite: 'eur',
+      regle: 'R-EXP-3',
+      sur: ['perimetre'],
+      formule: 'DERNIER(cumul_autofinancement_perimetre POUR exercice)',
+    },
+    creux_cumul: {
+      libelle: 'Creux de l’autofinancement cumulé',
+      unite: 'eur',
+      regle: 'R-EXP-3',
+      sur: ['perimetre'],
+      formule: 'MIN(cumul_autofinancement_perimetre POUR exercice)',
+    },
+    annee_creux_cumul: {
+      libelle: 'Année du creux',
+      unite: 'annee',
+      sur: ['perimetre'],
+      formule: 'PREMIER(exercice POUR exercice QUAND cumul_autofinancement_perimetre = creux_cumul)',
+    },
+    exercices_deficitaires: {
+      libelle: 'Exercices déficitaires',
+      unite: 'nombre',
+      regle: 'R-EXP-3',
+      sur: ['perimetre'],
+      formule: 'NB(exercice POUR exercice QUAND autofinancement_perimetre < 0)',
+    },
+    premiere_annee_deficitaire: {
+      libelle: 'Premier exercice déficitaire',
+      unite: 'annee',
+      sur: ['perimetre'],
+      formule: 'PREMIER(exercice POUR exercice QUAND autofinancement_perimetre < 0)',
+    },
+    derniere_annee_deficitaire: {
+      libelle: 'Dernier exercice déficitaire',
+      unite: 'annee',
+      sur: ['perimetre'],
+      formule: 'DERNIER(exercice POUR exercice QUAND autofinancement_perimetre < 0)',
+    },
+    taux_marge_moyen: {
+      libelle: 'Taux de marge moyen',
+      unite: 'taux',
+      regle: 'R-EXP-3',
+      sur: ['perimetre'],
+      formule:
+        'MOYENNE(taux_marge_perimetre POUR exercice QUAND ET(exercice < annee_fin_simulation; RENSEIGNE(taux_marge_perimetre)))',
+      note: 'Hors dernière année : le dernier prêt soldé, sa marge est exceptionnelle et fausserait la moyenne.',
+    },
+    annees_moyenne_marge: {
+      libelle: 'Années retenues dans la moyenne',
+      unite: 'nombre',
+      sur: ['perimetre'],
+      formule:
+        'NB(exercice POUR exercice QUAND ET(exercice < annee_fin_simulation; RENSEIGNE(taux_marge_perimetre)))',
+    },
+    taux_marge_annee_1: {
+      libelle: 'Taux de marge de la première année',
+      unite: 'taux',
+      sur: ['perimetre'],
+      formule: 'taux_marge_perimetre[exercice: annee_mise_en_location]',
+    },
+    tri: {
+      libelle: 'Taux de rentabilité interne',
+      unite: 'taux',
+      regle: 'R-EXP-3',
+      sur: ['perimetre'],
+      formule: 'SI(prix_revient_perimetre > 0; TRI(autofinancement_perimetre POUR exercice; -prix_revient_perimetre); VIDE)',
+      note: 'La mise de départ est le prix de revient, les flux suivants les autofinancements annuels.',
+    },
+    annee_reconstitution_fonds_propres: {
+      libelle: 'Année de reconstitution des fonds propres',
+      unite: 'annee',
+      regle: 'R-FIN-7',
+      sur: ['perimetre'],
+      formule:
+        'SI(fonds_propres_perimetre > 0; PREMIER(exercice POUR exercice ' +
+        'QUAND cumul_autofinancement_perimetre >= fonds_propres_perimetre); VIDE)',
+      note: 'Premier franchissement du seuil : le cumul peut repasser dessous après une rupture (Q-33).',
     },
   },
 };
@@ -14271,6 +14523,7 @@ function taxeAmenagement(p, referentiels) {
 
 
 
+
 // L'indexation et le TRI sont des fonctions du langage de formules : elles
 // vivent dans sa bibliotheque, et restent exportees d'ici pour les appelants
 // qui les y cherchent.
@@ -14372,6 +14625,75 @@ function restituerCompte(c, tranche) {
       premiere_annee_positive: t('premiere_annee_positive'),
       annee_retour_cumul_positif: t('annee_retour_cumul_positif'),
     },
+  };
+}
+
+/**
+ * R-EXP-8 - Compte d'un perimetre de tranches : « operation » pour l'operation
+ * entiere, ou les codes de ses tranches, « PLAI+PLUS ». Un perimetre d'une
+ * seule tranche rend le compte de la tranche lui-meme.
+ * @param {import('./formules/classeur.js').Classeur} c
+ * @param {string} perimetre
+ * @param {Record<string, any>} [comptes] comptes des tranches deja restitues
+ */
+function restituerPerimetre(c, perimetre, comptes = {}) {
+  const P = { perimetre };
+  const tranches = c.valeur('tranches_perimetre', P);
+  if (tranches.length === 1) return { ...(comptes[tranches[0]] ?? restituerCompte(c, tranches[0])) };
+  const charges = c.valeursDimension('charge');
+  const lignes = c.valeursDimension('exercice').map((exercice) => {
+    const I = { perimetre, exercice };
+    /** @type {Record<string, any>} */
+    const ligne = { annee: exercice };
+    for (const { ligne: x } of LIGNES_ADDITIVES) {
+      ligne[`${x}_eur`] = c.valeur(`${x}_perimetre`, I);
+      // Le prix de journee se publie juste apres la redevance.
+      if (x === 'redevance') ligne.prix_journee_eur = null;
+    }
+    ligne.detail_charges_diverses = charges
+      .filter((charge) => c.valeur('charge_applicable', { charge, exercice }))
+      .map((charge) => ({
+        code: c.valeur('code_charge', { charge }),
+        libelle: c.valeur('libelle_charge', { charge }),
+        montant_eur: c.valeur('montant_charge_perimetre', { perimetre, charge, exercice }),
+      }));
+    ligne.taux_marge = c.valeur('taux_marge_perimetre', I);
+    ligne.prix_journee_eur = c.valeur('prix_journee_perimetre', I);
+    return ligne;
+  });
+  return {
+    lignes,
+    mode: c.valeur('mode_exploitation'),
+    totaux: {
+      produits_eur: c.valeur('produits_perimetre_horizon', P),
+      charges_eur: c.valeur('charges_perimetre_horizon', P),
+      autofinancement_eur: c.valeur('autofinancement_perimetre_horizon', P),
+      resultat_comptable_eur: c.valeur('resultat_comptable_perimetre_horizon', P),
+      interets_eur: c.valeur('interets_perimetre_horizon', P),
+    },
+  };
+}
+
+/**
+ * R-EXP-3 - Indicateurs de lecture d'un perimetre : cumul final et creux,
+ * exercices deficitaires, marges, TRI, reconstitution des fonds propres.
+ * @param {import('./formules/classeur.js').Classeur} c
+ * @param {string} perimetre
+ */
+function restituerIndicateurs(c, perimetre) {
+  const v = (/** @type {string} */ id) => c.valeur(id, { perimetre });
+  return {
+    resultat_cumule_final_eur: v('resultat_cumule_final'),
+    creux_cumul_eur: v('creux_cumul'),
+    annee_creux_cumul: v('annee_creux_cumul'),
+    exercices_deficitaires: v('exercices_deficitaires'),
+    premiere_annee_deficitaire: v('premiere_annee_deficitaire'),
+    derniere_annee_deficitaire: v('derniere_annee_deficitaire'),
+    taux_marge_moyen: v('taux_marge_moyen'),
+    taux_marge_annee_1: v('taux_marge_annee_1'),
+    annees_moyenne_marge: v('annees_moyenne_marge'),
+    tri: v('tri'),
+    annee_reconstitution_fonds_propres: v('annee_reconstitution_fonds_propres'),
   };
 }
 
@@ -15388,7 +15710,7 @@ function calculer(entrees, referentiels) {
   const comptesTranches = Object.fromEntries(
     codesPresents.map((c) => [c, restituerCompte(classeur, c)]),
   );
-  const exploitation = sommerComptes(codesPresents.map((c) => comptesTranches[c]));
+  const exploitation = restituerPerimetre(classeur, 'operation', comptesTranches);
   // Le mode vient de la saisie et non de la premiere tranche : une operation
   // mixte porte les deux, et c est la saisie qui dit lequel gouverne la vue.
   exploitation.mode = exp.mode ?? 'loyers';
@@ -15444,14 +15766,9 @@ function calculer(entrees, referentiels) {
   evenements.sort((x, y) => x.annee - y.annee);
 
   exploitation.evenements = evenements;
-  exploitation.indicateurs = indicateursExploitation(exploitation.lignes, {
-    prix_revient_ttc_eur: bilan.total_ttc_module_eur,
-  });
+  // R-EXP-3 : indicateurs du perimetre « operation ».
+  exploitation.indicateurs = restituerIndicateurs(classeur, 'operation');
   exploitation.jalons = jalonsExploitation(exploitation.lignes, evenements);
-  exploitation.indicateurs.annee_reconstitution_fonds_propres = anneeReconstitutionFondsPropres(
-    exploitation.lignes,
-    fondsPropres,
-  );
   exploitation.fonds_propres_eur = fondsPropres;
   exploitation.charges_diverses_actives = chargesDiverses;
   // R-FIN-7 : detail des fonds propres par tranche, remuneres ou non.
@@ -15465,13 +15782,7 @@ function calculer(entrees, referentiels) {
       // Les memes indicateurs que le consolide, sur le meme horizon : une vue
       // par tranche qui ne saurait pas dire son TRI ou son creux de cumul ne
       // serait qu une table de chiffres.
-      compte.indicateurs = indicateursExploitation(compte.lignes, {
-        prix_revient_ttc_eur: bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0,
-      });
-      compte.indicateurs.annee_reconstitution_fonds_propres = anneeReconstitutionFondsPropres(
-        compte.lignes,
-        fondsPropresParTranche[c]?.montant_eur ?? 0,
-      );
+      compte.indicateurs = restituerIndicateurs(classeur, c);
       compte.fonds_propres_eur = fondsPropresParTranche[c]?.montant_eur ?? 0;
       // Les ruptures de la courbe sont celles de l operation - entree en taxe
       // fonciere, fin d un pret - mais leurs JALONS se lisent sur les lignes de
@@ -15557,10 +15868,7 @@ function calculer(entrees, referentiels) {
         : null,
     taux_fonds_propres:
       bilan.total_ttc_module_eur > 0 ? fondsPropres / bilan.total_ttc_module_eur : null,
-    annee_reconstitution_fonds_propres: anneeReconstitutionFondsPropres(
-      exploitation.lignes,
-      fondsPropres,
-    ),
+    annee_reconstitution_fonds_propres: exploitation.indicateurs.annee_reconstitution_fonds_propres,
     annee_debut_tfpb: tfpb.annee_debut_tfpb,
     amortissement_comptable: amortissementComptable,
   };

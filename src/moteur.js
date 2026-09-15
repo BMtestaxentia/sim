@@ -28,9 +28,8 @@ import { restituerTFPB, restituerTaxeAmenagement } from './fiscalite.js';
 import {
   restituerCompte,
   restituerChargesDiverses,
-  sommerComptes,
-  anneeReconstitutionFondsPropres,
-  indicateursExploitation,
+  restituerPerimetre,
+  restituerIndicateurs,
   jalonsExploitation,
 } from './exploitation.js';
 import { arrondiEuro } from './arrondis.js';
@@ -600,7 +599,7 @@ export function calculer(entrees, referentiels) {
   const comptesTranches = Object.fromEntries(
     codesPresents.map((c) => [c, restituerCompte(classeur, c)]),
   );
-  const exploitation = sommerComptes(codesPresents.map((c) => comptesTranches[c]));
+  const exploitation = restituerPerimetre(classeur, 'operation', comptesTranches);
   // Le mode vient de la saisie et non de la premiere tranche : une operation
   // mixte porte les deux, et c est la saisie qui dit lequel gouverne la vue.
   exploitation.mode = exp.mode ?? 'loyers';
@@ -656,14 +655,9 @@ export function calculer(entrees, referentiels) {
   evenements.sort((x, y) => x.annee - y.annee);
 
   exploitation.evenements = evenements;
-  exploitation.indicateurs = indicateursExploitation(exploitation.lignes, {
-    prix_revient_ttc_eur: bilan.total_ttc_module_eur,
-  });
+  // R-EXP-3 : indicateurs du perimetre « operation ».
+  exploitation.indicateurs = restituerIndicateurs(classeur, 'operation');
   exploitation.jalons = jalonsExploitation(exploitation.lignes, evenements);
-  exploitation.indicateurs.annee_reconstitution_fonds_propres = anneeReconstitutionFondsPropres(
-    exploitation.lignes,
-    fondsPropres,
-  );
   exploitation.fonds_propres_eur = fondsPropres;
   exploitation.charges_diverses_actives = chargesDiverses;
   // R-FIN-7 : detail des fonds propres par tranche, remuneres ou non.
@@ -677,13 +671,7 @@ export function calculer(entrees, referentiels) {
       // Les memes indicateurs que le consolide, sur le meme horizon : une vue
       // par tranche qui ne saurait pas dire son TRI ou son creux de cumul ne
       // serait qu une table de chiffres.
-      compte.indicateurs = indicateursExploitation(compte.lignes, {
-        prix_revient_ttc_eur: bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0,
-      });
-      compte.indicateurs.annee_reconstitution_fonds_propres = anneeReconstitutionFondsPropres(
-        compte.lignes,
-        fondsPropresParTranche[c]?.montant_eur ?? 0,
-      );
+      compte.indicateurs = restituerIndicateurs(classeur, c);
       compte.fonds_propres_eur = fondsPropresParTranche[c]?.montant_eur ?? 0;
       // Les ruptures de la courbe sont celles de l operation - entree en taxe
       // fonciere, fin d un pret - mais leurs JALONS se lisent sur les lignes de
@@ -769,10 +757,7 @@ export function calculer(entrees, referentiels) {
         : null,
     taux_fonds_propres:
       bilan.total_ttc_module_eur > 0 ? fondsPropres / bilan.total_ttc_module_eur : null,
-    annee_reconstitution_fonds_propres: anneeReconstitutionFondsPropres(
-      exploitation.lignes,
-      fondsPropres,
-    ),
+    annee_reconstitution_fonds_propres: exploitation.indicateurs.annee_reconstitution_fonds_propres,
     annee_debut_tfpb: tfpb.annee_debut_tfpb,
     amortissement_comptable: amortissementComptable,
   };

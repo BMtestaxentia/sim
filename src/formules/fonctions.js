@@ -339,6 +339,12 @@ export const FONCTIONS = {
     arite: [3, 3],
     calc: (x, separateur, rang) => String(x).split(String(separateur))[rang],
   },
+  'TEXTE.DECOUPER': {
+    libelle: 'Texte découpé',
+    aide: 'Les morceaux du texte coupé au séparateur, dans l’ordre.',
+    arite: [2, 2],
+    calc: (x, separateur) => String(x).split(String(separateur)),
+  },
 
   // --- Tables ------------------------------------------------------------------
   CHAMP: {

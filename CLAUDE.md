@@ -33,15 +33,26 @@ La spécification de référence est `docs/DICTIONNAIRE_REGLES_MOTEUR_PLUSPLAI_v
 ```
 moteur/
   src/
-    amortissement.js    # R-AMT : moteur de prêts (annuités progressives, révisabilités, différés, préfi)
-    loyers.js           # R-LOYER + R-SURF : surfaces, CS, loyers réglementés
-    bilan.js            # R-TVA : prix de revient, LASM, modulation
-    subventions.js      # R-SUB : SLA, SSF, gratuité/affectation
-    financement.js      # R-FIN : équilibre, prêts CDC théoriques
-    exploitation.js     # R-EXP : compte d'exploitation 50-60 ans
-    fiscalite.js        # R-FISC : TFPB/exonération, TA, VSD
-    moteur.js           # orchestration : calculer(entrees, referentiels) -> resultats
+    formules/           # LES CALCULS, écrits en formules
+      langage.js        #   le langage : nombres, textes, opérateurs, fonctions, agrégats POUR ... DANS ... QUAND
+      fonctions.js      #   sa bibliothèque : SI, DEFAUT, SOMME, REPARTIR, TRI, INDEXATION...
+      classeur.js       #   ce qui les exécute : calcul paresseux, mémoïsation, forçage, explication d'une cellule
+      modele.js         #   le modèle du moteur : tous les domaines assemblés
+      domaines/         #   une grandeur par valeur calculée : libellé, unité, règle R-xxx, formule
+                        #   (operation, calendrier, surfaces, loyers, prix_revient, subventions, financement,
+                        #    prets, amortissement, fiscalite, tresorerie, exploitation, synthese)
+    amortissement.js    # R-AMT : restitution des tableaux de prêts
+    loyers.js           # R-LOYER + R-SURF : restitution des loyers, contrôles
+    bilan.js            # R-TVA : restitution du prix de revient et de sa ventilation
+    subventions.js      # R-SUB : restitution des subventions et de la SSF
+    financement.js      # R-FIN : restitution de l'équilibre du plan
+    exploitation.js     # R-EXP : restitution des comptes d'exploitation, jalons
+    fiscalite.js        # R-FISC : restitution de la TFPB et de la TA
+    tresorerie.js       # R-TRESO : restitution de l'échéancier du chantier
+    moteur.js           # orchestration : calculer(entrees, referentiels) -> resultats ; calculerAvecClasseur
     produits.js         # définitions paramétriques des produits (PLUS, PLAI, LIB, LOC/LLI, PLS...)
+  ui/
+    formules.js         # écran « Formules » : catalogue des grandeurs, fiche en blocs, clic sur un chiffre
   referentiels/
     baremes_2025.json          # barèmes réglementaires versionnés (extraits de ParaGEN)
     trajectoires_axentia_2026.json  # scénario macro (LA, IRL, TFPB...)
@@ -60,6 +71,7 @@ moteur/
 ```
 
 Règles d'architecture non négociables :
+- **Tout calcul est une formule du modèle** (`src/formules/domaines/`). Chaque valeur que l'outil ressort est une grandeur, avec son libellé, son unité, sa règle R-xxx et sa formule. Le moteur exécute ces formules et l'écran « Formules » les affiche telles quelles : il n'existe pas de seconde rédaction des calculs. Les modules de `src/` restituent le classeur (`restituer*`) et gardent les fonctions historiques, qui évaluent ces mêmes formules sur les valeurs qu'on leur donne (`fixer`). Ajouter un calcul, c'est ajouter une grandeur ; `tests/modele.test.js` vérifie qu'elle compile, porte un libellé et une unité, et que son explication retombe sur sa valeur. Un chiffre affiché à l'écran porte `data-formule` (voir `attrFormule` dans `ui/app.js`) : un clic ouvre sa fiche.
 - **Le moteur est pur** : aucune I/O, aucun accès réseau, aucun état global, aucune date système implicite (la date est une entrée). Même entrées → même sorties, toujours.
 - **Aucun littéral métier dans le code de calcul** (pas de `345`, pas de `0.77`, pas de `0.006` en dur) : tout vient des référentiels ou des entrées. C'est la leçon de l'irrégularité I-2 de LEON.
 - Arithmétique : calculs en nombre flottant standard MAIS arrondis explicites et centralisés (module unique `arrondis.js`) appliqués aux frontières définies par le dictionnaire (R-CONV / I-9). Pas d'accumulation itérative quand une forme fermée existe (leçon I-4).

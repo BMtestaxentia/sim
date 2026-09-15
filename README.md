@@ -20,7 +20,9 @@ npm run check    # vérification de types via JSDoc (tsc --checkJs, si tsc dispo
 
 ## Structure
 
-- `src/` - le moteur (un module par domaine de règles R-xxx du dictionnaire)
+- `src/formules/` - tous les calculs, écrits en formules : le langage, le classeur qui les exécute, et une grandeur par valeur calculée, domaine par domaine (`domaines/`)
+- `src/` - l'orchestration (`moteur.js`) et la restitution de chaque domaine de règles R-xxx du dictionnaire
+- `ui/` - l'interface ; `ui/formules.js` affiche la formule de chaque chiffre (page Formules des paramètres, clic sur un chiffre)
 - `referentiels/` - barèmes et trajectoires versionnés (extraits de la matrice, cellules sources citées)
 - `fixtures/` - jeux d'or (entrees.json + attendus.json par opération)
 - `tests/` - cas canoniques + comparaison aux annexes

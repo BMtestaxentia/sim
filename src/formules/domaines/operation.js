@@ -10,7 +10,7 @@
  * marche...) viennent du referentiel des produits (`produits.js`) : elles se
  * lisent, elles ne se calculent pas.
  */
-import { produit, ORDRE_PRODUITS } from '../../produits.js';
+import { produit, ORDRE_PRODUITS, financeParCDC } from '../../produits.js';
 
 /**
  * Lecture d'une propriete du produit d'une tranche.
@@ -27,9 +27,12 @@ export const OPERATION = {
     lot: { libelle: 'Lot', valeurs: 'INDICES(lots_saisis)', etiquette: 'libelle_lot' },
     tranche: { libelle: 'Tranche', valeurs: 'tranches_presentes' },
     annexe: { libelle: 'Annexe louée', valeurs: 'INDICES(annexes_louees_saisies)' },
-    // Dimension LIBRE : toute annee civile y est admise. Elle sert a lire les
-    // tables annuelles (trajectoires), pas a les parcourir.
+    // Dimensions LIBRES : toute valeur y est admise. Elles servent a LIRE une
+    // table - une trajectoire par annee, une saisie par code de tranche, un
+    // champ de pret par son nom - pas a la parcourir.
     an: { libelle: 'Année civile' },
+    code: { libelle: 'Code de tranche' },
+    champ: { libelle: 'Caractéristique' },
   },
   grandeurs: {
     // --- Programme ----------------------------------------------------------
@@ -181,6 +184,36 @@ export const OPERATION = {
       unite: 'booleen',
       sur: ['tranche'],
       lire: (_ctx, tranche) => Boolean(produit(tranche).majoration_loyer),
+      ecran: 'Référentiel des produits',
+    },
+    finance_par_cdc: {
+      libelle: 'Produit financé sur fonds d’épargne',
+      unite: 'booleen',
+      regle: 'R-FIN-5',
+      sur: ['tranche'],
+      lire: (_ctx, tranche) => financeParCDC(tranche),
+      ecran: 'Référentiel des produits',
+    },
+    eligible_aides_publiques: {
+      libelle: 'Produit éligible aux aides publiques',
+      unite: 'booleen',
+      regle: 'R-SUB-3',
+      sur: ['tranche'],
+      lire: (_ctx, tranche) => produit(tranche).eligible_aides_publiques !== false,
+      ecran: 'Référentiel des produits',
+    },
+    natures_defaut: {
+      libelle: 'Prêts posés par défaut',
+      unite: 'liste',
+      regle: 'R-FIN-3',
+      sur: ['tranche'],
+      // La CDC prete en deux lignes, foncier et construction ; une banque en une
+      // seule. Un produit qui n'en declare aucune garde les deux : c'est le cas
+      // du PLUS 33, finance par les prets de sa tranche PLUS.
+      lire: (_ctx, tranche) => {
+        const declares = produit(tranche).prets_defaut;
+        return declares.length ? [...new Set(declares.map((d) => d.nature))] : ['foncier', 'construction'];
+      },
       ecran: 'Référentiel des produits',
     },
 

@@ -6633,9 +6633,12 @@ const OPERATION = {
     lot: { libelle: 'Lot', valeurs: 'INDICES(lots_saisis)', etiquette: 'libelle_lot' },
     tranche: { libelle: 'Tranche', valeurs: 'tranches_presentes' },
     annexe: { libelle: 'Annexe louée', valeurs: 'INDICES(annexes_louees_saisies)' },
-    // Dimension LIBRE : toute annee civile y est admise. Elle sert a lire les
-    // tables annuelles (trajectoires), pas a les parcourir.
+    // Dimensions LIBRES : toute valeur y est admise. Elles servent a LIRE une
+    // table - une trajectoire par annee, une saisie par code de tranche, un
+    // champ de pret par son nom - pas a la parcourir.
     an: { libelle: 'Année civile' },
+    code: { libelle: 'Code de tranche' },
+    champ: { libelle: 'Caractéristique' },
   },
   grandeurs: {
     // --- Programme ----------------------------------------------------------
@@ -6787,6 +6790,36 @@ const OPERATION = {
       unite: 'booleen',
       sur: ['tranche'],
       lire: (_ctx, tranche) => Boolean(produit(tranche).majoration_loyer),
+      ecran: 'Référentiel des produits',
+    },
+    finance_par_cdc: {
+      libelle: 'Produit financé sur fonds d’épargne',
+      unite: 'booleen',
+      regle: 'R-FIN-5',
+      sur: ['tranche'],
+      lire: (_ctx, tranche) => financeParCDC(tranche),
+      ecran: 'Référentiel des produits',
+    },
+    eligible_aides_publiques: {
+      libelle: 'Produit éligible aux aides publiques',
+      unite: 'booleen',
+      regle: 'R-SUB-3',
+      sur: ['tranche'],
+      lire: (_ctx, tranche) => produit(tranche).eligible_aides_publiques !== false,
+      ecran: 'Référentiel des produits',
+    },
+    natures_defaut: {
+      libelle: 'Prêts posés par défaut',
+      unite: 'liste',
+      regle: 'R-FIN-3',
+      sur: ['tranche'],
+      // La CDC prete en deux lignes, foncier et construction ; une banque en une
+      // seule. Un produit qui n'en declare aucune garde les deux : c'est le cas
+      // du PLUS 33, finance par les prets de sa tranche PLUS.
+      lire: (_ctx, tranche) => {
+        const declares = produit(tranche).prets_defaut;
+        return declares.length ? [...new Set(declares.map((d) => d.nature))] : ['foncier', 'construction'];
+      },
       ecran: 'Référentiel des produits',
     },
 
@@ -8404,6 +8437,673 @@ const SUBVENTIONS = {
   },
 };
 
+/* ===== src/formules/domaines/financement.js ===== */
+// @ts-check
+/**
+ * DOMAINE « FINANCEMENT » - R-FIN : fonds propres, solde a financer, prets CDC
+ * theoriques, besoin de chaque tranche et montants automatiques de ses prets.
+ *
+ * Chaque tranche porte par defaut un pret foncier et un pret construction dont
+ * le MONTANT S'AJUSTE a son besoin : ce que son prix de revient ne couvre pas
+ * encore apres ses subventions, ses fonds propres et ses prets a montant saisi.
+ * Une tranche SURFINANCEE finance les autres : son excedent se repartit, au
+ * prorata des surfaces, sur les tranches qui ont encore un besoin, en trois
+ * tours comme la calculette CDC. Le foncier se sert le premier, dans la limite
+ * du droit a pret foncier, et la construction prend le reste.
+ *
+ * Sources : `calculs!D327:D336`, calculette CDC « production LS » (onglet
+ * Construction, colonnes AI a AO, AT37 et M49).
+ */
+
+/** @type {import('../classeur.js').Domaine} */
+const FINANCEMENT = {
+  domaine: 'financement',
+  titre: 'Plan de financement',
+  dimensions: {
+    pret_saisi: {
+      libelle: 'Prêt saisi',
+      valeurs: 'INDICES(prets_saisis)',
+      etiquette: 'libelle_pret_saisi',
+    },
+    tirage: { libelle: 'Tirage de préfinancement', valeurs: 'INDICES(tirages_saisis)' },
+    tour: { libelle: 'Tour de redressement', valeurs: 'SUITE(1; tours_redressement)' },
+    nature_auto: { libelle: 'Prêt automatique', valeurs: 'natures_auto' },
+  },
+  grandeurs: {
+    // --- R-FIN-7 : apport en fonds propres ---------------------------------------
+    mode_exploitation_saisi: {
+      libelle: 'Régime d’exploitation saisi',
+      unite: 'texte',
+      saisie: 'exploitation.mode',
+      ecran: 'Exploitation',
+    },
+    mode_redevance_saisi: {
+      libelle: 'Mode de redevance saisi',
+      unite: 'texte',
+      saisie: 'exploitation.mode_redevance',
+      ecran: 'Exploitation',
+    },
+    apport_en_transparence: {
+      libelle: 'Opération en redevance transparente',
+      unite: 'booleen',
+      regle: 'R-FIN-7',
+      formule: "ET(mode_exploitation_saisi = 'redevance'; DEFAUT(mode_redevance_saisi; 'forfaitaire') = 'transparence')",
+    },
+    taux_apport_defaut: {
+      libelle: 'Part d’apport par défaut',
+      unite: 'taux',
+      regle: 'R-FIN-7',
+      parametre: 'fonds_propres.apport.taux_defaut',
+      ecran: 'Paramètres > Fonds propres',
+    },
+    taux_apport_transparence: {
+      libelle: 'Part d’apport en redevance transparente',
+      unite: 'taux',
+      regle: 'R-FIN-7',
+      parametre: 'fonds_propres.apport.taux_redevance_transparence',
+      ecran: 'Paramètres > Fonds propres',
+    },
+    taux_apport_reference: {
+      libelle: 'Part d’apport du référentiel',
+      unite: 'taux',
+      regle: 'R-FIN-7',
+      formule: 'DEFAUT(SI(apport_en_transparence; taux_apport_transparence; taux_apport_defaut); 0)',
+      note: 'En redevance transparente, l’apport prend la forme d’une avance de trésorerie et se limite à 2 %.',
+    },
+    taux_apport_saisi: {
+      libelle: 'Part d’apport saisie',
+      unite: 'taux',
+      sur: ['code'],
+      saisie: 'taux_apport_par_produit[code]',
+      ecran: 'Tranche > Fonds propres',
+    },
+    apport_saisi_brut: {
+      libelle: 'Apport saisi',
+      unite: 'eur',
+      sur: ['code'],
+      saisie: 'fonds_propres_par_produit[code]',
+      ecran: 'Tranche > Fonds propres',
+    },
+    apport_saisi: {
+      libelle: 'Apport saisi retenu',
+      unite: 'eur',
+      sur: ['code'],
+      formule: 'SI(SAISI(apport_saisi_brut); NOMBRE(apport_saisi_brut); VIDE)',
+      note: 'Une case vide rend la main au calcul ; zéro reste une valeur légitime, une tranche sans apport.',
+    },
+    taux_apport_tranche: {
+      libelle: 'Part d’apport de la tranche',
+      unite: 'taux',
+      regle: 'R-FIN-7',
+      sur: ['tranche'],
+      formule:
+        'SI(SAISI(taux_apport_saisi[code: tranche]); NOMBRE(taux_apport_saisi[code: tranche]); taux_apport_reference)',
+    },
+    apport_auto_tranche: {
+      libelle: 'Apport calculé de la tranche',
+      unite: 'eur',
+      regle: 'R-FIN-7',
+      sur: ['tranche'],
+      formule: 'ARRONDI.EURO(total_ttc_tranche * taux_apport_tranche)',
+      note: 'Sa part du prix de revient TTC de la tranche.',
+    },
+    apport_tranche: {
+      libelle: 'Apport de la tranche',
+      unite: 'eur',
+      regle: 'R-FIN-7',
+      sur: ['tranche'],
+      formule: 'DEFAUT(apport_saisi[code: tranche]; apport_auto_tranche)',
+    },
+    fp_saisis_par_tranche: {
+      libelle: 'Fonds propres saisis par tranche',
+      unite: 'liste',
+      saisie: 'fonds_propres_par_produit',
+      ecran: 'Tranche > Fonds propres',
+    },
+    fp_en_tranches: {
+      libelle: 'Fonds propres tenus par tranche',
+      unite: 'booleen',
+      formule: 'SI(fp_saisis_par_tranche; VRAI; FAUX)',
+    },
+    fonds_propres_global_saisis: {
+      libelle: 'Fonds propres saisis pour l’opération',
+      unite: 'eur',
+      saisie: 'fonds_propres_eur',
+      ecran: 'Plan de financement',
+    },
+    cles_fonds_propres: {
+      libelle: 'Tranches portant des fonds propres',
+      unite: 'liste',
+      formule: 'UNIQUES(CONCATENER(tranches_presentes; CLES(fp_saisis_par_tranche)))',
+      note: 'Les tranches du programme, et celles qui portent encore une saisie : un apport saisi compte là où il est.',
+    },
+    fonds_propres_total: {
+      libelle: 'Fonds propres de l’opération',
+      unite: 'eur',
+      regle: 'R-FIN-7',
+      formule:
+        'SI(fp_en_tranches; SOMME(SI(CONTIENT(tranches_presentes; k); apport_tranche[tranche: k]; ' +
+        'DEFAUT(apport_saisi[code: k]; 0)) POUR k DANS cles_fonds_propres); DEFAUT(fonds_propres_global_saisis; 0))',
+    },
+    fonds_propres_tranche: {
+      libelle: 'Fonds propres de la tranche',
+      unite: 'eur',
+      regle: 'R-FIN-7',
+      sur: ['tranche'],
+      formule: 'SI(fp_en_tranches; apport_tranche; quote_part_su * DEFAUT(fonds_propres_global_saisis; 0))',
+    },
+    fonds_propres_tranche_arrondi: {
+      libelle: 'Fonds propres de la tranche, arrondis',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'ARRONDI.EURO(fonds_propres_tranche)',
+    },
+    fp_remuneres_saisi: {
+      libelle: 'Fonds propres rémunérés',
+      unite: 'booleen',
+      sur: ['code'],
+      saisie: 'remuneration_fonds_propres[code].remuneres',
+      ecran: 'Tranche > Fonds propres',
+    },
+    fp_taux_saisi: {
+      libelle: 'Taux de rémunération saisi',
+      unite: 'taux',
+      sur: ['code'],
+      saisie: 'remuneration_fonds_propres[code].taux',
+      ecran: 'Tranche > Fonds propres',
+    },
+    fp_reconstitues_saisi: {
+      libelle: 'Fonds propres reconstitués',
+      unite: 'booleen',
+      sur: ['code'],
+      saisie: 'remuneration_fonds_propres[code].reconstitues',
+      ecran: 'Tranche > Fonds propres',
+    },
+    fp_duree_saisie: {
+      libelle: 'Durée de reconstitution saisie',
+      unite: 'an',
+      sur: ['code'],
+      saisie: 'remuneration_fonds_propres[code].duree_reconstitution_ans',
+      ecran: 'Tranche > Fonds propres',
+    },
+    taux_remuneration_fp: {
+      libelle: 'Taux de rémunération des fonds propres',
+      unite: 'taux',
+      regle: 'R-FIN-7',
+      sur: ['tranche'],
+      formule: 'SI(fp_remuneres_saisi[code: tranche] = VRAI; NOMBRE(fp_taux_saisi[code: tranche]); 0)',
+    },
+    duree_reconstitution_fp: {
+      libelle: 'Durée de reconstitution des fonds propres',
+      unite: 'an',
+      regle: 'R-FIN-7',
+      sur: ['tranche'],
+      formule: 'SI(fp_reconstitues_saisi[code: tranche] = VRAI; NOMBRE(fp_duree_saisie[code: tranche]); 0)',
+    },
+    annuite_fp_tranche: {
+      libelle: 'Charge annuelle des fonds propres',
+      unite: 'eur',
+      regle: 'R-FIN-7',
+      sur: ['tranche'],
+      formule:
+        'SI(NON(fonds_propres_tranche > 0); 0; ' +
+        'SI(NON(duree_reconstitution_fp > 0); SI(taux_remuneration_fp > 0; ARRONDI.EURO(fonds_propres_tranche * taux_remuneration_fp); 0); ' +
+        'SI(NON(taux_remuneration_fp > 0); ARRONDI.EURO(fonds_propres_tranche / duree_reconstitution_fp); ' +
+        'ARRONDI.EURO(fonds_propres_tranche * taux_remuneration_fp / (1 - (1 + taux_remuneration_fp) ^ -duree_reconstitution_fp)))))',
+      note: 'Rémunérés sans être reconstitués : les intérêts seuls. Reconstitués sans être rémunérés : le capital seul. Les deux : une annuité, comme un prêt que l’opération se fait à elle-même.',
+    },
+    annuite_fp_totale: {
+      libelle: 'Charge annuelle des fonds propres de l’opération',
+      unite: 'eur',
+      regle: 'R-FIN-7',
+      formule: 'ARRONDI.EURO(SOMME(annuite_fp_tranche POUR tranche))',
+    },
+    duree_charge_fp: {
+      libelle: 'Années portant la charge de fonds propres',
+      unite: 'an',
+      regle: 'R-FIN-7',
+      sur: ['tranche'],
+      formule: 'SI(duree_reconstitution_fp > 0; MIN(duree_reconstitution_fp; duree_simulation); duree_simulation)',
+      note: 'Reconstitués, la charge s’arrête au terme : le capital est rendu. Sinon elle court tant que l’opération existe.',
+    },
+
+    // --- Prets saisis ---------------------------------------------------------------
+    prets_saisis: { libelle: 'Prêts saisis', unite: 'liste', saisie: 'prets', ecran: 'Plan de financement' },
+    champ_pret_saisi: {
+      libelle: 'Caractéristique saisie du prêt',
+      unite: 'texte',
+      sur: ['pret_saisi', 'champ'],
+      saisie: 'prets[pret_saisi][champ]',
+      ecran: 'Plan de financement',
+    },
+    libelle_pret_saisi: {
+      libelle: 'Libellé du prêt saisi',
+      unite: 'texte',
+      sur: ['pret_saisi'],
+      formule: "champ_pret_saisi[champ: 'libelle']",
+    },
+    nature_pret_saisi: {
+      libelle: 'Nature du prêt saisi',
+      unite: 'texte',
+      sur: ['pret_saisi'],
+      formule: "champ_pret_saisi[champ: 'nature']",
+    },
+    montant_pret_saisi: {
+      libelle: 'Montant du prêt saisi',
+      unite: 'eur',
+      sur: ['pret_saisi'],
+      formule: "champ_pret_saisi[champ: 'montant_eur']",
+    },
+    pret_saisi_auto: {
+      libelle: 'Prêt saisi à montant automatique',
+      unite: 'booleen',
+      regle: 'R-FIN-3',
+      sur: ['pret_saisi'],
+      formule: "OU(champ_pret_saisi[champ: 'montant_auto'] = VRAI; NON(RENSEIGNE(montant_pret_saisi)))",
+    },
+    tranche_pret_saisi: {
+      libelle: 'Tranche du prêt saisi',
+      unite: 'texte',
+      sur: ['pret_saisi'],
+      formule: "DEFAUT(champ_pret_saisi[champ: 'produit']; tranche_unique)",
+      note: 'Un prêt sans tranche revient à la tranche unique du programme.',
+    },
+    autres_prets: {
+      libelle: 'Autres prêts',
+      unite: 'eur',
+      regle: 'R-FIN-3',
+      formule: "SOMME(montant_pret_saisi POUR pret_saisi QUAND nature_pret_saisi = 'autre')",
+    },
+    nb_prets_cdc_saisis: {
+      libelle: 'Prêts saisis hors « autres »',
+      unite: 'nombre',
+      formule: "NB(pret_saisi POUR pret_saisi QUAND nature_pret_saisi <> 'autre')",
+    },
+    pret_principal_saisi: {
+      libelle: 'Un prêt foncier ou construction est saisi',
+      unite: 'booleen',
+      regle: 'R-FIN-3',
+      formule: "UN(OU(nature_pret_saisi = 'foncier'; nature_pret_saisi = 'construction') POUR pret_saisi)",
+      note: 'Sinon, chaque tranche reçoit ses prêts par défaut.',
+    },
+    prets_fixes_tranche: {
+      libelle: 'Prêts à montant saisi de la tranche',
+      unite: 'eur',
+      regle: 'R-FIN-3',
+      sur: ['tranche'],
+      formule:
+        'SOMME(NOMBRE(montant_pret_saisi) POUR pret_saisi QUAND ET(NON(pret_saisi_auto); tranche_pret_saisi = tranche))',
+      note: 'Un montant saisi fige le prêt : il vient en déduction du besoin, comme une ressource déjà acquise.',
+    },
+
+    // --- R-FIN-3 : solde a financer ------------------------------------------------
+    solde_a_financer: {
+      libelle: 'Solde à financer',
+      unite: 'eur',
+      regle: 'R-FIN-3',
+      formule: 'ARRONDI.EURO(total_ttc_module - (subventions_total + fonds_propres_total + autres_prets))',
+    },
+
+    // --- R-FIN-6 : prefinancement --------------------------------------------------
+    prefinancement_saisi: {
+      libelle: 'Préfinancement saisi',
+      unite: 'liste',
+      saisie: 'prefinancement',
+      ecran: 'Trésorerie',
+    },
+    prefi_actif: {
+      libelle: 'Préfinancement demandé',
+      unite: 'booleen',
+      formule: 'SI(prefinancement_saisi; VRAI; FAUX)',
+    },
+    tirages_saisis: {
+      libelle: 'Tirages du préfinancement',
+      unite: 'liste',
+      saisie: 'prefinancement.tirages',
+      ecran: 'Trésorerie',
+    },
+    montant_tirage: {
+      libelle: 'Montant du tirage',
+      unite: 'eur',
+      sur: ['tirage'],
+      saisie: 'prefinancement.tirages[tirage].montant_eur',
+      ecran: 'Trésorerie',
+    },
+    date_tirage: {
+      libelle: 'Date du tirage',
+      unite: 'date',
+      sur: ['tirage'],
+      saisie: 'prefinancement.tirages[tirage].date',
+      ecran: 'Trésorerie',
+    },
+    taux_prefinancement: {
+      libelle: 'Taux du préfinancement',
+      unite: 'taux',
+      saisie: 'prefinancement.taux',
+      ecran: 'Trésorerie',
+    },
+    date_fin_prefinancement_saisie: {
+      libelle: 'Fin de capitalisation saisie',
+      unite: 'date',
+      saisie: 'prefinancement.date_fin',
+      ecran: 'Trésorerie',
+    },
+    capitaliser_prefinancement_saisi: {
+      libelle: 'Capitaliser les intérêts',
+      unite: 'booleen',
+      saisie: 'prefinancement.capitaliser',
+      ecran: 'Trésorerie',
+    },
+    jours_par_an_prefinancement: {
+      libelle: 'Base de jours de la capitalisation',
+      unite: 'nombre',
+      constante: 365,
+      note: 'Convention exact/365 de LEON (SimPLUS!FA15).',
+    },
+    jour_tirage: {
+      libelle: 'Rang du jour du tirage',
+      unite: 'jours',
+      sur: ['tirage'],
+      formule: 'JOURS(date_tirage)',
+    },
+    jour_fin_prefinancement: {
+      libelle: 'Rang du jour de fin de capitalisation',
+      unite: 'jours',
+      regle: 'R-FIN-6',
+      formule:
+        'SI(DEFINI(date_fin_prefinancement_saisie); JOURS(date_fin_prefinancement_saisie); MAX(jour_tirage POUR tirage))',
+      note: 'À défaut de date saisie, le jour du dernier tirage.',
+    },
+    tirage_tardif: {
+      libelle: 'Tirage postérieur à la fin de capitalisation',
+      unite: 'date',
+      formule: 'PREMIER(date_tirage POUR tirage QUAND jour_tirage > jour_fin_prefinancement)',
+    },
+    prefinancement_nominal: {
+      libelle: 'Montant tiré',
+      unite: 'eur',
+      regle: 'R-FIN-6',
+      formule:
+        "SI(RENSEIGNE(tirage_tardif); ERREUR('Tirage posterieur a la date de fin de capitalisation : '; tirage_tardif); " +
+        'SOMME(montant_tirage POUR tirage))',
+    },
+    prefinancement_capitalise: {
+      libelle: 'Montant capitalisé',
+      unite: 'eur',
+      regle: 'R-FIN-6',
+      formule:
+        'SOMME(montant_tirage * (1 + taux_prefinancement) ^ ((jour_fin_prefinancement - jour_tirage) / jours_par_an_prefinancement) POUR tirage)',
+      note: 'Capitalisation actuarielle de chaque tirage jusqu’à la fin de capitalisation.',
+    },
+    prefinancement_interets: {
+      libelle: 'Intérêts de préfinancement',
+      unite: 'eur',
+      regle: 'R-FIN-6',
+      formule: 'prefinancement_capitalise - prefinancement_nominal',
+    },
+    prefinancement_capital_constitue: {
+      libelle: 'Capital constitué',
+      unite: 'eur',
+      regle: 'R-FIN-6',
+      formule:
+        'SI(SI.ABSENT(capitaliser_prefinancement_saisi; VRAI); prefinancement_nominal + prefinancement_interets; prefinancement_nominal)',
+    },
+    interets_prefinancement: {
+      libelle: 'Intérêts de préfinancement retenus',
+      unite: 'eur',
+      formule: 'SI(prefi_actif; prefinancement_interets; 0)',
+    },
+
+    // --- R-FIN-2/4 : droit a pret foncier et prets CDC theoriques ---------------------
+    charge_fonciere_lasm: {
+      libelle: 'Charge foncière TTC finale',
+      unite: 'eur',
+      regle: 'R-FIN-2',
+      formule: "DEFAUT(ttc_lasm_chapitre[chapitre: 'charge_fonciere']; 0)",
+    },
+    reduction_subventions_foncier: {
+      libelle: 'Part des subventions dans le prix de revient',
+      unite: 'taux',
+      regle: 'R-FIN-2',
+      formule: 'SI(total_ttc_module > 0; subventions_total / total_ttc_module; 0)',
+    },
+    quote_part_foncier: {
+      libelle: 'Quote-part retenue du droit foncier',
+      unite: 'taux',
+      constante: 1,
+      note: 'Le droit se calcule sur l’opération entière, puis se répartit entre tranches au prorata des surfaces.',
+    },
+    droit_foncier_total: {
+      libelle: 'Droit à prêt foncier',
+      unite: 'eur',
+      regle: 'R-FIN-2',
+      formule:
+        'ARRONDI.EURO(charge_fonciere_lasm * (1 - reduction_subventions_foncier) * quote_part_foncier)',
+      note: 'Assiette de la calculette CDC (Construction!AT37) : toutes les subventions du plan, arbitrage du 06/08/2026 (Q-30).',
+    },
+    au_moins_une_tranche_cdc: {
+      libelle: 'Une tranche relève des fonds d’épargne',
+      unite: 'booleen',
+      regle: 'R-FIN-5',
+      formule: 'OU(LONGUEUR(tranches_presentes) = 0; UN(finance_par_cdc POUR tranche))',
+    },
+    cdc_theoriques_actifs: {
+      libelle: 'Prêts CDC théoriques calculés',
+      unite: 'booleen',
+      regle: 'R-FIN-4',
+      formule: 'ET(nb_prets_cdc_saisis = 0; au_moins_une_tranche_cdc)',
+    },
+    option_arrondi_milliers: {
+      libelle: 'Arrondir les prêts au millier supérieur',
+      unite: 'booleen',
+      saisie: 'options.arrondir_prets_milliers_sup',
+      ecran: 'Paramètres',
+    },
+    arrondir_prets_milliers: {
+      libelle: 'Arrondi des prêts au millier',
+      unite: 'booleen',
+      formule: 'DEFAUT(option_arrondi_milliers; FAUX)',
+    },
+    cdc_foncier_exact: {
+      libelle: 'Prêt CDC foncier théorique, non arrondi',
+      unite: 'eur',
+      regle: 'R-FIN-4',
+      formule: 'MAX(0; MIN(solde_a_financer; droit_foncier_total))',
+    },
+    cdc_foncier: {
+      libelle: 'Prêt CDC foncier théorique',
+      unite: 'eur',
+      regle: 'R-FIN-4',
+      formule: 'SI(arrondir_prets_milliers; ARRONDI.MILLIER.SUP(cdc_foncier_exact); cdc_foncier_exact)',
+    },
+    cdc_batiment_exact: {
+      libelle: 'Prêt CDC bâtiment théorique, non arrondi',
+      unite: 'eur',
+      regle: 'R-FIN-4',
+      formule: 'MAX(0; solde_a_financer - interets_prefinancement - cdc_foncier)',
+    },
+    cdc_batiment: {
+      libelle: 'Prêt CDC bâtiment théorique',
+      unite: 'eur',
+      regle: 'R-FIN-4',
+      formule: 'SI(arrondir_prets_milliers; ARRONDI.MILLIER.SUP(cdc_batiment_exact); cdc_batiment_exact)',
+    },
+    cdc_pret_foncier: {
+      libelle: 'Prêt CDC foncier théorique, arrondi',
+      unite: 'eur',
+      formule: 'ARRONDI.EURO(cdc_foncier)',
+    },
+    cdc_pret_batiment: {
+      libelle: 'Prêt CDC bâtiment théorique, arrondi',
+      unite: 'eur',
+      formule: 'ARRONDI.EURO(cdc_batiment)',
+    },
+    cdc_total: {
+      libelle: 'Prêts CDC théoriques',
+      unite: 'eur',
+      regle: 'R-FIN-4',
+      formule: 'ARRONDI.EURO(cdc_foncier + cdc_batiment)',
+    },
+
+    // --- R-SUB-3 : subventions revenant a chaque tranche ------------------------------
+    ssf_part_tranche: {
+      libelle: 'Part de la surcharge foncière revenant à la tranche',
+      unite: 'eur',
+      regle: 'R-SUB-2',
+      sur: ['tranche'],
+      formule:
+        'REPARTIR(quote_part_su * subvention_surcharge_fonciere POUR tranche; ARRONDI.EURO(subvention_surcharge_fonciere))',
+      note: 'Calculée sur l’opération entière, elle se répartit au prorata des surfaces, en euros entiers dont la somme vaut son montant.',
+    },
+    subventions_ventilees_tranche: {
+      libelle: 'Subventions de la tranche',
+      unite: 'eur',
+      regle: 'R-SUB-3',
+      sur: ['tranche'],
+      formule:
+        'SOMME(SI(tranche_subvention = tranche; montant_subvention; 0) POUR subvention QUAND subvention_rattachee) + ' +
+        'SI(subvention_surcharge_fonciere; ssf_part_tranche; 0)',
+    },
+    subventions_ventilees_tranche_arrondies: {
+      libelle: 'Subventions de la tranche, arrondies',
+      unite: 'eur',
+      sur: ['tranche'],
+      formule: 'ARRONDI.EURO(subventions_ventilees_tranche)',
+    },
+
+    // --- R-FIN-3 : besoin de chaque tranche, et son redressement en serie --------------
+    besoin_brut: {
+      libelle: 'Besoin de financement de la tranche',
+      unite: 'eur',
+      regle: 'R-FIN-3',
+      sur: ['tranche'],
+      formule: 'total_ttc_module_tranche - subventions_ventilees_tranche - fonds_propres_tranche - prets_fixes_tranche',
+      note: 'Le signe est conservé : un besoin négatif signale une tranche surfinancée, dont l’excédent va financer les autres.',
+    },
+    tours_redressement: {
+      libelle: 'Tours de redressement',
+      unite: 'nombre',
+      constante: 3,
+      note: 'La calculette CDC itère trois fois.',
+    },
+    besoin_tour_precedent: {
+      libelle: 'Besoin avant le tour',
+      unite: 'eur',
+      regle: 'R-FIN-3',
+      sur: ['tranche', 'tour'],
+      formule: 'SI(tour = 1; besoin_brut; besoin_apres_tour[tour: tour - 1])',
+    },
+    negatifs_tour: {
+      libelle: 'Une tranche est surfinancée au début du tour',
+      unite: 'booleen',
+      sur: ['tour'],
+      formule: 'UN(besoin_tour_precedent < 0 POUR tranche)',
+    },
+    excedent_tour: {
+      libelle: 'Excédent à redistribuer',
+      unite: 'eur',
+      regle: 'R-FIN-3',
+      sur: ['tour'],
+      formule: 'SOMME(besoin_tour_precedent POUR tranche QUAND besoin_tour_precedent < 0)',
+    },
+    cle_tour: {
+      libelle: 'Surface des tranches à servir',
+      unite: 'taux',
+      sur: ['tour'],
+      formule: 'SOMME(quote_part_su POUR tranche QUAND besoin_tour_precedent > 0)',
+    },
+    besoin_apres_tour: {
+      libelle: 'Besoin après le tour',
+      unite: 'eur',
+      regle: 'R-FIN-3',
+      sur: ['tranche', 'tour'],
+      formule:
+        'SI(NON(negatifs_tour); besoin_tour_precedent; SI(besoin_tour_precedent < 0; 0; ' +
+        'SI(ET(besoin_tour_precedent > 0; cle_tour > 0); besoin_tour_precedent + excedent_tour * (quote_part_su / cle_tour); ' +
+        'besoin_tour_precedent)))',
+      note: 'Les tranches surfinancées tombent à zéro, et leur excédent réduit le besoin des autres au prorata de leur surface.',
+    },
+    tour_complet: {
+      libelle: 'Tour mené à son terme',
+      unite: 'booleen',
+      sur: ['tour'],
+      formule:
+        'ET(SI(tour = 1; VRAI; tour_complet[tour: tour - 1]); negatifs_tour; UN(besoin_tour_precedent > 0 POUR tranche); cle_tour > 0)',
+    },
+    redressement_tours: {
+      libelle: 'Tours de redressement menés',
+      unite: 'nombre',
+      formule: 'NB(tour POUR tour QUAND tour_complet)',
+    },
+    besoin_redresse: {
+      libelle: 'Besoin redressé de la tranche',
+      unite: 'eur',
+      regle: 'R-FIN-3',
+      sur: ['tranche'],
+      formule: 'besoin_apres_tour[tour: tours_redressement]',
+    },
+    excedent_redresse: {
+      libelle: 'Excédent redistribué entre tranches',
+      unite: 'eur',
+      regle: 'R-FIN-3',
+      formule: 'ARRONDI.EURO(SOMME(-excedent_tour POUR tour))',
+    },
+
+    // --- R-FIN-2/3 : montants automatiques des prets ---------------------------------
+    plafond_foncier_tranche: {
+      libelle: 'Droit à prêt foncier de la tranche',
+      unite: 'eur',
+      regle: 'R-FIN-2',
+      sur: ['tranche'],
+      formule: 'droit_foncier_total * quote_part_su',
+    },
+    foncier_auto_present: {
+      libelle: 'La tranche porte un prêt foncier automatique',
+      unite: 'booleen',
+      sur: ['tranche'],
+      formule:
+        "OU(UN(ET(pret_saisi_auto; nature_pret_saisi = 'foncier'; tranche_pret_saisi = tranche) POUR pret_saisi); " +
+        "ET(NON(pret_principal_saisi); CONTIENT(natures_defaut; 'foncier')))",
+    },
+    foncier_auto_exact: {
+      libelle: 'Prêt foncier automatique, non arrondi',
+      unite: 'eur',
+      regle: 'R-FIN-2',
+      sur: ['tranche'],
+      formule:
+        'SI(foncier_auto_present; MIN(DEFAUT(besoin_redresse; 0); DEFAUT(plafond_foncier_tranche; 0)); 0)',
+      note: 'Le foncier se sert le premier, dans la limite du droit à prêt foncier de la tranche.',
+    },
+    construction_auto_exact: {
+      libelle: 'Prêt construction automatique, non arrondi',
+      unite: 'eur',
+      regle: 'R-FIN-3',
+      sur: ['tranche'],
+      formule: 'MAX(0; DEFAUT(besoin_redresse; 0) - foncier_auto_exact)',
+    },
+    natures_auto: {
+      libelle: 'Prêts à montant automatique',
+      unite: 'liste',
+      constante: ['foncier', 'construction'],
+    },
+    montant_auto_exact: {
+      libelle: 'Montant automatique, non arrondi',
+      unite: 'eur',
+      sur: ['tranche', 'nature_auto'],
+      formule: "SI(nature_auto = 'foncier'; foncier_auto_exact; construction_auto_exact)",
+    },
+    montant_auto: {
+      libelle: 'Montant automatique du prêt',
+      unite: 'eur',
+      regle: 'R-FIN-3',
+      sur: ['tranche', 'nature_auto'],
+      formule:
+        'REPARTIR(montant_auto_exact POUR nature_auto; ARRONDI.EURO(foncier_auto_exact + construction_auto_exact))',
+      note: 'Foncier et construction s’arrondissent ensemble : arrondis séparément, ils laissaient fuir un euro.',
+    },
+  },
+};
+
 /* ===== src/formules/modele.js ===== */
 // @ts-check
 /**
@@ -8425,7 +9125,16 @@ const SUBVENTIONS = {
 
 
 
-const MODELE = creerModele([OPERATION, CALENDRIER, SURFACES, LOYERS, PRIX_REVIENT, SUBVENTIONS]);
+
+const MODELE = creerModele([
+  OPERATION,
+  CALENDRIER,
+  SURFACES,
+  LOYERS,
+  PRIX_REVIENT,
+  SUBVENTIONS,
+  FINANCEMENT,
+]);
 
 /**
  * Un classeur neuf sur le modele du moteur.
@@ -8464,12 +9173,6 @@ function nouveauClasseur(contexte) {
  * lues d'une horloge, d'un fichier ou d'un etat global.
  */
 
-/**
- * Base de jours de la capitalisation du prefinancement : exact/365.
- * Convention lue dans la formule source SimPLUS!FA15 (`(FA$14-AL23)/365`),
- * ce n'est pas un parametre de bareme mais la convention de calcul de LEON.
- */
-const BASE_JOURS_ACT365 = 365;
 
 
 // L'arithmetique des dates vit dans `dates.js`. Les deux noms restent exportes
@@ -8918,25 +9621,12 @@ function tableauAmortissement(pret) {
  * @returns {{nominal_eur: number, interets_eur: number, capital_constitue_eur: number}}
  */
 function prefinancement({ tirages, taux, date_fin, capitaliser = true }) {
-  if (!tirages.length) return { nominal_eur: 0, interets_eur: 0, capital_constitue_eur: 0 };
-  const jours = tirages.map((t) => jourUTC(t.date));
-  const jourFin = date_fin === undefined ? Math.max(...jours) : jourUTC(date_fin);
-
-  let nominal = 0;
-  let capitalise = 0;
-  tirages.forEach((tirage, i) => {
-    if (jours[i] > jourFin) {
-      throw new Error(`Tirage posterieur a la date de fin de capitalisation : ${tirage.date}`);
-    }
-    nominal += tirage.montant_eur;
-    capitalise += tirage.montant_eur * (1 + taux) ** ((jourFin - jours[i]) / BASE_JOURS_ACT365);
-  });
-
-  const interets = capitalise - nominal;
+  // Formules `prefinancement_*` du domaine « financement ».
+  const c = nouveauClasseur({ entrees: { prefinancement: { tirages, taux, date_fin, capitaliser } } });
   return {
-    nominal_eur: nominal,
-    interets_eur: interets,
-    capital_constitue_eur: capitaliser ? nominal + interets : nominal,
+    nominal_eur: c.valeur('prefinancement_nominal'),
+    interets_eur: c.valeur('prefinancement_interets'),
+    capital_constitue_eur: c.valeur('prefinancement_capital_constitue'),
   };
 }
 
@@ -10203,6 +10893,12 @@ function subventionEtat({ mode, forfait_eur, nb_logements = 0, shab_m2 = 0, su_m
  * Unites : montants en euros.
  */
 
+
+// LES FORMULES DU SOLDE, DU DROIT A PRET FONCIER, DES PRETS CDC THEORIQUES, DES
+// FONDS PROPRES ET DU REDRESSEMENT VIVENT DANS `formules/domaines/financement.js`.
+// Les fonctions qui suivent les evaluent sur les valeurs qu'on leur donne ;
+// celles qui ne s'y referent pas encore restent ecrites ici.
+
 /**
  * R-FIN-3 - Solde a financer par pret CDC :
  * `solde = PR_TTC_module - (subventions + fonds propres + autres prets)`.
@@ -10219,9 +10915,12 @@ function soldeAFinancer({
   fonds_propres_eur = 0,
   autres_prets_eur = 0,
 }) {
-  return arrondiEuro(
-    prix_revient_ttc_module_eur - (subventions_eur + fonds_propres_eur + autres_prets_eur),
-  );
+  return nouveauClasseur({})
+    .fixer('total_ttc_module', {}, prix_revient_ttc_module_eur)
+    .fixer('subventions_total', {}, subventions_eur)
+    .fixer('fonds_propres_total', {}, fonds_propres_eur)
+    .fixer('autres_prets', {}, autres_prets_eur)
+    .valeur('solde_a_financer');
 }
 
 /**
@@ -10321,10 +11020,13 @@ function plafondPretsLLI({ total_prets_eur, prix_revient_eur, plafond = 0.9 }) {
  * @returns {number} charge annuelle en euros
  */
 function annuiteFondsPropres({ montant_eur, taux = 0, duree_ans = 0 }) {
-  if (!(montant_eur > 0)) return 0;
-  if (!(duree_ans > 0)) return taux > 0 ? arrondiEuro(montant_eur * taux) : 0;
-  if (!(taux > 0)) return arrondiEuro(montant_eur / duree_ans);
-  return arrondiEuro((montant_eur * taux) / (1 - (1 + taux) ** -duree_ans));
+  const T = { tranche: '_' };
+  return nouveauClasseur({})
+    .fixerDimension('tranche', ['_'])
+    .fixer('fonds_propres_tranche', T, montant_eur)
+    .fixer('taux_remuneration_fp', T, taux)
+    .fixer('duree_reconstitution_fp', T, duree_ans)
+    .valeur('annuite_fp_tranche', T);
 }
 
 /**
@@ -10372,27 +11074,16 @@ function annuiteFondsPropres({ montant_eur, taux = 0, duree_ans = 0 }) {
  */
 function redresserBesoins(besoins, quotesParts) {
   const codes = Object.keys(besoins);
-  const resultat = { ...besoins };
-  let excedentTotal = 0;
-  let tours = 0;
-
-  for (; tours < 3; tours++) {
-    const negatifs = codes.filter((c) => resultat[c] < 0);
-    if (!negatifs.length) break;
-
-    const excedent = negatifs.reduce((s, c) => s + resultat[c], 0); // valeur negative
-    excedentTotal += -excedent;
-    for (const c of negatifs) resultat[c] = 0;
-
-    const positifs = codes.filter((c) => resultat[c] > 0);
-    const cle = positifs.reduce((s, c) => s + (quotesParts[c] ?? 0), 0);
-    // Plus aucune tranche a servir : l'excedent reste acquis a l'operation et
-    // ressortira en surfinancement, ce qui est la verite du plan.
-    if (!positifs.length || cle <= 0) break;
-    for (const c of positifs) resultat[c] += excedent * ((quotesParts[c] ?? 0) / cle);
+  const c = nouveauClasseur({}).fixerDimension('tranche', codes);
+  for (const code of codes) {
+    c.fixer('besoin_brut', { tranche: code }, besoins[code]);
+    c.fixer('quote_part_su', { tranche: code }, quotesParts[code] ?? 0);
   }
-
-  return { besoins: resultat, excedent_eur: arrondiEuro(excedentTotal), tours };
+  return {
+    besoins: Object.fromEntries(codes.map((code) => [code, c.valeur('besoin_redresse', { tranche: code })])),
+    excedent_eur: c.valeur('excedent_redresse'),
+    tours: c.valeur('redressement_tours'),
+  };
 }
 
 function foncierFinancable({
@@ -10401,9 +11092,12 @@ function foncierFinancable({
   prix_revient_operation_eur = 0,
   quote_part_su = 1,
 }) {
-  const reduction =
-    prix_revient_operation_eur > 0 ? subventions_eur / prix_revient_operation_eur : 0;
-  return arrondiEuro(charge_fonciere_eur * (1 - reduction) * quote_part_su);
+  return nouveauClasseur({})
+    .fixer('charge_fonciere_lasm', {}, charge_fonciere_eur)
+    .fixer('subventions_total', {}, subventions_eur)
+    .fixer('total_ttc_module', {}, prix_revient_operation_eur)
+    .fixer('quote_part_foncier', {}, quote_part_su)
+    .valeur('droit_foncier_total');
 }
 
 /**
@@ -10442,25 +11136,26 @@ function pretsCDCTheoriques({
   pret_foncier_force_eur,
   pret_batiment_force_eur,
 }) {
-  let foncier = Math.max(0, Math.min(solde_eur, foncier_financable_eur));
-  if (arrondir_milliers) foncier = arrondiMillierSup(foncier);
+  const c = nouveauClasseur({})
+    .fixer('solde_a_financer', {}, solde_eur)
+    .fixer('droit_foncier_total', {}, foncier_financable_eur)
+    .fixer('interets_prefinancement', {}, prefinancement_eur)
+    .fixer('arrondir_prets_milliers', {}, arrondir_milliers);
+  // Un montant FORCE court-circuite la formule du pret : c'est la saisie
+  // manuelle de LEON. Le moteur ne s'en sert pas ; la fonction le permet.
   if (pret_foncier_force_eur !== undefined && pret_foncier_force_eur !== null) {
-    foncier = pret_foncier_force_eur;
+    c.fixer('cdc_foncier', {}, pret_foncier_force_eur);
   }
-
-  let batiment = solde_eur - prefinancement_eur - foncier;
   if (pret_batiment_force_eur !== undefined && pret_batiment_force_eur !== null) {
-    batiment = pret_batiment_force_eur;
+    c.fixer('cdc_batiment', {}, Math.max(0, pret_batiment_force_eur));
+  } else if (pret_batiment_force_eur === null) {
+    // Un forcage VIDE n'impose rien, mais suspend l'arrondi au millier.
+    c.fixer('cdc_batiment', {}, c.valeur('cdc_batiment_exact'));
   }
-  batiment = Math.max(0, batiment);
-  if (arrondir_milliers && pret_batiment_force_eur === undefined) {
-    batiment = arrondiMillierSup(batiment);
-  }
-
   return {
-    pret_foncier_eur: arrondiEuro(foncier),
-    pret_batiment_eur: arrondiEuro(batiment),
-    total_cdc_eur: arrondiEuro(foncier + batiment),
+    pret_foncier_eur: c.valeur('cdc_pret_foncier'),
+    pret_batiment_eur: c.valeur('cdc_pret_batiment'),
+    total_cdc_eur: c.valeur('cdc_total'),
   };
 }
 
@@ -11860,99 +12555,43 @@ function calculer(entrees, referentiels) {
   // tresorerie. Le moteur le resout lui-meme, comme il resout le montant d'un
   // pret CDC laisse en automatique - sinon l'ecran devrait pre-remplir une
   // valeur, et une valeur pre-remplie devient vite une valeur figee.
-  const cfgApport = baremes.fonds_propres?.apport ?? {};
-  const expEntree = entrees.exploitation ?? {};
-  const tauxApport =
-    (expEntree.mode === 'redevance' &&
-    (expEntree.mode_redevance ?? 'forfaitaire') === 'transparence'
-      ? cfgApport.taux_redevance_transparence
-      : cfgApport.taux_defaut) ?? 0;
-  /**
-   * Taux d'apport RETENU pour une tranche : celui qu'elle declare, sinon celui
-   * du referentiel.
-   *
-   * La part de 5 % est une regle de place, pas une loi : une operation la
-   * negocie, et un programme mixte ne la negocie pas au meme niveau sur toutes
-   * ses tranches. Le taux se surcharge donc TRANCHE PAR TRANCHE, la ou le
-   * montant se surcharge deja. Les deux surcharges ne se contredisent pas :
-   * un montant saisi fait foi et le taux ne sert plus qu'a la lecture, un
-   * montant laisse au calcul suit le taux.
-   *
-   * Zero est une valeur LEGITIME - une tranche sans apport - donc seul le vide
-   * rend la main au referentiel.
-   */
-  const tauxApportDe = (c) => {
-    const v = entrees.taux_apport_par_produit?.[c];
-    return v === undefined || v === null || v === '' ? tauxApport : (Number(v) || 0);
-  };
-  /** Apport automatique d'une tranche : sa part sur son prix de revient TTC. */
-  const apportAutoDe = (c) =>
-    arrondiEuro((bilan.par_tranche?.[c]?.total_ttc_eur ?? 0) * tauxApportDe(c));
-  const apportSaisi = (c) => {
-    const v = entrees.fonds_propres_par_produit?.[c];
-    return v === undefined || v === null || v === '' ? null : (Number(v) || 0);
-  };
-  /** Apport resolu d'une tranche : la saisie si elle existe, sinon la part. */
-  const apportDe = (c) => apportSaisi(c) ?? apportAutoDe(c);
-
+  // Domaine « financement » : l'apport de chaque tranche (R-FIN-7), saisi ou
+  // calcule a sa part du prix de revient, et la charge des fonds propres
+  // remuneres ou reconstitues.
   const fpParProduit = entrees.fonds_propres_par_produit ?? null;
-  // Union des tranches PRESENTES et des tranches SAISIES : l'apport automatique
-  // ne vaut que pour les premieres, mais un montant saisi compte la ou il est,
-  // meme si le produit a quitte le programme entre-temps. Restreindre la somme
-  // aux tranches presentes ferait disparaitre cet apport sans le dire.
-  const clesFP = [...new Set([...codesPresents, ...Object.keys(fpParProduit ?? {})])];
-  const fondsPropres = fpParProduit
-    ? clesFP.reduce((s, c) => s + apportDe(c), 0)
-    : (entrees.fonds_propres_eur ?? 0);
-  // R-FIN-7 - Fonds propres REMUNERES : ceux dont la tranche porte un taux de
-  // remuneration et une duree de reconstitution produisent une annuite, comme
-  // un pret que l'operation se fait a elle-meme. Les autres se reconstituent
-  // sur l'autofinancement, sans charge annuelle.
-  const paramFP = entrees.remuneration_fonds_propres ?? {};
+  /** Apport resolu d'une tranche : la saisie si elle existe, sinon la part. */
+  const apportDe = (c) => lire('apport_tranche', { tranche: c });
+  const fondsPropres = lire('fonds_propres_total');
+  const tauxApport = lire('taux_apport_reference');
   /** @type {Record<string, any>} */
   const fondsPropresParTranche = {};
-  let annuiteFPTotale = 0;
   /** Charge de fonds propres annee par annee : chaque tranche a SA duree. */
-  /** @type {Array<{annee: number, montant_eur: number}>} */
+  /** @type {Array<{annee: number, montant_eur: number, produit: string}>} */
   const annuitesFP = [];
-  const horizon = dates.duree_simulation_ans ?? 50;
   for (const c of codesPresents) {
-    const montant = fpParProduit
-      ? apportDe(c)
-      : (quotesParts[c] ?? 0) * (entrees.fonds_propres_eur ?? 0);
-    const p = paramFP[c] ?? {};
-    // Deux options INDEPENDANTES : un taux sans duree sert des interets sans
-    // rendre le capital, une duree sans taux rend le capital sans le remunerer.
-    const taux = p.remuneres === true ? (Number(p.taux) || 0) : 0;
-    const duree = p.reconstitues === true ? (Number(p.duree_reconstitution_ans) || 0) : 0;
-    const annuite = annuiteFondsPropres({ montant_eur: montant, taux, duree_ans: duree });
-    annuiteFPTotale += annuite;
-    // Reconstitues, la charge s'arrete au terme : le capital est rendu. Non
-    // reconstitues, elle court tant que l'operation existe, puisque le capital
-    // reste dedans. C'est pour ce cas mixte que la serie remplace un scalaire.
+    const T = { tranche: c };
+    const taux = lire('taux_remuneration_fp', T);
+    const duree = lire('duree_reconstitution_fp', T);
+    const annuite = lire('annuite_fp_tranche', T);
     if (annuite > 0) {
-      const derniere = duree > 0 ? Math.min(duree, horizon) : horizon;
+      const derniere = lire('duree_charge_fp', T);
       for (let k = 0; k < derniere; k++) {
-        // La tranche est PORTEE par la ligne : le compte consolide somme tout
-        // sans la lire, mais le compte d une tranche a besoin de savoir laquelle
-        // de ces annuites est la sienne.
+        // La tranche est PORTEE par la ligne : le compte d une tranche a besoin
+        // de savoir laquelle de ces annuites est la sienne.
         annuitesFP.push({ annee: anneeMEL + k, montant_eur: annuite, produit: c });
       }
     }
+    const tauxTranche = fpParProduit ? lire('taux_apport_tranche', T) : null;
     fondsPropresParTranche[c] = {
-      montant_eur: arrondiEuro(montant),
-      // De quoi permettre a l'ecran de dire d'ou vient le montant : calcule a la
-      // part du referentiel, ou saisi. Sans cette distinction il ne pourrait
-      // qu'afficher un nombre, sans jamais dire s'il est subi ou choisi.
-      montant_auto: fpParProduit ? apportSaisi(c) === null : false,
-      montant_auto_eur: fpParProduit ? apportAutoDe(c) : null,
-      // Le taux EFFECTIF de la tranche, celui qui a servi au calcul, et non
-      // celui du referentiel : c'est lui que l'ecran affiche et propose a la
-      // saisie. `taux_apport_reference` dit ce que le referentiel aurait donne,
+      montant_eur: lire('fonds_propres_tranche_arrondi', T),
+      // De quoi permettre a l'ecran de dire si le montant est calcule ou saisi.
+      montant_auto: fpParProduit ? lire('apport_saisi', { code: c }) === null : false,
+      montant_auto_eur: fpParProduit ? lire('apport_auto_tranche', T) : null,
+      // Le taux EFFECTIF de la tranche, et ce que le referentiel aurait donne,
       // pour que l'ecran sache s'il montre une surcharge ou un defaut.
-      taux_apport: fpParProduit ? tauxApportDe(c) : null,
+      taux_apport: tauxTranche,
       taux_apport_reference: fpParProduit ? tauxApport : null,
-      taux_apport_surcharge: fpParProduit ? tauxApportDe(c) !== tauxApport : false,
+      taux_apport_surcharge: fpParProduit ? tauxTranche !== tauxApport : false,
       remuneres: taux > 0,
       reconstitues: duree > 0,
       taux_remuneration: taux,
@@ -11960,45 +12599,29 @@ function calculer(entrees, referentiels) {
       annuite_eur: annuite,
     };
   }
-  annuiteFPTotale = arrondiEuro(annuiteFPTotale);
+  const annuiteFPTotale = lire('annuite_fp_totale');
 
   const pretsSaisis = entrees.prets ?? [];
-  const autresPretsEur = pretsSaisis
-    .filter((p) => p.nature === 'autre')
-    .reduce((s, p) => s + p.montant_eur, 0);
 
-  const solde = soldeAFinancer({
-    prix_revient_ttc_module_eur: bilan.total_ttc_module_eur,
-    subventions_eur: subventionsTotal,
-    fonds_propres_eur: fondsPropres,
-    autres_prets_eur: autresPretsEur,
-  });
-
-  // Prefinancement (R-FIN-6) : seulement si un echeancier de tirages est fourni.
-  const prefi = entrees.prefinancement
-    ? prefinancement(entrees.prefinancement)
+  // Solde a financer (R-FIN-3), prefinancement (R-FIN-6) et prets CDC
+  // theoriques (R-FIN-4) : domaine « financement ». Les prets theoriques ne se
+  // calculent que si aucun pret CDC n'est saisi et qu'une tranche releve des
+  // fonds d'epargne - le logement libre se finance en banque.
+  const solde = lire('solde_a_financer');
+  const prefi = lire('prefi_actif')
+    ? {
+        nominal_eur: lire('prefinancement_nominal'),
+        interets_eur: lire('prefinancement_interets'),
+        capital_constitue_eur: lire('prefinancement_capital_constitue'),
+      }
     : null;
-
-  // Prets CDC theoriques, sauf si la saisie impose deja les prets.
-  const pretsCDCSaisis = pretsSaisis.filter((p) => p.nature !== 'autre');
-  // Une operation dont aucune tranche ne releve des fonds d'epargne n'a pas de
-  // droits CDC a chiffrer : le logement libre se finance en banque. Les calculer
-  // quand meme aurait affiche un droit qui n'existe pas, et fausse le ratio
-  // R-FIN-5 en lui donnant un numerateur sorti de nulle part.
-  const auMoinsUneTrancheCDC = codesPresents.length === 0 || codesPresents.some((c) => financeParCDC(c));
-  const cdcTheoriques =
-    pretsCDCSaisis.length > 0 || !auMoinsUneTrancheCDC
-      ? null
-      : pretsCDCTheoriques({
-          solde_eur: solde,
-          foncier_financable_eur: foncierFinancable({
-            charge_fonciere_eur: bilan.chapitres.charge_fonciere?.ttc_lasm_eur ?? 0,
-            subventions_eur: subventionsTotal,
-            prix_revient_operation_eur: bilan.total_ttc_module_eur,
-          }),
-          prefinancement_eur: prefi?.interets_eur ?? 0,
-          arrondir_milliers: options.arrondir_prets_milliers_sup ?? false,
-        });
+  const cdcTheoriques = lire('cdc_theoriques_actifs')
+    ? {
+        pret_foncier_eur: lire('cdc_pret_foncier'),
+        pret_batiment_eur: lire('cdc_pret_batiment'),
+        total_cdc_eur: lire('cdc_total'),
+      }
+    : null;
 
   // --- 6. Amortissement (R-AMT) ---
   const laOrigine = trajectoires.taux_reference_livret_a;
@@ -12086,46 +12709,26 @@ function calculer(entrees, referentiels) {
       );
     }
 
-    // Besoin de financement de chaque tranche : ce que son prix de revient ne
-    // couvre pas encore. Faute de ventilation (operation sans programme), on
-    // retombe sur le solde global.
-    // R-SUB-3 - Chaque subvention porte SA tranche : elle arrive ici deja
-    // rattachee (`agregerSubventions`), et celles qui ne le sont pas n'entrent
-    // pas au plan. Rien ne se repartit plus au prorata des surfaces : la
-    // repartition fabriquait des centimes que chaque tranche arrondissait de son
-    // cote, et une operation a quatre tranches en sortait desequilibree d'un euro.
-    // Le detail est etabli UNE fois et sert deux fois : a chiffrer le besoin de
-    // chaque tranche, et a le restituer ligne par ligne. Deux parcours de la
-    // meme liste finiraient par ventiler differemment.
+    // Subventions revenant a chaque tranche, besoin, redressement en serie,
+    // droit a pret foncier et montants automatiques des prets : domaine
+    // « financement ». Le detail des subventions se restitue ligne par ligne,
+    // avec les parts que le besoin a lues.
     /** @type {Array<{libelle: string, montant_eur: number, affectation: string|null, par_tranche: Record<string, number>}>} */
     const lignesSub = [];
-    const ventiler = (libelle, montant, affectation) => {
-      /** @type {Record<string, number>} */
-      const parTranche = {};
-      if (affectation) {
-        for (const c of codesFinances) parTranche[c] = c === affectation ? montant : 0;
-      } else if (codesFinances.length) {
-        // Seule la subvention de SURCHARGE FONCIERE arrive sans tranche : elle
-        // est CALCULEE sur la charge fonciere de l'operation entiere, pas
-        // saisie. Elle se repartit donc au prorata des surfaces, mais en euros
-        // ENTIERS dont la somme vaut exactement son montant - la methode du plus
-        // grand reste, celle du prix de revient - pour ne pas recreer l'euro.
-        const entiers = arrondirEnConservantLaSomme(
-          codesFinances.map((c) => (quotesParts[c] ?? 0) * montant),
-          arrondiEuro(montant),
-        );
-        codesFinances.forEach((c, i) => {
-          parTranche[c] = entiers[i];
-        });
-      }
-      lignesSub.push({ libelle, montant_eur: montant, affectation: affectation ?? null, par_tranche: parTranche });
-
+    /**
+     * @param {string} libelle
+     * @param {number} montant
+     * @param {string|null} affectation
+     * @param {Record<string, number>} parTranche
+     */
+    const ligneSubvention = (libelle, montant, affectation, parTranche) => {
+      lignesSub.push({ libelle, montant_eur: montant, affectation, par_tranche: parTranche });
       // Une subvention rattachee a une tranche qui n'ouvre droit a aucune aide
       // publique - le logement libre - n'est pas refusee : le montant saisi fait
       // foi, et une participation de collectivite de droit commun existe. Mais
       // elle se DIT : c'est le montage qui se decide, pas le calcul.
       const versLibre = codesFinances.filter(
-        (c) => parTranche[c] > 0 && produit(c).eligible_aides_publiques === false,
+        (c) => parTranche[c] > 0 && !lire('eligible_aides_publiques', { tranche: c }),
       );
       if (versLibre.length) {
         alertes.push(
@@ -12136,63 +12739,39 @@ function calculer(entrees, referentiels) {
         );
       }
     };
-    for (const s of subventions.rattachees) ventiler(s.libelle ?? 'Subvention', s.montant_eur, s.affectation);
-    if (ssf?.subvention_eur) ventiler('Surcharge foncière', ssf.subvention_eur, null);
-    detailSubventions.push(...lignesSub);
-
-    /** @type {Record<string, number>} */
-    const besoinBrut = {};
-    for (const c of codesFinances) {
-      const pr = bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0;
-      const sub = lignesSub.reduce((s, l) => s + (l.par_tranche[c] ?? 0), 0);
-      // `apportDe` et non la saisie brute : un apport laisse au calcul vaut sa
-      // part du prix de revient, pas zero. Lire la saisie ici faisait croire la
-      // tranche sans fonds propres - la part affichee tombait a 0,0 % et les
-      // prets CDC couvraient un besoin qu'ils n'avaient pas a couvrir.
-      const fp = fpParProduit ? apportDe(c) : (quotesParts[c] ?? 0) * fondsPropres;
-      // Memorise pour la restitution par tranche : la ventilation des ressources
-      // est une regle du moteur (une subvention non affectee profite a tous, au
-      // prorata de surface utile), pas une commodite d'affichage. La refaire a
-      // l'ecran serait la deuxieme occasion de s'en ecarter.
-      ressourcesParTranche[c] = { subventions_eur: arrondiEuro(sub), fonds_propres_eur: arrondiEuro(fp) };
-      const fixes = prets
-        .filter((p) => !auto(p) && (p.produit ?? trancheUnique) === c)
-        .reduce((s, p) => s + (Number(p.montant_eur) || 0), 0);
-      // Le signe est CONSERVE : un besoin negatif signale une tranche
-      // surfinancee, dont l'excedent va financer les autres.
-      besoinBrut[c] = pr - sub - fp - fixes;
-    }
-    const redresse = redresserBesoins(besoinBrut, quotesParts);
-    const besoin = redresse.besoins;
-    if (redresse.excedent_eur > 0) {
-      const surfinancees = codesFinances.filter((c) => besoinBrut[c] < 0);
-      alertes.push(
-        `Tranche${surfinancees.length > 1 ? 's' : ''} ${surfinancees.join(', ')} surfinancee${surfinancees.length > 1 ? 's' : ''} ` +
-          `de ${redresse.excedent_eur} EUR : cet excedent reduit d'autant les prets des autres tranches ` +
-          '(redressement en serie, calculette CDC).',
+    for (const s of subventions.rattachees) {
+      ligneSubvention(
+        s.libelle ?? 'Subvention',
+        s.montant_eur,
+        s.affectation,
+        Object.fromEntries(codesFinances.map((c) => [c, c === s.affectation ? s.montant_eur : 0])),
       );
     }
+    if (ssf?.subvention_eur) {
+      ligneSubvention(
+        'Surcharge foncière',
+        ssf.subvention_eur,
+        null,
+        Object.fromEntries(codesFinances.map((c) => [c, lire('ssf_part_tranche', { tranche: c })])),
+      );
+    }
+    detailSubventions.push(...lignesSub);
 
-    // Repartition foncier / construction : le foncier est plafonne a la part
-    // FINANCABLE de la charge fonciere de la tranche (R-FIN-2), le reste va a la
-    // construction. Sans ce plafond, un terrain cher absorberait tout le pret
-    // long et fausserait la duree moyenne de la dette.
-    //
-    // Le droit a pret foncier se calcule GLOBALEMENT puis se repartit au prorata
-    // de surface utile, et non tranche par tranche : c'est la marche de la
-    // calculette CDC (`Construction!AT37` pour le total, `M49` pour la
-    // repartition). La difference n'est pas cosmetique - une subvention flechee
-    // sur une seule tranche reduit le droit a pret foncier de TOUTE l'operation,
-    // pas seulement celui de la tranche qui la recoit.
-    const droitFoncierTotal = foncierFinancable({
-      charge_fonciere_eur: bilan.chapitres.charge_fonciere?.ttc_lasm_eur ?? 0,
-      subventions_eur: subventionsTotal,
-      prix_revient_operation_eur: bilan.total_ttc_module_eur,
-    });
-    /** @type {Record<string, number>} */
-    const plafondFoncier = {};
     for (const c of codesFinances) {
-      plafondFoncier[c] = droitFoncierTotal * (quotesParts[c] ?? 0);
+      const T = { tranche: c };
+      ressourcesParTranche[c] = {
+        subventions_eur: lire('subventions_ventilees_tranche_arrondies', T),
+        fonds_propres_eur: lire('fonds_propres_tranche_arrondi', T),
+      };
+    }
+    const excedentRedresse = lire('excedent_redresse');
+    if (excedentRedresse > 0) {
+      const surfinancees = codesFinances.filter((c) => lire('besoin_brut', { tranche: c }) < 0);
+      alertes.push(
+        `Tranche${surfinancees.length > 1 ? 's' : ''} ${surfinancees.join(', ')} surfinancee${surfinancees.length > 1 ? 's' : ''} ` +
+          `de ${excedentRedresse} EUR : cet excedent reduit d'autant les prets des autres tranches ` +
+          '(redressement en serie, calculette CDC).',
+      );
     }
 
     pretsACalculer = [];
@@ -12226,30 +12805,22 @@ function calculer(entrees, referentiels) {
       return defautsTranche[code];
     };
 
-    // Montants automatiques resolus PAR TRANCHE et arrondis ENSEMBLE : le
-    // foncier se sert le premier dans la limite de son plafond, la construction
-    // prend le reste. Arrondir les deux separement laissait fuir un euro, le
-    // reste etant calcule sur un foncier non arrondi.
-    /** @type {Record<string, Record<string, number>>} */
-    const montantsAuto = {};
-    for (const c of codesFinances) {
-      const aFoncierAuto = prets.some(
-        (x) => auto(x) && x.nature === 'foncier' && (x.produit ?? trancheUnique) === c,
-      );
-      const foncierExact = aFoncierAuto ? Math.min(besoin[c] ?? 0, plafondFoncier[c] ?? 0) : 0;
-      const constructionExact = Math.max(0, (besoin[c] ?? 0) - foncierExact);
-      const [f, b] = arrondirEnConservantLaSomme(
-        [foncierExact, constructionExact],
-        arrondiEuro(foncierExact + constructionExact),
-      );
-      montantsAuto[c] = { foncier: f, construction: b };
-    }
+    /**
+     * Montant automatique d'un pret, lu dans le classeur : le foncier et la
+     * construction d'une tranche s'y arrondissent ensemble.
+     * @param {string|null} code
+     * @param {string} nature
+     */
+    const montantAutoDe = (code, nature) =>
+      codesFinances.includes(/** @type {string} */ (code)) && (nature === 'foncier' || nature === 'construction')
+        ? lire('montant_auto', { tranche: code, nature_auto: nature })
+        : 0;
 
     for (const p of prets) {
       const code = p.produit ?? trancheUnique;
       let montant = p.montant_eur;
       if (auto(p) && code) {
-        montant = montantsAuto[code]?.[p.nature] ?? 0;
+        montant = montantAutoDe(code, p.nature);
       }
       // Les valeurs du pret ne sont reprises que si elles sont RENSEIGNEES :
       // etaler `p` tel quel ecraserait un taux par defaut avec un `undefined`,

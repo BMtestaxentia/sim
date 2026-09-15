@@ -9,7 +9,13 @@
  *
  * Unites : montants en euros.
  */
-import { arrondiEuro, arrondiMillierSup } from './arrondis.js';
+import { arrondiEuro } from './arrondis.js';
+import { nouveauClasseur } from './formules/modele.js';
+
+// LES FORMULES DU SOLDE, DU DROIT A PRET FONCIER, DES PRETS CDC THEORIQUES, DES
+// FONDS PROPRES ET DU REDRESSEMENT VIVENT DANS `formules/domaines/financement.js`.
+// Les fonctions qui suivent les evaluent sur les valeurs qu'on leur donne ;
+// celles qui ne s'y referent pas encore restent ecrites ici.
 
 /**
  * R-FIN-3 - Solde a financer par pret CDC :
@@ -27,9 +33,12 @@ export function soldeAFinancer({
   fonds_propres_eur = 0,
   autres_prets_eur = 0,
 }) {
-  return arrondiEuro(
-    prix_revient_ttc_module_eur - (subventions_eur + fonds_propres_eur + autres_prets_eur),
-  );
+  return nouveauClasseur({})
+    .fixer('total_ttc_module', {}, prix_revient_ttc_module_eur)
+    .fixer('subventions_total', {}, subventions_eur)
+    .fixer('fonds_propres_total', {}, fonds_propres_eur)
+    .fixer('autres_prets', {}, autres_prets_eur)
+    .valeur('solde_a_financer');
 }
 
 /**
@@ -129,10 +138,13 @@ export function plafondPretsLLI({ total_prets_eur, prix_revient_eur, plafond = 0
  * @returns {number} charge annuelle en euros
  */
 export function annuiteFondsPropres({ montant_eur, taux = 0, duree_ans = 0 }) {
-  if (!(montant_eur > 0)) return 0;
-  if (!(duree_ans > 0)) return taux > 0 ? arrondiEuro(montant_eur * taux) : 0;
-  if (!(taux > 0)) return arrondiEuro(montant_eur / duree_ans);
-  return arrondiEuro((montant_eur * taux) / (1 - (1 + taux) ** -duree_ans));
+  const T = { tranche: '_' };
+  return nouveauClasseur({})
+    .fixerDimension('tranche', ['_'])
+    .fixer('fonds_propres_tranche', T, montant_eur)
+    .fixer('taux_remuneration_fp', T, taux)
+    .fixer('duree_reconstitution_fp', T, duree_ans)
+    .valeur('annuite_fp_tranche', T);
 }
 
 /**
@@ -180,27 +192,16 @@ export function annuiteFondsPropres({ montant_eur, taux = 0, duree_ans = 0 }) {
  */
 export function redresserBesoins(besoins, quotesParts) {
   const codes = Object.keys(besoins);
-  const resultat = { ...besoins };
-  let excedentTotal = 0;
-  let tours = 0;
-
-  for (; tours < 3; tours++) {
-    const negatifs = codes.filter((c) => resultat[c] < 0);
-    if (!negatifs.length) break;
-
-    const excedent = negatifs.reduce((s, c) => s + resultat[c], 0); // valeur negative
-    excedentTotal += -excedent;
-    for (const c of negatifs) resultat[c] = 0;
-
-    const positifs = codes.filter((c) => resultat[c] > 0);
-    const cle = positifs.reduce((s, c) => s + (quotesParts[c] ?? 0), 0);
-    // Plus aucune tranche a servir : l'excedent reste acquis a l'operation et
-    // ressortira en surfinancement, ce qui est la verite du plan.
-    if (!positifs.length || cle <= 0) break;
-    for (const c of positifs) resultat[c] += excedent * ((quotesParts[c] ?? 0) / cle);
+  const c = nouveauClasseur({}).fixerDimension('tranche', codes);
+  for (const code of codes) {
+    c.fixer('besoin_brut', { tranche: code }, besoins[code]);
+    c.fixer('quote_part_su', { tranche: code }, quotesParts[code] ?? 0);
   }
-
-  return { besoins: resultat, excedent_eur: arrondiEuro(excedentTotal), tours };
+  return {
+    besoins: Object.fromEntries(codes.map((code) => [code, c.valeur('besoin_redresse', { tranche: code })])),
+    excedent_eur: c.valeur('excedent_redresse'),
+    tours: c.valeur('redressement_tours'),
+  };
 }
 
 export function foncierFinancable({
@@ -209,9 +210,12 @@ export function foncierFinancable({
   prix_revient_operation_eur = 0,
   quote_part_su = 1,
 }) {
-  const reduction =
-    prix_revient_operation_eur > 0 ? subventions_eur / prix_revient_operation_eur : 0;
-  return arrondiEuro(charge_fonciere_eur * (1 - reduction) * quote_part_su);
+  return nouveauClasseur({})
+    .fixer('charge_fonciere_lasm', {}, charge_fonciere_eur)
+    .fixer('subventions_total', {}, subventions_eur)
+    .fixer('total_ttc_module', {}, prix_revient_operation_eur)
+    .fixer('quote_part_foncier', {}, quote_part_su)
+    .valeur('droit_foncier_total');
 }
 
 /**
@@ -250,25 +254,26 @@ export function pretsCDCTheoriques({
   pret_foncier_force_eur,
   pret_batiment_force_eur,
 }) {
-  let foncier = Math.max(0, Math.min(solde_eur, foncier_financable_eur));
-  if (arrondir_milliers) foncier = arrondiMillierSup(foncier);
+  const c = nouveauClasseur({})
+    .fixer('solde_a_financer', {}, solde_eur)
+    .fixer('droit_foncier_total', {}, foncier_financable_eur)
+    .fixer('interets_prefinancement', {}, prefinancement_eur)
+    .fixer('arrondir_prets_milliers', {}, arrondir_milliers);
+  // Un montant FORCE court-circuite la formule du pret : c'est la saisie
+  // manuelle de LEON. Le moteur ne s'en sert pas ; la fonction le permet.
   if (pret_foncier_force_eur !== undefined && pret_foncier_force_eur !== null) {
-    foncier = pret_foncier_force_eur;
+    c.fixer('cdc_foncier', {}, pret_foncier_force_eur);
   }
-
-  let batiment = solde_eur - prefinancement_eur - foncier;
   if (pret_batiment_force_eur !== undefined && pret_batiment_force_eur !== null) {
-    batiment = pret_batiment_force_eur;
+    c.fixer('cdc_batiment', {}, Math.max(0, pret_batiment_force_eur));
+  } else if (pret_batiment_force_eur === null) {
+    // Un forcage VIDE n'impose rien, mais suspend l'arrondi au millier.
+    c.fixer('cdc_batiment', {}, c.valeur('cdc_batiment_exact'));
   }
-  batiment = Math.max(0, batiment);
-  if (arrondir_milliers && pret_batiment_force_eur === undefined) {
-    batiment = arrondiMillierSup(batiment);
-  }
-
   return {
-    pret_foncier_eur: arrondiEuro(foncier),
-    pret_batiment_eur: arrondiEuro(batiment),
-    total_cdc_eur: arrondiEuro(foncier + batiment),
+    pret_foncier_eur: c.valeur('cdc_pret_foncier'),
+    pret_batiment_eur: c.valeur('cdc_pret_batiment'),
+    total_cdc_eur: c.valeur('cdc_total'),
   };
 }
 

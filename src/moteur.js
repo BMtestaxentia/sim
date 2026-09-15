@@ -23,18 +23,8 @@ import { pretsDefautResolus, produit, marge, financeParCDC } from './produits.js
 import { fusionner, surchargerTrajectoires, ecartsParametrage } from './parametrage.js';
 import { restituerPrixDeRevient, valeurComptableTerrain, baseAmortissementComptable } from './bilan.js';
 import { restituerSubventions, restituerSurchargeFonciere } from './subventions.js';
-import {
-  soldeAFinancer,
-  foncierFinancable,
-  quotiteFoncier,
-  annuiteFondsPropres,
-  scinderPLS,
-  plafondPretsLLI,
-  pretsCDCTheoriques,
-  redresserBesoins,
-  controleEquilibre,
-} from './financement.js';
-import { tableauAmortissement, anneePremiereEcheance, prefinancement } from './amortissement.js';
+import { quotiteFoncier, scinderPLS, plafondPretsLLI, controleEquilibre } from './financement.js';
+import { tableauAmortissement, anneePremiereEcheance } from './amortissement.js';
 import { exonerationTFPB, taxeAmenagement } from './fiscalite.js';
 import {
   compteExploitation,
@@ -243,99 +233,43 @@ export function calculer(entrees, referentiels) {
   // tresorerie. Le moteur le resout lui-meme, comme il resout le montant d'un
   // pret CDC laisse en automatique - sinon l'ecran devrait pre-remplir une
   // valeur, et une valeur pre-remplie devient vite une valeur figee.
-  const cfgApport = baremes.fonds_propres?.apport ?? {};
-  const expEntree = entrees.exploitation ?? {};
-  const tauxApport =
-    (expEntree.mode === 'redevance' &&
-    (expEntree.mode_redevance ?? 'forfaitaire') === 'transparence'
-      ? cfgApport.taux_redevance_transparence
-      : cfgApport.taux_defaut) ?? 0;
-  /**
-   * Taux d'apport RETENU pour une tranche : celui qu'elle declare, sinon celui
-   * du referentiel.
-   *
-   * La part de 5 % est une regle de place, pas une loi : une operation la
-   * negocie, et un programme mixte ne la negocie pas au meme niveau sur toutes
-   * ses tranches. Le taux se surcharge donc TRANCHE PAR TRANCHE, la ou le
-   * montant se surcharge deja. Les deux surcharges ne se contredisent pas :
-   * un montant saisi fait foi et le taux ne sert plus qu'a la lecture, un
-   * montant laisse au calcul suit le taux.
-   *
-   * Zero est une valeur LEGITIME - une tranche sans apport - donc seul le vide
-   * rend la main au referentiel.
-   */
-  const tauxApportDe = (c) => {
-    const v = entrees.taux_apport_par_produit?.[c];
-    return v === undefined || v === null || v === '' ? tauxApport : (Number(v) || 0);
-  };
-  /** Apport automatique d'une tranche : sa part sur son prix de revient TTC. */
-  const apportAutoDe = (c) =>
-    arrondiEuro((bilan.par_tranche?.[c]?.total_ttc_eur ?? 0) * tauxApportDe(c));
-  const apportSaisi = (c) => {
-    const v = entrees.fonds_propres_par_produit?.[c];
-    return v === undefined || v === null || v === '' ? null : (Number(v) || 0);
-  };
-  /** Apport resolu d'une tranche : la saisie si elle existe, sinon la part. */
-  const apportDe = (c) => apportSaisi(c) ?? apportAutoDe(c);
-
+  // Domaine « financement » : l'apport de chaque tranche (R-FIN-7), saisi ou
+  // calcule a sa part du prix de revient, et la charge des fonds propres
+  // remuneres ou reconstitues.
   const fpParProduit = entrees.fonds_propres_par_produit ?? null;
-  // Union des tranches PRESENTES et des tranches SAISIES : l'apport automatique
-  // ne vaut que pour les premieres, mais un montant saisi compte la ou il est,
-  // meme si le produit a quitte le programme entre-temps. Restreindre la somme
-  // aux tranches presentes ferait disparaitre cet apport sans le dire.
-  const clesFP = [...new Set([...codesPresents, ...Object.keys(fpParProduit ?? {})])];
-  const fondsPropres = fpParProduit
-    ? clesFP.reduce((s, c) => s + apportDe(c), 0)
-    : (entrees.fonds_propres_eur ?? 0);
-  // R-FIN-7 - Fonds propres REMUNERES : ceux dont la tranche porte un taux de
-  // remuneration et une duree de reconstitution produisent une annuite, comme
-  // un pret que l'operation se fait a elle-meme. Les autres se reconstituent
-  // sur l'autofinancement, sans charge annuelle.
-  const paramFP = entrees.remuneration_fonds_propres ?? {};
+  /** Apport resolu d'une tranche : la saisie si elle existe, sinon la part. */
+  const apportDe = (c) => lire('apport_tranche', { tranche: c });
+  const fondsPropres = lire('fonds_propres_total');
+  const tauxApport = lire('taux_apport_reference');
   /** @type {Record<string, any>} */
   const fondsPropresParTranche = {};
-  let annuiteFPTotale = 0;
   /** Charge de fonds propres annee par annee : chaque tranche a SA duree. */
-  /** @type {Array<{annee: number, montant_eur: number}>} */
+  /** @type {Array<{annee: number, montant_eur: number, produit: string}>} */
   const annuitesFP = [];
-  const horizon = dates.duree_simulation_ans ?? 50;
   for (const c of codesPresents) {
-    const montant = fpParProduit
-      ? apportDe(c)
-      : (quotesParts[c] ?? 0) * (entrees.fonds_propres_eur ?? 0);
-    const p = paramFP[c] ?? {};
-    // Deux options INDEPENDANTES : un taux sans duree sert des interets sans
-    // rendre le capital, une duree sans taux rend le capital sans le remunerer.
-    const taux = p.remuneres === true ? (Number(p.taux) || 0) : 0;
-    const duree = p.reconstitues === true ? (Number(p.duree_reconstitution_ans) || 0) : 0;
-    const annuite = annuiteFondsPropres({ montant_eur: montant, taux, duree_ans: duree });
-    annuiteFPTotale += annuite;
-    // Reconstitues, la charge s'arrete au terme : le capital est rendu. Non
-    // reconstitues, elle court tant que l'operation existe, puisque le capital
-    // reste dedans. C'est pour ce cas mixte que la serie remplace un scalaire.
+    const T = { tranche: c };
+    const taux = lire('taux_remuneration_fp', T);
+    const duree = lire('duree_reconstitution_fp', T);
+    const annuite = lire('annuite_fp_tranche', T);
     if (annuite > 0) {
-      const derniere = duree > 0 ? Math.min(duree, horizon) : horizon;
+      const derniere = lire('duree_charge_fp', T);
       for (let k = 0; k < derniere; k++) {
-        // La tranche est PORTEE par la ligne : le compte consolide somme tout
-        // sans la lire, mais le compte d une tranche a besoin de savoir laquelle
-        // de ces annuites est la sienne.
+        // La tranche est PORTEE par la ligne : le compte d une tranche a besoin
+        // de savoir laquelle de ces annuites est la sienne.
         annuitesFP.push({ annee: anneeMEL + k, montant_eur: annuite, produit: c });
       }
     }
+    const tauxTranche = fpParProduit ? lire('taux_apport_tranche', T) : null;
     fondsPropresParTranche[c] = {
-      montant_eur: arrondiEuro(montant),
-      // De quoi permettre a l'ecran de dire d'ou vient le montant : calcule a la
-      // part du referentiel, ou saisi. Sans cette distinction il ne pourrait
-      // qu'afficher un nombre, sans jamais dire s'il est subi ou choisi.
-      montant_auto: fpParProduit ? apportSaisi(c) === null : false,
-      montant_auto_eur: fpParProduit ? apportAutoDe(c) : null,
-      // Le taux EFFECTIF de la tranche, celui qui a servi au calcul, et non
-      // celui du referentiel : c'est lui que l'ecran affiche et propose a la
-      // saisie. `taux_apport_reference` dit ce que le referentiel aurait donne,
+      montant_eur: lire('fonds_propres_tranche_arrondi', T),
+      // De quoi permettre a l'ecran de dire si le montant est calcule ou saisi.
+      montant_auto: fpParProduit ? lire('apport_saisi', { code: c }) === null : false,
+      montant_auto_eur: fpParProduit ? lire('apport_auto_tranche', T) : null,
+      // Le taux EFFECTIF de la tranche, et ce que le referentiel aurait donne,
       // pour que l'ecran sache s'il montre une surcharge ou un defaut.
-      taux_apport: fpParProduit ? tauxApportDe(c) : null,
+      taux_apport: tauxTranche,
       taux_apport_reference: fpParProduit ? tauxApport : null,
-      taux_apport_surcharge: fpParProduit ? tauxApportDe(c) !== tauxApport : false,
+      taux_apport_surcharge: fpParProduit ? tauxTranche !== tauxApport : false,
       remuneres: taux > 0,
       reconstitues: duree > 0,
       taux_remuneration: taux,
@@ -343,45 +277,29 @@ export function calculer(entrees, referentiels) {
       annuite_eur: annuite,
     };
   }
-  annuiteFPTotale = arrondiEuro(annuiteFPTotale);
+  const annuiteFPTotale = lire('annuite_fp_totale');
 
   const pretsSaisis = entrees.prets ?? [];
-  const autresPretsEur = pretsSaisis
-    .filter((p) => p.nature === 'autre')
-    .reduce((s, p) => s + p.montant_eur, 0);
 
-  const solde = soldeAFinancer({
-    prix_revient_ttc_module_eur: bilan.total_ttc_module_eur,
-    subventions_eur: subventionsTotal,
-    fonds_propres_eur: fondsPropres,
-    autres_prets_eur: autresPretsEur,
-  });
-
-  // Prefinancement (R-FIN-6) : seulement si un echeancier de tirages est fourni.
-  const prefi = entrees.prefinancement
-    ? prefinancement(entrees.prefinancement)
+  // Solde a financer (R-FIN-3), prefinancement (R-FIN-6) et prets CDC
+  // theoriques (R-FIN-4) : domaine « financement ». Les prets theoriques ne se
+  // calculent que si aucun pret CDC n'est saisi et qu'une tranche releve des
+  // fonds d'epargne - le logement libre se finance en banque.
+  const solde = lire('solde_a_financer');
+  const prefi = lire('prefi_actif')
+    ? {
+        nominal_eur: lire('prefinancement_nominal'),
+        interets_eur: lire('prefinancement_interets'),
+        capital_constitue_eur: lire('prefinancement_capital_constitue'),
+      }
     : null;
-
-  // Prets CDC theoriques, sauf si la saisie impose deja les prets.
-  const pretsCDCSaisis = pretsSaisis.filter((p) => p.nature !== 'autre');
-  // Une operation dont aucune tranche ne releve des fonds d'epargne n'a pas de
-  // droits CDC a chiffrer : le logement libre se finance en banque. Les calculer
-  // quand meme aurait affiche un droit qui n'existe pas, et fausse le ratio
-  // R-FIN-5 en lui donnant un numerateur sorti de nulle part.
-  const auMoinsUneTrancheCDC = codesPresents.length === 0 || codesPresents.some((c) => financeParCDC(c));
-  const cdcTheoriques =
-    pretsCDCSaisis.length > 0 || !auMoinsUneTrancheCDC
-      ? null
-      : pretsCDCTheoriques({
-          solde_eur: solde,
-          foncier_financable_eur: foncierFinancable({
-            charge_fonciere_eur: bilan.chapitres.charge_fonciere?.ttc_lasm_eur ?? 0,
-            subventions_eur: subventionsTotal,
-            prix_revient_operation_eur: bilan.total_ttc_module_eur,
-          }),
-          prefinancement_eur: prefi?.interets_eur ?? 0,
-          arrondir_milliers: options.arrondir_prets_milliers_sup ?? false,
-        });
+  const cdcTheoriques = lire('cdc_theoriques_actifs')
+    ? {
+        pret_foncier_eur: lire('cdc_pret_foncier'),
+        pret_batiment_eur: lire('cdc_pret_batiment'),
+        total_cdc_eur: lire('cdc_total'),
+      }
+    : null;
 
   // --- 6. Amortissement (R-AMT) ---
   const laOrigine = trajectoires.taux_reference_livret_a;
@@ -469,46 +387,26 @@ export function calculer(entrees, referentiels) {
       );
     }
 
-    // Besoin de financement de chaque tranche : ce que son prix de revient ne
-    // couvre pas encore. Faute de ventilation (operation sans programme), on
-    // retombe sur le solde global.
-    // R-SUB-3 - Chaque subvention porte SA tranche : elle arrive ici deja
-    // rattachee (`agregerSubventions`), et celles qui ne le sont pas n'entrent
-    // pas au plan. Rien ne se repartit plus au prorata des surfaces : la
-    // repartition fabriquait des centimes que chaque tranche arrondissait de son
-    // cote, et une operation a quatre tranches en sortait desequilibree d'un euro.
-    // Le detail est etabli UNE fois et sert deux fois : a chiffrer le besoin de
-    // chaque tranche, et a le restituer ligne par ligne. Deux parcours de la
-    // meme liste finiraient par ventiler differemment.
+    // Subventions revenant a chaque tranche, besoin, redressement en serie,
+    // droit a pret foncier et montants automatiques des prets : domaine
+    // « financement ». Le detail des subventions se restitue ligne par ligne,
+    // avec les parts que le besoin a lues.
     /** @type {Array<{libelle: string, montant_eur: number, affectation: string|null, par_tranche: Record<string, number>}>} */
     const lignesSub = [];
-    const ventiler = (libelle, montant, affectation) => {
-      /** @type {Record<string, number>} */
-      const parTranche = {};
-      if (affectation) {
-        for (const c of codesFinances) parTranche[c] = c === affectation ? montant : 0;
-      } else if (codesFinances.length) {
-        // Seule la subvention de SURCHARGE FONCIERE arrive sans tranche : elle
-        // est CALCULEE sur la charge fonciere de l'operation entiere, pas
-        // saisie. Elle se repartit donc au prorata des surfaces, mais en euros
-        // ENTIERS dont la somme vaut exactement son montant - la methode du plus
-        // grand reste, celle du prix de revient - pour ne pas recreer l'euro.
-        const entiers = arrondirEnConservantLaSomme(
-          codesFinances.map((c) => (quotesParts[c] ?? 0) * montant),
-          arrondiEuro(montant),
-        );
-        codesFinances.forEach((c, i) => {
-          parTranche[c] = entiers[i];
-        });
-      }
-      lignesSub.push({ libelle, montant_eur: montant, affectation: affectation ?? null, par_tranche: parTranche });
-
+    /**
+     * @param {string} libelle
+     * @param {number} montant
+     * @param {string|null} affectation
+     * @param {Record<string, number>} parTranche
+     */
+    const ligneSubvention = (libelle, montant, affectation, parTranche) => {
+      lignesSub.push({ libelle, montant_eur: montant, affectation, par_tranche: parTranche });
       // Une subvention rattachee a une tranche qui n'ouvre droit a aucune aide
       // publique - le logement libre - n'est pas refusee : le montant saisi fait
       // foi, et une participation de collectivite de droit commun existe. Mais
       // elle se DIT : c'est le montage qui se decide, pas le calcul.
       const versLibre = codesFinances.filter(
-        (c) => parTranche[c] > 0 && produit(c).eligible_aides_publiques === false,
+        (c) => parTranche[c] > 0 && !lire('eligible_aides_publiques', { tranche: c }),
       );
       if (versLibre.length) {
         alertes.push(
@@ -519,63 +417,39 @@ export function calculer(entrees, referentiels) {
         );
       }
     };
-    for (const s of subventions.rattachees) ventiler(s.libelle ?? 'Subvention', s.montant_eur, s.affectation);
-    if (ssf?.subvention_eur) ventiler('Surcharge foncière', ssf.subvention_eur, null);
-    detailSubventions.push(...lignesSub);
-
-    /** @type {Record<string, number>} */
-    const besoinBrut = {};
-    for (const c of codesFinances) {
-      const pr = bilan.par_tranche?.[c]?.total_ttc_module_eur ?? 0;
-      const sub = lignesSub.reduce((s, l) => s + (l.par_tranche[c] ?? 0), 0);
-      // `apportDe` et non la saisie brute : un apport laisse au calcul vaut sa
-      // part du prix de revient, pas zero. Lire la saisie ici faisait croire la
-      // tranche sans fonds propres - la part affichee tombait a 0,0 % et les
-      // prets CDC couvraient un besoin qu'ils n'avaient pas a couvrir.
-      const fp = fpParProduit ? apportDe(c) : (quotesParts[c] ?? 0) * fondsPropres;
-      // Memorise pour la restitution par tranche : la ventilation des ressources
-      // est une regle du moteur (une subvention non affectee profite a tous, au
-      // prorata de surface utile), pas une commodite d'affichage. La refaire a
-      // l'ecran serait la deuxieme occasion de s'en ecarter.
-      ressourcesParTranche[c] = { subventions_eur: arrondiEuro(sub), fonds_propres_eur: arrondiEuro(fp) };
-      const fixes = prets
-        .filter((p) => !auto(p) && (p.produit ?? trancheUnique) === c)
-        .reduce((s, p) => s + (Number(p.montant_eur) || 0), 0);
-      // Le signe est CONSERVE : un besoin negatif signale une tranche
-      // surfinancee, dont l'excedent va financer les autres.
-      besoinBrut[c] = pr - sub - fp - fixes;
-    }
-    const redresse = redresserBesoins(besoinBrut, quotesParts);
-    const besoin = redresse.besoins;
-    if (redresse.excedent_eur > 0) {
-      const surfinancees = codesFinances.filter((c) => besoinBrut[c] < 0);
-      alertes.push(
-        `Tranche${surfinancees.length > 1 ? 's' : ''} ${surfinancees.join(', ')} surfinancee${surfinancees.length > 1 ? 's' : ''} ` +
-          `de ${redresse.excedent_eur} EUR : cet excedent reduit d'autant les prets des autres tranches ` +
-          '(redressement en serie, calculette CDC).',
+    for (const s of subventions.rattachees) {
+      ligneSubvention(
+        s.libelle ?? 'Subvention',
+        s.montant_eur,
+        s.affectation,
+        Object.fromEntries(codesFinances.map((c) => [c, c === s.affectation ? s.montant_eur : 0])),
       );
     }
+    if (ssf?.subvention_eur) {
+      ligneSubvention(
+        'Surcharge foncière',
+        ssf.subvention_eur,
+        null,
+        Object.fromEntries(codesFinances.map((c) => [c, lire('ssf_part_tranche', { tranche: c })])),
+      );
+    }
+    detailSubventions.push(...lignesSub);
 
-    // Repartition foncier / construction : le foncier est plafonne a la part
-    // FINANCABLE de la charge fonciere de la tranche (R-FIN-2), le reste va a la
-    // construction. Sans ce plafond, un terrain cher absorberait tout le pret
-    // long et fausserait la duree moyenne de la dette.
-    //
-    // Le droit a pret foncier se calcule GLOBALEMENT puis se repartit au prorata
-    // de surface utile, et non tranche par tranche : c'est la marche de la
-    // calculette CDC (`Construction!AT37` pour le total, `M49` pour la
-    // repartition). La difference n'est pas cosmetique - une subvention flechee
-    // sur une seule tranche reduit le droit a pret foncier de TOUTE l'operation,
-    // pas seulement celui de la tranche qui la recoit.
-    const droitFoncierTotal = foncierFinancable({
-      charge_fonciere_eur: bilan.chapitres.charge_fonciere?.ttc_lasm_eur ?? 0,
-      subventions_eur: subventionsTotal,
-      prix_revient_operation_eur: bilan.total_ttc_module_eur,
-    });
-    /** @type {Record<string, number>} */
-    const plafondFoncier = {};
     for (const c of codesFinances) {
-      plafondFoncier[c] = droitFoncierTotal * (quotesParts[c] ?? 0);
+      const T = { tranche: c };
+      ressourcesParTranche[c] = {
+        subventions_eur: lire('subventions_ventilees_tranche_arrondies', T),
+        fonds_propres_eur: lire('fonds_propres_tranche_arrondi', T),
+      };
+    }
+    const excedentRedresse = lire('excedent_redresse');
+    if (excedentRedresse > 0) {
+      const surfinancees = codesFinances.filter((c) => lire('besoin_brut', { tranche: c }) < 0);
+      alertes.push(
+        `Tranche${surfinancees.length > 1 ? 's' : ''} ${surfinancees.join(', ')} surfinancee${surfinancees.length > 1 ? 's' : ''} ` +
+          `de ${excedentRedresse} EUR : cet excedent reduit d'autant les prets des autres tranches ` +
+          '(redressement en serie, calculette CDC).',
+      );
     }
 
     pretsACalculer = [];
@@ -609,30 +483,22 @@ export function calculer(entrees, referentiels) {
       return defautsTranche[code];
     };
 
-    // Montants automatiques resolus PAR TRANCHE et arrondis ENSEMBLE : le
-    // foncier se sert le premier dans la limite de son plafond, la construction
-    // prend le reste. Arrondir les deux separement laissait fuir un euro, le
-    // reste etant calcule sur un foncier non arrondi.
-    /** @type {Record<string, Record<string, number>>} */
-    const montantsAuto = {};
-    for (const c of codesFinances) {
-      const aFoncierAuto = prets.some(
-        (x) => auto(x) && x.nature === 'foncier' && (x.produit ?? trancheUnique) === c,
-      );
-      const foncierExact = aFoncierAuto ? Math.min(besoin[c] ?? 0, plafondFoncier[c] ?? 0) : 0;
-      const constructionExact = Math.max(0, (besoin[c] ?? 0) - foncierExact);
-      const [f, b] = arrondirEnConservantLaSomme(
-        [foncierExact, constructionExact],
-        arrondiEuro(foncierExact + constructionExact),
-      );
-      montantsAuto[c] = { foncier: f, construction: b };
-    }
+    /**
+     * Montant automatique d'un pret, lu dans le classeur : le foncier et la
+     * construction d'une tranche s'y arrondissent ensemble.
+     * @param {string|null} code
+     * @param {string} nature
+     */
+    const montantAutoDe = (code, nature) =>
+      codesFinances.includes(/** @type {string} */ (code)) && (nature === 'foncier' || nature === 'construction')
+        ? lire('montant_auto', { tranche: code, nature_auto: nature })
+        : 0;
 
     for (const p of prets) {
       const code = p.produit ?? trancheUnique;
       let montant = p.montant_eur;
       if (auto(p) && code) {
-        montant = montantsAuto[code]?.[p.nature] ?? 0;
+        montant = montantAutoDe(code, p.nature);
       }
       // Les valeurs du pret ne sont reprises que si elles sont RENSEIGNEES :
       // etaler `p` tel quel ecraserait un taux par defaut avec un `undefined`,

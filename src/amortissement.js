@@ -26,13 +26,7 @@
  * lues d'une horloge, d'un fichier ou d'un etat global.
  */
 import { arrondiCRD } from './arrondis.js';
-
-/**
- * Base de jours de la capitalisation du prefinancement : exact/365.
- * Convention lue dans la formule source SimPLUS!FA15 (`(FA$14-AL23)/365`),
- * ce n'est pas un parametre de bareme mais la convention de calcul de LEON.
- */
-const BASE_JOURS_ACT365 = 365;
+import { nouveauClasseur } from './formules/modele.js';
 
 import { jourUTC, MS_PAR_JOUR } from './dates.js';
 
@@ -482,24 +476,11 @@ export function tableauAmortissement(pret) {
  * @returns {{nominal_eur: number, interets_eur: number, capital_constitue_eur: number}}
  */
 export function prefinancement({ tirages, taux, date_fin, capitaliser = true }) {
-  if (!tirages.length) return { nominal_eur: 0, interets_eur: 0, capital_constitue_eur: 0 };
-  const jours = tirages.map((t) => jourUTC(t.date));
-  const jourFin = date_fin === undefined ? Math.max(...jours) : jourUTC(date_fin);
-
-  let nominal = 0;
-  let capitalise = 0;
-  tirages.forEach((tirage, i) => {
-    if (jours[i] > jourFin) {
-      throw new Error(`Tirage posterieur a la date de fin de capitalisation : ${tirage.date}`);
-    }
-    nominal += tirage.montant_eur;
-    capitalise += tirage.montant_eur * (1 + taux) ** ((jourFin - jours[i]) / BASE_JOURS_ACT365);
-  });
-
-  const interets = capitalise - nominal;
+  // Formules `prefinancement_*` du domaine « financement ».
+  const c = nouveauClasseur({ entrees: { prefinancement: { tirages, taux, date_fin, capitaliser } } });
   return {
-    nominal_eur: nominal,
-    interets_eur: interets,
-    capital_constitue_eur: capitaliser ? nominal + interets : nominal,
+    nominal_eur: c.valeur('prefinancement_nominal'),
+    interets_eur: c.valeur('prefinancement_interets'),
+    capital_constitue_eur: c.valeur('prefinancement_capital_constitue'),
   };
 }

@@ -18,7 +18,7 @@ import { restituerLoyer, controlesLoyer } from './loyers.js';
 import { normaliserTrajectoires } from './trajectoires.js';
 import { restituerCalendrier } from './calendrier.js';
 import { nouveauClasseur } from './formules/modele.js';
-import { tresorerieChantier } from './tresorerie.js';
+import { restituerTresorerie } from './tresorerie.js';
 import { fusionner, surchargerTrajectoires, ecartsParametrage } from './parametrage.js';
 import { restituerPrixDeRevient, valeurComptableTerrain, baseAmortissementComptable } from './bilan.js';
 import { restituerSubventions, restituerSurchargeFonciere } from './subventions.js';
@@ -86,9 +86,6 @@ export function calculer(entrees, referentiels) {
   // --- 0. Calendrier (R-AMT-3, domaine « calendrier ») ---
   const calendrier = restituerCalendrier(classeur);
   const anneeMEL = calendrier.annee_mise_en_location;
-  // Duree du chantier : elle sert au differe par defaut des prets principaux
-  // (R-AMT-9) et a l'echeancier de tresorerie (R-TRESO).
-  const dureeChantierMois = lire('duree_chantier_retenue');
 
   // --- 1. Surfaces (R-SURF, domaine « surfaces ») ---
   const surfaces = lots.map((lot, i) => ({
@@ -608,31 +605,9 @@ export function calculer(entrees, referentiels) {
   // Elle se calcule APRES le plan de financement : il lui faut le prix de
   // revient par chapitre, les subventions et les fonds propres resolus. Elle
   // s'arrete a la livraison, la ou le compte d'exploitation commence.
-  const tresorerie =
-    dates.date_debut_travaux && dureeChantierMois > 0
-      ? tresorerieChantier({
-          date_debut_travaux: dates.date_debut_travaux,
-          duree_chantier_mois: dureeChantierMois,
-          // Le prix de revient TTC, reparti a parts egales sur les mois de
-          // chantier puis indexe (R-TRESO-2, classeur « Indexeur cout travaux »).
-          cout_total_eur: bilan.total_ttc_module_eur,
-          date_valeur_cout: dates.date_valeur_cout ?? entrees.tresorerie?.date_valeur_cout,
-          taux_indexation:
-            entrees.tresorerie?.taux_indexation ?? baremes.tresorerie?.taux_indexation ?? 0,
-          // Mobilisables des l'ordre de service : arbitrage metier du 11/08/2026.
-          subventions_eur: subventionsTotal,
-          fonds_propres_eur: fondsPropres,
-          // R-TRESO-3 : le bareme d'appels de fonds ne vaut QU'EN VEFA. Une
-          // operation en maitrise d'ouvrage directe paie ses factures au fil du
-          // chantier, sans jalon legal.
-          jalons:
-            String(identite.type_operation ?? '').toUpperCase() === 'VEFA'
-              ? (entrees.tresorerie?.jalons ?? baremes.tresorerie?.jalons_vefa?.jalons ?? null)
-              : null,
-          mode_tirage:
-            entrees.tresorerie?.mode_tirage ?? baremes.tresorerie?.mode_tirage ?? 'integral',
-        })
-      : null;
+  // Domaine « tresorerie » : il faut un ordre de service et une duree de
+  // chantier pour tenir l'echeancier.
+  const tresorerie = lire('tresorerie_calculee') ? restituerTresorerie(classeur) : null;
 
   // Ruptures qui expliquent la forme de la courbe de resultat. Elles sont
   // calculees ici, sinon l'interface les redecouvrirait par difference, ce qui

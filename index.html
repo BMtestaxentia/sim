@@ -10621,6 +10621,363 @@ const FISCALITE = {
   },
 };
 
+/* ===== src/formules/domaines/tresorerie.js ===== */
+// @ts-check
+/**
+ * DOMAINE « TRESORERIE » - R-TRESO : la tresorerie de la phase chantier, du
+ * premier ordre de service a la livraison, mois par mois.
+ *
+ * Deux indexations se suivent (classeur « Indexeur cout travaux », metier,
+ * 11/08/2026) : le cout est revise de sa date de valeur a l'ordre de service,
+ * puis chaque somme due est indexee de SA propre duree, du demarrage a son
+ * echeance - « seules les sommes dues sont indexees ». La base est 365,25 jours
+ * et la premiere echeance tombe un mois apres l'ordre de service.
+ *
+ * En VEFA, les depenses suivent le bareme legal des appels de fonds
+ * (R-TRESO-3) ; ailleurs, le cout se repartit a parts egales. Subventions et
+ * fonds propres arrivent a l'ordre de service ; les prets comblent le manque,
+ * tires en une fois au premier mois ou au fil de l'eau (R-TRESO-4).
+ */
+
+/** @type {import('../classeur.js').Domaine} */
+const TRESORERIE = {
+  domaine: 'tresorerie',
+  titre: 'Trésorerie du chantier',
+  dimensions: {
+    mois_chantier: { libelle: 'Mois de chantier', valeurs: 'SUITE(1; nb_mois_chantier)' },
+    jalon: { libelle: 'Appel de fonds', valeurs: 'INDICES(jalons_tresorerie)', etiquette: 'libelle_jalon' },
+  },
+  grandeurs: {
+    // --- Parametres -------------------------------------------------------------
+    taux_indexation_saisi: {
+      libelle: 'Indexation des travaux saisie',
+      unite: 'taux',
+      saisie: 'tresorerie.taux_indexation',
+      ecran: 'Trésorerie',
+    },
+    taux_indexation_bareme: {
+      libelle: 'Indexation des travaux du barème',
+      unite: 'taux',
+      regle: 'R-TRESO-2',
+      parametre: 'tresorerie.taux_indexation',
+      ecran: 'Paramètres > Trésorerie',
+    },
+    taux_indexation_chantier: {
+      libelle: 'Indexation annuelle des travaux',
+      unite: 'taux',
+      regle: 'R-TRESO-2',
+      formule: 'DEFAUT(taux_indexation_saisi; taux_indexation_bareme; 0)',
+    },
+    mode_tirage_saisi: {
+      libelle: 'Mode de tirage saisi',
+      unite: 'texte',
+      saisie: 'tresorerie.mode_tirage',
+      ecran: 'Trésorerie',
+    },
+    mode_tirage_bareme: {
+      libelle: 'Mode de tirage du barème',
+      unite: 'texte',
+      regle: 'R-TRESO-4',
+      parametre: 'tresorerie.mode_tirage',
+      ecran: 'Paramètres > Trésorerie',
+    },
+    mode_tirage: {
+      libelle: 'Mode de tirage des prêts',
+      unite: 'texte',
+      regle: 'R-TRESO-4',
+      formule: "DEFAUT(mode_tirage_saisi; mode_tirage_bareme; 'integral')",
+      note: 'Intégral : tout le prêt au premier mois. Au fil de l’eau : à hauteur du manque de chaque mois.',
+    },
+    jalons_saisis: {
+      libelle: 'Appels de fonds saisis',
+      unite: 'liste',
+      saisie: 'tresorerie.jalons',
+      ecran: 'Trésorerie',
+    },
+    jalons_bareme: {
+      libelle: 'Barème légal des appels de fonds en VEFA',
+      unite: 'liste',
+      regle: 'R-TRESO-3',
+      parametre: 'tresorerie.jalons_vefa.jalons',
+      ecran: 'Paramètres > Trésorerie',
+    },
+    date_valeur_cout_saisie: {
+      libelle: 'Date de valeur du coût saisie',
+      unite: 'date',
+      saisie: 'dates.date_valeur_cout',
+      ecran: 'Opération > Calendrier',
+    },
+    date_valeur_cout_tresorerie: {
+      libelle: 'Date de valeur du coût, écran de trésorerie',
+      unite: 'date',
+      saisie: 'tresorerie.date_valeur_cout',
+      ecran: 'Trésorerie',
+    },
+    date_valeur_cout: {
+      libelle: 'Date de valeur du coût',
+      unite: 'date',
+      formule: 'DEFAUT(date_valeur_cout_saisie; date_valeur_cout_tresorerie)',
+      note: 'Sans date de valeur, le coût est réputé exprimé au démarrage.',
+    },
+    jours_indexation: { libelle: 'Base de jours de l’indexation', unite: 'nombre', constante: 365.25 },
+    tirer_les_prets: {
+      libelle: 'Les prêts comblent le manque',
+      unite: 'booleen',
+      constante: true,
+    },
+    tresorerie_calculee: {
+      libelle: 'Trésorerie du chantier calculée',
+      unite: 'booleen',
+      formule: 'ET(date_debut_travaux_saisie; duree_chantier_retenue > 0)',
+    },
+    cout_chantier: {
+      libelle: 'Coût du chantier',
+      unite: 'eur',
+      formule: 'total_ttc_module',
+      note: 'Le prix de revient TTC de l’opération.',
+    },
+    subventions_chantier: {
+      libelle: 'Subventions mobilisées au démarrage',
+      unite: 'eur',
+      formule: 'subventions_total',
+      note: 'Mobilisables dès l’ordre de service (arbitrage métier du 11/08/2026).',
+    },
+    fonds_propres_chantier: {
+      libelle: 'Fonds propres mobilisés au démarrage',
+      unite: 'eur',
+      formule: 'fonds_propres_total',
+    },
+    jalons_tresorerie: {
+      libelle: 'Appels de fonds retenus',
+      unite: 'liste',
+      regle: 'R-TRESO-3',
+      formule: "SI(MAJUSCULE(type_operation) = 'VEFA'; DEFAUT(jalons_saisis; jalons_bareme; VIDE); VIDE)",
+      note: 'Le barème d’appels de fonds ne vaut qu’en VEFA : en maîtrise d’ouvrage directe, les factures se paient au fil du chantier.',
+    },
+    jalons_utilises: {
+      libelle: 'Dépenses aux appels de fonds',
+      unite: 'booleen',
+      formule: 'LONGUEUR(jalons_tresorerie) > 0',
+    },
+    nb_mois_chantier: {
+      libelle: 'Mois de chantier',
+      unite: 'nombre',
+      formule: 'MAX(1; ENTIER.PROCHE(NOMBRE(duree_chantier_retenue)))',
+    },
+
+    // --- R-TRESO-2 : revision et indexation du cout -------------------------------------
+    revision_annees: {
+      libelle: 'Années de révision jusqu’au démarrage',
+      unite: 'an',
+      regle: 'R-TRESO-2',
+      formule:
+        'SI(date_valeur_cout; -((JOURS(date_valeur_cout) - JOURS(date_debut_travaux_saisie)) / jours_indexation); 0)',
+    },
+    cout_revise: {
+      libelle: 'Coût révisé au démarrage',
+      unite: 'eur',
+      regle: 'R-TRESO-2',
+      formule: 'cout_chantier * (1 + taux_indexation_chantier) ^ revision_annees',
+    },
+    libelle_jalon: {
+      libelle: 'Appel de fonds',
+      unite: 'texte',
+      sur: ['jalon'],
+      formule: "DEFAUT(CHAMP(ELEMENT(jalons_tresorerie; jalon); 'libelle'); CHAMP(ELEMENT(jalons_tresorerie; jalon); 'id'))",
+    },
+    part_jalon: {
+      libelle: 'Part du prix appelée',
+      unite: 'taux',
+      regle: 'R-TRESO-3',
+      sur: ['jalon'],
+      formule: "DEFAUT(CHAMP(ELEMENT(jalons_tresorerie; jalon); 'part'); 0)",
+    },
+    rang_brut_jalon: {
+      libelle: 'Mois de l’appel, avant bornage',
+      unite: 'nombre',
+      sur: ['jalon'],
+      formule: "ENTIER.SUP(DEFAUT(CHAMP(ELEMENT(jalons_tresorerie; jalon); 'avancement'); 0) * nb_mois_chantier)",
+    },
+    rang_jalon: {
+      libelle: 'Mois de l’appel de fonds',
+      unite: 'nombre',
+      regle: 'R-TRESO-3',
+      sur: ['jalon'],
+      formule: 'MIN(nb_mois_chantier; MAX(1; SI(rang_brut_jalon; rang_brut_jalon; 1)))',
+      note: 'Il n’y a pas de mois zéro : un appel à l’ordre de service tombe le premier mois. Ceux qui suivent la livraison y sont ramenés.',
+    },
+    date_echeance: {
+      libelle: 'Échéance du mois',
+      unite: 'date',
+      sur: ['mois_chantier'],
+      formule: 'AJOUTER.MOIS(date_debut_travaux_saisie; mois_chantier)',
+    },
+    nominal_mois: {
+      libelle: 'Dépense du mois avant indexation',
+      unite: 'eur',
+      sur: ['mois_chantier'],
+      formule:
+        'SI(jalons_utilises; SOMME(cout_revise * part_jalon POUR jalon QUAND rang_jalon = mois_chantier); ' +
+        'cout_revise / nb_mois_chantier)',
+    },
+    coefficient_mois: {
+      libelle: 'Coefficient d’indexation du mois',
+      unite: 'coef',
+      regle: 'R-TRESO-2',
+      sur: ['mois_chantier'],
+      formule:
+        '(1 + taux_indexation_chantier) ^ ((JOURS(date_echeance) - JOURS(date_debut_travaux_saisie)) / jours_indexation)',
+      note: 'Chaque somme due est indexée de sa propre durée, du démarrage à son échéance.',
+    },
+    depense_indexee: {
+      libelle: 'Dépense indexée du mois',
+      unite: 'eur',
+      sur: ['mois_chantier'],
+      formule: 'nominal_mois * coefficient_mois',
+    },
+    depense_mois: {
+      libelle: 'Dépense du mois',
+      unite: 'eur',
+      regle: 'R-TRESO-2',
+      sur: ['mois_chantier'],
+      formule: 'REPARTIR(depense_indexee POUR mois_chantier)',
+      note: 'Arrondie en conservant la somme : l’échéancier totalise son propre total.',
+    },
+
+    // --- Financement mois par mois ---------------------------------------------------------
+    total_depenses_chantier: {
+      libelle: 'Dépenses du chantier',
+      unite: 'eur',
+      formule: 'SOMME(depense_mois POUR mois_chantier)',
+    },
+    a_emprunter: {
+      libelle: 'Montant à emprunter',
+      unite: 'eur',
+      regle: 'R-TRESO-4',
+      formule: 'MAX(0; total_depenses_chantier - subventions_chantier - fonds_propres_chantier)',
+    },
+    tirage_integral: {
+      libelle: 'Tirage intégral',
+      unite: 'eur',
+      regle: 'R-TRESO-4',
+      sur: ['mois_chantier'],
+      formule: "SI(ET(tirer_les_prets; mode_tirage = 'integral'; mois_chantier = 1; a_emprunter > 0); a_emprunter; 0)",
+      note: 'Le prêt est en caisse avant la première facture.',
+    },
+    solde_brut: {
+      libelle: 'Trésorerie avant tirage au fil de l’eau',
+      unite: 'eur',
+      sur: ['mois_chantier'],
+      formule:
+        'DEFAUT(solde_chantier[mois_chantier: mois_chantier - 1]; subventions_chantier + fonds_propres_chantier) + ' +
+        'tirage_integral - depense_mois',
+    },
+    tirage_fil: {
+      libelle: 'Tirage au fil de l’eau',
+      unite: 'eur',
+      regle: 'R-TRESO-4',
+      sur: ['mois_chantier'],
+      formule: "SI(ET(tirer_les_prets; mode_tirage <> 'integral'; solde_brut < 0); -solde_brut; 0)",
+      note: 'Comble le manque du mois, jamais plus.',
+    },
+    solde_chantier: {
+      libelle: 'Trésorerie en fin de mois',
+      unite: 'eur',
+      sur: ['mois_chantier'],
+      formule: 'SI(tirage_fil > 0; 0; solde_brut)',
+    },
+    tirage_mois: {
+      libelle: 'Tirage du mois',
+      unite: 'eur',
+      sur: ['mois_chantier'],
+      formule: 'tirage_integral + tirage_fil',
+    },
+    cumul_depenses_chantier: {
+      libelle: 'Dépenses cumulées',
+      unite: 'eur',
+      sur: ['mois_chantier'],
+      formule: 'DEFAUT(cumul_depenses_chantier[mois_chantier: mois_chantier - 1]; 0) + depense_mois',
+    },
+    cumul_tirages: {
+      libelle: 'Tirages cumulés',
+      unite: 'eur',
+      sur: ['mois_chantier'],
+      formule: 'DEFAUT(cumul_tirages[mois_chantier: mois_chantier - 1]; 0) + tirage_mois',
+    },
+    besoin_mois: {
+      libelle: 'Besoin cumulé hors prêts',
+      unite: 'eur',
+      sur: ['mois_chantier'],
+      formule: 'cumul_depenses_chantier - subventions_chantier - fonds_propres_chantier',
+    },
+    encaissement_subventions: {
+      libelle: 'Subventions encaissées',
+      unite: 'eur',
+      sur: ['mois_chantier'],
+      formule: 'SI(mois_chantier = 1; subventions_chantier; 0)',
+    },
+    encaissement_fonds_propres: {
+      libelle: 'Fonds propres apportés',
+      unite: 'eur',
+      sur: ['mois_chantier'],
+      formule: 'SI(mois_chantier = 1; fonds_propres_chantier; 0)',
+    },
+
+    // --- Indicateurs ------------------------------------------------------------------
+    revision_au_demarrage: {
+      libelle: 'Révision au démarrage',
+      unite: 'eur',
+      formule: 'cout_revise - cout_chantier',
+    },
+    echeance_nominale: {
+      libelle: 'Échéance nominale',
+      unite: 'eur',
+      formule: 'SI(jalons_utilises; VIDE; cout_revise / nb_mois_chantier)',
+      note: 'Sans objet sous barème d’appels de fonds : aucun mois réel ne la porte.',
+    },
+    total_depenses_final: {
+      libelle: 'Total des dépenses',
+      unite: 'eur',
+      formule: 'DERNIER(cumul_depenses_chantier POUR mois_chantier)',
+    },
+    surcout_indexation: {
+      libelle: 'Surcoût de l’indexation',
+      unite: 'eur',
+      regle: 'R-TRESO-2',
+      formule: 'total_depenses_final - cout_chantier',
+      note: 'Révision de départ comprise.',
+    },
+    total_tirages: {
+      libelle: 'Total des tirages',
+      unite: 'eur',
+      formule: 'DERNIER(cumul_tirages POUR mois_chantier)',
+    },
+    besoin_pic: {
+      libelle: 'Point haut du besoin',
+      unite: 'eur',
+      formule: 'MAX(ARRONDI.EURO(besoin_mois) POUR mois_chantier)',
+    },
+    mois_pic: {
+      libelle: 'Mois du point haut',
+      unite: 'nombre',
+      formule: 'PREMIER(mois_chantier POUR mois_chantier QUAND ARRONDI.EURO(besoin_mois) = besoin_pic)',
+    },
+    besoin_maximal: {
+      libelle: 'Besoin de préfinancement',
+      unite: 'eur',
+      regle: 'R-TRESO',
+      formule: 'MAX(0; besoin_pic)',
+    },
+    tresorerie_maximale: {
+      libelle: 'Trésorerie maximale en caisse',
+      unite: 'eur',
+      regle: 'R-TRESO-4',
+      formule: 'MAX(0; MAX(ARRONDI.EURO(solde_chantier) POUR mois_chantier))',
+      note: 'Ce que le tirage intégral laisse dormir en caisse, sur quoi courent des intérêts intercalaires.',
+    },
+  },
+};
+
 /* ===== src/formules/domaines/exploitation.js ===== */
 // @ts-check
 /**
@@ -12535,6 +12892,7 @@ const EXPLOITATION = {
 
 
 
+
 const MODELE = creerModele([
   OPERATION,
   CALENDRIER,
@@ -12546,6 +12904,7 @@ const MODELE = creerModele([
   PRETS,
   AMORTISSEMENT,
   FISCALITE,
+  TRESORERIE,
   EXPLOITATION,
 ]);
 
@@ -12866,39 +13225,19 @@ function calendrierOperation(entrees = {}) {
  * livraison.
  *
  * Ce module repond a une question que le compte d'exploitation ne pose jamais :
- * l'operation a-t-elle de quoi payer ses factures PENDANT les travaux ? Le
- * compte d'exploitation demarre a la mise en location ; entre l'ordre de service
- * et la livraison, l'operation ne fait que depenser, et ce qui la finance
- * n'arrive pas au meme rythme.
+ * l'operation a-t-elle de quoi payer ses factures PENDANT les travaux ? Le point
+ * de vue est celui du FINANCEUR : on suit le solde mois par mois, on regarde a
+ * quel moment il creuse le plus, et de combien.
  *
- * Le point de vue est celui du FINANCEUR : on suit le solde mois par mois, on
- * regarde a quel moment il creuse le plus, et de combien. Ce creux est le besoin
- * de prefinancement, et c'est lui qui porte les interets intercalaires (R-FIN-6).
+ * LES FORMULES VIVENT DANS `formules/domaines/tresorerie.js` : revision du cout,
+ * indexation de chaque somme due, appels de fonds en VEFA, tirages des prets.
+ * Ce module restitue l'echeancier d'un classeur, et garde la fonction
+ * historique `tresorerieChantier`, qui evalue ces memes formules sur les
+ * valeurs qu'on lui donne.
  *
- * R-TRESO-2 - INDEXATION DES DEPENSES. Transcription du classeur « Indexeur cout
- * travaux » (metier, 11/08/2026). Deux indexations se suivent, et les confondre
- * donnerait un surcout faux :
- *
- *  1. le cout est saisi a une DATE DE VALEUR, et revise jusqu'a l'ordre de
- *     service :  cout_revise = cout x (1 + t)^((debut - valeur)/365,25)  ;
- *  2. l'echeancier repartit ce cout revise a PARTS EGALES sur les mois de
- *     chantier, et chaque mensualite est indexee de SA propre duree, du debut
- *     des travaux a son echeance. Le classeur le dit en titre : « seules les
- *     sommes dues sont indexees » - une facture payee au premier mois ne subit
- *     pas l'indexation de la trentieme.
- *
- * La base est 365,25 jours, celle du classeur, et la premiere echeance tombe un
- * mois APRES l'ordre de service : un chantier ne facture pas le jour ou il
- * commence.
- *
- * Module pur : aucune date systeme, aucun acces disque. Meme entrees, memes
- * sorties.
+ * Module pur : aucune date systeme, aucun acces disque.
  */
 
-
-
-/** Base de jours de l'indexation : celle du classeur (365,25). */
-const BASE_JOURS = 365.25;
 
 /**
  * @typedef {Object} LigneTresorerie
@@ -12917,165 +13256,87 @@ const BASE_JOURS = 365.25;
  */
 
 /**
- * Echeancier de tresorerie du chantier.
+ * Echeancier de tresorerie du chantier d'un classeur.
+ * @param {import('./formules/classeur.js').Classeur} c
+ * @returns {{lignes: LigneTresorerie[], tirages: Array<{date: string, montant_eur: number}>, indicateurs: Object}}
+ */
+function restituerTresorerie(c) {
+  const mois = c.valeursDimension('mois_chantier');
+  const v = (/** @type {string} */ id, /** @type {number} */ m) => c.valeur(id, { mois_chantier: m });
+  const lignes = mois.map((m) => ({
+    mois: m,
+    date: v('date_echeance', m),
+    nominal_eur: arrondiEuro(v('nominal_mois', m)),
+    coefficient: v('coefficient_mois', m),
+    depenses_eur: v('depense_mois', m),
+    subventions_eur: arrondiEuro(v('encaissement_subventions', m)),
+    fonds_propres_eur: arrondiEuro(v('encaissement_fonds_propres', m)),
+    tirage_eur: arrondiEuro(v('tirage_mois', m)),
+    solde_eur: arrondiEuro(v('solde_chantier', m)),
+    cumul_depenses_eur: arrondiEuro(v('cumul_depenses_chantier', m)),
+    cumul_tirages_eur: arrondiEuro(v('cumul_tirages', m)),
+    besoin_eur: arrondiEuro(v('besoin_mois', m)),
+  }));
+  const tirages = mois
+    .filter((m) => v('tirage_mois', m) > 0)
+    .map((m) => ({ date: v('date_echeance', m), montant_eur: arrondiEuro(v('tirage_mois', m)) }));
+  const g = (/** @type {string} */ id) => c.valeur(id);
+  const echeance = g('echeance_nominale');
+  return {
+    lignes,
+    tirages,
+    indicateurs: {
+      cout_initial_eur: arrondiEuro(g('cout_chantier')),
+      cout_revise_eur: arrondiEuro(g('cout_revise')),
+      revision_au_demarrage_eur: arrondiEuro(g('revision_au_demarrage')),
+      echeance_nominale_eur: echeance === null ? null : arrondiEuro(echeance),
+      total_depenses_eur: arrondiEuro(g('total_depenses_final')),
+      surcout_indexation_eur: arrondiEuro(g('surcout_indexation')),
+      taux_indexation: g('taux_indexation_chantier'),
+      total_subventions_eur: arrondiEuro(g('subventions_chantier')),
+      total_fonds_propres_eur: arrondiEuro(g('fonds_propres_chantier')),
+      total_tirages_eur: arrondiEuro(g('total_tirages')),
+      besoin_maximal_eur: arrondiEuro(g('besoin_maximal')),
+      mois_pic: g('mois_pic'),
+      mode_tirage: g('mode_tirage'),
+      tresorerie_maximale_eur: arrondiEuro(g('tresorerie_maximale')),
+      jalons_utilises: g('jalons_utilises'),
+    },
+  };
+}
+
+/** Valeur d'une entree, ou son defaut si elle est absente - et seulement absente. */
+const saisieOuDefaut = (/** @type {any} */ v, /** @type {any} */ defaut) => (v === undefined ? defaut : v);
+
+/**
+ * Echeancier de tresorerie d'un chantier decrit par ses seules valeurs.
+ * Formules du domaine « tresorerie ».
  *
  * @param {Object} p
  * @param {string} p.date_debut_travaux         ordre de service
  * @param {number} p.duree_chantier_mois
- * @param {number} p.cout_total_eur             prix de revient TTC de l'operation
+ * @param {number} [p.cout_total_eur]           prix de revient TTC de l'operation
  * @param {string} [p.date_valeur_cout]         date a laquelle le cout est exprime
  * @param {number} [p.taux_indexation]          taux ANNUEL, fraction
  * @param {number} [p.subventions_eur]          mobilisables a l'ordre de service
  * @param {number} [p.fonds_propres_eur]        apport de l'organisme
  * @param {boolean} [p.tirer_les_prets]         defaut vrai : les prets comblent le manque
- * @returns {{lignes: LigneTresorerie[], indicateurs: Object, tirages: Array<{date: string, montant_eur: number}>}}
+ * @param {Array<{part: number, avancement: number}>|null} [p.jalons] appels de fonds (VEFA)
+ * @param {'integral'|'au_fil_de_l_eau'} [p.mode_tirage]
  */
 function tresorerieChantier(p) {
-  const {
-    date_debut_travaux,
-    duree_chantier_mois,
-    cout_total_eur = 0,
-    date_valeur_cout,
-    taux_indexation = 0,
-    subventions_eur = 0,
-    fonds_propres_eur = 0,
-    tirer_les_prets = true,
-    jalons = null,
-    mode_tirage = 'integral',
-  } = p;
-
-  const n = Math.max(1, Math.round(Number(duree_chantier_mois) || 0));
-  const anneesDepuis = (date) => (jourUTC(date) - jourUTC(date_debut_travaux)) / BASE_JOURS;
-
-  // 1. Revision du cout jusqu'a l'ordre de service. Sans date de valeur, le
-  //    cout est repute exprime au demarrage : il n'y a rien a rattraper.
-  const anneesRevision = date_valeur_cout ? -anneesDepuis(date_valeur_cout) : 0;
-  const coutRevise = cout_total_eur * (1 + taux_indexation) ** anneesRevision;
-
-  // 2. Repartition du cout revise sur les mois de chantier.
-  //
-  // R-TRESO-3 - En VEFA, le promoteur appelle des fonds A L'AVANCEMENT selon un
-  // bareme LEGAL (CCH R261-14) : 25 % a la signature, 10 % aux fondations, et
-  // ainsi de suite. Repartir a parts egales y serait faux d'un quart des le
-  // premier mois. Hors VEFA, l'operation paie ses factures au fil du chantier
-  // et la repartition egale reste la meilleure approximation.
-  const nominauxParMois = new Array(n).fill(0);
-  if (jalons?.length) {
-    for (const jalon of jalons) {
-      // L'avancement se convertit en RANG DE MOIS. Un jalon a l'ordre de
-      // service tombe au premier mois - il n'y a pas de mois zero, le premier
-      // appel de fonds est du des la signature.
-      const rang = Math.min(n, Math.max(1, Math.ceil((jalon.avancement ?? 0) * n) || 1));
-      nominauxParMois[rang - 1] += coutRevise * (jalon.part ?? 0);
-    }
-  } else {
-    for (let k = 0; k < n; k++) nominauxParMois[k] = coutRevise / n;
-  }
-
-  // 3. Chaque somme due est indexee de SA propre duree.
-  const dates = Array.from({ length: n }, (_, k) => decalerMois(date_debut_travaux, k + 1));
-  const coefficients = dates.map((d) => (1 + taux_indexation) ** anneesDepuis(d));
-  const indexees = coefficients.map((c, k) => nominauxParMois[k] * c);
-  // Les mensualites s'arrondissent EN CONSERVANT LEUR SOMME : arrondies une a
-  // une, trente lignes derivaient de quelques euros du total, et un echeancier
-  // qui ne totalise pas son propre total n'inspire rien de bon.
-  const depenses = arrondirEnConservantLaSomme(indexees);
-
-  /** @type {LigneTresorerie[]} */
-  const lignes = [];
-  /** @type {Array<{date: string, montant_eur: number}>} */
-  const tirages = [];
-  let cumulDepenses = 0;
-  let cumulTirages = 0;
-  // Subventions et fonds propres arrivent a l'ordre de service, donc AVANT la
-  // premiere echeance : la tresorerie demarre en positif. La regle des
-  // subventions est un arbitrage metier ; celle des fonds propres suit le bon
-  // sens - l'organisme met sa part avant d'emprunter.
-  let tresorerie = subventions_eur + fonds_propres_eur;
-
-  // R-TRESO-4 - MODE DE TIRAGE. En `integral`, le pret est mobilise en une fois
-  // des le premier mois : c'est la pratique de l'organisme, et elle a un cout -
-  // les interets intercalaires courent sur la totalite pendant tout le chantier,
-  // pas seulement sur ce qui est consomme. En `au_fil_de_l_eau`, le pret ne se
-  // tire qu'a hauteur du manque du mois. Les deux modes financent exactement la
-  // meme chose ; ils ne la financent pas au meme prix.
-  const totalDepenses = depenses.reduce((s, d) => s + d, 0);
-  const aEmprunter = Math.max(0, totalDepenses - subventions_eur - fonds_propres_eur);
-
-  for (let k = 0; k < n; k++) {
-    const depense = depenses[k];
-
-    // Le tirage integral tombe AVANT la depense du premier mois : le pret est
-    // en caisse quand la premiere facture arrive.
-    let tirage = 0;
-    if (tirer_les_prets && mode_tirage === 'integral' && k === 0 && aEmprunter > 0) {
-      tirage = aEmprunter;
-      tresorerie += tirage;
-      cumulTirages += tirage;
-      tirages.push({ date: dates[0], montant_eur: arrondiEuro(tirage) });
-    }
-
-    cumulDepenses += depense;
-    tresorerie -= depense;
-
-    // Au fil de l'eau : on comble le manque du mois, jamais plus.
-    if (tirer_les_prets && mode_tirage !== 'integral' && tresorerie < 0) {
-      tirage = -tresorerie;
-      tresorerie = 0;
-      cumulTirages += tirage;
-      tirages.push({ date: dates[k], montant_eur: arrondiEuro(tirage) });
-    }
-
-    lignes.push({
-      mois: k + 1,
-      date: dates[k],
-      nominal_eur: arrondiEuro(nominauxParMois[k]),
-      coefficient: coefficients[k],
-      depenses_eur: depense,
-      subventions_eur: k === 0 ? arrondiEuro(subventions_eur) : 0,
-      fonds_propres_eur: k === 0 ? arrondiEuro(fonds_propres_eur) : 0,
-      tirage_eur: arrondiEuro(tirage),
-      solde_eur: arrondiEuro(tresorerie),
-      cumul_depenses_eur: arrondiEuro(cumulDepenses),
-      cumul_tirages_eur: arrondiEuro(cumulTirages),
-      besoin_eur: arrondiEuro(cumulDepenses - subventions_eur - fonds_propres_eur),
-    });
-  }
-
-  // Le besoin de prefinancement est le point HAUT du besoin cumule : c'est le
-  // moment ou l'operation doit le plus d'argent, et donc ce que les prets
-  // devront couvrir.
-  const pic = lignes.reduce((max, l) => (l.besoin_eur > max.besoin_eur ? l : max), lignes[0]);
-
-  return {
-    lignes,
-    tirages,
-    indicateurs: {
-      cout_initial_eur: arrondiEuro(cout_total_eur),
-      cout_revise_eur: arrondiEuro(coutRevise),
-      revision_au_demarrage_eur: arrondiEuro(coutRevise - cout_total_eur),
-      // L'echeance nominale n'a de sens qu'a parts egales : sous bareme de
-      // jalons, les appels de fonds vont de 1 a 25 % et une « mensualite »
-      // moyenne ne decrirait aucun mois reel.
-      echeance_nominale_eur: jalons?.length ? null : arrondiEuro(coutRevise / n),
-      total_depenses_eur: arrondiEuro(cumulDepenses),
-      // Ce que l'indexation coute en propre, revision de depart comprise : le
-      // chiffre que le classeur appelle « ecart total vs cout initial ».
-      surcout_indexation_eur: arrondiEuro(cumulDepenses - cout_total_eur),
-      taux_indexation,
-      total_subventions_eur: arrondiEuro(subventions_eur),
-      total_fonds_propres_eur: arrondiEuro(fonds_propres_eur),
-      total_tirages_eur: arrondiEuro(cumulTirages),
-      besoin_maximal_eur: arrondiEuro(Math.max(0, pic.besoin_eur)),
-      mois_pic: pic.mois,
-      mode_tirage,
-      // Le pic de TRESORERIE dit ce que le tirage integral laisse dormir en
-      // caisse : c'est l'argent sur lequel courent des interets intercalaires
-      // sans qu'il finance encore quoi que ce soit.
-      tresorerie_maximale_eur: arrondiEuro(Math.max(0, ...lignes.map((l) => l.solde_eur))),
-      jalons_utilises: Boolean(jalons?.length),
-    },
-  };
+  const c = nouveauClasseur({})
+    .fixer('date_debut_travaux_saisie', {}, p.date_debut_travaux)
+    .fixer('duree_chantier_retenue', {}, p.duree_chantier_mois)
+    .fixer('cout_chantier', {}, saisieOuDefaut(p.cout_total_eur, 0))
+    .fixer('date_valeur_cout', {}, p.date_valeur_cout)
+    .fixer('taux_indexation_chantier', {}, saisieOuDefaut(p.taux_indexation, 0))
+    .fixer('subventions_chantier', {}, saisieOuDefaut(p.subventions_eur, 0))
+    .fixer('fonds_propres_chantier', {}, saisieOuDefaut(p.fonds_propres_eur, 0))
+    .fixer('tirer_les_prets', {}, saisieOuDefaut(p.tirer_les_prets, true))
+    .fixer('jalons_tresorerie', {}, saisieOuDefaut(p.jalons, null))
+    .fixer('mode_tirage', {}, saisieOuDefaut(p.mode_tirage, 'integral'));
+  return restituerTresorerie(c);
 }
 
 /* ===== src/trajectoires.js ===== */
@@ -15197,9 +15458,6 @@ function calculer(entrees, referentiels) {
   // --- 0. Calendrier (R-AMT-3, domaine « calendrier ») ---
   const calendrier = restituerCalendrier(classeur);
   const anneeMEL = calendrier.annee_mise_en_location;
-  // Duree du chantier : elle sert au differe par defaut des prets principaux
-  // (R-AMT-9) et a l'echeancier de tresorerie (R-TRESO).
-  const dureeChantierMois = lire('duree_chantier_retenue');
 
   // --- 1. Surfaces (R-SURF, domaine « surfaces ») ---
   const surfaces = lots.map((lot, i) => ({
@@ -15719,31 +15977,9 @@ function calculer(entrees, referentiels) {
   // Elle se calcule APRES le plan de financement : il lui faut le prix de
   // revient par chapitre, les subventions et les fonds propres resolus. Elle
   // s'arrete a la livraison, la ou le compte d'exploitation commence.
-  const tresorerie =
-    dates.date_debut_travaux && dureeChantierMois > 0
-      ? tresorerieChantier({
-          date_debut_travaux: dates.date_debut_travaux,
-          duree_chantier_mois: dureeChantierMois,
-          // Le prix de revient TTC, reparti a parts egales sur les mois de
-          // chantier puis indexe (R-TRESO-2, classeur « Indexeur cout travaux »).
-          cout_total_eur: bilan.total_ttc_module_eur,
-          date_valeur_cout: dates.date_valeur_cout ?? entrees.tresorerie?.date_valeur_cout,
-          taux_indexation:
-            entrees.tresorerie?.taux_indexation ?? baremes.tresorerie?.taux_indexation ?? 0,
-          // Mobilisables des l'ordre de service : arbitrage metier du 11/08/2026.
-          subventions_eur: subventionsTotal,
-          fonds_propres_eur: fondsPropres,
-          // R-TRESO-3 : le bareme d'appels de fonds ne vaut QU'EN VEFA. Une
-          // operation en maitrise d'ouvrage directe paie ses factures au fil du
-          // chantier, sans jalon legal.
-          jalons:
-            String(identite.type_operation ?? '').toUpperCase() === 'VEFA'
-              ? (entrees.tresorerie?.jalons ?? baremes.tresorerie?.jalons_vefa?.jalons ?? null)
-              : null,
-          mode_tirage:
-            entrees.tresorerie?.mode_tirage ?? baremes.tresorerie?.mode_tirage ?? 'integral',
-        })
-      : null;
+  // Domaine « tresorerie » : il faut un ordre de service et une duree de
+  // chantier pour tenir l'echeancier.
+  const tresorerie = lire('tresorerie_calculee') ? restituerTresorerie(classeur) : null;
 
   // Ruptures qui expliquent la forme de la courbe de resultat. Elles sont
   // calculees ici, sinon l'interface les redecouvrirait par difference, ce qui

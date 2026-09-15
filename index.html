@@ -10290,6 +10290,323 @@ const AMORTISSEMENT = {
   },
 };
 
+/* ===== src/formules/domaines/fiscalite.js ===== */
+// @ts-check
+/**
+ * DOMAINE « FISCALITE » - R-FISC : exoneration de taxe fonciere et taxe
+ * d'amenagement.
+ *
+ * La duree d'exoneration de TFPB est une propriete du PRODUIT (Q-14) : 25 ans
+ * en logement social (CGI art. 1384 A), 20 ans en intermediaire (art. 1384-0 A),
+ * deux ans de droit commun en libre. Une duree posee sur la simulation prime.
+ *
+ * La taxe d'amenagement se ventile a la quote-part de surface de plancher de
+ * chaque tranche, et chacune applique son regime : le PLAI en est exonere de
+ * plein droit (art. 1635 quater D), le PLUS et le PLS n'ont que l'abattement de
+ * 50 % (art. 1635 quater I), le LLI et le libre ni l'un ni l'autre. Un
+ * abattement saisi prime sur tout : c'est le recours quand une deliberation
+ * locale s'ecarte du droit commun.
+ *
+ * Sources : `SimPLUS!G37`, `calculs!B1255:B1259`, referentiel
+ * `taxe_amenagement` et `constantes_reglementaires.tfpb`.
+ */
+
+/** @type {import('../classeur.js').Domaine} */
+const FISCALITE = {
+  domaine: 'fiscalite',
+  titre: 'Fiscalité',
+  dimensions: {
+    tranche_sdp: { libelle: 'Tranche de surface de plancher', valeurs: 'cles_sdp' },
+  },
+  grandeurs: {
+    // --- R-FISC-1 : taxe fonciere ------------------------------------------------
+    tfpb_par_logement_saisi: {
+      libelle: 'Taxe foncière saisie, par logement',
+      unite: 'eur',
+      saisie: 'exploitation.tfpb_par_logement_eur',
+      ecran: 'Paramètres > Compte d’exploitation',
+    },
+    tfpb_par_logement_bareme: {
+      libelle: 'Taxe foncière du barème, par logement',
+      unite: 'eur',
+      regle: 'R-FISC-1',
+      parametre: 'constantes_reglementaires.tfpb.montant_par_logement_eur',
+      ecran: 'Paramètres > Constantes réglementaires',
+    },
+    tfpb_par_logement: {
+      libelle: 'Taxe foncière par logement',
+      unite: 'eur',
+      regle: 'R-FISC-1',
+      formule: 'DEFAUT(tfpb_par_logement_saisi; tfpb_par_logement_bareme)',
+    },
+    duree_exoneration_saisie: {
+      libelle: 'Durée d’exonération saisie',
+      unite: 'an',
+      saisie: 'options.duree_exoneration_tfpb_ans',
+      ecran: 'Paramètres',
+    },
+    duree_exoneration_produit: {
+      libelle: 'Durée d’exonération du produit',
+      unite: 'an',
+      regle: 'R-FISC-1',
+      sur: ['tranche'],
+      lire: (_ctx, tranche) => produit(tranche).duree_exoneration_tfpb_ans,
+      ecran: 'Référentiel des produits',
+    },
+    duree_exoneration_defaut: {
+      libelle: 'Durée d’exonération par défaut',
+      unite: 'an',
+      regle: 'R-FISC-1',
+      parametre: 'constantes_reglementaires.tfpb.duree_exoneration_defaut_ans',
+      ecran: 'Paramètres > Constantes réglementaires',
+    },
+    duree_exoneration_tranche: {
+      libelle: 'Durée d’exonération de la tranche',
+      unite: 'an',
+      regle: 'R-FISC-1',
+      sur: ['tranche'],
+      formule: 'DEFAUT(duree_exoneration_saisie; duree_exoneration_produit; duree_exoneration_defaut)',
+    },
+    annee_debut_tfpb_tranche: {
+      libelle: 'Première année de taxe foncière de la tranche',
+      unite: 'annee',
+      regle: 'R-FISC-1',
+      sur: ['tranche'],
+      formule: 'annee_mise_en_location + duree_exoneration_tranche',
+    },
+    tfpb_base_tranche: {
+      libelle: 'Taxe foncière annuelle de la tranche, avant indexation',
+      unite: 'eur',
+      regle: 'R-FISC-1',
+      sur: ['tranche'],
+      formule: 'nb_logements_tranche * tfpb_par_logement',
+    },
+    duree_exoneration_operation: {
+      libelle: 'Durée d’exonération la plus courte',
+      unite: 'an',
+      regle: 'R-FISC-1',
+      formule:
+        'DEFAUT(duree_exoneration_saisie; SI(LONGUEUR(tranches_presentes) > 0; ' +
+        'MIN(duree_exoneration_tranche POUR tranche); INDEFINI); duree_exoneration_defaut)',
+      note: 'La première année où une taxe est due, quelle que soit la tranche : celle qui marque la rupture de la courbe.',
+    },
+    annee_debut_tfpb: {
+      libelle: 'Première année de taxe foncière',
+      unite: 'annee',
+      regle: 'R-FISC-1',
+      formule: 'annee_mise_en_location + duree_exoneration_operation',
+    },
+
+    // --- R-FISC-2 : taxe d'amenagement --------------------------------------------
+    ta_saisie: {
+      libelle: 'Taxe d’aménagement saisie',
+      unite: 'liste',
+      saisie: 'taxe_amenagement',
+      ecran: 'Prix de revient',
+    },
+    ta_active: {
+      libelle: 'Taxe d’aménagement calculée',
+      unite: 'booleen',
+      formule: 'SI(ta_saisie; VRAI; FAUX)',
+    },
+    ta_sdp: {
+      libelle: 'Surface de plancher',
+      unite: 'm2',
+      saisie: 'taxe_amenagement.sdp_m2',
+      ecran: 'Prix de revient',
+    },
+    ta_idf_saisi: {
+      libelle: 'Opération en Île-de-France',
+      unite: 'booleen',
+      saisie: 'taxe_amenagement.idf',
+      ecran: 'Prix de revient',
+    },
+    ta_abattement_saisi: {
+      libelle: 'Abattement saisi',
+      unite: 'taux',
+      saisie: 'taxe_amenagement.abattement',
+      ecran: 'Prix de revient',
+    },
+    ta_taux_commune_saisi: {
+      libelle: 'Taux communal saisi',
+      unite: 'taux',
+      saisie: 'taxe_amenagement.taux_commune',
+      ecran: 'Prix de revient',
+    },
+    ta_taux_departement_saisi: {
+      libelle: 'Taux départemental saisi',
+      unite: 'taux',
+      saisie: 'taxe_amenagement.taux_departement',
+      ecran: 'Prix de revient',
+    },
+    ta_nb_places_saisi: {
+      libelle: 'Places de stationnement extérieures',
+      unite: 'nombre',
+      saisie: 'taxe_amenagement.nb_places_exterieures',
+      ecran: 'Prix de revient',
+    },
+    ta_valeur_place_saisie: {
+      libelle: 'Valeur forfaitaire d’une place',
+      unite: 'eur',
+      saisie: 'taxe_amenagement.valeur_place_eur',
+      ecran: 'Prix de revient',
+    },
+    ta_quotes_parts_saisies: {
+      libelle: 'Quotes-parts de surface de plancher saisies',
+      unite: 'liste',
+      saisie: 'taxe_amenagement.quotes_parts_sdp',
+      ecran: 'Prix de revient',
+    },
+    ta_valeur_idf: {
+      libelle: 'Valeur forfaitaire en Île-de-France',
+      unite: 'eur_m2',
+      regle: 'R-FISC-2',
+      parametre: 'taxe_amenagement.idf',
+      ecran: 'Paramètres > Foncier et fiscalité',
+    },
+    ta_valeur_hors_idf: {
+      libelle: 'Valeur forfaitaire hors Île-de-France',
+      unite: 'eur_m2',
+      regle: 'R-FISC-2',
+      parametre: 'taxe_amenagement.hors_idf',
+      ecran: 'Paramètres > Foncier et fiscalité',
+    },
+    ta_regimes: {
+      libelle: 'Abattements par régime',
+      unite: 'liste',
+      regle: 'R-FISC-2',
+      parametre: 'taxe_amenagement.regimes',
+      ecran: 'Paramètres > Foncier et fiscalité',
+    },
+    ta_abattement_social: {
+      libelle: 'Abattement du logement social',
+      unite: 'taux',
+      regle: 'R-FISC-2',
+      parametre: 'taxe_amenagement.abattement_logement_social',
+      ecran: 'Paramètres > Foncier et fiscalité',
+    },
+    regime_ta: {
+      libelle: 'Régime de taxe d’aménagement du produit',
+      unite: 'texte',
+      regle: 'R-FISC-2',
+      sur: ['code'],
+      lire: (_ctx, code) => PRODUITS[/** @type {any} */ (code)]?.regime_taxe_amenagement ?? 'abattement_50',
+      ecran: 'Référentiel des produits',
+    },
+    ta_idf: {
+      libelle: 'Valeur d’Île-de-France retenue',
+      unite: 'booleen',
+      formule: 'SI.ABSENT(ta_idf_saisi; FAUX)',
+    },
+    ta_taux_commune: {
+      libelle: 'Taux communal',
+      unite: 'taux',
+      formule: 'SI.ABSENT(ta_taux_commune_saisi; 0)',
+    },
+    ta_taux_departement: {
+      libelle: 'Taux départemental',
+      unite: 'taux',
+      formule: 'SI.ABSENT(ta_taux_departement_saisi; 0)',
+    },
+    ta_nb_places: {
+      libelle: 'Places extérieures retenues',
+      unite: 'nombre',
+      formule: 'SI.ABSENT(ta_nb_places_saisi; 0)',
+    },
+    ta_valeur_place: {
+      libelle: 'Valeur d’une place retenue',
+      unite: 'eur',
+      formule: 'SI.ABSENT(ta_valeur_place_saisie; 0)',
+    },
+    ta_valeur_forfaitaire: {
+      libelle: 'Valeur forfaitaire au mètre carré',
+      unite: 'eur_m2',
+      regle: 'R-FISC-2',
+      formule: 'SI(ta_idf; ta_valeur_idf; ta_valeur_hors_idf)',
+    },
+    ta_abattement_regime: {
+      libelle: 'Abattement du régime',
+      unite: 'taux',
+      regle: 'R-FISC-2',
+      sur: ['code'],
+      formule: "DEFAUT(ta_abattement_saisi; CHAMP(ta_regimes; DEFAUT(regime_ta; 'abattement_50')); ta_abattement_social)",
+    },
+    ta_abattement_global: {
+      libelle: 'Abattement de l’opération entière',
+      unite: 'taux',
+      regle: 'R-FISC-2',
+      formule: "DEFAUT(ta_abattement_saisi; CHAMP(ta_regimes; 'abattement_50'); ta_abattement_social)",
+    },
+    cles_sdp: {
+      libelle: 'Tranches de la surface de plancher',
+      unite: 'liste',
+      formule:
+        'SI(RENSEIGNE(ta_quotes_parts_saisies); CLES(ta_quotes_parts_saisies); ' +
+        'SI(LONGUEUR(tranches_presentes) > 0; tranches_ordre_saisie; SUITE(1; 0)))',
+      note: 'Faute de surface de plancher par tranche, la clé est la quote-part de surface utile.',
+    },
+    part_sdp: {
+      libelle: 'Quote-part de surface de plancher',
+      unite: 'taux',
+      sur: ['tranche_sdp'],
+      formule:
+        'SI(RENSEIGNE(ta_quotes_parts_saisies); DEFAUT(CHAMP(ta_quotes_parts_saisies; tranche_sdp); 0); ' +
+        'DEFAUT(quote_part_su[tranche: tranche_sdp]; 0))',
+    },
+    sdp_tranche: {
+      libelle: 'Surface de plancher de la tranche',
+      unite: 'm2',
+      sur: ['tranche_sdp'],
+      formule: 'ta_sdp * part_sdp',
+    },
+    abattement_tranche_sdp: {
+      libelle: 'Abattement de la tranche',
+      unite: 'taux',
+      regle: 'R-FISC-2',
+      sur: ['tranche_sdp'],
+      formule: 'ta_abattement_regime[code: tranche_sdp]',
+    },
+    assiette_ta_exacte_tranche: {
+      libelle: 'Assiette de la tranche, non arrondie',
+      unite: 'eur',
+      regle: 'R-FISC-2',
+      sur: ['tranche_sdp'],
+      formule: 'sdp_tranche * (1 - abattement_tranche_sdp) * ta_valeur_forfaitaire',
+    },
+    assiette_ta_tranche: {
+      libelle: 'Assiette de la tranche',
+      unite: 'eur',
+      sur: ['tranche_sdp'],
+      formule: 'ARRONDI.EURO(assiette_ta_exacte_tranche)',
+    },
+    assiette_ta_surface: {
+      libelle: 'Assiette des surfaces',
+      unite: 'eur',
+      regle: 'R-FISC-2',
+      formule:
+        'SI(LONGUEUR(cles_sdp) > 0; SOMME(assiette_ta_exacte_tranche POUR tranche_sdp); ' +
+        'ta_sdp * (1 - ta_abattement_global) * ta_valeur_forfaitaire)',
+    },
+    assiette_ta: {
+      libelle: 'Assiette de la taxe d’aménagement',
+      unite: 'eur',
+      regle: 'R-FISC-2',
+      formule: 'assiette_ta_surface + ta_nb_places * ta_valeur_place',
+    },
+    assiette_ta_arrondie: {
+      libelle: 'Assiette de la taxe d’aménagement, arrondie',
+      unite: 'eur',
+      formule: 'ARRONDI.EURO(assiette_ta)',
+    },
+    taxe_amenagement: {
+      libelle: 'Taxe d’aménagement',
+      unite: 'eur',
+      regle: 'R-FISC-2',
+      formule: 'ARRONDI.EURO(assiette_ta * (ta_taux_commune + ta_taux_departement))',
+    },
+  },
+};
+
 /* ===== src/formules/modele.js ===== */
 // @ts-check
 /**
@@ -10314,6 +10631,7 @@ const AMORTISSEMENT = {
 
 
 
+
 const MODELE = creerModele([
   OPERATION,
   CALENDRIER,
@@ -10324,6 +10642,7 @@ const MODELE = creerModele([
   FINANCEMENT,
   PRETS,
   AMORTISSEMENT,
+  FISCALITE,
 ]);
 
 /**
@@ -12155,10 +12474,10 @@ function restituerEquilibre(c) {
 /**
  * R-FISC - Fiscalite : exoneration de TFPB et taxe d'amenagement.
  *
- *
- * Sources : `SimPLUS!G37` (annee de fin d'exoneration TFPB),
- * `calculs!B1255:B1259` (assiette de taxe d'amenagement),
- * baremes_her_2027.json/taxe_amenagement et constantes_reglementaires.tfpb.
+ * LES FORMULES VIVENT DANS `formules/domaines/fiscalite.js`. Ce module restitue
+ * la taxe fonciere et la taxe d'amenagement d'un classeur, et garde les
+ * fonctions historiques (`exonerationTFPB`, `taxeAmenagement`), qui evaluent ces
+ * memes formules sur les valeurs qu'on leur donne.
  *
  * La duree d'exoneration est un PARAMETRE (irregularite I-7 : LEON la cable a
  * 25 ans a un endroit et lit « EXONERATION 2 » a un autre).
@@ -12166,107 +12485,97 @@ function restituerEquilibre(c) {
  * Unites : montants en euros, surfaces en m2.
  */
 
-
 /**
- * R-FISC-2 - Regime de taxe d'amenagement d'un produit. Defaut : l'abattement de
- * 50 % des logements finances par un pret aide de l'Etat, qui couvre le PLUS, le
- * PLS et les foyers correspondants.
- * @param {string} code_produit
- * @returns {'exoneration'|'abattement_50'|'aucun'}
+ * Taxe fonciere d'un classeur : la premiere annee ou elle est due, et la duree
+ * d'exoneration de chaque tranche.
+ * @param {import('./formules/classeur.js').Classeur} c
  */
-function regimeProduit(code_produit) {
-  return PRODUITS[code_produit]?.regime_taxe_amenagement ?? 'abattement_50';
+function restituerTFPB(c) {
+  return {
+    annee_debut_tfpb: c.valeur('annee_debut_tfpb'),
+    duree_exoneration_ans: c.valeur('duree_exoneration_operation'),
+    par_tranche: Object.fromEntries(
+      c.valeursDimension('tranche').map((code) => {
+        const T = { tranche: code };
+        return [
+          code,
+          {
+            duree_exoneration_ans: c.valeur('duree_exoneration_tranche', T),
+            annee_debut_tfpb: c.valeur('annee_debut_tfpb_tranche', T),
+          },
+        ];
+      }),
+    ),
+  };
 }
 
 /**
- * R-FISC-1 - Premiere annee d'assujettissement a la taxe fonciere.
- * `annee(mise en location) + duree d'exoneration`.
- * @param {Object} p
- * @param {number} p.annee_mise_en_location
- * @param {number} [p.duree_exoneration_ans] defaut : valeur du referentiel
+ * R-FISC-1 - Premiere annee d'assujettissement a la taxe fonciere :
+ * `annee(mise en location) + duree d'exoneration`. Formule : `annee_debut_tfpb`.
+ * @param {{annee_mise_en_location: number, duree_exoneration_ans?: number}} p
  * @param {any} referentiels
  * @returns {{annee_debut_tfpb: number, duree_exoneration_ans: number}}
  */
 function exonerationTFPB({ annee_mise_en_location, duree_exoneration_ans }, referentiels) {
-  const duree =
-    duree_exoneration_ans ??
-    referentiels.constantes_reglementaires.tfpb.duree_exoneration_defaut_ans;
+  const c = nouveauClasseur({ baremes: referentiels })
+    .fixer('annee_mise_en_location', {}, annee_mise_en_location)
+    .fixer('duree_exoneration_saisie', {}, duree_exoneration_ans);
   return {
-    annee_debut_tfpb: annee_mise_en_location + duree,
-    duree_exoneration_ans: duree,
+    annee_debut_tfpb: c.valeur('annee_debut_tfpb'),
+    duree_exoneration_ans: c.valeur('duree_exoneration_operation'),
   };
 }
 
 /**
- * R-FISC-2 - Taxe d'amenagement.
- * `assiette = SDP x (1 - abattement) x valeur_forfaitaire`, la valeur forfaitaire
- * dependant de la localisation (Ile-de-France ou non). Les places de
- * stationnement exterieures s'ajoutent a un forfait par place.
+ * Taxe d'amenagement d'un classeur, ou `null` si elle n'est pas demandee.
+ * @param {import('./formules/classeur.js').Classeur} c
+ */
+function restituerTaxeAmenagement(c) {
+  if (!c.valeur('ta_active')) return null;
+  const codes = c.valeursDimension('tranche_sdp');
+  /** @type {Record<string, any>} */
+  const r = {
+    valeur_forfaitaire_eur_m2: c.valeur('ta_valeur_forfaitaire'),
+    assiette_eur: c.valeur('assiette_ta_arrondie'),
+    montant_eur: c.valeur('taxe_amenagement'),
+  };
+  if (codes.length) {
+    r.par_tranche = Object.fromEntries(
+      codes.map((code) => {
+        const T = { tranche_sdp: code };
+        return [
+          code,
+          {
+            sdp_m2: c.valeur('sdp_tranche', T),
+            abattement: c.valeur('abattement_tranche_sdp', T),
+            assiette_eur: c.valeur('assiette_ta_tranche', T),
+          },
+        ];
+      }),
+    );
+  }
+  return r;
+}
+
+/**
+ * R-FISC-2 - Taxe d'amenagement, a partir de valeurs donnees.
+ * `assiette = SDP x (1 - abattement) x valeur_forfaitaire`, ventilee par tranche
+ * quand des quotes-parts de surface de plancher sont fournies.
  * @param {Object} p
  * @param {number} p.sdp_m2
  * @param {boolean} [p.idf]
- * @param {number} [p.abattement]        defaut : abattement logement social du referentiel
+ * @param {number} [p.abattement]        force l'abattement de toute l'operation
  * @param {number} [p.taux_commune]
  * @param {number} [p.taux_departement]
  * @param {number} [p.nb_places_exterieures]
  * @param {number} [p.valeur_place_eur]
+ * @param {Record<string, number>} [p.quotes_parts_sdp]
  * @param {any} referentiels
  */
-function taxeAmenagement(
-  {
-    sdp_m2,
-    idf = false,
-    abattement,
-    taux_commune = 0,
-    taux_departement = 0,
-    nb_places_exterieures = 0,
-    valeur_place_eur = 0,
-    quotes_parts_sdp,
-  },
-  referentiels,
-) {
-  const ta = referentiels.taxe_amenagement;
-  const valeurForfaitaire = idf ? ta.idf : ta.hors_idf;
-
-  // R-FISC-2 - Le regime n'est PAS le meme pour tous les logements aides. Le
-  // PLAI ouvre une exoneration de PLEIN DROIT (CGI art. 1635 quater D, I, 2°),
-  // le PLUS et le PLS n'ont que l'abattement de 50 % (art. 1635 quater I), et le
-  // LLI comme le libre n'ont ni l'un ni l'autre - ils ne sont pas finances par un
-  // pret aide de l'Etat. Un abattement uniforme de 50 % surtaxait donc le PLAI
-  // et sous-taxait le libre, sur la meme operation.
-  //
-  // L'assiette se ventile a la quote-part de surface de plancher de chaque
-  // tranche, chacune appliquant ensuite son regime. Un `abattement` saisi force
-  // la valeur pour toute l'operation : c'est le recours quand une deliberation
-  // locale s'ecarte du droit commun (art. 1635 quater E).
-  const regimes = ta.regimes ?? {};
-  const abattementDe = (regime) =>
-    abattement ?? regimes[regime ?? 'abattement_50'] ?? ta.abattement_logement_social;
-
-  const parts = quotes_parts_sdp ?? {};
-  const codes = Object.keys(parts);
-  /** @type {Record<string, {sdp_m2: number, abattement: number, assiette_eur: number}>} */
-  const parTranche = {};
-  let assietteSurface = 0;
-  if (codes.length) {
-    for (const code of codes) {
-      const sdpTranche = sdp_m2 * (parts[code] ?? 0);
-      const ab = abattementDe(regimeProduit(code));
-      const a = sdpTranche * (1 - ab) * valeurForfaitaire;
-      parTranche[code] = { sdp_m2: sdpTranche, abattement: ab, assiette_eur: arrondiEuro(a) };
-      assietteSurface += a;
-    }
-  } else {
-    assietteSurface = sdp_m2 * (1 - abattementDe(undefined)) * valeurForfaitaire;
-  }
-
-  const assiette = assietteSurface + nb_places_exterieures * valeur_place_eur;
-  return {
-    valeur_forfaitaire_eur_m2: valeurForfaitaire,
-    assiette_eur: arrondiEuro(assiette),
-    montant_eur: arrondiEuro(assiette * (taux_commune + taux_departement)),
-    ...(codes.length ? { par_tranche: parTranche } : {}),
-  };
+function taxeAmenagement(p, referentiels) {
+  return /** @type {NonNullable<ReturnType<typeof restituerTaxeAmenagement>>} */ (
+    restituerTaxeAmenagement(nouveauClasseur({ entrees: { taxe_amenagement: { ...p } }, baremes: referentiels }))
+  );
 }
 
 /*
@@ -12284,8 +12593,8 @@ function taxeAmenagement(
  * que par ses propres tests. Elle portait un piege : son annee de reference par
  * defaut etait l'annee de DEBUT de TFPB, si bien que la brancher telle quelle
  * aurait efface vingt-cinq ans d'indexation en silence. Le calcul reellement
- * emprunte vit dans `exploitation.js`, qui indexe depuis la mise en location -
- * c'est la seule version qui doive exister.
+ * emprunte vit dans le compte d'exploitation, qui indexe depuis la mise en
+ * location - c'est la seule version qui doive exister.
  */
 
 /* ===== src/exploitation.js ===== */
@@ -13817,58 +14126,23 @@ function calculer(entrees, referentiels) {
   // 25 ans en logement social (CGI art. 1384 A), 20 ans en intermediaire
   // (art. 1384-0 A), rien en libre. Une duree posee sur la simulation prime,
   // pour les operations qui ne remplissent pas les conditions.
-  const tfpbParTranche = {};
-  const tfpbMontantParLogement =
-    entrees.exploitation?.tfpb_par_logement_eur ??
-    baremes.constantes_reglementaires.tfpb.montant_par_logement_eur;
-  /** @type {Array<{annee: number, montant_eur: number}>} */
+  // Domaine « fiscalite » : la duree d'exoneration de chaque tranche, et la
+  // taxe fonciere qu'elle doit chaque annee a partir de la fin d'exoneration.
+  /** @type {Array<{annee: number, montant_eur: number, produit: string}>} */
   const tfpbParAnnee = [];
-  const horizonTFPB = dates.duree_simulation_ans ?? 50;
+  const horizonTFPB = lire('duree_simulation');
   for (const c of codesPresents) {
-    const duree =
-      options.duree_exoneration_tfpb_ans ??
-      produit(/** @type {any} */ (c)).duree_exoneration_tfpb_ans ??
-      baremes.constantes_reglementaires.tfpb.duree_exoneration_defaut_ans;
-    const debut = anneeMEL + duree;
-    tfpbParTranche[c] = { duree_exoneration_ans: duree, annee_debut_tfpb: debut };
-    const montant = tranches[c].nb_logements * tfpbMontantParLogement;
+    const T = { tranche: c };
+    const debut = lire('annee_debut_tfpb_tranche', T);
+    const montant = lire('tfpb_base_tranche', T);
     for (let k = 0; k < horizonTFPB; k++) {
       const annee = anneeMEL + k;
       if (annee >= debut) tfpbParAnnee.push({ annee, montant_eur: montant, produit: c });
     }
   }
-
-  // Vue d'ensemble : la PREMIERE annee ou une taxe est due, quelle que soit la
-  // tranche. C'est celle qui marque la rupture sur la courbe de resultat.
-  const tfpb = exonerationTFPB(
-    {
-      annee_mise_en_location: anneeMEL,
-      duree_exoneration_ans:
-        options.duree_exoneration_tfpb_ans ??
-        (codesPresents.length
-          ? Math.min(...codesPresents.map((c) => tfpbParTranche[c].duree_exoneration_ans))
-          : undefined),
-    },
-    baremes,
-  );
-  tfpb.par_tranche = tfpbParTranche;
-  // R-FISC-2 - La taxe d'amenagement se ventile par tranche : le PLAI en est
-  // exonere de plein droit, le PLUS et le PLS n'ont que l'abattement de 50 %, le
-  // LLI et le libre n'ont ni l'un ni l'autre. Faute de surface de plancher par
-  // tranche, la cle est celle qui sert partout ailleurs, la quote-part de
-  // surface utile - une SDP par tranche viendra la remplacer sans changer le
-  // calcul. Une saisie d'abattement continue de primer sur tout.
-  const ta = entrees.taxe_amenagement
-    ? taxeAmenagement(
-        {
-          ...entrees.taxe_amenagement,
-          quotes_parts_sdp:
-            entrees.taxe_amenagement.quotes_parts_sdp ??
-            (codesPresents.length ? quotesParts : undefined),
-        },
-        baremes,
-      )
-    : null;
+  const tfpb = restituerTFPB(classeur);
+  // R-FISC-2 - La taxe d'amenagement, ventilee par tranche.
+  const ta = restituerTaxeAmenagement(classeur);
 
   // --- 8. Exploitation (R-EXP) ---
   const exp = entrees.exploitation ?? {};

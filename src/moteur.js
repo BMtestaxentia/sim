@@ -25,7 +25,7 @@ import { restituerPrixDeRevient, valeurComptableTerrain, baseAmortissementCompta
 import { restituerSubventions, restituerSurchargeFonciere } from './subventions.js';
 import { quotiteFoncier, restituerEquilibre } from './financement.js';
 import { restituerTableau } from './amortissement.js';
-import { exonerationTFPB, taxeAmenagement } from './fiscalite.js';
+import { restituerTFPB, restituerTaxeAmenagement } from './fiscalite.js';
 import {
   compteExploitation,
   sommerComptes,
@@ -566,58 +566,23 @@ export function calculer(entrees, referentiels) {
   // 25 ans en logement social (CGI art. 1384 A), 20 ans en intermediaire
   // (art. 1384-0 A), rien en libre. Une duree posee sur la simulation prime,
   // pour les operations qui ne remplissent pas les conditions.
-  const tfpbParTranche = {};
-  const tfpbMontantParLogement =
-    entrees.exploitation?.tfpb_par_logement_eur ??
-    baremes.constantes_reglementaires.tfpb.montant_par_logement_eur;
-  /** @type {Array<{annee: number, montant_eur: number}>} */
+  // Domaine « fiscalite » : la duree d'exoneration de chaque tranche, et la
+  // taxe fonciere qu'elle doit chaque annee a partir de la fin d'exoneration.
+  /** @type {Array<{annee: number, montant_eur: number, produit: string}>} */
   const tfpbParAnnee = [];
-  const horizonTFPB = dates.duree_simulation_ans ?? 50;
+  const horizonTFPB = lire('duree_simulation');
   for (const c of codesPresents) {
-    const duree =
-      options.duree_exoneration_tfpb_ans ??
-      produit(/** @type {any} */ (c)).duree_exoneration_tfpb_ans ??
-      baremes.constantes_reglementaires.tfpb.duree_exoneration_defaut_ans;
-    const debut = anneeMEL + duree;
-    tfpbParTranche[c] = { duree_exoneration_ans: duree, annee_debut_tfpb: debut };
-    const montant = tranches[c].nb_logements * tfpbMontantParLogement;
+    const T = { tranche: c };
+    const debut = lire('annee_debut_tfpb_tranche', T);
+    const montant = lire('tfpb_base_tranche', T);
     for (let k = 0; k < horizonTFPB; k++) {
       const annee = anneeMEL + k;
       if (annee >= debut) tfpbParAnnee.push({ annee, montant_eur: montant, produit: c });
     }
   }
-
-  // Vue d'ensemble : la PREMIERE annee ou une taxe est due, quelle que soit la
-  // tranche. C'est celle qui marque la rupture sur la courbe de resultat.
-  const tfpb = exonerationTFPB(
-    {
-      annee_mise_en_location: anneeMEL,
-      duree_exoneration_ans:
-        options.duree_exoneration_tfpb_ans ??
-        (codesPresents.length
-          ? Math.min(...codesPresents.map((c) => tfpbParTranche[c].duree_exoneration_ans))
-          : undefined),
-    },
-    baremes,
-  );
-  tfpb.par_tranche = tfpbParTranche;
-  // R-FISC-2 - La taxe d'amenagement se ventile par tranche : le PLAI en est
-  // exonere de plein droit, le PLUS et le PLS n'ont que l'abattement de 50 %, le
-  // LLI et le libre n'ont ni l'un ni l'autre. Faute de surface de plancher par
-  // tranche, la cle est celle qui sert partout ailleurs, la quote-part de
-  // surface utile - une SDP par tranche viendra la remplacer sans changer le
-  // calcul. Une saisie d'abattement continue de primer sur tout.
-  const ta = entrees.taxe_amenagement
-    ? taxeAmenagement(
-        {
-          ...entrees.taxe_amenagement,
-          quotes_parts_sdp:
-            entrees.taxe_amenagement.quotes_parts_sdp ??
-            (codesPresents.length ? quotesParts : undefined),
-        },
-        baremes,
-      )
-    : null;
+  const tfpb = restituerTFPB(classeur);
+  // R-FISC-2 - La taxe d'amenagement, ventilee par tranche.
+  const ta = restituerTaxeAmenagement(classeur);
 
   // --- 8. Exploitation (R-EXP) ---
   const exp = entrees.exploitation ?? {};

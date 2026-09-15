@@ -2,119 +2,109 @@
 /**
  * R-FISC - Fiscalite : exoneration de TFPB et taxe d'amenagement.
  *
- *
- * Sources : `SimPLUS!G37` (annee de fin d'exoneration TFPB),
- * `calculs!B1255:B1259` (assiette de taxe d'amenagement),
- * baremes_her_2027.json/taxe_amenagement et constantes_reglementaires.tfpb.
+ * LES FORMULES VIVENT DANS `formules/domaines/fiscalite.js`. Ce module restitue
+ * la taxe fonciere et la taxe d'amenagement d'un classeur, et garde les
+ * fonctions historiques (`exonerationTFPB`, `taxeAmenagement`), qui evaluent ces
+ * memes formules sur les valeurs qu'on leur donne.
  *
  * La duree d'exoneration est un PARAMETRE (irregularite I-7 : LEON la cable a
  * 25 ans a un endroit et lit « EXONERATION 2 » a un autre).
  *
  * Unites : montants en euros, surfaces en m2.
  */
-import { arrondiEuro } from './arrondis.js';
-import { PRODUITS } from './produits.js';
+import { nouveauClasseur } from './formules/modele.js';
 
 /**
- * R-FISC-2 - Regime de taxe d'amenagement d'un produit. Defaut : l'abattement de
- * 50 % des logements finances par un pret aide de l'Etat, qui couvre le PLUS, le
- * PLS et les foyers correspondants.
- * @param {string} code_produit
- * @returns {'exoneration'|'abattement_50'|'aucun'}
+ * Taxe fonciere d'un classeur : la premiere annee ou elle est due, et la duree
+ * d'exoneration de chaque tranche.
+ * @param {import('./formules/classeur.js').Classeur} c
  */
-function regimeProduit(code_produit) {
-  return PRODUITS[code_produit]?.regime_taxe_amenagement ?? 'abattement_50';
+export function restituerTFPB(c) {
+  return {
+    annee_debut_tfpb: c.valeur('annee_debut_tfpb'),
+    duree_exoneration_ans: c.valeur('duree_exoneration_operation'),
+    par_tranche: Object.fromEntries(
+      c.valeursDimension('tranche').map((code) => {
+        const T = { tranche: code };
+        return [
+          code,
+          {
+            duree_exoneration_ans: c.valeur('duree_exoneration_tranche', T),
+            annee_debut_tfpb: c.valeur('annee_debut_tfpb_tranche', T),
+          },
+        ];
+      }),
+    ),
+  };
 }
 
 /**
- * R-FISC-1 - Premiere annee d'assujettissement a la taxe fonciere.
- * `annee(mise en location) + duree d'exoneration`.
- * @param {Object} p
- * @param {number} p.annee_mise_en_location
- * @param {number} [p.duree_exoneration_ans] defaut : valeur du referentiel
+ * R-FISC-1 - Premiere annee d'assujettissement a la taxe fonciere :
+ * `annee(mise en location) + duree d'exoneration`. Formule : `annee_debut_tfpb`.
+ * @param {{annee_mise_en_location: number, duree_exoneration_ans?: number}} p
  * @param {any} referentiels
  * @returns {{annee_debut_tfpb: number, duree_exoneration_ans: number}}
  */
 export function exonerationTFPB({ annee_mise_en_location, duree_exoneration_ans }, referentiels) {
-  const duree =
-    duree_exoneration_ans ??
-    referentiels.constantes_reglementaires.tfpb.duree_exoneration_defaut_ans;
+  const c = nouveauClasseur({ baremes: referentiels })
+    .fixer('annee_mise_en_location', {}, annee_mise_en_location)
+    .fixer('duree_exoneration_saisie', {}, duree_exoneration_ans);
   return {
-    annee_debut_tfpb: annee_mise_en_location + duree,
-    duree_exoneration_ans: duree,
+    annee_debut_tfpb: c.valeur('annee_debut_tfpb'),
+    duree_exoneration_ans: c.valeur('duree_exoneration_operation'),
   };
 }
 
 /**
- * R-FISC-2 - Taxe d'amenagement.
- * `assiette = SDP x (1 - abattement) x valeur_forfaitaire`, la valeur forfaitaire
- * dependant de la localisation (Ile-de-France ou non). Les places de
- * stationnement exterieures s'ajoutent a un forfait par place.
+ * Taxe d'amenagement d'un classeur, ou `null` si elle n'est pas demandee.
+ * @param {import('./formules/classeur.js').Classeur} c
+ */
+export function restituerTaxeAmenagement(c) {
+  if (!c.valeur('ta_active')) return null;
+  const codes = c.valeursDimension('tranche_sdp');
+  /** @type {Record<string, any>} */
+  const r = {
+    valeur_forfaitaire_eur_m2: c.valeur('ta_valeur_forfaitaire'),
+    assiette_eur: c.valeur('assiette_ta_arrondie'),
+    montant_eur: c.valeur('taxe_amenagement'),
+  };
+  if (codes.length) {
+    r.par_tranche = Object.fromEntries(
+      codes.map((code) => {
+        const T = { tranche_sdp: code };
+        return [
+          code,
+          {
+            sdp_m2: c.valeur('sdp_tranche', T),
+            abattement: c.valeur('abattement_tranche_sdp', T),
+            assiette_eur: c.valeur('assiette_ta_tranche', T),
+          },
+        ];
+      }),
+    );
+  }
+  return r;
+}
+
+/**
+ * R-FISC-2 - Taxe d'amenagement, a partir de valeurs donnees.
+ * `assiette = SDP x (1 - abattement) x valeur_forfaitaire`, ventilee par tranche
+ * quand des quotes-parts de surface de plancher sont fournies.
  * @param {Object} p
  * @param {number} p.sdp_m2
  * @param {boolean} [p.idf]
- * @param {number} [p.abattement]        defaut : abattement logement social du referentiel
+ * @param {number} [p.abattement]        force l'abattement de toute l'operation
  * @param {number} [p.taux_commune]
  * @param {number} [p.taux_departement]
  * @param {number} [p.nb_places_exterieures]
  * @param {number} [p.valeur_place_eur]
+ * @param {Record<string, number>} [p.quotes_parts_sdp]
  * @param {any} referentiels
  */
-export function taxeAmenagement(
-  {
-    sdp_m2,
-    idf = false,
-    abattement,
-    taux_commune = 0,
-    taux_departement = 0,
-    nb_places_exterieures = 0,
-    valeur_place_eur = 0,
-    quotes_parts_sdp,
-  },
-  referentiels,
-) {
-  const ta = referentiels.taxe_amenagement;
-  const valeurForfaitaire = idf ? ta.idf : ta.hors_idf;
-
-  // R-FISC-2 - Le regime n'est PAS le meme pour tous les logements aides. Le
-  // PLAI ouvre une exoneration de PLEIN DROIT (CGI art. 1635 quater D, I, 2°),
-  // le PLUS et le PLS n'ont que l'abattement de 50 % (art. 1635 quater I), et le
-  // LLI comme le libre n'ont ni l'un ni l'autre - ils ne sont pas finances par un
-  // pret aide de l'Etat. Un abattement uniforme de 50 % surtaxait donc le PLAI
-  // et sous-taxait le libre, sur la meme operation.
-  //
-  // L'assiette se ventile a la quote-part de surface de plancher de chaque
-  // tranche, chacune appliquant ensuite son regime. Un `abattement` saisi force
-  // la valeur pour toute l'operation : c'est le recours quand une deliberation
-  // locale s'ecarte du droit commun (art. 1635 quater E).
-  const regimes = ta.regimes ?? {};
-  const abattementDe = (regime) =>
-    abattement ?? regimes[regime ?? 'abattement_50'] ?? ta.abattement_logement_social;
-
-  const parts = quotes_parts_sdp ?? {};
-  const codes = Object.keys(parts);
-  /** @type {Record<string, {sdp_m2: number, abattement: number, assiette_eur: number}>} */
-  const parTranche = {};
-  let assietteSurface = 0;
-  if (codes.length) {
-    for (const code of codes) {
-      const sdpTranche = sdp_m2 * (parts[code] ?? 0);
-      const ab = abattementDe(regimeProduit(code));
-      const a = sdpTranche * (1 - ab) * valeurForfaitaire;
-      parTranche[code] = { sdp_m2: sdpTranche, abattement: ab, assiette_eur: arrondiEuro(a) };
-      assietteSurface += a;
-    }
-  } else {
-    assietteSurface = sdp_m2 * (1 - abattementDe(undefined)) * valeurForfaitaire;
-  }
-
-  const assiette = assietteSurface + nb_places_exterieures * valeur_place_eur;
-  return {
-    valeur_forfaitaire_eur_m2: valeurForfaitaire,
-    assiette_eur: arrondiEuro(assiette),
-    montant_eur: arrondiEuro(assiette * (taux_commune + taux_departement)),
-    ...(codes.length ? { par_tranche: parTranche } : {}),
-  };
+export function taxeAmenagement(p, referentiels) {
+  return /** @type {NonNullable<ReturnType<typeof restituerTaxeAmenagement>>} */ (
+    restituerTaxeAmenagement(nouveauClasseur({ entrees: { taxe_amenagement: { ...p } }, baremes: referentiels }))
+  );
 }
 
 /*
@@ -132,6 +122,6 @@ export function taxeAmenagement(
  * que par ses propres tests. Elle portait un piege : son annee de reference par
  * defaut etait l'annee de DEBUT de TFPB, si bien que la brancher telle quelle
  * aurait efface vingt-cinq ans d'indexation en silence. Le calcul reellement
- * emprunte vit dans `exploitation.js`, qui indexe depuis la mise en location -
- * c'est la seule version qui doive exister.
+ * emprunte vit dans le compte d'exploitation, qui indexe depuis la mise en
+ * location - c'est la seule version qui doive exister.
  */

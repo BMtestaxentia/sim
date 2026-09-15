@@ -1764,3 +1764,59 @@ describe('audit 03/09/2026 - regles declarees qui ne s appliquaient pas', () => 
     expect(facteurIndexation({ 2020: 0.02, 2029: 0.03 }, 2028, 2030)).toBeCloseTo(1.03 * 1.03, 12);
   });
 });
+
+describe('R-EXP-8 - compte par tranche : plusieurs prets par tranche, forfaits par logement', () => {
+  // Deux tranches de surfaces inegales, deux prets sur la premiere : c'est sur
+  // ce montage que se voyaient les deux defauts du compte d'origine, reproduits
+  // a sa migration en formules puis corriges.
+  const r = calculer(
+    {
+      ...BASE,
+      lots: [
+        { code_produit: 'PLUS', nb_logements: 12, shab_m2: 780, surfaces_annexes_m2: 0 },
+        { code_produit: 'PLS', nb_logements: 6, shab_m2: 372, surfaces_annexes_m2: 0 },
+      ],
+      prets: [
+        { ...PRET_CDC, code: 'CDC_C_PLUS', produit: 'PLUS', montant_eur: 400000 },
+        { ...PRET_CDC, code: 'CDC_F_PLUS', nature: 'foncier', produit: 'PLUS', montant_eur: 150000, duree_ans: 50 },
+        { ...PRET_CDC, code: 'CDC_C_PLS', produit: 'PLS', montant_eur: 300000 },
+      ],
+      exploitation: {
+        frais_gestion_pct_loyers: 0,
+        frais_gestion_pct_prix_revient: 0,
+        frais_gestion_annuels_eur: 450,
+        rel_annuel_eur: 120,
+      },
+    },
+    REFERENTIELS,
+  );
+  const parT = r.exploitation.par_tranche;
+
+  it('additionne les interets de tous les prets de la tranche', () => {
+    // Seuls les interets du dernier pret etaient retenus : sur la tranche PLUS,
+    // le pret construction sortait des charges comptables et gonflait d'autant
+    // le capital rembourse.
+    for (const code of ['PLUS', 'PLS']) {
+      const tables = r.amortissements.filter((a) => a.produit === code);
+      for (const l of parT[code].lignes) {
+        const attendu = tables.reduce(
+          (s, a) => s + (a.tableau.find((t) => t.annee === l.annee)?.interets_eur ?? 0),
+          0,
+        );
+        expect(Math.abs(l.interets_eur - attendu)).toBeLessThanOrEqual(0.5);
+      }
+    }
+    expect(r.amortissements.filter((a) => a.produit === 'PLUS').length).toBe(2);
+  });
+
+  it('multiplie un forfait par logement par les logements de la tranche, sans le proratiser', () => {
+    // Le forfait etait d'abord ramene a la quote-part de surface de la tranche,
+    // puis multiplie par ses logements : 450 EUR sur 12 logements PLUS
+    // devenaient 450 x 68 % x 12.
+    expect(parT.PLUS.lignes[0].frais_gestion_eur).toBe(450 * 12);
+    expect(parT.PLS.lignes[0].frais_gestion_eur).toBe(450 * 6);
+    expect(parT.PLUS.lignes[0].rel_eur).toBe(120 * 12);
+    expect(parT.PLS.lignes[0].rel_eur).toBe(120 * 6);
+    expect(r.exploitation.lignes[0].rel_eur).toBe(120 * 18);
+  });
+});
